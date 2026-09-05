@@ -45,7 +45,10 @@ class FolderImportScanner @Inject constructor(@ApplicationContext private val co
         }
 
         val dirs = children.filter { it.isDirectory }
-        val (discDirs, otherDirs) = dirs.partition { DISC_FOLDER_NAME.matches(it.name.orEmpty()) }
+        val (matchedDirs, otherDirs) = dirs.partition { DISC_FOLDER_NAME.matches(it.name.orEmpty()) }
+        // ponytail: a single disc-like folder is a real album named "CD1", not a multi-disc release
+        val discDirs = if (matchedDirs.size >= 2) matchedDirs else emptyList()
+        val soloDirs = if (matchedDirs.size >= 2) otherDirs else dirs
 
         if (discDirs.isNotEmpty()) {
             val discAudio = discDirs.flatMap { collectAudioRecursively(it) }
@@ -59,7 +62,7 @@ class FolderImportScanner @Inject constructor(@ApplicationContext private val co
             }
         }
 
-        for (dir in otherDirs) {
+        for (dir in soloDirs) {
             val nestedAudio = collectAudioRecursively(dir)
             if (nestedAudio.isNotEmpty()) {
                 groups += AudioGroup(

@@ -64,6 +64,19 @@ class FolderImportScannerTest {
     }
 
     @Test
+    fun `single disc-like subfolder is treated as its own album, not merged with parent`() {
+        val root = File(tempDir(), "Farewell225").apply { mkdirs() }
+        val cd1 = File(root, "CD1").apply { mkdirs() }
+        File(cd1, "01.mp3").writeText("fake")
+
+        val groups = scanner.scanDirectory(DocumentFile.fromFile(root))
+
+        assertEquals(1, groups.size)
+        assertEquals("CD1", groups[0].albumFolderName)
+        assertEquals("Farewell225", groups[0].artistFolderName)
+    }
+
+    @Test
     fun `non-audio files are ignored`() {
         val root = File(tempDir(), "Album").apply { mkdirs() }
         File(root, "01.mp3").writeText("fake")
