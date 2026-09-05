@@ -21,7 +21,7 @@ class FtsQueryBuilderTest {
     }
 
     @Test
-    fun `embedded quotes are escaped`() {
-        assertEquals("\"say \"\"hi\"\"\"*", FtsQueryBuilder.build("say \"hi\""))
+    fun `embedded quotes are escaped per token`() {
+        assertEquals("\"say\"* \"\"\"hi\"\"\"*", FtsQueryBuilder.build("say \"hi\""))
     }
 }
