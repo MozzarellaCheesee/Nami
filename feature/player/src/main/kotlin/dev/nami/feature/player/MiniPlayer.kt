@@ -34,6 +34,8 @@ fun MiniPlayer(
     val queue by viewModel.queue.collectAsState()
     val playing = state as? PlaybackState.Playing
 
+    if (queue.nowPlaying == null) return
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
