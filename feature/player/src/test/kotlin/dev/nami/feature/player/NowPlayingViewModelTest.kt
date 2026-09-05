@@ -61,6 +61,7 @@ class NowPlayingViewModelTest {
         override suspend fun removeQueueItem(index: Int) {
             removedIndex = index
         }
+        override suspend fun removeTracks(ids: Set<TrackId>) {}
     }
 
     private val libraryRepo = object : LibraryRepository {

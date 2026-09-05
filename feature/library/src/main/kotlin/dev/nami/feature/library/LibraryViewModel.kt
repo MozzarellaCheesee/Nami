@@ -12,6 +12,7 @@ import dev.nami.core.model.TrackId
 import dev.nami.domain.ImportProgress
 import dev.nami.domain.ImportSource
 import dev.nami.domain.LibraryRepository
+import dev.nami.domain.PlayerRepository
 import dev.nami.domain.SearchRepository
 import dev.nami.domain.TrashRepository
 import kotlinx.coroutines.CancellationException
@@ -36,6 +37,7 @@ class LibraryViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
     private val searchRepository: SearchRepository,
     private val trashRepository: TrashRepository,
+    private val playerRepository: PlayerRepository,
 ) : ViewModel() {
 
     val tracks: Flow<PagingData<Track>> =
@@ -96,6 +98,7 @@ class LibraryViewModel @Inject constructor(
     private fun deleteTracks(ids: Set<TrackId>) {
         viewModelScope.launch {
             libraryRepository.deleteTracks(ids.toList())
+            playerRepository.removeTracks(ids)
             _uiState.value = _uiState.value.copy(lastDeletedTrackIds = ids)
         }
     }

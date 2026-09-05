@@ -11,6 +11,10 @@ import dev.nami.core.model.TrackId
 import dev.nami.domain.ImportProgress
 import dev.nami.domain.ImportSource
 import dev.nami.domain.LibraryRepository
+import dev.nami.domain.PlaybackState
+import dev.nami.domain.PlayableTrack
+import dev.nami.domain.PlayerQueue
+import dev.nami.domain.PlayerRepository
 import dev.nami.domain.SearchRepository
 import dev.nami.domain.SearchResult
 import dev.nami.domain.TrashRepository
@@ -20,6 +24,8 @@ import dev.nami.core.model.PlaylistId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -57,6 +63,21 @@ class LibraryViewModelTest {
         override suspend fun purgeExpired() {}
     }
 
+    private class FakePlayerRepository : PlayerRepository {
+        var removedTracks: Set<TrackId>? = null
+        override val state: StateFlow<PlaybackState> = MutableStateFlow(PlaybackState.Idle)
+        override val queue: StateFlow<PlayerQueue> = MutableStateFlow(PlayerQueue.EMPTY)
+        override suspend fun play(tracks: List<PlayableTrack>, startIndex: Int, startMs: Long) {}
+        override suspend fun toggle() {}
+        override suspend fun seek(ms: Long) {}
+        override suspend fun skipNext() {}
+        override suspend fun skipPrevious() {}
+        override suspend fun addToQueue(track: PlayableTrack) {}
+        override suspend fun moveQueueItem(fromIndex: Int, toIndex: Int) {}
+        override suspend fun removeQueueItem(index: Int) {}
+        override suspend fun removeTracks(ids: Set<TrackId>) { removedTracks = ids }
+    }
+
     @Test
     fun `importing emits progress then reaches total`() = runTest {
         val fakeRepo = object : LibraryRepository {
@@ -74,7 +95,7 @@ class LibraryViewModelTest {
             override suspend fun deleteTrack(id: TrackId) {}
             override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
-        val viewModel = LibraryViewModel(fakeRepo, noOpSearchRepo, FakeTrashRepository())
+        val viewModel = LibraryViewModel(fakeRepo, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository())
 
         viewModel.importFiles(listOf("content://fake/1", "content://fake/2"))
 
@@ -97,7 +118,7 @@ class LibraryViewModelTest {
             override suspend fun deleteTrack(id: TrackId) {}
             override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
-        val viewModel = LibraryViewModel(fakeRepo, noOpSearchRepo, FakeTrashRepository())
+        val viewModel = LibraryViewModel(fakeRepo, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository())
 
         viewModel.selectTab(LibraryTab.ALBUMS)
 
@@ -126,7 +147,7 @@ class LibraryViewModelTest {
             override suspend fun deleteTrack(id: TrackId) {}
             override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
-        val viewModel = LibraryViewModel(fakeRepo, fakeSearchRepo, FakeTrashRepository())
+        val viewModel = LibraryViewModel(fakeRepo, fakeSearchRepo, FakeTrashRepository(), FakePlayerRepository())
 
         viewModel.importFiles(listOf("content://fake/1"))
 
@@ -155,7 +176,7 @@ class LibraryViewModelTest {
             override suspend fun deleteTrack(id: TrackId) {}
             override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
-        val viewModel = LibraryViewModel(fakeRepo, fakeSearchRepo, FakeTrashRepository())
+        val viewModel = LibraryViewModel(fakeRepo, fakeSearchRepo, FakeTrashRepository(), FakePlayerRepository())
 
         viewModel.importFiles(listOf("content://fake/1"))
 
@@ -179,7 +200,7 @@ class LibraryViewModelTest {
             override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
         val fakeTrashRepository = FakeTrashRepository()
-        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, fakeTrashRepository)
+        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, fakeTrashRepository, FakePlayerRepository())
 
         viewModel.deleteTrack(TrackId("t1"))
 
@@ -203,7 +224,7 @@ class LibraryViewModelTest {
             override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
         val fakeTrashRepository = FakeTrashRepository()
-        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, fakeTrashRepository)
+        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, fakeTrashRepository, FakePlayerRepository())
         viewModel.deleteTrack(TrackId("t1"))
 
         viewModel.undoLastDelete()
@@ -228,7 +249,7 @@ class LibraryViewModelTest {
             override suspend fun deleteTrack(id: TrackId) {}
             override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
-        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, FakeTrashRepository())
+        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository())
 
         viewModel.toggleTrackSelection(TrackId("t1"))
         assertEquals(setOf(TrackId("t1")), viewModel.uiState.value.selectedTrackIds)
@@ -254,7 +275,7 @@ class LibraryViewModelTest {
             override suspend fun deleteTrack(id: TrackId) {}
             override suspend fun deleteTracks(ids: List<TrackId>) { deletedIds.addAll(ids) }
         }
-        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, FakeTrashRepository())
+        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository())
         viewModel.toggleTrackSelection(TrackId("t1"))
         viewModel.toggleTrackSelection(TrackId("t2"))
 
@@ -281,7 +302,7 @@ class LibraryViewModelTest {
             override suspend fun deleteTrack(id: TrackId) {}
             override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
-        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, FakeTrashRepository())
+        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository())
         viewModel.toggleTrackSelection(TrackId("t1"))
 
         viewModel.clearSelection()

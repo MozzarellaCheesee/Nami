@@ -43,4 +43,6 @@ interface PlayerRepository {
     suspend fun addToQueue(track: PlayableTrack)
     suspend fun moveQueueItem(fromIndex: Int, toIndex: Int)
     suspend fun removeQueueItem(index: Int)
+    /** Removes any currently playing/queued item whose id is in [ids] (e.g. after a library delete). */
+    suspend fun removeTracks(ids: Set<TrackId>)
 }

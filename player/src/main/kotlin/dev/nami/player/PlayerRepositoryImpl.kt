@@ -152,4 +152,19 @@ class PlayerRepositoryImpl @Inject constructor(
         player.removeMediaItem(base + index)
         originByMediaId.remove(mediaId)
     }
+
+    override suspend fun removeTracks(ids: Set<TrackId>) {
+        val player = controller ?: return
+        if (player.currentMediaItemIndex == androidx.media3.common.C.INDEX_UNSET) return
+        val idValues = ids.mapTo(mutableSetOf()) { it.value }
+        // Only the current item and everything after it are exposed as "queue" — walk
+        // descending so removing one index doesn't shift the ones still to check.
+        for (i in player.mediaItemCount - 1 downTo player.currentMediaItemIndex) {
+            val mediaId = player.getMediaItemAt(i).mediaId
+            if (mediaId in idValues) {
+                player.removeMediaItem(i)
+                originByMediaId.remove(mediaId)
+            }
+        }
+    }
 }
