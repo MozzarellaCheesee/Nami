@@ -1,6 +1,8 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.hilt)
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -63,7 +65,12 @@ val generateUniffiBindings by tasks.registering(Exec::class) {
 tasks.named("preBuild") { dependsOn(generateUniffiBindings) }
 
 dependencies {
+    implementation(project(":core:model"))
+    implementation(project(":domain"))
     implementation(libs.androidx.core.ktx)
+    implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.compiler)
     // UniFFI's generated Kotlin bindings call into JNI via JNA; the @aar classifier
     // pulls the Android-compatible build (bundles native libs for host JVM too).
     implementation("net.java.dev.jna:jna:5.14.0@aar")
