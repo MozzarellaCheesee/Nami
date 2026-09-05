@@ -46,6 +46,7 @@ import kotlin.math.roundToInt
 
 private const val SKIP_THRESHOLD_DP = 80
 private const val ARTWORK_SIZE_DP = 40
+private const val EXPAND_THRESHOLD_DP = 24
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -58,8 +59,10 @@ fun MiniPlayer(
     val playing = state as? PlaybackState.Playing
     val density = LocalDensity.current
     val skipThresholdPx = with(density) { SKIP_THRESHOLD_DP.dp.toPx() }
+    val expandThresholdPx = with(density) { EXPAND_THRESHOLD_DP.dp.toPx() }
     var artworkOffsetX by remember { mutableFloatStateOf(0f) }
     var blockWidthPx by remember { mutableIntStateOf(0) }
+    var dragOffsetY by remember { mutableFloatStateOf(0f) }
 
     if (queue.nowPlaying == null) return
 
@@ -69,6 +72,16 @@ fun MiniPlayer(
             .height(60.dp)
             .background(NamiColors.Ink800)
             .clickable(onClick = onExpand)
+            .draggable(
+                orientation = Orientation.Vertical,
+                state = rememberDraggableState { delta -> dragOffsetY += delta },
+                onDragStopped = { velocity ->
+                    if (dragOffsetY < -expandThresholdPx || velocity < -2000f) {
+                        onExpand()
+                    }
+                    dragOffsetY = 0f
+                },
+            )
             .draggable(
                 orientation = Orientation.Horizontal,
                 state = rememberDraggableState { delta -> artworkOffsetX += delta },
