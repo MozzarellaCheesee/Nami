@@ -14,6 +14,7 @@ import dev.nami.feature.library.LibraryViewModel
 class MainActivity : ComponentActivity() {
 
     private val libraryViewModel: LibraryViewModel by viewModels()
+    private val playlistActionsViewModel: PlaylistActionsViewModel by viewModels()
 
     private val pickFiles = registerForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
@@ -23,12 +24,36 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val pickCoverImage = registerForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri -> uri?.let(playlistActionsViewModel::onCoverPicked) }
+
+    private val pickExportDestination = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/x-mpegurl"),
+    ) { uri -> uri?.let(playlistActionsViewModel::onExportDestinationPicked) }
+
+    private val pickImportSource = registerForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri -> uri?.let(playlistActionsViewModel::onImportSourcePicked) }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             NamiTheme {
                 NamiNavHost(
                     onImportRequested = { pickFiles.launch(arrayOf("audio/*")) },
+                    onPickPlaylistCover = { playlistId ->
+                        playlistActionsViewModel.requestCoverPick(playlistId)
+                        pickCoverImage.launch(arrayOf("image/*"))
+                    },
+                    onExportPlaylist = { playlistId ->
+                        playlistActionsViewModel.requestExport(playlistId)
+                        pickExportDestination.launch("playlist.m3u8")
+                    },
+                    onImportPlaylist = { playlistName ->
+                        playlistActionsViewModel.requestImport(playlistName)
+                        pickImportSource.launch(arrayOf("*/*"))
+                    },
                 )
             }
         }

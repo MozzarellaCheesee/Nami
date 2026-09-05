@@ -12,8 +12,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import dev.nami.app.PlaylistsPlaceholderScreen
 import dev.nami.app.SettingsPlaceholderScreen
+import dev.nami.core.model.PlaylistId
 import dev.nami.feature.library.AlbumDetailScreen
 import dev.nami.feature.library.ArtistDetailScreen
 import dev.nami.feature.library.LibraryScreen
@@ -21,6 +21,8 @@ import dev.nami.feature.player.MiniPlayer
 import dev.nami.feature.player.NowPlayingScreen
 import dev.nami.feature.player.NowPlayingViewModel
 import dev.nami.feature.player.QueueScreen
+import dev.nami.feature.playlists.PlaylistDetailScreen
+import dev.nami.feature.playlists.PlaylistsScreen
 import dev.nami.feature.search.SearchScreen
 
 private const val ROUTE_LIBRARY = "library"
@@ -31,14 +33,20 @@ private const val ROUTE_NOW_PLAYING = "now_playing"
 private const val ROUTE_QUEUE = "queue"
 private const val ROUTE_ALBUM_DETAIL = "album/{albumId}"
 private const val ROUTE_ARTIST_DETAIL = "artist/{artistId}"
+private const val ROUTE_PLAYLIST_DETAIL = "playlist/{playlistId}"
 
 private val BOTTOM_BAR_ROUTES = setOf(ROUTE_LIBRARY, ROUTE_SEARCH, ROUTE_PLAYLISTS, ROUTE_SETTINGS)
 
 @Composable
 fun NamiNavHost(
     onImportRequested: () -> Unit,
+    onPickPlaylistCover: (PlaylistId) -> Unit,
+    onExportPlaylist: (PlaylistId) -> Unit,
+    onImportPlaylist: (playlistName: String) -> Unit,
     navController: NavHostController = rememberNavController(),
 ) {
+    // Scoped here (Activity-level ViewModelStoreOwner), not inside a nav destination,
+    // so MiniPlayer and NowPlayingScreen share the same instance and stay in sync.
     val nowPlayingViewModel: NowPlayingViewModel = hiltViewModel()
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
 
@@ -69,7 +77,12 @@ fun NamiNavHost(
                     onArtistClick = { artistId -> navController.navigate("artist/${artistId.value}") },
                 )
             }
-            composable(ROUTE_PLAYLISTS) { PlaylistsPlaceholderScreen() }
+            composable(ROUTE_PLAYLISTS) {
+                PlaylistsScreen(
+                    onPlaylistClick = { playlistId -> navController.navigate("playlist/${playlistId.value}") },
+                    onImportRequested = onImportPlaylist,
+                )
+            }
             composable(ROUTE_SETTINGS) { SettingsPlaceholderScreen() }
             composable(ROUTE_NOW_PLAYING) {
                 NowPlayingScreen(
@@ -106,6 +119,21 @@ fun NamiNavHost(
                         navController.navigate(ROUTE_NOW_PLAYING)
                     },
                     onAddToQueue = { track, artistName -> nowPlayingViewModel.addToQueue(track, artistName) },
+                )
+            }
+            composable(
+                ROUTE_PLAYLIST_DETAIL,
+                arguments = listOf(navArgument("playlistId") { type = NavType.StringType }),
+            ) {
+                PlaylistDetailScreen(
+                    onBack = { navController.popBackStack() },
+                    onDeleted = { navController.popBackStack() },
+                    onPlayTracks = { tracks, startIndex ->
+                        nowPlayingViewModel.playTracks(tracks, artistName = null, startIndex = startIndex)
+                        navController.navigate(ROUTE_NOW_PLAYING)
+                    },
+                    onExportRequested = onExportPlaylist,
+                    onPickCoverRequested = onPickPlaylistCover,
                 )
             }
         }
