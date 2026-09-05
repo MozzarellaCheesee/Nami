@@ -17,8 +17,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
@@ -55,7 +59,9 @@ fun LibraryScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var addToPlaylistTrackId by remember { mutableStateOf<TrackId?>(null) }
+    var showAddSelectedToPlaylist by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
+    val selectionMode = uiState.selectedTrackIds.isNotEmpty()
 
     LaunchedEffect(uiState.lastDeletedTrackIds) {
         if (uiState.lastDeletedTrackIds.isEmpty()) return@LaunchedEffect
@@ -75,30 +81,83 @@ fun LibraryScreen(
     Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding).background(NamiColors.Ink900)) {
             Column {
-                LibraryChipsRow(selected = uiState.selectedTab, onSelect = viewModel::selectTab)
+                if (selectionMode) {
+                    SelectionTopBar(
+                        selectedCount = uiState.selectedTrackIds.size,
+                        onCancel = viewModel::clearSelection,
+                        onDelete = viewModel::deleteSelectedTracks,
+                        onAddToPlaylist = { showAddSelectedToPlaylist = true },
+                    )
+                } else {
+                    LibraryChipsRow(selected = uiState.selectedTab, onSelect = viewModel::selectTab)
+                }
                 when (uiState.selectedTab) {
                     LibraryTab.TRACKS -> TrackListContent(
                         viewModel = viewModel,
+                        selectionMode = selectionMode,
+                        selectedTrackIds = uiState.selectedTrackIds,
                         onTrackClick = onTrackClick,
                         onAddToPlaylist = { trackId -> addToPlaylistTrackId = trackId },
                         onDelete = { trackId -> viewModel.deleteTrack(trackId) },
+                        onToggleSelection = { trackId -> viewModel.toggleTrackSelection(trackId) },
                     )
                     LibraryTab.ALBUMS -> AlbumGridContent(viewModel, onAlbumClick)
                     LibraryTab.ARTISTS -> ArtistListContent(viewModel, onArtistClick)
                 }
             }
 
-            FloatingActionButton(
-                onClick = onImportRequested,
-                modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
-            ) {
-                Icon(Icons.Filled.Add, contentDescription = "Импортировать файлы")
+            if (!selectionMode) {
+                FloatingActionButton(
+                    onClick = onImportRequested,
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
+                ) {
+                    Icon(Icons.Filled.Add, contentDescription = "Импортировать файлы")
+                }
             }
         }
     }
 
     addToPlaylistTrackId?.let { trackId ->
-        AddToPlaylistDialog(trackId = trackId, onDismiss = { addToPlaylistTrackId = null })
+        AddToPlaylistDialog(trackIds = setOf(trackId), onDismiss = { addToPlaylistTrackId = null })
+    }
+
+    if (showAddSelectedToPlaylist) {
+        AddToPlaylistDialog(
+            trackIds = uiState.selectedTrackIds,
+            onDismiss = {
+                showAddSelectedToPlaylist = false
+                viewModel.clearSelection()
+            },
+        )
+    }
+}
+
+@Composable
+private fun SelectionTopBar(
+    selectedCount: Int,
+    onCancel: () -> Unit,
+    onDelete: () -> Unit,
+    onAddToPlaylist: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onCancel) {
+            Icon(Icons.Filled.Close, contentDescription = "Отменить выбор", tint = NamiColors.Paper100)
+        }
+        Text(
+            text = "Выбрано: $selectedCount",
+            color = NamiColors.Paper100,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f).padding(start = 8.dp),
+        )
+        IconButton(onClick = onAddToPlaylist) {
+            Icon(Icons.Filled.LibraryAdd, contentDescription = "В плейлист", tint = NamiColors.Paper70)
+        }
+        IconButton(onClick = onDelete) {
+            Icon(Icons.Filled.Delete, contentDescription = "Удалить", tint = NamiColors.Paper70)
+        }
     }
 }
 
@@ -135,9 +194,12 @@ private fun LibraryChipsRow(selected: LibraryTab, onSelect: (LibraryTab) -> Unit
 @Composable
 private fun TrackListContent(
     viewModel: LibraryViewModel,
+    selectionMode: Boolean,
+    selectedTrackIds: Set<TrackId>,
     onTrackClick: (TrackId) -> Unit,
     onAddToPlaylist: (TrackId) -> Unit,
     onDelete: (TrackId) -> Unit,
+    onToggleSelection: (TrackId) -> Unit,
 ) {
     val tracks = viewModel.tracks.collectAsLazyPagingItems()
     if (tracks.itemCount == 0) {
@@ -148,9 +210,14 @@ private fun TrackListContent(
                 tracks[index]?.let { track ->
                     TrackListItem(
                         track = track,
-                        onClick = { onTrackClick(track.id) },
-                        onAddToPlaylist = { onAddToPlaylist(track.id) },
-                        onDelete = { onDelete(track.id) },
+                        onClick = {
+                            if (selectionMode) onToggleSelection(track.id) else onTrackClick(track.id)
+                        },
+                        onLongClick = { onToggleSelection(track.id) },
+                        selectionMode = selectionMode,
+                        isSelected = track.id in selectedTrackIds,
+                        onAddToPlaylist = if (selectionMode) null else { { onAddToPlaylist(track.id) } },
+                        onDelete = if (selectionMode) null else { { onDelete(track.id) } },
                     )
                 }
             }
