@@ -65,6 +65,9 @@ class LibraryRepositoryImpl @Inject constructor(
             .flow
             .map { pagingData -> pagingData.pagingMap { it.toDomain() } }
 
+    override suspend fun recentAlbums(limit: Int): List<AlbumSummary> =
+        albumDao.recentAlbums(limit).map { it.toDomain() }
+
     override fun artists(): Flow<PagingData<Artist>> =
         Pager(PagingConfig(pageSize = 50)) { artistDao.pagingSource() }
             .flow

@@ -38,6 +38,17 @@ interface AlbumDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(album: AlbumEntity)
 
+    @Query(
+        """
+        SELECT albums.id AS id, albums.title AS title, artists.name AS artistName, albums.artworkPath AS artworkPath
+        FROM albums LEFT JOIN artists ON albums.artistId = artists.id
+        WHERE EXISTS (SELECT 1 FROM tracks WHERE tracks.albumId = albums.id AND tracks.deletedAt IS NULL)
+        ORDER BY albums.title DESC
+        LIMIT :limit
+        """,
+    )
+    suspend fun recentAlbums(limit: Int): List<AlbumListRow>
+
     @Query("UPDATE albums SET artworkPath = :path WHERE id = :id AND artworkPath IS NULL")
     suspend fun setArtworkPath(id: String, path: String)
 

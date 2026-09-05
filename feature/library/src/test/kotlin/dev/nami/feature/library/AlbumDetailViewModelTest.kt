@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import dev.nami.core.model.Album
 import dev.nami.core.model.AlbumId
 import dev.nami.core.model.ArtistId
+import dev.nami.core.model.AlbumSummary
 import dev.nami.core.model.Track
 import dev.nami.core.model.TrackId
 import dev.nami.domain.ImportSource
@@ -41,6 +42,7 @@ class AlbumDetailViewModelTest {
             override suspend fun allTracksOrdered(): List<Track> = emptyList()
             override fun track(id: TrackId) = throw NotImplementedError()
             override fun albums() = throw NotImplementedError()
+            override suspend fun recentAlbums(limit: Int): List<AlbumSummary> = emptyList()
             override fun artists() = throw NotImplementedError()
             override fun album(id: AlbumId) = flowOf(album)
             override fun artist(id: ArtistId) = throw NotImplementedError()

@@ -16,6 +16,8 @@ interface LibraryRepository {
     suspend fun allTracksOrdered(): List<Track>
     fun track(id: TrackId): Flow<Track?>
     fun albums(): Flow<PagingData<AlbumSummary>>
+    /** Snapshot of the most recent [limit] albums, for the Library screen's discography block. */
+    suspend fun recentAlbums(limit: Int): List<AlbumSummary>
     fun artists(): Flow<PagingData<Artist>>
     fun album(id: AlbumId): Flow<Album?>
     fun artist(id: ArtistId): Flow<Artist?>

@@ -1,5 +1,6 @@
 package dev.nami.feature.player
 
+import dev.nami.core.model.AlbumSummary
 import dev.nami.core.model.Track
 import dev.nami.core.model.TrackId
 import dev.nami.domain.ImportSource
@@ -69,6 +70,7 @@ class NowPlayingViewModelTest {
             override suspend fun allTracksOrdered(): List<Track> = emptyList()
         override fun track(id: TrackId) = flowOf(trackFixture("t1", "/data/music/real-file.flac"))
         override fun albums() = throw NotImplementedError()
+        override suspend fun recentAlbums(limit: Int): List<AlbumSummary> = emptyList()
         override fun artists() = throw NotImplementedError()
         override fun album(id: dev.nami.core.model.AlbumId) = throw NotImplementedError()
         override fun artist(id: dev.nami.core.model.ArtistId) = throw NotImplementedError()
