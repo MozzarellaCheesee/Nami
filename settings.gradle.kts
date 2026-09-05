@@ -27,4 +27,5 @@ include(
     ":feature:player",
     ":feature:search",
     ":feature:playlists",
+    ":feature:trash",
 )
