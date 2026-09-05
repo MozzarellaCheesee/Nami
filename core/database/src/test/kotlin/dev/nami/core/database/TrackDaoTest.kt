@@ -116,4 +116,20 @@ class TrackDaoTest {
         assertEquals(0, db.trackDao().trashedTracksFlow().first().size)
         assertEquals("/music/t1.flac", db.trackDao().findById("t1")?.path)
     }
+
+    @Test
+    fun `pagingSource falls back to track artworkPath when album has none`() = runTest {
+        db.trackDao().insertAll(listOf(
+            TrackEntity(
+                id = "t1", title = "Song", artistId = null, albumId = null, trackNo = null,
+                discNo = null, durationMs = 1000, path = "/music/t1.flac", format = "flac",
+                sizeBytes = 100, dateAdded = 1000, lastPlayed = null, playCount = 0,
+                artworkPath = "/artwork/t1_full.webp",
+            ),
+        ))
+
+        val page = loadFirstPage(db.trackDao().pagingSource())
+
+        assertEquals("/artwork/t1_full.webp", page.data[0].albumArtworkPath)
+    }
 }

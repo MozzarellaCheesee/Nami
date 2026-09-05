@@ -21,6 +21,7 @@ import dev.nami.core.database.migration.MIGRATION_1_2
 import dev.nami.core.database.migration.MIGRATION_2_3
 import dev.nami.core.database.migration.MIGRATION_3_4
 import dev.nami.core.database.migration.MIGRATION_4_5
+import dev.nami.core.database.migration.MIGRATION_5_6
 import io.requery.android.database.sqlite.RequerySQLiteOpenHelperFactory
 import javax.inject.Singleton
 
@@ -32,7 +33,7 @@ object DatabaseModule {
     fun provideDatabase(@ApplicationContext context: Context): NamiDatabase =
         Room.databaseBuilder(context, NamiDatabase::class.java, "nami.db")
             .openHelperFactory(RequerySQLiteOpenHelperFactory())
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
             .addCallback(
                 object : RoomDatabase.Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {

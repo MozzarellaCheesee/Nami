@@ -45,4 +45,5 @@ data class TrackEntity(
     val playCount: Int,
     val genre: String? = null,
     val deletedAt: Long? = null,
+    val artworkPath: String? = null,
 )

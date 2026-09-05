@@ -121,9 +121,14 @@ class LibraryRepositoryImpl @Inject constructor(
         val tags = nativeBridge.readTags(destination.path)
         val artistId = metadataResolver.resolveArtist(tags?.artist ?: tags?.albumArtist)
         val albumId = metadataResolver.resolveAlbum(tags?.album, artistId, tags?.year)
+        val trackId = UUID.randomUUID().toString()
         val artwork = tags?.artwork
-        if (albumId != null && artwork != null) {
-            artworkStore.save(albumId, artwork)?.let { path -> albumDao.setArtworkPath(albumId, path) }
+        var trackArtworkPath: String? = null
+        if (artwork != null) {
+            trackArtworkPath = artworkStore.save(trackId, artwork)
+            if (albumId != null) {
+                trackArtworkPath?.let { path -> albumDao.setArtworkPath(albumId, path) }
+            }
         }
 
         val fallbackTitle = (queryDisplayName(resolver, uri) ?: uri.lastPathSegment ?: "unknown")
@@ -132,7 +137,7 @@ class LibraryRepositoryImpl @Inject constructor(
         trackDao.insertAll(
             listOf(
                 TrackEntity(
-                    id = UUID.randomUUID().toString(),
+                    id = trackId,
                     title = tags?.title?.takeIf { it.isNotBlank() } ?: fallbackTitle,
                     artistId = artistId,
                     albumId = albumId,
@@ -146,6 +151,7 @@ class LibraryRepositoryImpl @Inject constructor(
                     lastPlayed = null,
                     playCount = 0,
                     genre = tags?.genre,
+                    artworkPath = trackArtworkPath,
                 ),
             ),
         )

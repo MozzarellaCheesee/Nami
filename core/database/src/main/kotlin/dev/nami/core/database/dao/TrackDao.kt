@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.Flow
 interface TrackDao {
     @Query(
         """
-        SELECT tracks.*, albums.artworkPath AS albumArtworkPath FROM tracks
+        SELECT tracks.*, COALESCE(albums.artworkPath, tracks.artworkPath) AS albumArtworkPath FROM tracks
         LEFT JOIN albums ON tracks.albumId = albums.id
         WHERE tracks.deletedAt IS NULL
         ORDER BY tracks.dateAdded DESC
@@ -35,7 +35,7 @@ interface TrackDao {
 
     @Query(
         """
-        SELECT tracks.*, albums.artworkPath AS albumArtworkPath FROM tracks
+        SELECT tracks.*, COALESCE(albums.artworkPath, tracks.artworkPath) AS albumArtworkPath FROM tracks
         LEFT JOIN albums ON tracks.albumId = albums.id
         WHERE tracks.albumId = :albumId AND tracks.deletedAt IS NULL
         ORDER BY tracks.discNo ASC, tracks.trackNo ASC
@@ -45,7 +45,7 @@ interface TrackDao {
 
     @Query(
         """
-        SELECT tracks.*, albums.artworkPath AS albumArtworkPath FROM tracks
+        SELECT tracks.*, COALESCE(albums.artworkPath, tracks.artworkPath) AS albumArtworkPath FROM tracks
         LEFT JOIN albums ON tracks.albumId = albums.id
         WHERE tracks.artistId = :artistId AND tracks.deletedAt IS NULL
         ORDER BY albums.year DESC, albums.title ASC, tracks.discNo ASC, tracks.trackNo ASC
@@ -70,6 +70,9 @@ interface TrackDao {
 
     @Query("DELETE FROM tracks WHERE id = :id")
     suspend fun hardDelete(id: String)
+
+    @Query("UPDATE tracks SET artworkPath = :path WHERE id = :id AND artworkPath IS NULL")
+    suspend fun setArtworkPath(id: String, path: String)
 
     @Query("SELECT * FROM tracks WHERE deletedAt IS NOT NULL ORDER BY deletedAt DESC")
     fun trashedTracksFlow(): Flow<List<TrackEntity>>

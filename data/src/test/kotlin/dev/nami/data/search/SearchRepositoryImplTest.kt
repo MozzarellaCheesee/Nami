@@ -55,6 +55,7 @@ class SearchRepositoryImplTest {
         override suspend fun allForIndexing(): List<TrackDao.TrackIndexRow> = rows
         override suspend fun setDeletedAt(id: String, deletedAt: Long?, path: String) = error("unused")
         override suspend fun hardDelete(id: String) = error("unused")
+        override suspend fun setArtworkPath(id: String, path: String) = error("unused")
         override fun trashedTracksFlow() = error("unused")
     }
 

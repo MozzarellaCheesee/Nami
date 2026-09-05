@@ -67,6 +67,31 @@ class LibraryRepositoryImplTest {
     }
 
     @Test
+    fun `import saves embedded artwork even when the track has no album tag`() = runTest {
+        val fakeBridge = object : NativeBridge {
+            override suspend fun readTags(path: String) = TagResult(
+                title = "Window View", artist = null, album = null,
+                albumArtist = null, trackNo = null, discNo = null, genre = null, year = null,
+                durationMs = 180_000, artwork = byteArrayOf(1, 2, 3), artworkMime = "image/jpeg",
+            )
+        }
+        val resolver = MetadataResolver(db.artistDao(), db.albumDao())
+        val artworkStore = ArtworkStore(context)
+        val repo = LibraryRepositoryImpl(
+            context, db.trackDao(), db.artistDao(), db.albumDao(), fakeBridge, resolver, artworkStore, TrashFileStore(context),
+        )
+
+        val sourceUri = android.net.Uri.parse("content://fake/source2.flac")
+        shadowOf(context.contentResolver).registerInputStream(sourceUri, byteArrayOf(1).inputStream())
+
+        repo.import(ImportSource.Files(listOf(sourceUri.toString()))).last()
+
+        assertEquals(1, db.trackDao().count())
+        val imported = db.trackDao().findById(db.trackDao().allForIndexing().first().id)
+        assertNotNull(imported?.artworkPath)
+    }
+
+    @Test
     fun `deleteTracks soft-deletes every id`() = runTest {
         val musicDir = File(context.filesDir, "music").apply { mkdirs() }
         val t1File = File(musicDir, "t1.flac").apply { writeText("audio-bytes-1") }
