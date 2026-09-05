@@ -40,7 +40,6 @@ private const val ROUTE_ARTIST_DETAIL = "artist/{artistId}"
 private const val ROUTE_PLAYLIST_DETAIL = "playlist/{playlistId}"
 private const val ROUTE_TRASH = "trash"
 
-private val BOTTOM_BAR_ROUTES = setOf(ROUTE_LIBRARY, ROUTE_SEARCH, ROUTE_PLAYLISTS, ROUTE_SETTINGS)
 
 @Composable
 fun NamiNavHost(
@@ -151,8 +150,10 @@ fun NamiNavHost(
                 )
             }
         }
-        MiniPlayer(onExpand = { navController.navigate(ROUTE_NOW_PLAYING) }, viewModel = nowPlayingViewModel)
-        if (currentRoute in BOTTOM_BAR_ROUTES) {
+        if (currentRoute != ROUTE_NOW_PLAYING) {
+            MiniPlayer(onExpand = { navController.navigate(ROUTE_NOW_PLAYING) }, viewModel = nowPlayingViewModel)
+        }
+        if (currentRoute != ROUTE_NOW_PLAYING) {
             NamiBottomBar(
                 currentRoute = currentRoute,
                 onTabSelected = { route ->
