@@ -33,6 +33,6 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
-    // FTS5 support: Robolectric SQLite lacks FTS5 module; sqlite-jdbc provides fallback
+    // FTS5 support: Robolectric lacks FTS5; sqlite-jdbc provides fallback
     testImplementation("org.xerial:sqlite-jdbc:3.46.0.1")
 }

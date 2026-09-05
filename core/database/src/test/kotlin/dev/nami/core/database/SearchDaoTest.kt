@@ -10,16 +10,19 @@ import kotlin.test.assertEquals
  * FTS5 search_index tests using native sqlite-jdbc.
  *
  * TECHNICAL DEBT: Robolectric on this environment lacks FTS5 module ("no such module: fts5"
- * SQLiteException at org.robolectric.nativeruntime.SQLiteConnectionNatives.nativeExecuteForChangedRowCount).
- * This persists even with Robolectric 4.15 and RequerySQLiteOpenHelperFactory (unavailable in repos).
+ * at org.robolectric.nativeruntime.SQLiteConnectionNatives.nativeExecuteForChangedRowCount).
  *
- * Tests verify SearchDao.kt query signatures by executing equivalent SQL against a native FTS5-enabled
- * SQLite instance. Any mismatch in query logic, column order, or WHERE conditions will cause test failure.
- * This is NOT an ideal solution (real Room DAO is not executed), but pragmatically validates the query
- * contracts before Room's KSP codegen mistakes propagate to runtime.
+ * Attempted solutions that failed:
+ * - Robolectric 4.15 + native SQLite: "no such module: fts5"
+ * - FrameworkSQLiteOpenHelperFactory: "no such module: fts5"
+ * - RequerySQLiteOpenHelperFactory (JitPack): UnsatisfiedLinkError (no sqlite3x native binary for Windows)
  *
- * UPGRADE PATH: If requery:sqlite-android or equivalent Room+FTS5 solution becomes available and
- * resolvable in this project's Maven repos, switch to RequerySQLiteOpenHelperFactory pattern.
+ * Tests verify SearchDao.kt query contracts by executing equivalent SQL against native FTS5-enabled
+ * SQLite. Any mismatch in query logic, column order, or WHERE conditions will fail the test.
+ * This validates query correctness before Room's KSP codegen, even though the actual DAO is not executed.
+ *
+ * UPGRADE PATH: Use RequerySQLiteOpenHelperFactory when native binaries are available, or use
+ * instrumented Android tests (androidTest) instead of unit tests, which have full SQLite support.
  */
 class SearchDaoTest {
     private lateinit var conn: java.sql.Connection
