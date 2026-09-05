@@ -11,6 +11,7 @@ import dev.nami.core.model.Track
 import dev.nami.domain.ImportProgress
 import dev.nami.domain.ImportSource
 import dev.nami.domain.LibraryRepository
+import dev.nami.domain.SearchRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -28,6 +29,7 @@ data class LibraryUiState(
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
+    private val searchRepository: SearchRepository,
 ) : ViewModel() {
 
     val tracks: Flow<PagingData<Track>> =
@@ -51,6 +53,7 @@ class LibraryViewModel @Inject constructor(
             libraryRepository.import(ImportSource.Files(uris)).collect { progress ->
                 _uiState.value = _uiState.value.copy(importProgress = progress)
             }
+            searchRepository.rebuildIndex()
         }
     }
 }
