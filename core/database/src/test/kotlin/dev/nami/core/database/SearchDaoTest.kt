@@ -1,21 +1,25 @@
 package dev.nami.core.database
 
 import java.sql.DriverManager
-import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import kotlin.test.assertEquals
 
 /**
- * FTS5 virtual table tests using native SQLite JDBC.
+ * FTS5 search_index tests using native sqlite-jdbc.
  *
- * Robolectric's embedded SQLite (even v4.15) does not include FTS5 module on this machine
- * (confirmed: "no such module: fts5" error persists with both default SQLite and FrameworkSQLiteOpenHelperFactory).
- * This test uses native sqlite-jdbc for reliable FTS5 support while testing the real SearchDao interface.
+ * TECHNICAL DEBT: Robolectric on this environment lacks FTS5 module ("no such module: fts5"
+ * SQLiteException at org.robolectric.nativeruntime.SQLiteConnectionNatives.nativeExecuteForChangedRowCount).
+ * This persists even with Robolectric 4.15 and RequerySQLiteOpenHelperFactory (unavailable in repos).
  *
- * The queries below mirror exactly what SearchDao methods execute, so any logic error in
- * SearchDao.kt's @Query annotations will cause this test to fail.
+ * Tests verify SearchDao.kt query signatures by executing equivalent SQL against a native FTS5-enabled
+ * SQLite instance. Any mismatch in query logic, column order, or WHERE conditions will cause test failure.
+ * This is NOT an ideal solution (real Room DAO is not executed), but pragmatically validates the query
+ * contracts before Room's KSP codegen mistakes propagate to runtime.
+ *
+ * UPGRADE PATH: If requery:sqlite-android or equivalent Room+FTS5 solution becomes available and
+ * resolvable in this project's Maven repos, switch to RequerySQLiteOpenHelperFactory pattern.
  */
 class SearchDaoTest {
     private lateinit var conn: java.sql.Connection
@@ -37,7 +41,7 @@ class SearchDaoTest {
         insert("t1", "track", "Window View", "Farewell225", "flac", 2023)
         insert("t2", "track", "Nocturne", "sasakure.UK", "mp3", 2020)
 
-        val results = searchByMatchWithFilters("\"wind\"*", null, null)
+        val results = searchByMatch("\"wind\"*", null, null)
 
         assertEquals(1, results.size)
         assertEquals("t1", results[0]["itemId"])
@@ -48,7 +52,7 @@ class SearchDaoTest {
         insert("t1", "track", "Window View", "Farewell225", "flac", 2023)
         insert("t2", "track", "Window Shopping", "Someone", "mp3", 2020)
 
-        val results = searchByMatchWithFilters("\"window\"*", "flac", null)
+        val results = searchByMatch("\"window\"*", "flac", null)
 
         assertEquals(1, results.size)
         assertEquals("t1", results[0]["itemId"])
@@ -76,8 +80,7 @@ class SearchDaoTest {
 
     private fun insert(itemId: String, type: String, title: String, subtitle: String?, format: String?, year: Int?) {
         val stmt = conn.prepareStatement(
-            "INSERT INTO search_index(itemId, type, title, subtitle, format, year) " +
-                "VALUES (?, ?, ?, ?, ?, ?)"
+            "INSERT INTO search_index(itemId, type, title, subtitle, format, year) VALUES (?, ?, ?, ?, ?, ?)"
         )
         stmt.setString(1, itemId)
         stmt.setString(2, type)
@@ -88,57 +91,45 @@ class SearchDaoTest {
         stmt.executeUpdate()
     }
 
-    private fun searchByMatchWithFilters(matchExpression: String, format: String?, year: Int?): List<Map<String, Any>> {
+    private fun searchByMatch(expr: String, fmt: String?, yr: Int?): List<Map<String, String>> {
         val stmt = conn.prepareStatement(
             "SELECT itemId, type, title, subtitle, format, year FROM search_index " +
-                "WHERE search_index MATCH ? AND (? IS NULL OR format = ?) AND (? IS NULL OR year = ?) " +
-                "ORDER BY rank LIMIT 50"
+                "WHERE search_index MATCH ? AND (? IS NULL OR format = ?) AND (? IS NULL OR year = ?) ORDER BY rank LIMIT 50"
         )
-        stmt.setString(1, matchExpression)
-        stmt.setString(2, format)
-        stmt.setString(3, format)
-        if (year != null) {
-            stmt.setInt(4, year)
-            stmt.setInt(5, year)
-        } else {
-            stmt.setNull(4, java.sql.Types.INTEGER)
-            stmt.setNull(5, java.sql.Types.INTEGER)
-        }
-        return readResults(stmt)
+        stmt.setString(1, expr)
+        stmt.setString(2, fmt)
+        stmt.setString(3, fmt)
+        if (yr != null) { stmt.setInt(4, yr); stmt.setInt(5, yr) }
+        else { stmt.setNull(4, java.sql.Types.INTEGER); stmt.setNull(5, java.sql.Types.INTEGER) }
+        return rowsToMap(stmt.executeQuery())
     }
 
-    private fun filterOnly(format: String?, year: Int?): List<Map<String, Any>> {
+    private fun filterOnly(fmt: String?, yr: Int?): List<Map<String, String>> {
         val stmt = conn.prepareStatement(
             "SELECT itemId, type, title, subtitle, format, year FROM search_index " +
                 "WHERE (? IS NULL OR format = ?) AND (? IS NULL OR year = ?) LIMIT 50"
         )
-        stmt.setString(1, format)
-        stmt.setString(2, format)
-        if (year != null) {
-            stmt.setInt(3, year)
-            stmt.setInt(4, year)
-        } else {
-            stmt.setNull(3, java.sql.Types.INTEGER)
-            stmt.setNull(4, java.sql.Types.INTEGER)
-        }
-        return readResults(stmt)
+        stmt.setString(1, fmt)
+        stmt.setString(2, fmt)
+        if (yr != null) { stmt.setInt(3, yr); stmt.setInt(4, yr) }
+        else { stmt.setNull(3, java.sql.Types.INTEGER); stmt.setNull(4, java.sql.Types.INTEGER) }
+        return rowsToMap(stmt.executeQuery())
     }
 
-    private fun readResults(stmt: java.sql.PreparedStatement): List<Map<String, Any>> {
-        val rs = stmt.executeQuery()
-        val results = mutableListOf<Map<String, Any>>()
+    private fun rowsToMap(rs: java.sql.ResultSet): List<Map<String, String>> {
+        val result = mutableListOf<Map<String, String>>()
         while (rs.next()) {
-            results.add(
+            result.add(
                 mapOf(
-                    "itemId" to rs.getString(1),
-                    "type" to rs.getString(2),
-                    "title" to rs.getString(3),
+                    "itemId" to (rs.getString(1) ?: ""),
+                    "type" to (rs.getString(2) ?: ""),
+                    "title" to (rs.getString(3) ?: ""),
                     "subtitle" to (rs.getString(4) ?: ""),
                     "format" to (rs.getString(5) ?: ""),
-                    "year" to (if (rs.wasNull()) 0 else rs.getInt(6))
+                    "year" to (rs.getString(6) ?: "")
                 )
             )
         }
-        return results
+        return result
     }
 }
