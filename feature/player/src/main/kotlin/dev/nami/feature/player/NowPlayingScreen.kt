@@ -82,12 +82,13 @@ fun NowPlayingScreen(
                 },
                 onDragStopped = { velocity ->
                     if (dragOffsetY > dismissThresholdPx || velocity > 2000f) {
-                        // Finish the slide off-screen ourselves before popping the back stack --
-                        // otherwise AnimatedVisibility's own slide-out plays a second animation
-                        // starting from wherever the finger let go, stacking on top of this one
-                        // and reading as a stutter on a fast flick.
-                        animate(dragOffsetY, screenHeightPx) { value, _ -> dragOffsetY = value }
+                        // Pop immediately so the screen underneath shows up without waiting on
+                        // our own slide -- the composable stays alive through AnimatedVisibility's
+                        // exit transition, so finishing the offset animation afterwards still
+                        // plays out smoothly (and offscreen) instead of stacking a second
+                        // animation on top like before.
                         onCollapse()
+                        animate(dragOffsetY, screenHeightPx) { value, _ -> dragOffsetY = value }
                     } else {
                         animate(dragOffsetY, 0f) { value, _ -> dragOffsetY = value }
                     }

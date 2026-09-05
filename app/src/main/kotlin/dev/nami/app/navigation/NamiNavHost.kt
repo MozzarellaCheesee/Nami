@@ -1,6 +1,7 @@
 package dev.nami.app.navigation
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
@@ -175,7 +176,12 @@ fun NamiNavHost(
     AnimatedVisibility(
         visible = currentRoute == ROUTE_NOW_PLAYING,
         enter = slideInVertically(initialOffsetY = { fullHeight -> fullHeight }),
-        exit = slideOutVertically(targetOffsetY = { fullHeight -> fullHeight }),
+        // Short exit: the screen underneath should show up quickly after a swipe-to-dismiss
+        // instead of waiting on a full-length transition.
+        exit = slideOutVertically(
+            animationSpec = tween(150),
+            targetOffsetY = { fullHeight -> fullHeight },
+        ),
     ) {
         NowPlayingScreen(
             onCollapse = { navController.popBackStack() },
