@@ -30,6 +30,17 @@ class QueueBuilderTest {
     }
 
     @Test
+    fun `now playing artworkPath is propagated to QueueTrack`() {
+        val queue = buildPlayerQueue(
+            nowPlaying = MediaItemInfo(mediaId = "t1", title = "Window View", artist = "Farewell225", artworkPath = "art/t1.jpg"),
+            upcoming = emptyList(),
+            originByMediaId = emptyMap(),
+        )
+
+        assertEquals("art/t1.jpg", queue.nowPlaying?.artworkPath)
+    }
+
+    @Test
     fun `upcoming items default to CONTEXT origin when absent from the map`() {
         val queue = buildPlayerQueue(
             nowPlaying = null,

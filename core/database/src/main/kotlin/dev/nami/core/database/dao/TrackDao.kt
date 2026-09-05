@@ -27,6 +27,18 @@ interface TrackDao {
     @Query("SELECT * FROM tracks WHERE id = :id")
     suspend fun findById(id: String): TrackEntity?
 
+    @Query(
+        """
+        SELECT tracks.*, COALESCE(albums.artworkPath, tracks.artworkPath) AS albumArtworkPath,
+               artists.name AS artistName
+        FROM tracks
+        LEFT JOIN albums ON tracks.albumId = albums.id
+        LEFT JOIN artists ON tracks.artistId = artists.id
+        WHERE tracks.id = :id
+        """,
+    )
+    suspend fun findByIdWithArtwork(id: String): TrackWithArtwork?
+
     @Query("SELECT * FROM tracks WHERE path = :path AND deletedAt IS NULL LIMIT 1")
     suspend fun findByPath(path: String): TrackEntity?
 

@@ -149,7 +149,7 @@ class PlaylistDaoTest {
         db.trackDao().setDeletedAt("t1", deletedAt = 2000, path = "/trash/t1.flac")
 
         val tracks = db.playlistTrackDao().tracksInPlaylistFlow("p1").first()
-        assertEquals(listOf("t2"), tracks.map { it.id })
+        assertEquals(listOf("t2"), tracks.map { it.track.id })
     }
 
     @Test

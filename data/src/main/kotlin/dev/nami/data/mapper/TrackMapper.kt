@@ -1,5 +1,6 @@
 package dev.nami.data.mapper
 
+import dev.nami.core.database.dao.PlaylistTrackDao
 import dev.nami.core.database.dao.TrackDao
 import dev.nami.core.database.entity.TrackEntity
 import dev.nami.core.model.AlbumId
@@ -28,5 +29,7 @@ fun TrackEntity.toDomain(albumArtworkPath: String? = null, artistName: String? =
 )
 
 fun TrackDao.TrackWithArtwork.toDomain(): Track = track.toDomain(albumArtworkPath = albumArtworkPath, artistName = artistName)
+
+fun PlaylistTrackDao.TrackWithArtwork.toDomain(): Track = track.toDomain(albumArtworkPath = albumArtworkPath, artistName = artistName)
 
 fun TrackEntity.toTrashedDomain(): TrashedTrack = TrashedTrack(track = toDomain(), deletedAt = requireNotNull(deletedAt))

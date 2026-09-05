@@ -54,7 +54,7 @@ class LibraryRepositoryImpl @Inject constructor(
             .map { pagingData -> pagingData.pagingMap { it.toDomain() } }
 
     override fun track(id: TrackId): Flow<Track?> = flow {
-        emit(trackDao.findById(id.value)?.toDomain())
+        emit(trackDao.findByIdWithArtwork(id.value)?.toDomain())
     }
 
     override fun albums(): Flow<PagingData<AlbumSummary>> =

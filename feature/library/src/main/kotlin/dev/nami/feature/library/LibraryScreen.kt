@@ -278,7 +278,7 @@ private fun AlbumGridContent(viewModel: LibraryViewModel, onAlbumClick: (AlbumId
     if (albums.itemCount == 0) {
         EmptyLibraryMessage()
     } else {
-        LazyVerticalGrid(columns = GridCells.Adaptive(minSize = 172.dp)) {
+        LazyVerticalGrid(columns = GridCells.Adaptive(minSize = 172.dp), contentPadding = PaddingValues(bottom = 140.dp)) {
             items(count = albums.itemCount, key = albums.itemKey { it.id.value }) { index ->
                 albums[index]?.let { album ->
                     AlbumGridItem(
@@ -298,7 +298,7 @@ private fun ArtistListContent(viewModel: LibraryViewModel, onArtistClick: (Artis
     if (artists.itemCount == 0) {
         EmptyLibraryMessage()
     } else {
-        LazyColumn {
+        LazyColumn(contentPadding = PaddingValues(bottom = 140.dp)) {
             items(count = artists.itemCount, key = artists.itemKey { it.id.value }) { index ->
                 artists[index]?.let { artist -> ArtistListItem(artist = artist, onClick = { onArtistClick(artist.id) }) }
             }

@@ -1,6 +1,7 @@
 package dev.nami.core.database.dao
 
 import androidx.room.Dao
+import androidx.room.Embedded
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -31,11 +32,21 @@ interface PlaylistTrackDao {
 
     @Query(
         """
-        SELECT tracks.* FROM playlist_tracks
+        SELECT tracks.*, COALESCE(albums.artworkPath, tracks.artworkPath) AS albumArtworkPath,
+               artists.name AS artistName
+        FROM playlist_tracks
         JOIN tracks ON playlist_tracks.trackId = tracks.id
+        LEFT JOIN albums ON tracks.albumId = albums.id
+        LEFT JOIN artists ON tracks.artistId = artists.id
         WHERE playlist_tracks.playlistId = :playlistId AND tracks.deletedAt IS NULL
         ORDER BY playlist_tracks.position ASC
         """,
     )
-    fun tracksInPlaylistFlow(playlistId: String): Flow<List<TrackEntity>>
+    fun tracksInPlaylistFlow(playlistId: String): Flow<List<TrackWithArtwork>>
+
+    data class TrackWithArtwork(
+        @Embedded val track: TrackEntity,
+        val albumArtworkPath: String?,
+        val artistName: String?,
+    )
 }
