@@ -2,6 +2,7 @@ package dev.nami.app.navigation
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -54,7 +55,7 @@ fun NamiNavHost(
     val nowPlayingViewModel: NowPlayingViewModel = hiltViewModel()
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
 
-    Column(modifier = Modifier.navigationBarsPadding()) {
+    Column(modifier = Modifier.statusBarsPadding().navigationBarsPadding()) {
         NavHost(
             navController = navController,
             startDestination = ROUTE_LIBRARY,
