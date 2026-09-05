@@ -22,6 +22,7 @@ dependencies {
     implementation(project(":core:native"))
     implementation(project(":domain"))
     implementation(libs.paging.runtime)
+    implementation(libs.room.ktx)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     testImplementation(libs.junit)

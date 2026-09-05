@@ -12,6 +12,7 @@ import dev.nami.domain.ImportProgress
 import dev.nami.domain.ImportSource
 import dev.nami.domain.LibraryRepository
 import dev.nami.domain.SearchRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -50,10 +51,18 @@ class LibraryViewModel @Inject constructor(
 
     fun importFiles(uris: List<String>) {
         viewModelScope.launch {
-            libraryRepository.import(ImportSource.Files(uris)).collect { progress ->
-                _uiState.value = _uiState.value.copy(importProgress = progress)
+            try {
+                libraryRepository.import(ImportSource.Files(uris)).collect { progress ->
+                    _uiState.value = _uiState.value.copy(importProgress = progress)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Partial import failure: full error handling/reporting is a later task.
+                // Swallow so viewModelScope survives and rebuildIndex still runs below.
+            } finally {
+                searchRepository.rebuildIndex()
             }
-            searchRepository.rebuildIndex()
         }
     }
 }

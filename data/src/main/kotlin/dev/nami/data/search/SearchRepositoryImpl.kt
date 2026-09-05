@@ -1,5 +1,7 @@
 package dev.nami.data.search
 
+import androidx.room.withTransaction
+import dev.nami.core.database.NamiDatabase
 import dev.nami.core.database.dao.AlbumDao
 import dev.nami.core.database.dao.ArtistDao
 import dev.nami.core.database.dao.SearchDao
@@ -12,6 +14,7 @@ import dev.nami.domain.SearchResult
 import javax.inject.Inject
 
 class SearchRepositoryImpl @Inject constructor(
+    private val database: NamiDatabase,
     private val trackDao: TrackDao,
     private val albumDao: AlbumDao,
     private val artistDao: ArtistDao,
@@ -19,25 +22,27 @@ class SearchRepositoryImpl @Inject constructor(
 ) : SearchRepository {
 
     override suspend fun rebuildIndex() {
-        searchDao.clear()
+        database.withTransaction {
+            searchDao.clear()
 
-        trackDao.allForIndexing().forEach { row ->
-            searchDao.insert(
-                itemId = row.id, type = "track", title = row.title,
-                subtitle = row.artistName, format = row.format, year = row.year,
-            )
-        }
-        albumDao.allForIndexing().forEach { row ->
-            searchDao.insert(
-                itemId = row.id, type = "album", title = row.title,
-                subtitle = row.artistName, format = null, year = null,
-            )
-        }
-        artistDao.allForIndexing().forEach { row ->
-            searchDao.insert(
-                itemId = row.id, type = "artist", title = row.name,
-                subtitle = null, format = null, year = null,
-            )
+            trackDao.allForIndexing().forEach { row ->
+                searchDao.insert(
+                    itemId = row.id, type = "track", title = row.title,
+                    subtitle = row.artistName, format = row.format, year = row.year,
+                )
+            }
+            albumDao.allForIndexing().forEach { row ->
+                searchDao.insert(
+                    itemId = row.id, type = "album", title = row.title,
+                    subtitle = row.artistName, format = null, year = null,
+                )
+            }
+            artistDao.allForIndexing().forEach { row ->
+                searchDao.insert(
+                    itemId = row.id, type = "artist", title = row.name,
+                    subtitle = null, format = null, year = null,
+                )
+            }
         }
     }
 

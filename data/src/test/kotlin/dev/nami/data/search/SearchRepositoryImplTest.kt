@@ -16,6 +16,9 @@ package dev.nami.data.search
  */
 
 import androidx.paging.PagingSource
+import androidx.room.Room
+import androidx.test.core.app.ApplicationProvider
+import dev.nami.core.database.NamiDatabase
 import dev.nami.core.database.dao.AlbumDao
 import dev.nami.core.database.dao.ArtistDao
 import dev.nami.core.database.dao.SearchDao
@@ -28,8 +31,18 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
+@RunWith(RobolectricTestRunner::class)
 class SearchRepositoryImplTest {
+
+    // withTransaction just needs a real RoomDatabase instance to call runInTransaction on;
+    // the DAOs used by rebuildIndex/search are still the fakes below, not this database's own.
+    private fun inMemoryDb(): NamiDatabase =
+        Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), NamiDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
 
     private fun fakeTrackDao(rows: List<TrackDao.TrackIndexRow> = emptyList()) = object : TrackDao {
         override fun pagingSource(): PagingSource<Int, TrackEntity> = error("unused")
@@ -74,6 +87,7 @@ class SearchRepositoryImplTest {
             override suspend fun filterOnly(format: String?, year: Int?) = error("unused")
         }
         val repo = SearchRepositoryImpl(
+            database = inMemoryDb(),
             trackDao = fakeTrackDao(
                 listOf(
                     TrackDao.TrackIndexRow(
@@ -120,7 +134,7 @@ class SearchRepositoryImplTest {
             }
             override suspend fun filterOnly(format: String?, year: Int?) = error("unused")
         }
-        val repo = SearchRepositoryImpl(fakeTrackDao(), fakeAlbumDao(), fakeArtistDao(), searchDao)
+        val repo = SearchRepositoryImpl(inMemoryDb(), fakeTrackDao(), fakeAlbumDao(), fakeArtistDao(), searchDao)
 
         val results = repo.search("wind format:flac year:2023")
 
@@ -147,7 +161,7 @@ class SearchRepositoryImplTest {
                 return listOf(SearchDao.SearchResultRow("t1", "track", "Window View", null, "flac", null))
             }
         }
-        val repo = SearchRepositoryImpl(fakeTrackDao(), fakeAlbumDao(), fakeArtistDao(), searchDao)
+        val repo = SearchRepositoryImpl(inMemoryDb(), fakeTrackDao(), fakeAlbumDao(), fakeArtistDao(), searchDao)
 
         val results = repo.search("format:flac")
 
@@ -163,7 +177,7 @@ class SearchRepositoryImplTest {
             override suspend fun searchByMatchWithFilters(matchExpression: String, format: String?, year: Int?) = error("should not be called")
             override suspend fun filterOnly(format: String?, year: Int?) = error("should not be called")
         }
-        val repo = SearchRepositoryImpl(fakeTrackDao(), fakeAlbumDao(), fakeArtistDao(), searchDao)
+        val repo = SearchRepositoryImpl(inMemoryDb(), fakeTrackDao(), fakeAlbumDao(), fakeArtistDao(), searchDao)
 
         val results = repo.search("   ")
 

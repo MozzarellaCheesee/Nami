@@ -5,8 +5,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.QueueMusic
@@ -37,19 +39,22 @@ fun NamiBottomBar(currentRoute: String?, onTabSelected: (String) -> Unit) {
             .fillMaxWidth()
             .height(56.dp)
             .background(NamiColors.Ink900),
-        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
     ) {
         TABS.forEach { tab ->
             val isActive = tab.route == currentRoute
-            val tint = if (isActive) NamiColors.Shu else NamiColors.Paper70
+            val iconTint = if (isActive) NamiColors.Shu else NamiColors.Paper70
+            val labelColor = if (isActive) NamiColors.Shu else NamiColors.Paper40
             Column(
                 modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
                     .clickable { onTabSelected(tab.route) },
                 horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                Icon(tab.icon, contentDescription = tab.label, tint = tint, modifier = Modifier.height(24.dp))
-                Text(text = tab.label, color = tint, fontSize = 10.sp)
+                Icon(tab.icon, contentDescription = tab.label, tint = iconTint, modifier = Modifier.size(24.dp))
+                Text(text = tab.label, color = labelColor, fontSize = 10.sp)
             }
         }
     }

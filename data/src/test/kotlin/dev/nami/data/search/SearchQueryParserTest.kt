@@ -34,6 +34,18 @@ class SearchQueryParserTest {
     }
 
     @Test
+    fun `format alias mp3 is normalized to mpeg`() {
+        val result = SearchQueryParser.parse("format:mp3")
+        assertEquals("mpeg", result.format)
+    }
+
+    @Test
+    fun `format flac has no alias and is left as is`() {
+        val result = SearchQueryParser.parse("format:flac")
+        assertEquals("flac", result.format)
+    }
+
+    @Test
     fun `operators only leaves empty text`() {
         val result = SearchQueryParser.parse("format:flac year:2023")
         assertEquals("", result.text)

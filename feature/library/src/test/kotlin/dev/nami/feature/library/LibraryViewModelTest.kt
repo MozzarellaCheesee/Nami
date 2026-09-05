@@ -16,6 +16,7 @@ import dev.nami.domain.SearchResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -102,6 +103,33 @@ class LibraryViewModelTest {
             override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
             override suspend fun import(source: ImportSource): Flow<ImportProgress> =
                 flowOf(ImportProgress(1, 1))
+        }
+        val viewModel = LibraryViewModel(fakeRepo, fakeSearchRepo)
+
+        viewModel.importFiles(listOf("content://fake/1"))
+
+        assertEquals(true, rebuildCalled)
+    }
+
+    @Test
+    fun `importFiles still rebuilds search index when import throws`() = runTest {
+        var rebuildCalled = false
+        val fakeSearchRepo = object : SearchRepository {
+            override suspend fun search(query: String) = emptyList<SearchResult>()
+            override suspend fun rebuildIndex() { rebuildCalled = true }
+        }
+        val fakeRepo = object : LibraryRepository {
+            override fun tracks() = flowOf(PagingData.empty<Track>())
+            override fun track(id: TrackId) = flowOf<Track?>(null)
+            override fun albums() = flowOf(PagingData.empty<AlbumSummary>())
+            override fun artists() = flowOf(PagingData.empty<Artist>())
+            override fun album(id: AlbumId) = flowOf<Album?>(null)
+            override fun artist(id: ArtistId) = flowOf<Artist?>(null)
+            override fun tracksInAlbum(id: AlbumId) = flowOf(emptyList<Track>())
+            override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
+            override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
+            override suspend fun import(source: ImportSource): Flow<ImportProgress> =
+                flow { throw RuntimeException("boom") }
         }
         val viewModel = LibraryViewModel(fakeRepo, fakeSearchRepo)
 
