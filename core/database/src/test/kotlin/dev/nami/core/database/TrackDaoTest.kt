@@ -1,5 +1,6 @@
 package dev.nami.core.database
 
+import androidx.paging.PagingSource
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import dev.nami.core.database.entity.TrackEntity
@@ -27,6 +28,10 @@ class TrackDaoTest {
 
     @After
     fun tearDown() = db.close()
+
+    private suspend fun loadFirstPage(source: PagingSource<Int, TrackEntity>) =
+        (source.load(PagingSource.LoadParams.Refresh(key = null, loadSize = 20, placeholdersEnabled = false))
+            as PagingSource.LoadResult.Page)
 
     @Test
     fun `insertAll then findByPath returns inserted track`() = runTest {
@@ -90,6 +95,9 @@ class TrackDaoTest {
         assertEquals(1, trashed.size)
         assertEquals("/trash/t1.flac", trashed[0].path)
         assertEquals(2000L, trashed[0].deletedAt)
+
+        val page = loadFirstPage(db.trackDao().pagingSource())
+        assertEquals(emptyList(), page.data.map { it.id })
     }
 
     @Test

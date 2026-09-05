@@ -140,6 +140,19 @@ class PlaylistDaoTest {
     }
 
     @Test
+    fun `soft-deleted track disappears from tracksInPlaylistFlow`() = runTest {
+        db.playlistDao().insert(PlaylistEntity(id = "p1", name = "Doujin", coverPath = null, createdAt = 1))
+        db.trackDao().insertAll(listOf(trackFixture("t1"), trackFixture("t2")))
+        db.playlistTrackDao().insert(PlaylistTrackEntity("p1", "t1", 0, 1))
+        db.playlistTrackDao().insert(PlaylistTrackEntity("p1", "t2", 1, 2))
+
+        db.trackDao().setDeletedAt("t1", deletedAt = 2000, path = "/trash/t1.flac")
+
+        val tracks = db.playlistTrackDao().tracksInPlaylistFlow("p1").first()
+        assertEquals(listOf("t2"), tracks.map { it.id })
+    }
+
+    @Test
     fun `hardDelete removes the row permanently`() = runTest {
         db.playlistDao().insert(PlaylistEntity(id = "p1", name = "Mix", coverPath = null, createdAt = 1000))
         db.playlistDao().hardDelete("p1")
