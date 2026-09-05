@@ -26,6 +26,10 @@ dependencies {
     ksp(libs.room.compiler)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
+    // System SQLite on some devices/OS builds lacks FTS5 compiled in (confirmed crash on a
+    // real device: "no such module: fts5"). Bundle a SQLite build that has it, and use it
+    // as Room's SupportSQLiteOpenHelper.Factory in production, not just in tests.
+    implementation("com.github.requery:sqlite-android:3.45.0")
 
     testImplementation(libs.junit)
     testImplementation(kotlin("test"))

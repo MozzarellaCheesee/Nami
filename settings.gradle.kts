@@ -9,6 +9,9 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // io.requery:sqlite-android (bundled SQLite with FTS5, needed because some devices'
+        // system SQLite lacks it) is published only via JitPack, not Maven Central.
+        maven("https://jitpack.io")
     }
 }
 
