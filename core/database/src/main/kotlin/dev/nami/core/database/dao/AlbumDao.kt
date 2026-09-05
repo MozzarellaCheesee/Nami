@@ -15,13 +15,21 @@ interface AlbumDao {
     @Query("SELECT * FROM albums WHERE title = :title AND artistId = :artistId LIMIT 1")
     suspend fun findByTitleAndArtist(title: String, artistId: String?): AlbumEntity?
 
-    @Query("SELECT * FROM albums WHERE artistId = :artistId ORDER BY year DESC, title ASC")
+    @Query(
+        """
+        SELECT * FROM albums
+        WHERE artistId = :artistId
+        AND EXISTS (SELECT 1 FROM tracks WHERE tracks.albumId = albums.id AND tracks.deletedAt IS NULL)
+        ORDER BY year DESC, title ASC
+        """,
+    )
     suspend fun albumsByArtist(artistId: String): List<AlbumEntity>
 
     @Query(
         """
         SELECT albums.id AS id, albums.title AS title, artists.name AS artistName, albums.artworkPath AS artworkPath
         FROM albums LEFT JOIN artists ON albums.artistId = artists.id
+        WHERE EXISTS (SELECT 1 FROM tracks WHERE tracks.albumId = albums.id AND tracks.deletedAt IS NULL)
         ORDER BY albums.title ASC
         """,
     )
@@ -37,6 +45,7 @@ interface AlbumDao {
         """
         SELECT albums.id AS id, albums.title AS title, artists.name AS artistName, albums.artworkPath AS artworkPath
         FROM albums LEFT JOIN artists ON albums.artistId = artists.id
+        WHERE EXISTS (SELECT 1 FROM tracks WHERE tracks.albumId = albums.id AND tracks.deletedAt IS NULL)
         """,
     )
     suspend fun allForIndexing(): List<AlbumListRow>

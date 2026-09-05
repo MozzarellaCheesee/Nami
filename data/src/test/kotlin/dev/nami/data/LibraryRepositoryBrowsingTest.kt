@@ -62,6 +62,7 @@ class LibraryRepositoryBrowsingTest {
     fun `albumsByArtist maps album rows for that artist`() = runTest {
         db.artistDao().insert(ArtistEntity(id = "a1", name = "Farewell225", sortName = "Farewell225"))
         db.albumDao().insert(AlbumEntity(id = "al1", title = "Doujin Compilation", artistId = "a1", year = 2023, artworkPath = null))
+        db.trackDao().insertAll(listOf(trackFixture(id = "t1", albumId = "al1")))
 
         val albums = repo.albumsByArtist(ArtistId("a1")).first()
 

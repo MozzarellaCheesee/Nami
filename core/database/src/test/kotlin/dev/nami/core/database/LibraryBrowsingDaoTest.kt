@@ -41,6 +41,7 @@ class LibraryBrowsingDaoTest {
         db.albumDao().insert(
             AlbumEntity(id = "al1", title = "Doujin Compilation", artistId = "a1", year = 2023, artworkPath = null),
         )
+        db.trackDao().insertAll(listOf(trackFixture(id = "t1", albumId = "al1", artistId = "a1")))
 
         val page = loadFirstPage(db.albumDao().pagingSource())
 
@@ -54,11 +55,38 @@ class LibraryBrowsingDaoTest {
         db.albumDao().insert(
             AlbumEntity(id = "al2", title = "Unknown Artist Album", artistId = null, year = null, artworkPath = null),
         )
+        db.trackDao().insertAll(listOf(trackFixture(id = "t1", albumId = "al2")))
 
         val page = loadFirstPage(db.albumDao().pagingSource())
 
         assertEquals("Unknown Artist Album", page.data[0].title)
         assertEquals(null, page.data[0].artistName)
+    }
+
+    @Test
+    fun `album pagingSource excludes albums whose tracks are all soft-deleted`() = runTest {
+        db.albumDao().insert(
+            AlbumEntity(id = "al3", title = "Empty Album", artistId = null, year = null, artworkPath = null),
+        )
+        db.trackDao().insertAll(listOf(trackFixture(id = "t1", albumId = "al3")))
+        db.trackDao().setDeletedAt("t1", deletedAt = 1000, path = "/trash/t1.flac")
+
+        val page = loadFirstPage(db.albumDao().pagingSource())
+
+        assertEquals(0, page.data.size)
+    }
+
+    @Test
+    fun `artist pagingSource excludes artists whose tracks are all soft-deleted`() = runTest {
+        db.artistDao().insert(ArtistEntity(id = "a2", name = "Lonely Artist", sortName = "Lonely Artist"))
+        db.trackDao().insertAll(listOf(trackFixture(id = "t1", artistId = "a2")))
+        db.trackDao().setDeletedAt("t1", deletedAt = 1000, path = "/trash/t1.flac")
+
+        val page = db.artistDao().pagingSource().load(
+            PagingSource.LoadParams.Refresh(key = null, loadSize = 20, placeholdersEnabled = false),
+        ) as PagingSource.LoadResult.Page
+
+        assertEquals(0, page.data.size)
     }
 
     @Test

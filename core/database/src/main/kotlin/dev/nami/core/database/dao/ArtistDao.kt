@@ -15,12 +15,23 @@ interface ArtistDao {
     @Query("SELECT * FROM artists WHERE name = :name LIMIT 1")
     suspend fun findByName(name: String): ArtistEntity?
 
-    @Query("SELECT * FROM artists ORDER BY sortName ASC")
+    @Query(
+        """
+        SELECT * FROM artists
+        WHERE EXISTS (SELECT 1 FROM tracks WHERE tracks.artistId = artists.id AND tracks.deletedAt IS NULL)
+        ORDER BY sortName ASC
+        """,
+    )
     fun pagingSource(): PagingSource<Int, ArtistEntity>
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(artist: ArtistEntity)
 
-    @Query("SELECT * FROM artists")
+    @Query(
+        """
+        SELECT * FROM artists
+        WHERE EXISTS (SELECT 1 FROM tracks WHERE tracks.artistId = artists.id AND tracks.deletedAt IS NULL)
+        """,
+    )
     suspend fun allForIndexing(): List<ArtistEntity>
 }
