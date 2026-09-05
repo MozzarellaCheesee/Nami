@@ -11,7 +11,7 @@ import dev.nami.core.database.entity.TrackEntity
 
 @Database(
     entities = [TrackEntity::class, ArtistEntity::class, AlbumEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class NamiDatabase : RoomDatabase() {

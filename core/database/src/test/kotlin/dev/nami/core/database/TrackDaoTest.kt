@@ -58,4 +58,19 @@ class TrackDaoTest {
 
         assertEquals(1, db.trackDao().count())
     }
+
+    @Test
+    fun `insertAll persists genre and findByPath returns it`() = runTest {
+        val track = TrackEntity(
+            id = "t1", title = "Window View", artistId = null, albumId = null,
+            trackNo = null, discNo = null, durationMs = 180_000,
+            path = "/music/genre.flac", format = "flac", sizeBytes = 1,
+            dateAdded = 1, lastPlayed = null, playCount = 0, genre = "J-Rock",
+        )
+        db.trackDao().insertAll(listOf(track))
+
+        val found = db.trackDao().findByPath("/music/genre.flac")
+
+        assertEquals("J-Rock", found?.genre)
+    }
 }

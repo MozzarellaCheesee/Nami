@@ -19,7 +19,9 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): NamiDatabase =
-        Room.databaseBuilder(context, NamiDatabase::class.java, "nami.db").build()
+        Room.databaseBuilder(context, NamiDatabase::class.java, "nami.db")
+            .addMigrations(dev.nami.core.database.migration.MIGRATION_1_2)
+            .build()
 
     @Provides
     fun provideTrackDao(db: NamiDatabase): TrackDao = db.trackDao()
