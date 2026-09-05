@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.Flow
 
 interface LibraryRepository {
     fun tracks(): Flow<PagingData<Track>>
+    /** Snapshot of every non-deleted track, same order as [tracks], for building a full playback queue. */
+    suspend fun allTracksOrdered(): List<Track>
     fun track(id: TrackId): Flow<Track?>
     fun albums(): Flow<PagingData<AlbumSummary>>
     fun artists(): Flow<PagingData<Artist>>

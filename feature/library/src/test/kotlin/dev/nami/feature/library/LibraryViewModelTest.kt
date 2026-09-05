@@ -82,6 +82,7 @@ class LibraryViewModelTest {
     fun `importing emits progress then reaches total`() = runTest {
         val fakeRepo = object : LibraryRepository {
             override fun tracks(): Flow<PagingData<Track>> = flowOf(PagingData.empty())
+            override suspend fun allTracksOrdered(): List<Track> = emptyList()
             override fun track(id: TrackId): Flow<Track?> = flowOf(null)
             override fun albums() = flowOf(PagingData.empty<AlbumSummary>())
             override fun artists() = flowOf(PagingData.empty<Artist>())
@@ -106,6 +107,7 @@ class LibraryViewModelTest {
     fun `importFolder emits progress then reaches total`() = runTest {
         val fakeRepo = object : LibraryRepository {
             override fun tracks() = flowOf(PagingData.empty<Track>())
+            override suspend fun allTracksOrdered(): List<Track> = emptyList()
             override fun track(id: TrackId) = flowOf<Track?>(null)
             override fun albums() = flowOf(PagingData.empty<AlbumSummary>())
             override fun artists() = flowOf(PagingData.empty<Artist>())
@@ -132,6 +134,7 @@ class LibraryViewModelTest {
     fun `selectTab updates uiState selectedTab`() = runTest {
         val fakeRepo = object : LibraryRepository {
             override fun tracks() = flowOf(PagingData.empty<Track>())
+            override suspend fun allTracksOrdered(): List<Track> = emptyList()
             override fun track(id: TrackId) = flowOf<Track?>(null)
             override fun albums() = flowOf(PagingData.empty<AlbumSummary>())
             override fun artists() = flowOf(PagingData.empty<Artist>())
@@ -160,6 +163,7 @@ class LibraryViewModelTest {
         }
         val fakeRepo = object : LibraryRepository {
             override fun tracks() = flowOf(PagingData.empty<Track>())
+            override suspend fun allTracksOrdered(): List<Track> = emptyList()
             override fun track(id: TrackId) = flowOf<Track?>(null)
             override fun albums() = flowOf(PagingData.empty<AlbumSummary>())
             override fun artists() = flowOf(PagingData.empty<Artist>())
@@ -189,6 +193,7 @@ class LibraryViewModelTest {
         }
         val fakeRepo = object : LibraryRepository {
             override fun tracks() = flowOf(PagingData.empty<Track>())
+            override suspend fun allTracksOrdered(): List<Track> = emptyList()
             override fun track(id: TrackId) = flowOf<Track?>(null)
             override fun albums() = flowOf(PagingData.empty<AlbumSummary>())
             override fun artists() = flowOf(PagingData.empty<Artist>())
@@ -213,6 +218,7 @@ class LibraryViewModelTest {
     fun `deleteTrack sets lastDeletedTrackIds after repository call`() = runTest {
         val fakeLibraryRepository = object : LibraryRepository {
             override fun tracks() = flowOf(PagingData.empty<Track>())
+            override suspend fun allTracksOrdered(): List<Track> = emptyList()
             override fun track(id: TrackId) = flowOf<Track?>(null)
             override fun albums() = flowOf(PagingData.empty<AlbumSummary>())
             override fun artists() = flowOf(PagingData.empty<Artist>())
@@ -237,6 +243,7 @@ class LibraryViewModelTest {
     fun `undoLastDelete restores the track and clears state`() = runTest {
         val fakeLibraryRepository = object : LibraryRepository {
             override fun tracks() = flowOf(PagingData.empty<Track>())
+            override suspend fun allTracksOrdered(): List<Track> = emptyList()
             override fun track(id: TrackId) = flowOf<Track?>(null)
             override fun albums() = flowOf(PagingData.empty<AlbumSummary>())
             override fun artists() = flowOf(PagingData.empty<Artist>())
@@ -263,6 +270,7 @@ class LibraryViewModelTest {
     fun `toggleTrackSelection adds then removes an id`() = runTest {
         val fakeLibraryRepository = object : LibraryRepository {
             override fun tracks() = flowOf(PagingData.empty<Track>())
+            override suspend fun allTracksOrdered(): List<Track> = emptyList()
             override fun track(id: TrackId) = flowOf<Track?>(null)
             override fun albums() = flowOf(PagingData.empty<AlbumSummary>())
             override fun artists() = flowOf(PagingData.empty<Artist>())
@@ -289,6 +297,7 @@ class LibraryViewModelTest {
         val deletedIds = mutableListOf<TrackId>()
         val fakeLibraryRepository = object : LibraryRepository {
             override fun tracks() = flowOf(PagingData.empty<Track>())
+            override suspend fun allTracksOrdered(): List<Track> = emptyList()
             override fun track(id: TrackId) = flowOf<Track?>(null)
             override fun albums() = flowOf(PagingData.empty<AlbumSummary>())
             override fun artists() = flowOf(PagingData.empty<Artist>())
@@ -316,6 +325,7 @@ class LibraryViewModelTest {
     fun `clearSelection empties selectedTrackIds`() = runTest {
         val fakeLibraryRepository = object : LibraryRepository {
             override fun tracks() = flowOf(PagingData.empty<Track>())
+            override suspend fun allTracksOrdered(): List<Track> = emptyList()
             override fun track(id: TrackId) = flowOf<Track?>(null)
             override fun albums() = flowOf(PagingData.empty<AlbumSummary>())
             override fun artists() = flowOf(PagingData.empty<Artist>())

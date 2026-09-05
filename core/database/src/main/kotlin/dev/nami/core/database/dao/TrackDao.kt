@@ -24,6 +24,19 @@ interface TrackDao {
     )
     fun pagingSource(): PagingSource<Int, TrackWithArtwork>
 
+    @Query(
+        """
+        SELECT tracks.*, COALESCE(albums.artworkPath, tracks.artworkPath) AS albumArtworkPath,
+               artists.name AS artistName
+        FROM tracks
+        LEFT JOIN albums ON tracks.albumId = albums.id
+        LEFT JOIN artists ON tracks.artistId = artists.id
+        WHERE tracks.deletedAt IS NULL
+        ORDER BY tracks.dateAdded DESC
+        """,
+    )
+    suspend fun allOrderedWithArtwork(): List<TrackWithArtwork>
+
     @Query("SELECT * FROM tracks WHERE id = :id")
     suspend fun findById(id: String): TrackEntity?
 

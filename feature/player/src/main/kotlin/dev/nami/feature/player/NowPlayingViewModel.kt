@@ -31,6 +31,20 @@ class NowPlayingViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Plays [trackId] as if it were tapped from the full "all tracks" library list: the queue is
+     * every track in that list, positioned at [trackId], so skipPrevious/skipNext traverse the
+     * whole library exactly like tapping a track inside an album/artist/playlist already does.
+     */
+    fun playFromLibrary(trackId: TrackId) {
+        viewModelScope.launch {
+            val tracks = libraryRepository.allTracksOrdered()
+            val startIndex = tracks.indexOfFirst { it.id == trackId }
+            if (startIndex < 0) return@launch
+            playerRepository.play(tracks.map { it.toPlayableTrack(artistName = null) }, startIndex = startIndex)
+        }
+    }
+
     fun playTracks(tracks: List<Track>, artistName: String?, startIndex: Int) {
         viewModelScope.launch {
             playerRepository.play(tracks.map { it.toPlayableTrack(artistName) }, startIndex = startIndex)

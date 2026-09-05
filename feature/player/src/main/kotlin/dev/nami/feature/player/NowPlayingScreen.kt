@@ -31,10 +31,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -63,6 +65,7 @@ fun NowPlayingScreen(
 
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
     var artworkOffsetX by remember { mutableFloatStateOf(0f) }
+    var artworkWidthPx by remember { mutableIntStateOf(0) }
 
     Column(
         modifier = Modifier
@@ -92,17 +95,29 @@ fun NowPlayingScreen(
             .fillMaxWidth()
             .aspectRatio(1f)
             .padding(vertical = 24.dp)
+            .onSizeChanged { artworkWidthPx = it.width }
             .offset { IntOffset(artworkOffsetX.roundToInt(), 0) }
             .background(NamiColors.Ink700, RoundedCornerShape(4.dp))
             .draggable(
                 orientation = Orientation.Horizontal,
                 state = rememberDraggableState { delta -> artworkOffsetX += delta },
                 onDragStopped = {
+                    val exitDistance = artworkWidthPx.toFloat() + skipThresholdPx
                     when {
-                        artworkOffsetX < -skipThresholdPx -> viewModel.skipNext()
-                        artworkOffsetX > skipThresholdPx -> viewModel.skipPrevious()
+                        artworkOffsetX < -skipThresholdPx -> {
+                            animate(artworkOffsetX, -exitDistance) { value, _ -> artworkOffsetX = value }
+                            viewModel.skipNext()
+                            artworkOffsetX = exitDistance
+                            animate(artworkOffsetX, 0f) { value, _ -> artworkOffsetX = value }
+                        }
+                        artworkOffsetX > skipThresholdPx -> {
+                            animate(artworkOffsetX, exitDistance) { value, _ -> artworkOffsetX = value }
+                            viewModel.skipPrevious()
+                            artworkOffsetX = -exitDistance
+                            animate(artworkOffsetX, 0f) { value, _ -> artworkOffsetX = value }
+                        }
+                        else -> animate(artworkOffsetX, 0f) { value, _ -> artworkOffsetX = value }
                     }
-                    animate(artworkOffsetX, 0f) { value, _ -> artworkOffsetX = value }
                 },
             )
 

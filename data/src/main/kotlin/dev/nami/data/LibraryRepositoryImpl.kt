@@ -53,6 +53,9 @@ class LibraryRepositoryImpl @Inject constructor(
             .flow
             .map { pagingData -> pagingData.pagingMap { it.toDomain() } }
 
+    override suspend fun allTracksOrdered(): List<Track> =
+        trackDao.allOrderedWithArtwork().map { it.toDomain() }
+
     override fun track(id: TrackId): Flow<Track?> = flow {
         emit(trackDao.findByIdWithArtwork(id.value)?.toDomain())
     }

@@ -66,6 +66,7 @@ class NowPlayingViewModelTest {
 
     private val libraryRepo = object : LibraryRepository {
         override fun tracks() = throw NotImplementedError()
+            override suspend fun allTracksOrdered(): List<Track> = emptyList()
         override fun track(id: TrackId) = flowOf(trackFixture("t1", "/data/music/real-file.flac"))
         override fun albums() = throw NotImplementedError()
         override fun artists() = throw NotImplementedError()

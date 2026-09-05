@@ -74,7 +74,7 @@ fun NamiNavHost(
             composable(ROUTE_LIBRARY) {
                 LibraryScreen(
                     onTrackClick = { trackId ->
-                        nowPlayingViewModel.playTrack(trackId)
+                        nowPlayingViewModel.playFromLibrary(trackId)
                         navController.navigate(ROUTE_NOW_PLAYING)
                     },
                     onAlbumClick = { albumId -> navController.navigate("album/${albumId.value}") },

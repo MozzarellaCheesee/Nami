@@ -38,6 +38,7 @@ class AlbumDetailViewModelTest {
         )
         val fakeRepo = object : LibraryRepository {
             override fun tracks() = throw NotImplementedError()
+            override suspend fun allTracksOrdered(): List<Track> = emptyList()
             override fun track(id: TrackId) = throw NotImplementedError()
             override fun albums() = throw NotImplementedError()
             override fun artists() = throw NotImplementedError()
