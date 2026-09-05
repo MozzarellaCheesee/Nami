@@ -9,3 +9,5 @@ captures/
 .cxx/
 *.apk
 native/target/
+core/native/src/main/jniLibs/
+core/native/build/

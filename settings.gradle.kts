@@ -19,6 +19,7 @@ include(
     ":core:model",
     ":core:database",
     ":core:designsystem",
+    ":core:native",
     ":domain",
     ":data",
     ":player",
