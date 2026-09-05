@@ -66,13 +66,6 @@ fun MiniPlayer(
             .height(60.dp)
             .background(NamiColors.Ink800)
             .clickable(onClick = onExpand)
-            .padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        val artworkModifier = Modifier
-            .size(ARTWORK_SIZE_DP.dp)
-            .offset { IntOffset(artworkOffsetX.roundToInt(), 0) }
-            .background(NamiColors.Ink700, RoundedCornerShape(4.dp))
             .draggable(
                 orientation = Orientation.Horizontal,
                 state = rememberDraggableState { delta -> artworkOffsetX += delta },
@@ -95,6 +88,13 @@ fun MiniPlayer(
                     }
                 },
             )
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val artworkModifier = Modifier
+            .size(ARTWORK_SIZE_DP.dp)
+            .offset { IntOffset(artworkOffsetX.roundToInt(), 0) }
+            .background(NamiColors.Ink700, RoundedCornerShape(4.dp))
         if (queue.nowPlaying?.artworkPath != null) {
             AsyncImage(
                 model = queue.nowPlaying?.artworkPath,
