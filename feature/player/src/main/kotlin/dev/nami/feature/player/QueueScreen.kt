@@ -26,6 +26,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,6 +65,15 @@ fun QueueScreen(
             }
         }
         LazyColumn(modifier = Modifier.fillMaxWidth()) {
+            if (manual.isEmpty() && context.isEmpty()) {
+                item {
+                    Text(
+                        text = "Очередь пуста",
+                        color = NamiColors.Paper40,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
+                    )
+                }
+            }
             if (manual.isNotEmpty()) {
                 item {
                     Text(
@@ -72,7 +82,7 @@ fun QueueScreen(
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                     )
                 }
-                itemsIndexed(manual, key = { _, item -> item.track.id.value }) { index, item ->
+                itemsIndexed(manual, key = { index, item -> "manual-$index-${item.track.id.value}" }) { index, item ->
                     ManualQueueRow(
                         item = item,
                         onDragBy = { relativeMove ->
@@ -91,7 +101,7 @@ fun QueueScreen(
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                     )
                 }
-                itemsIndexed(context, key = { _, item -> item.track.id.value }) { index, item ->
+                itemsIndexed(context, key = { index, item -> "context-$index-${item.track.id.value}" }) { index, item ->
                     ContextQueueRow(
                         item = item,
                         onRemove = { viewModel.removeQueueItem(contextStartIndex + index) },
@@ -104,6 +114,7 @@ fun QueueScreen(
 
 @Composable
 private fun ManualQueueRow(item: QueueItem, onDragBy: (Int) -> Unit, onRemove: () -> Unit) {
+    val currentOnDragBy by rememberUpdatedState(onDragBy)
     val density = LocalDensity.current
     var dragOffsetPx by remember { mutableStateOf(0f) }
     val rowHeightPx = with(density) { QUEUE_ROW_HEIGHT.toPx() }
@@ -128,7 +139,7 @@ private fun ManualQueueRow(item: QueueItem, onDragBy: (Int) -> Unit, onRemove: (
                         onDragEnd = {
                             val moveBy = (dragOffsetPx / rowHeightPx).toInt()
                             dragOffsetPx = 0f
-                            if (moveBy != 0) onDragBy(moveBy)
+                            if (moveBy != 0) currentOnDragBy(moveBy)
                         },
                         onDragCancel = { dragOffsetPx = 0f },
                     )
@@ -145,10 +156,11 @@ private fun ManualQueueRow(item: QueueItem, onDragBy: (Int) -> Unit, onRemove: (
 
 @Composable
 private fun ContextQueueRow(item: QueueItem, onRemove: () -> Unit) {
+    val currentOnRemove by rememberUpdatedState(onRemove)
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
             if (value == SwipeToDismissBoxValue.EndToStart) {
-                onRemove()
+                currentOnRemove()
                 true
             } else {
                 false

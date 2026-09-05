@@ -32,6 +32,10 @@ class PlayerRepositoryImpl @Inject constructor(
     override val queue: StateFlow<PlayerQueue> = _queue
 
     private var controller: MediaController? = null
+    // Known limitation: keyed by mediaId, not by queue position — if the same track
+    // appears twice in the queue (e.g. added manually while already present from
+    // album context), both copies share one origin entry. A full fix needs
+    // per-position origin tracking, deferred as a larger refactor.
     private val originByMediaId = mutableMapOf<String, QueueOrigin>()
 
     init {
@@ -121,8 +125,13 @@ class PlayerRepositoryImpl @Inject constructor(
     override suspend fun addToQueue(track: PlayableTrack) {
         val player = controller ?: return
         originByMediaId[track.id.value] = QueueOrigin.MANUAL
+        val wasEmpty = player.mediaItemCount == 0
         val insertIndex = (player.currentMediaItemIndex + 1).coerceAtMost(player.mediaItemCount)
         player.addMediaItem(insertIndex, track.toMediaItem())
+        if (wasEmpty) {
+            player.prepare()
+            player.play()
+        }
     }
 
     override suspend fun moveQueueItem(fromIndex: Int, toIndex: Int) {
