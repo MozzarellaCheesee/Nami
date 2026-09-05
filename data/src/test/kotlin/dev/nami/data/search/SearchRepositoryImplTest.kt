@@ -47,6 +47,7 @@ class SearchRepositoryImplTest {
     private fun fakeTrackDao(rows: List<TrackDao.TrackIndexRow> = emptyList()) = object : TrackDao {
         override fun pagingSource(): PagingSource<Int, TrackDao.TrackWithArtwork> = error("unused")
         override suspend fun findById(id: String): TrackEntity? = error("unused")
+        override suspend fun findByIdWithArtwork(id: String): TrackDao.TrackWithArtwork? = error("unused")
         override suspend fun findByPath(path: String): TrackEntity? = error("unused")
         override suspend fun insertAll(tracks: List<TrackEntity>) = error("unused")
         override suspend fun count(): Int = error("unused")
