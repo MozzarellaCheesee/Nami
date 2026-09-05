@@ -20,6 +20,7 @@ class MetadataResolverTest {
             override suspend fun findByName(name: String) = if (name == "Farewell225") existing else null
             override suspend fun insert(artist: ArtistEntity) = error("should not insert when found")
             override fun pagingSource(): PagingSource<Int, ArtistEntity> = error("unused")
+            override suspend fun allForIndexing(): List<ArtistEntity> = error("unused")
         }
         val albumDao = object : AlbumDao {
             override suspend fun findById(id: String): AlbumEntity? = null
@@ -28,6 +29,7 @@ class MetadataResolverTest {
             override suspend fun insert(album: AlbumEntity) = error("unused")
             override suspend fun setArtworkPath(id: String, path: String) = error("unused")
             override fun pagingSource(): PagingSource<Int, AlbumDao.AlbumListRow> = error("unused")
+            override suspend fun allForIndexing(): List<AlbumDao.AlbumListRow> = error("unused")
         }
         val resolver = MetadataResolver(artistDao, albumDao)
 
@@ -44,6 +46,7 @@ class MetadataResolverTest {
             override suspend fun findByName(name: String): ArtistEntity? = null
             override suspend fun insert(artist: ArtistEntity) { inserted = artist }
             override fun pagingSource(): PagingSource<Int, ArtistEntity> = error("unused")
+            override suspend fun allForIndexing(): List<ArtistEntity> = error("unused")
         }
         val albumDao = object : AlbumDao {
             override suspend fun findById(id: String): AlbumEntity? = null
@@ -52,6 +55,7 @@ class MetadataResolverTest {
             override suspend fun insert(album: AlbumEntity) = error("unused")
             override suspend fun setArtworkPath(id: String, path: String) = error("unused")
             override fun pagingSource(): PagingSource<Int, AlbumDao.AlbumListRow> = error("unused")
+            override suspend fun allForIndexing(): List<AlbumDao.AlbumListRow> = error("unused")
         }
         val resolver = MetadataResolver(artistDao, albumDao)
 
@@ -68,6 +72,7 @@ class MetadataResolverTest {
             override suspend fun findByName(name: String): ArtistEntity? = null
             override suspend fun insert(artist: ArtistEntity) = error("should not be called")
             override fun pagingSource(): PagingSource<Int, ArtistEntity> = error("unused")
+            override suspend fun allForIndexing(): List<ArtistEntity> = error("unused")
         }
         val albumDao = object : AlbumDao {
             override suspend fun findById(id: String): AlbumEntity? = null
@@ -76,6 +81,7 @@ class MetadataResolverTest {
             override suspend fun insert(album: AlbumEntity) = error("unused")
             override suspend fun setArtworkPath(id: String, path: String) = error("unused")
             override fun pagingSource(): PagingSource<Int, AlbumDao.AlbumListRow> = error("unused")
+            override suspend fun allForIndexing(): List<AlbumDao.AlbumListRow> = error("unused")
         }
         val resolver = MetadataResolver(artistDao, albumDao)
 
@@ -90,6 +96,7 @@ class MetadataResolverTest {
             override suspend fun findByName(name: String): ArtistEntity? = null
             override suspend fun insert(artist: ArtistEntity) = error("unused")
             override fun pagingSource(): PagingSource<Int, ArtistEntity> = error("unused")
+            override suspend fun allForIndexing(): List<ArtistEntity> = error("unused")
         }
         val albumDao = object : AlbumDao {
             override suspend fun findById(id: String): AlbumEntity? = null
@@ -98,6 +105,7 @@ class MetadataResolverTest {
             override suspend fun insert(album: AlbumEntity) { inserted = album }
             override suspend fun setArtworkPath(id: String, path: String) = error("unused")
             override fun pagingSource(): PagingSource<Int, AlbumDao.AlbumListRow> = error("unused")
+            override suspend fun allForIndexing(): List<AlbumDao.AlbumListRow> = error("unused")
         }
         val resolver = MetadataResolver(artistDao, albumDao)
 
