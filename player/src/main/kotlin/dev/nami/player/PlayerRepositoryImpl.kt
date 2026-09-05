@@ -3,14 +3,18 @@ package dev.nami.player
 import android.content.ComponentName
 import android.content.Context
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.MoreExecutors
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.nami.core.model.TrackId
+import dev.nami.domain.PlayableTrack
 import dev.nami.domain.PlaybackState
+import dev.nami.domain.PlayerQueue
 import dev.nami.domain.PlayerRepository
+import dev.nami.domain.QueueOrigin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
@@ -24,8 +28,11 @@ class PlayerRepositoryImpl @Inject constructor(
     private val _state = MutableStateFlow<PlaybackState>(PlaybackState.Idle)
     override val state: StateFlow<PlaybackState> = _state
 
+    private val _queue = MutableStateFlow(PlayerQueue.EMPTY)
+    override val queue: StateFlow<PlayerQueue> = _queue
+
     private var controller: MediaController? = null
-    private var queue: List<TrackId> = emptyList()
+    private val originByMediaId = mutableMapOf<String, QueueOrigin>()
 
     init {
         val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
@@ -37,6 +44,7 @@ class PlayerRepositoryImpl @Inject constructor(
                     object : Player.Listener {
                         override fun onEvents(player: Player, events: Player.Events) {
                             publishState(player)
+                            publishQueue(player)
                         }
                     },
                 )
@@ -46,8 +54,9 @@ class PlayerRepositoryImpl @Inject constructor(
     }
 
     private fun publishState(player: Player) {
-        val index = player.currentMediaItemIndex
-        val trackId = queue.getOrNull(index)
+        val trackId = player.currentMediaItem?.mediaId
+            ?.takeIf { it.isNotEmpty() }
+            ?.let(::TrackId)
         _state.value = toPlaybackState(
             trackId = trackId,
             positionMs = player.currentPosition,
@@ -57,9 +66,35 @@ class PlayerRepositoryImpl @Inject constructor(
         )
     }
 
-    override suspend fun play(queue: List<TrackId>, startIndex: Int, startMs: Long) {
-        this.queue = queue
-        val items = queue.map { MediaItem.fromUri(it.value) }
+    private fun publishQueue(player: Player) {
+        val nowPlaying = player.currentMediaItem?.toMediaItemInfo()
+        val currentIndex = player.currentMediaItemIndex
+        val upcoming = if (currentIndex == androidx.media3.common.C.INDEX_UNSET) {
+            emptyList()
+        } else {
+            (currentIndex + 1 until player.mediaItemCount).map { i -> player.getMediaItemAt(i).toMediaItemInfo() }
+        }
+        // Drop stale origins for items no longer in the timeline (played-through or removed).
+        val liveIds = upcoming.mapTo(mutableSetOf()) { it.mediaId }
+        originByMediaId.keys.retainAll(liveIds)
+        _queue.value = buildPlayerQueue(nowPlaying, upcoming, originByMediaId)
+    }
+
+    private fun MediaItem.toMediaItemInfo(): MediaItemInfo = MediaItemInfo(
+        mediaId = mediaId,
+        title = mediaMetadata.title?.toString().orEmpty(),
+        artist = mediaMetadata.artist?.toString(),
+    )
+
+    private fun PlayableTrack.toMediaItem(): MediaItem = MediaItem.Builder()
+        .setMediaId(id.value)
+        .setUri(path)
+        .setMediaMetadata(MediaMetadata.Builder().setTitle(title).setArtist(artistName).build())
+        .build()
+
+    override suspend fun play(tracks: List<PlayableTrack>, startIndex: Int, startMs: Long) {
+        originByMediaId.clear()
+        val items = tracks.map { it.toMediaItem() }
         controller?.apply {
             setMediaItems(items, startIndex, startMs)
             prepare()
@@ -81,5 +116,31 @@ class PlayerRepositoryImpl @Inject constructor(
 
     override suspend fun skipPrevious() {
         controller?.seekToPrevious()
+    }
+
+    override suspend fun addToQueue(track: PlayableTrack) {
+        val player = controller ?: return
+        originByMediaId[track.id.value] = QueueOrigin.MANUAL
+        val insertIndex = (player.currentMediaItemIndex + 1).coerceAtMost(player.mediaItemCount)
+        player.addMediaItem(insertIndex, track.toMediaItem())
+    }
+
+    override suspend fun moveQueueItem(fromIndex: Int, toIndex: Int) {
+        val player = controller ?: return
+        val upcoming = _queue.value.upcoming
+        if (fromIndex !in upcoming.indices || toIndex !in upcoming.indices) return
+        if (upcoming[fromIndex].origin != QueueOrigin.MANUAL || upcoming[toIndex].origin != QueueOrigin.MANUAL) return
+        val base = player.currentMediaItemIndex + 1
+        player.moveMediaItem(base + fromIndex, base + toIndex)
+    }
+
+    override suspend fun removeQueueItem(index: Int) {
+        val player = controller ?: return
+        val upcoming = _queue.value.upcoming
+        if (index !in upcoming.indices) return
+        val base = player.currentMediaItemIndex + 1
+        val mediaId = upcoming[index].track.id.value
+        player.removeMediaItem(base + index)
+        originByMediaId.remove(mediaId)
     }
 }
