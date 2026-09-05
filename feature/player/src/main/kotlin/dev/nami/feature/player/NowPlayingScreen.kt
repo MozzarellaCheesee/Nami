@@ -1,18 +1,19 @@
 package dev.nami.feature.player
 
-import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animate
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -29,10 +30,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
@@ -42,7 +43,6 @@ import coil3.compose.AsyncImage
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.domain.PlaybackState
 import kotlin.math.roundToInt
-import kotlinx.coroutines.launch
 
 private const val DISMISS_THRESHOLD_DP = 120
 private const val SKIP_THRESHOLD_DP = 96
@@ -57,42 +57,32 @@ fun NowPlayingScreen(
     val state by viewModel.playbackState.collectAsState()
     val queue by viewModel.queue.collectAsState()
     val playing = state as? PlaybackState.Playing
-    val scope = rememberCoroutineScope()
     val density = LocalDensity.current
+    val dismissThresholdPx = with(density) { DISMISS_THRESHOLD_DP.dp.toPx() }
+    val skipThresholdPx = with(density) { SKIP_THRESHOLD_DP.dp.toPx() }
 
-    val dragOffsetY = remember { Animatable(0f) }
-    val artworkOffsetX = remember { Animatable(0f) }
+    var dragOffsetY by remember { mutableFloatStateOf(0f) }
+    var artworkOffsetX by remember { mutableFloatStateOf(0f) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .offset { IntOffset(0, dragOffsetY.value.roundToInt()) }
+            .offset { IntOffset(0, dragOffsetY.roundToInt()) }
             .background(NamiColors.Ink900)
             .navigationBarsPadding()
-            .pointerInput(Unit) {
-                val dismissThresholdPx = with(density) { DISMISS_THRESHOLD_DP.dp.toPx() }
-                detectVerticalDragGestures(
-                    onVerticalDrag = { change, dragAmount ->
-                        change.consume()
-                        scope.launch {
-                            val next = (dragOffsetY.value + dragAmount).coerceAtLeast(0f)
-                            dragOffsetY.snapTo(next)
-                        }
-                    },
-                    onDragEnd = {
-                        scope.launch {
-                            if (dragOffsetY.value > dismissThresholdPx) {
-                                onCollapse()
-                            } else {
-                                dragOffsetY.animateTo(0f)
-                            }
-                        }
-                    },
-                    onDragCancel = {
-                        scope.launch { dragOffsetY.animateTo(0f) }
-                    },
-                )
-            }
+            .draggable(
+                orientation = Orientation.Vertical,
+                state = rememberDraggableState { delta ->
+                    dragOffsetY = (dragOffsetY + delta).coerceAtLeast(0f)
+                },
+                onDragStopped = { velocity ->
+                    if (dragOffsetY > dismissThresholdPx || velocity > 2000f) {
+                        onCollapse()
+                    } else {
+                        animate(dragOffsetY, 0f) { value, _ -> dragOffsetY = value }
+                    }
+                },
+            )
             .padding(20.dp),
     ) {
         IconButton(onClick = onCollapse) {
@@ -100,32 +90,21 @@ fun NowPlayingScreen(
         }
         val artworkModifier = Modifier
             .fillMaxWidth()
-            .height(310.dp)
+            .aspectRatio(1f)
             .padding(vertical = 24.dp)
-            .offset { IntOffset(artworkOffsetX.value.roundToInt(), 0) }
+            .offset { IntOffset(artworkOffsetX.roundToInt(), 0) }
             .background(NamiColors.Ink700, RoundedCornerShape(4.dp))
-            .pointerInput(Unit) {
-                val skipThresholdPx = with(density) { SKIP_THRESHOLD_DP.dp.toPx() }
-                detectHorizontalDragGestures(
-                    onHorizontalDrag = { change, dragAmount ->
-                        change.consume()
-                        scope.launch { artworkOffsetX.snapTo(artworkOffsetX.value + dragAmount) }
-                    },
-                    onDragEnd = {
-                        scope.launch {
-                            val offset = artworkOffsetX.value
-                            when {
-                                offset < -skipThresholdPx -> viewModel.skipNext()
-                                offset > skipThresholdPx -> viewModel.skipPrevious()
-                            }
-                            artworkOffsetX.animateTo(0f)
-                        }
-                    },
-                    onDragCancel = {
-                        scope.launch { artworkOffsetX.animateTo(0f) }
-                    },
-                )
-            }
+            .draggable(
+                orientation = Orientation.Horizontal,
+                state = rememberDraggableState { delta -> artworkOffsetX += delta },
+                onDragStopped = {
+                    when {
+                        artworkOffsetX < -skipThresholdPx -> viewModel.skipNext()
+                        artworkOffsetX > skipThresholdPx -> viewModel.skipPrevious()
+                    }
+                    animate(artworkOffsetX, 0f) { value, _ -> artworkOffsetX = value }
+                },
+            )
 
         if (queue.nowPlaying?.artworkPath != null) {
             AsyncImage(
