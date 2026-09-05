@@ -21,11 +21,13 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.model.AlbumId
+import dev.nami.core.model.TrackId
 
 @Composable
 fun ArtistDetailScreen(
     onBack: () -> Unit,
     onAlbumClick: (AlbumId) -> Unit,
+    onTrackClick: (TrackId) -> Unit,
     viewModel: ArtistDetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -51,7 +53,7 @@ fun ArtistDetailScreen(
         }
         LazyColumn {
             items(uiState.tracks, key = { it.id.value }) { track ->
-                TrackListItem(track = track, onClick = { })
+                TrackListItem(track = track, onClick = { onTrackClick(track.id) })
             }
         }
     }

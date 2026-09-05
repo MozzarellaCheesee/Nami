@@ -55,7 +55,13 @@ fun NamiNavHost(
                 ROUTE_ALBUM_DETAIL,
                 arguments = listOf(navArgument("albumId") { type = NavType.StringType }),
             ) {
-                AlbumDetailScreen(onBack = { navController.popBackStack() })
+                AlbumDetailScreen(
+                    onBack = { navController.popBackStack() },
+                    onTrackClick = { trackId ->
+                        nowPlayingViewModel.playTrack(trackId)
+                        navController.navigate(ROUTE_NOW_PLAYING)
+                    },
+                )
             }
             composable(
                 ROUTE_ARTIST_DETAIL,
@@ -64,6 +70,10 @@ fun NamiNavHost(
                 ArtistDetailScreen(
                     onBack = { navController.popBackStack() },
                     onAlbumClick = { albumId -> navController.navigate("album/${albumId.value}") },
+                    onTrackClick = { trackId ->
+                        nowPlayingViewModel.playTrack(trackId)
+                        navController.navigate(ROUTE_NOW_PLAYING)
+                    },
                 )
             }
         }
