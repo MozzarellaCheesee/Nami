@@ -2,15 +2,21 @@ package dev.nami.core.database.di
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.RoomDatabase
+import androidx.sqlite.db.SupportSQLiteDatabase
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import dev.nami.core.database.CREATE_SEARCH_INDEX_SQL
 import dev.nami.core.database.NamiDatabase
 import dev.nami.core.database.dao.AlbumDao
 import dev.nami.core.database.dao.ArtistDao
+import dev.nami.core.database.dao.SearchDao
 import dev.nami.core.database.dao.TrackDao
+import dev.nami.core.database.migration.MIGRATION_1_2
+import dev.nami.core.database.migration.MIGRATION_2_3
 import javax.inject.Singleton
 
 @Module
@@ -20,7 +26,15 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): NamiDatabase =
         Room.databaseBuilder(context, NamiDatabase::class.java, "nami.db")
-            .addMigrations(dev.nami.core.database.migration.MIGRATION_1_2)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            .addCallback(
+                object : RoomDatabase.Callback() {
+                    override fun onCreate(db: SupportSQLiteDatabase) {
+                        super.onCreate(db)
+                        db.execSQL(CREATE_SEARCH_INDEX_SQL)
+                    }
+                },
+            )
             .build()
 
     @Provides
@@ -31,4 +45,7 @@ object DatabaseModule {
 
     @Provides
     fun provideAlbumDao(db: NamiDatabase): AlbumDao = db.albumDao()
+
+    @Provides
+    fun provideSearchDao(db: NamiDatabase): SearchDao = db.searchDao()
 }
