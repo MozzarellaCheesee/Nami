@@ -31,6 +31,7 @@ fun MiniPlayer(
     viewModel: NowPlayingViewModel = hiltViewModel(),
 ) {
     val state by viewModel.playbackState.collectAsState()
+    val queue by viewModel.queue.collectAsState()
     val playing = state as? PlaybackState.Playing
 
     Row(
@@ -47,7 +48,7 @@ fun MiniPlayer(
                 .background(NamiColors.Ink700, RoundedCornerShape(4.dp)),
         )
         Text(
-            text = playing?.trackId?.value ?: "Ничего не играет",
+            text = queue.nowPlaying?.title ?: "Ничего не играет",
             color = NamiColors.Paper100,
             modifier = Modifier
                 .padding(start = 12.dp)

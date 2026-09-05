@@ -72,7 +72,11 @@ fun NamiNavHost(
             composable(ROUTE_PLAYLISTS) { PlaylistsPlaceholderScreen() }
             composable(ROUTE_SETTINGS) { SettingsPlaceholderScreen() }
             composable(ROUTE_NOW_PLAYING) {
-                NowPlayingScreen(onCollapse = { navController.popBackStack() }, viewModel = nowPlayingViewModel)
+                NowPlayingScreen(
+                    onCollapse = { navController.popBackStack() },
+                    onQueueClick = {},
+                    viewModel = nowPlayingViewModel,
+                )
             }
             composable(
                 ROUTE_ALBUM_DETAIL,

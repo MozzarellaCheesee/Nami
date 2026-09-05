@@ -31,9 +31,11 @@ import dev.nami.domain.PlaybackState
 @Composable
 fun NowPlayingScreen(
     onCollapse: () -> Unit,
+    onQueueClick: () -> Unit,
     viewModel: NowPlayingViewModel = hiltViewModel(),
 ) {
     val state by viewModel.playbackState.collectAsState()
+    val queue by viewModel.queue.collectAsState()
     val playing = state as? PlaybackState.Playing
 
     Column(
@@ -53,9 +55,12 @@ fun NowPlayingScreen(
                 .background(NamiColors.Ink700, RoundedCornerShape(4.dp)),
         )
         Text(
-            text = playing?.trackId?.value ?: "Ничего не играет",
+            text = queue.nowPlaying?.title ?: "Ничего не играет",
             color = NamiColors.Paper100,
         )
+        queue.nowPlaying?.artistName?.let { artistName ->
+            Text(text = artistName, color = NamiColors.Paper70)
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -78,6 +83,9 @@ fun NowPlayingScreen(
             IconButton(onClick = viewModel::skipNext) {
                 Icon(Icons.Filled.SkipNext, contentDescription = "Следующий", tint = NamiColors.Paper100)
             }
+        }
+        androidx.compose.material3.TextButton(onClick = onQueueClick, modifier = Modifier.padding(top = 12.dp)) {
+            Text(text = "Очередь", color = NamiColors.Paper70)
         }
     }
 }
