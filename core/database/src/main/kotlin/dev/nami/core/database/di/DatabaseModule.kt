@@ -13,10 +13,13 @@ import dev.nami.core.database.CREATE_SEARCH_INDEX_SQL
 import dev.nami.core.database.NamiDatabase
 import dev.nami.core.database.dao.AlbumDao
 import dev.nami.core.database.dao.ArtistDao
+import dev.nami.core.database.dao.PlaylistDao
+import dev.nami.core.database.dao.PlaylistTrackDao
 import dev.nami.core.database.dao.SearchDao
 import dev.nami.core.database.dao.TrackDao
 import dev.nami.core.database.migration.MIGRATION_1_2
 import dev.nami.core.database.migration.MIGRATION_2_3
+import dev.nami.core.database.migration.MIGRATION_3_4
 import javax.inject.Singleton
 
 @Module
@@ -26,7 +29,7 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): NamiDatabase =
         Room.databaseBuilder(context, NamiDatabase::class.java, "nami.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
             .addCallback(
                 object : RoomDatabase.Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
@@ -48,4 +51,10 @@ object DatabaseModule {
 
     @Provides
     fun provideSearchDao(db: NamiDatabase): SearchDao = db.searchDao()
+
+    @Provides
+    fun providePlaylistDao(db: NamiDatabase): PlaylistDao = db.playlistDao()
+
+    @Provides
+    fun providePlaylistTrackDao(db: NamiDatabase): PlaylistTrackDao = db.playlistTrackDao()
 }
