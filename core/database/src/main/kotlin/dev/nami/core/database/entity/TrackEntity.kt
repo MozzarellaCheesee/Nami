@@ -44,4 +44,5 @@ data class TrackEntity(
     val lastPlayed: Long?,
     val playCount: Int,
     val genre: String? = null,
+    val deletedAt: Long? = null,
 )

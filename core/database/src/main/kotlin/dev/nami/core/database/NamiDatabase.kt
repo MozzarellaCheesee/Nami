@@ -19,7 +19,7 @@ import dev.nami.core.database.entity.TrackEntity
         TrackEntity::class, ArtistEntity::class, AlbumEntity::class,
         PlaylistEntity::class, PlaylistTrackEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class NamiDatabase : RoomDatabase() {
