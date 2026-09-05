@@ -44,7 +44,9 @@ class LibraryRepositoryImplTest {
         }
         val resolver = MetadataResolver(db.artistDao(), db.albumDao())
         val artworkStore = ArtworkStore(context)
-        val repo = LibraryRepositoryImpl(context, db.trackDao(), fakeBridge, resolver, artworkStore)
+        val repo = LibraryRepositoryImpl(
+            context, db.trackDao(), db.artistDao(), db.albumDao(), fakeBridge, resolver, artworkStore,
+        )
 
         // Register the stream directly instead of a file:// URI: Robolectric's real
         // file-based ContentResolver path resolution has Windows drive-letter issues

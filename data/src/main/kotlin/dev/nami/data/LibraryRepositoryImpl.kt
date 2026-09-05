@@ -8,10 +8,17 @@ import androidx.core.net.toUri
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
-import androidx.paging.map
+import androidx.paging.map as pagingMap
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.nami.core.database.dao.AlbumDao
+import dev.nami.core.database.dao.ArtistDao
 import dev.nami.core.database.dao.TrackDao
 import dev.nami.core.database.entity.TrackEntity
+import dev.nami.core.model.Album
+import dev.nami.core.model.AlbumId
+import dev.nami.core.model.AlbumSummary
+import dev.nami.core.model.Artist
+import dev.nami.core.model.ArtistId
 import dev.nami.core.model.Track
 import dev.nami.core.model.TrackId
 import dev.nami.data.mapper.toDomain
@@ -29,6 +36,8 @@ import javax.inject.Inject
 class LibraryRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val trackDao: TrackDao,
+    private val artistDao: ArtistDao,
+    private val albumDao: AlbumDao,
     private val nativeBridge: NativeBridge,
     private val metadataResolver: MetadataResolver,
     private val artworkStore: ArtworkStore,
@@ -37,10 +46,44 @@ class LibraryRepositoryImpl @Inject constructor(
     override fun tracks(): Flow<PagingData<Track>> =
         Pager(PagingConfig(pageSize = 50)) { trackDao.pagingSource() }
             .flow
-            .map { pagingData -> pagingData.map { it.toDomain() } }
+            .map { pagingData -> pagingData.pagingMap { it.toDomain() } }
 
     override fun track(id: TrackId): Flow<Track?> = flow {
         emit(trackDao.findById(id.value)?.toDomain())
+    }
+
+    override fun albums(): Flow<PagingData<AlbumSummary>> =
+        Pager(PagingConfig(pageSize = 30)) { albumDao.pagingSource() }
+            .flow
+            .map { pagingData -> pagingData.pagingMap { it.toDomain() } }
+
+    override fun artists(): Flow<PagingData<Artist>> =
+        Pager(PagingConfig(pageSize = 50)) { artistDao.pagingSource() }
+            .flow
+            .map { pagingData -> pagingData.pagingMap { it.toDomain() } }
+
+    override fun album(id: AlbumId): Flow<Album?> = flow {
+        emit(albumDao.findById(id.value)?.toDomain())
+    }
+
+    override fun artist(id: ArtistId): Flow<Artist?> = flow {
+        emit(artistDao.findById(id.value)?.toDomain())
+    }
+
+    override fun tracksInAlbum(id: AlbumId): Flow<List<Track>> = flow {
+        emit(trackDao.tracksForAlbum(id.value).map { it.toDomain() })
+    }
+
+    override fun tracksByArtist(id: ArtistId): Flow<List<Track>> = flow {
+        emit(trackDao.tracksForArtist(id.value).map { it.toDomain() })
+    }
+
+    override fun albumsByArtist(id: ArtistId): Flow<List<AlbumSummary>> = flow {
+        emit(
+            albumDao.albumsByArtist(id.value).map {
+                AlbumSummary(id = AlbumId(it.id), title = it.title, artistName = null, artworkPath = it.artworkPath)
+            },
+        )
     }
 
     override suspend fun import(source: ImportSource): Flow<ImportProgress> = flow {
