@@ -18,6 +18,7 @@ import dev.nami.data.mapper.toDomain
 import dev.nami.domain.ImportProgress
 import dev.nami.domain.ImportSource
 import dev.nami.domain.LibraryRepository
+import dev.nami.domain.NativeBridge
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
@@ -28,6 +29,9 @@ import javax.inject.Inject
 class LibraryRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val trackDao: TrackDao,
+    private val nativeBridge: NativeBridge,
+    private val metadataResolver: MetadataResolver,
+    private val artworkStore: ArtworkStore,
 ) : LibraryRepository {
 
     override fun tracks(): Flow<PagingData<Track>> =
@@ -52,7 +56,6 @@ class LibraryRepositoryImpl @Inject constructor(
 
     private suspend fun copyAndIndex(resolver: ContentResolver, uri: Uri, musicDir: File) {
         val extension = resolver.getType(uri)?.substringAfterLast('/') ?: "audio"
-        val displayName = queryDisplayName(resolver, uri) ?: uri.lastPathSegment ?: "unknown"
         val destination = File(musicDir, "${UUID.randomUUID()}.$extension")
 
         resolver.openInputStream(uri)?.use { input ->
@@ -61,30 +64,40 @@ class LibraryRepositoryImpl @Inject constructor(
 
         if (trackDao.findByPath(destination.path) != null) return
 
-        val durationMs = readDurationMs(destination.path)
-        val title = displayName.substringBeforeLast('.')
+        val tags = nativeBridge.readTags(destination.path)
+        val artistId = metadataResolver.resolveArtist(tags?.artist ?: tags?.albumArtist)
+        val albumId = metadataResolver.resolveAlbum(tags?.album, artistId)
+        val artwork = tags?.artwork
+        if (albumId != null && artwork != null) {
+            artworkStore.save(albumId, artwork)
+        }
+
+        val fallbackTitle = (queryDisplayName(resolver, uri) ?: uri.lastPathSegment ?: "unknown")
+            .substringBeforeLast('.')
 
         trackDao.insertAll(
             listOf(
                 TrackEntity(
                     id = UUID.randomUUID().toString(),
-                    title = title,
-                    artistId = null,
-                    albumId = null,
-                    trackNo = null,
-                    discNo = null,
-                    durationMs = durationMs,
+                    title = tags?.title?.takeIf { it.isNotBlank() } ?: fallbackTitle,
+                    artistId = artistId,
+                    albumId = albumId,
+                    trackNo = tags?.trackNo,
+                    discNo = tags?.discNo,
+                    durationMs = tags?.durationMs?.takeIf { it > 0 } ?: readDurationMs(destination.path),
                     path = destination.path,
                     format = extension,
                     sizeBytes = destination.length(),
                     dateAdded = System.currentTimeMillis(),
                     lastPlayed = null,
                     playCount = 0,
+                    genre = tags?.genre,
                 ),
             ),
         )
     }
 
+    // Fallbacks for files lofty can't parse (or that carry no duration in their tag).
     private fun readDurationMs(path: String): Long {
         val retriever = MediaMetadataRetriever()
         return try {

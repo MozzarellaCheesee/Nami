@@ -19,6 +19,7 @@ kotlin { jvmToolchain(21) }
 dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:database"))
+    implementation(project(":core:native"))
     implementation(project(":domain"))
     implementation(libs.paging.runtime)
     implementation(libs.hilt.android)

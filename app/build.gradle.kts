@@ -28,6 +28,7 @@ dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:database"))
     implementation(project(":core:designsystem"))
+    implementation(project(":core:native"))
     implementation(project(":domain"))
     implementation(project(":data"))
     implementation(project(":player"))

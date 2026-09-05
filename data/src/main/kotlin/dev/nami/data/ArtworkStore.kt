@@ -4,9 +4,13 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Build
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
+import javax.inject.Inject
+import javax.inject.Singleton
 
-class ArtworkStore(private val context: Context) {
+@Singleton
+class ArtworkStore @Inject constructor(@ApplicationContext private val context: Context) {
     fun save(albumId: String, bytes: ByteArray): String? {
         val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return null
         val artworkDir = File(context.filesDir, "artwork").apply { mkdirs() }
