@@ -5,7 +5,9 @@ import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import dev.nami.data.LibraryRepositoryImpl
+import dev.nami.data.search.SearchRepositoryImpl
 import dev.nami.domain.LibraryRepository
+import dev.nami.domain.SearchRepository
 import javax.inject.Singleton
 
 @Module
@@ -14,4 +16,8 @@ abstract class DataModule {
     @Binds
     @Singleton
     abstract fun bindLibraryRepository(impl: LibraryRepositoryImpl): LibraryRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSearchRepository(impl: SearchRepositoryImpl): SearchRepository
 }

@@ -33,6 +33,14 @@ interface AlbumDao {
     @Query("UPDATE albums SET artworkPath = :path WHERE id = :id AND artworkPath IS NULL")
     suspend fun setArtworkPath(id: String, path: String)
 
+    @Query(
+        """
+        SELECT albums.id AS id, albums.title AS title, artists.name AS artistName, albums.artworkPath AS artworkPath
+        FROM albums LEFT JOIN artists ON albums.artistId = artists.id
+        """,
+    )
+    suspend fun allForIndexing(): List<AlbumListRow>
+
     data class AlbumListRow(
         val id: String,
         val title: String,

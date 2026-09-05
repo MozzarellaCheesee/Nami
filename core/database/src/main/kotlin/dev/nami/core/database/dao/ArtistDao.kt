@@ -20,4 +20,7 @@ interface ArtistDao {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(artist: ArtistEntity)
+
+    @Query("SELECT * FROM artists")
+    suspend fun allForIndexing(): List<ArtistEntity>
 }

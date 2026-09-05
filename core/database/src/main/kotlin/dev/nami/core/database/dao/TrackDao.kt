@@ -36,4 +36,24 @@ interface TrackDao {
         """,
     )
     suspend fun tracksForArtist(artistId: String): List<TrackEntity>
+
+    @Query(
+        """
+        SELECT tracks.id AS id, tracks.title AS title, artists.name AS artistName,
+               albums.title AS albumName, tracks.format AS format, albums.year AS year
+        FROM tracks
+        LEFT JOIN artists ON tracks.artistId = artists.id
+        LEFT JOIN albums ON tracks.albumId = albums.id
+        """,
+    )
+    suspend fun allForIndexing(): List<TrackIndexRow>
+
+    data class TrackIndexRow(
+        val id: String,
+        val title: String,
+        val artistName: String?,
+        val albumName: String?,
+        val format: String,
+        val year: Int?,
+    )
 }
