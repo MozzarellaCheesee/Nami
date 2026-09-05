@@ -26,8 +26,11 @@ import dev.nami.domain.ImportProgress
 import dev.nami.domain.ImportSource
 import dev.nami.domain.LibraryRepository
 import dev.nami.domain.NativeBridge
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import java.io.File
 import java.util.UUID
@@ -112,10 +115,11 @@ class LibraryRepositoryImpl @Inject constructor(
             copyAndIndex(resolver, uri, musicDir)
             emit(ImportProgress(done = index + 1, total = uris.size))
         }
-    }
+    }.flowOn(Dispatchers.IO)
 
-    private fun importFolder(treeUriString: String): Flow<ImportProgress> =
-        importFolderFromGroups(folderImportScanner.scan(treeUriString.toUri()))
+    private fun importFolder(treeUriString: String): Flow<ImportProgress> = flow {
+        emitAll(importFolderFromGroups(folderImportScanner.scan(treeUriString.toUri())))
+    }.flowOn(Dispatchers.IO)
 
     internal fun importFolderFromGroups(groups: List<AudioGroup>): Flow<ImportProgress> = flow {
         val musicDir = File(context.filesDir, "music").apply { mkdirs() }
@@ -170,9 +174,12 @@ class LibraryRepositoryImpl @Inject constructor(
         val artwork = tags?.artwork
         var trackArtworkPath: String? = null
         if (artwork != null) {
-            trackArtworkPath = artworkStore.save(trackId, artwork)
+            val artworkKey = albumId ?: trackId
+            val savedPath = artworkStore.save(artworkKey, artwork)
             if (albumId != null) {
-                trackArtworkPath?.let { path -> albumDao.setArtworkPath(albumId, path) }
+                savedPath?.let { path -> albumDao.setArtworkPath(albumId, path) }
+            } else {
+                trackArtworkPath = savedPath
             }
         }
 
