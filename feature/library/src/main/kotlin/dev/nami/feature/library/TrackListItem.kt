@@ -1,7 +1,8 @@
 package dev.nami.feature.library
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material.icons.filled.PlaylistAdd
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -27,6 +29,7 @@ import coil3.compose.AsyncImage
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.model.Track
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TrackListItem(
     track: Track,
@@ -34,13 +37,16 @@ fun TrackListItem(
     onAddToQueue: (() -> Unit)? = null,
     onAddToPlaylist: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
+    selectionMode: Boolean = false,
+    isSelected: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
             .height(64.dp)
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -72,19 +78,23 @@ fun TrackListItem(
                 style = MaterialTheme.typography.bodySmall,
             )
         }
-        if (onAddToPlaylist != null) {
-            IconButton(onClick = onAddToPlaylist) {
-                Icon(Icons.Filled.LibraryAdd, contentDescription = "В плейлист", tint = NamiColors.Paper70)
+        if (selectionMode) {
+            Checkbox(checked = isSelected, onCheckedChange = null)
+        } else {
+            if (onAddToPlaylist != null) {
+                IconButton(onClick = onAddToPlaylist) {
+                    Icon(Icons.Filled.LibraryAdd, contentDescription = "В плейлист", tint = NamiColors.Paper70)
+                }
             }
-        }
-        if (onAddToQueue != null) {
-            IconButton(onClick = onAddToQueue) {
-                Icon(Icons.Filled.PlaylistAdd, contentDescription = "В очередь", tint = NamiColors.Paper70)
+            if (onAddToQueue != null) {
+                IconButton(onClick = onAddToQueue) {
+                    Icon(Icons.Filled.PlaylistAdd, contentDescription = "В очередь", tint = NamiColors.Paper70)
+                }
             }
-        }
-        if (onDelete != null) {
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Filled.Delete, contentDescription = "Удалить", tint = NamiColors.Paper70)
+            if (onDelete != null) {
+                IconButton(onClick = onDelete) {
+                    Icon(Icons.Filled.Delete, contentDescription = "Удалить", tint = NamiColors.Paper70)
+                }
             }
         }
     }
