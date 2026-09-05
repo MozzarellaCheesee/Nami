@@ -25,4 +25,5 @@ include(
     ":player",
     ":feature:library",
     ":feature:player",
+    ":feature:search",
 )
