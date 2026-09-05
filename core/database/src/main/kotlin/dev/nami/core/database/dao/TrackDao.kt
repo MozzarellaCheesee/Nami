@@ -23,4 +23,10 @@ interface TrackDao {
 
     @Query("SELECT COUNT(*) FROM tracks")
     suspend fun count(): Int
+
+    @Query("SELECT * FROM tracks WHERE albumId = :albumId ORDER BY discNo ASC, trackNo ASC")
+    suspend fun tracksForAlbum(albumId: String): List<TrackEntity>
+
+    @Query("SELECT * FROM tracks WHERE artistId = :artistId ORDER BY albumId ASC, trackNo ASC")
+    suspend fun tracksForArtist(artistId: String): List<TrackEntity>
 }
