@@ -75,6 +75,7 @@ class NowPlayingViewModelTest {
         override fun albumsByArtist(id: dev.nami.core.model.ArtistId) = throw NotImplementedError()
         override suspend fun import(source: ImportSource): Flow<dev.nami.domain.ImportProgress> = throw NotImplementedError()
         override suspend fun deleteTrack(id: TrackId) = throw NotImplementedError()
+        override suspend fun deleteTracks(ids: List<TrackId>) {}
     }
 
     @Test

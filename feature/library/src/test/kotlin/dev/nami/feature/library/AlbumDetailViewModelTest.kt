@@ -48,6 +48,7 @@ class AlbumDetailViewModelTest {
             override fun albumsByArtist(id: ArtistId) = throw NotImplementedError()
             override suspend fun import(source: ImportSource) = throw NotImplementedError()
             override suspend fun deleteTrack(id: TrackId) = throw NotImplementedError()
+            override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
         val savedStateHandle = SavedStateHandle(mapOf("albumId" to "al1"))
 

@@ -4,7 +4,9 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import dev.nami.core.database.NamiDatabase
+import dev.nami.core.database.entity.TrackEntity
 import dev.nami.core.model.TagResult
+import dev.nami.core.model.TrackId
 import dev.nami.domain.ImportSource
 import dev.nami.domain.NativeBridge
 import kotlinx.coroutines.flow.last
@@ -15,6 +17,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 
@@ -61,5 +64,38 @@ class LibraryRepositoryImplTest {
         assertNotNull(artist)
         val album = db.albumDao().findByTitleAndArtist("Doujin Compilation", artist.id)
         assertNotNull(album)
+    }
+
+    @Test
+    fun `deleteTracks soft-deletes every id`() = runTest {
+        val musicDir = File(context.filesDir, "music").apply { mkdirs() }
+        val t1File = File(musicDir, "t1.flac").apply { writeText("audio-bytes-1") }
+        val t2File = File(musicDir, "t2.flac").apply { writeText("audio-bytes-2") }
+        db.trackDao().insertAll(
+            listOf(
+                TrackEntity(
+                    id = "t1", title = "Track 1", artistId = null, albumId = null, trackNo = null, discNo = null,
+                    durationMs = 1000, path = t1File.path, format = "flac", sizeBytes = 1,
+                    dateAdded = 1, lastPlayed = null, playCount = 0, genre = null,
+                ),
+                TrackEntity(
+                    id = "t2", title = "Track 2", artistId = null, albumId = null, trackNo = null, discNo = null,
+                    durationMs = 1000, path = t2File.path, format = "flac", sizeBytes = 1,
+                    dateAdded = 1, lastPlayed = null, playCount = 0, genre = null,
+                ),
+            ),
+        )
+        val repo = LibraryRepositoryImpl(
+            context, db.trackDao(), db.artistDao(), db.albumDao(), object : NativeBridge {
+                override suspend fun readTags(path: String) = null
+            }, MetadataResolver(db.artistDao(), db.albumDao()), ArtworkStore(context), TrashFileStore(context),
+        )
+
+        repo.deleteTracks(listOf(TrackId("t1"), TrackId("t2")))
+
+        val t1 = db.trackDao().findById("t1")
+        val t2 = db.trackDao().findById("t2")
+        assertNotNull(t1?.deletedAt)
+        assertNotNull(t2?.deletedAt)
     }
 }

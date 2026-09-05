@@ -85,6 +85,10 @@ class LibraryRepositoryImpl @Inject constructor(
         trackDao.setDeletedAt(id.value, deletedAt = System.currentTimeMillis(), path = trashedPath)
     }
 
+    override suspend fun deleteTracks(ids: List<TrackId>) {
+        ids.forEach { deleteTrack(it) }
+    }
+
     override fun albumsByArtist(id: ArtistId): Flow<List<AlbumSummary>> = flow {
         emit(
             albumDao.albumsByArtist(id.value).map {

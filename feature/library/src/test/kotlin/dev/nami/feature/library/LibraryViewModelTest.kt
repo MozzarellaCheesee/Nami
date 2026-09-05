@@ -72,6 +72,7 @@ class LibraryViewModelTest {
             override suspend fun import(source: ImportSource): Flow<ImportProgress> =
                 flowOf(ImportProgress(1, 2), ImportProgress(2, 2))
             override suspend fun deleteTrack(id: TrackId) {}
+            override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
         val viewModel = LibraryViewModel(fakeRepo, noOpSearchRepo, FakeTrashRepository())
 
@@ -94,6 +95,7 @@ class LibraryViewModelTest {
             override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
             override suspend fun import(source: ImportSource) = flowOf(ImportProgress(0, 0))
             override suspend fun deleteTrack(id: TrackId) {}
+            override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
         val viewModel = LibraryViewModel(fakeRepo, noOpSearchRepo, FakeTrashRepository())
 
@@ -122,6 +124,7 @@ class LibraryViewModelTest {
             override suspend fun import(source: ImportSource): Flow<ImportProgress> =
                 flowOf(ImportProgress(1, 1))
             override suspend fun deleteTrack(id: TrackId) {}
+            override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
         val viewModel = LibraryViewModel(fakeRepo, fakeSearchRepo, FakeTrashRepository())
 
@@ -150,6 +153,7 @@ class LibraryViewModelTest {
             override suspend fun import(source: ImportSource): Flow<ImportProgress> =
                 flow { throw RuntimeException("boom") }
             override suspend fun deleteTrack(id: TrackId) {}
+            override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
         val viewModel = LibraryViewModel(fakeRepo, fakeSearchRepo, FakeTrashRepository())
 
@@ -172,6 +176,7 @@ class LibraryViewModelTest {
             override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
             override suspend fun import(source: ImportSource) = flowOf(ImportProgress(0, 0))
             override suspend fun deleteTrack(id: TrackId) {}
+            override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
         val fakeTrashRepository = FakeTrashRepository()
         val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, fakeTrashRepository)
@@ -195,6 +200,7 @@ class LibraryViewModelTest {
             override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
             override suspend fun import(source: ImportSource) = flowOf(ImportProgress(0, 0))
             override suspend fun deleteTrack(id: TrackId) {}
+            override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
         val fakeTrashRepository = FakeTrashRepository()
         val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, fakeTrashRepository)
