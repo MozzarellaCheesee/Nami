@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -62,6 +63,7 @@ fun NowPlayingScreen(
     val density = LocalDensity.current
     val dismissThresholdPx = with(density) { DISMISS_THRESHOLD_DP.dp.toPx() }
     val skipThresholdPx = with(density) { SKIP_THRESHOLD_DP.dp.toPx() }
+    val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
 
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
     var artworkOffsetX by remember { mutableFloatStateOf(0f) }
@@ -80,6 +82,11 @@ fun NowPlayingScreen(
                 },
                 onDragStopped = { velocity ->
                     if (dragOffsetY > dismissThresholdPx || velocity > 2000f) {
+                        // Finish the slide off-screen ourselves before popping the back stack --
+                        // otherwise AnimatedVisibility's own slide-out plays a second animation
+                        // starting from wherever the finger let go, stacking on top of this one
+                        // and reading as a stutter on a fast flick.
+                        animate(dragOffsetY, screenHeightPx) { value, _ -> dragOffsetY = value }
                         onCollapse()
                     } else {
                         animate(dragOffsetY, 0f) { value, _ -> dragOffsetY = value }
