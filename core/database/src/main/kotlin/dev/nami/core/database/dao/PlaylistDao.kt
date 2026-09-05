@@ -6,6 +6,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import dev.nami.core.database.entity.PlaylistEntity
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface PlaylistDao {
@@ -23,6 +24,9 @@ interface PlaylistDao {
 
     @Query("SELECT * FROM playlists WHERE id = :id")
     suspend fun findById(id: String): PlaylistEntity?
+
+    @Query("SELECT * FROM playlists WHERE id = :id")
+    fun findByIdFlow(id: String): Flow<PlaylistEntity?>
 
     @Query(
         """

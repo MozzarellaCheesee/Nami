@@ -1,6 +1,7 @@
 package dev.nami.app
 
 import android.net.Uri
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -17,11 +18,21 @@ import javax.inject.Inject
 @HiltViewModel
 class PlaylistActionsViewModel @Inject constructor(
     private val playlistRepository: PlaylistRepository,
+    private val savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
-    private var pendingCoverTarget: PlaylistId? = null
-    private var pendingExportTarget: PlaylistId? = null
-    private var pendingImportName: String? = null
+    // Survives process death: SAF pickers run in a separate Activity the host process may kill.
+    private var pendingCoverTarget: PlaylistId?
+        get() = savedStateHandle.get<String>("pendingCoverTarget")?.let(::PlaylistId)
+        set(value) { savedStateHandle["pendingCoverTarget"] = value?.value }
+
+    private var pendingExportTarget: PlaylistId?
+        get() = savedStateHandle.get<String>("pendingExportTarget")?.let(::PlaylistId)
+        set(value) { savedStateHandle["pendingExportTarget"] = value?.value }
+
+    private var pendingImportName: String?
+        get() = savedStateHandle.get<String>("pendingImportName")
+        set(value) { savedStateHandle["pendingImportName"] = value }
 
     private val _lastImportResult = MutableStateFlow<ImportM3u8Result?>(null)
     val lastImportResult: StateFlow<ImportM3u8Result?> = _lastImportResult.asStateFlow()
@@ -75,5 +86,9 @@ class PlaylistActionsViewModel @Inject constructor(
                 // SAF I/O can fail (revoked URI grant, IOException): swallow so viewModelScope survives.
             }
         }
+    }
+
+    fun onImportResultShown() {
+        _lastImportResult.value = null
     }
 }

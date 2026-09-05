@@ -54,6 +54,8 @@ class MainActivity : ComponentActivity() {
                         playlistActionsViewModel.requestImport(playlistName)
                         pickImportSource.launch(arrayOf("*/*"))
                     },
+                    lastImportResult = playlistActionsViewModel.lastImportResult,
+                    onImportResultShown = playlistActionsViewModel::onImportResultShown,
                 )
             }
         }

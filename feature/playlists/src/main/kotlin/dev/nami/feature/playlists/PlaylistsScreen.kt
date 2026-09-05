@@ -14,9 +14,14 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,18 +34,33 @@ import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemKey
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.model.PlaylistId
+import dev.nami.domain.ImportM3u8Result
+import kotlinx.coroutines.flow.StateFlow
 
 @Composable
 fun PlaylistsScreen(
     onPlaylistClick: (PlaylistId) -> Unit,
     onImportRequested: (playlistName: String) -> Unit,
+    lastImportResult: StateFlow<ImportM3u8Result?>,
+    onImportResultShown: () -> Unit,
     viewModel: PlaylistsViewModel = hiltViewModel(),
 ) {
     val playlists = viewModel.playlists.collectAsLazyPagingItems()
     var showCreateDialog by remember { mutableStateOf(false) }
     var showImportDialog by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val importResult by lastImportResult.collectAsState()
 
-    Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
+    LaunchedEffect(importResult) {
+        val result = importResult ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(
+            "Импортировано: ${result.matchedCount}, пропущено: ${result.skippedCount}",
+        )
+        onImportResultShown()
+    }
+
+    Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
+    Box(modifier = Modifier.fillMaxSize().padding(padding).background(NamiColors.Ink900)) {
         if (playlists.itemCount == 0) {
             Column(modifier = Modifier.align(Alignment.Center)) {
                 Text(text = "Создайте первый плейлист", color = NamiColors.Paper70)
@@ -72,6 +92,7 @@ fun PlaylistsScreen(
         ) {
             Icon(Icons.Filled.Add, contentDescription = "Новый плейлист")
         }
+    }
     }
 
     if (showCreateDialog) {

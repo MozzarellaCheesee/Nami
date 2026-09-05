@@ -21,7 +21,6 @@ import dev.nami.data.mapper.toDomain
 import dev.nami.domain.ImportM3u8Result
 import dev.nami.domain.PlaylistRepository
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import java.util.UUID
 import javax.inject.Inject
@@ -39,13 +38,11 @@ class PlaylistRepositoryImpl @Inject constructor(
             .flow
             .map { pagingData -> pagingData.pagingMap { it.toDomain() } }
 
-    override fun playlist(id: PlaylistId): Flow<Playlist?> = flow {
-        emit(playlistDao.findById(id.value)?.toDomain())
-    }
+    override fun playlist(id: PlaylistId): Flow<Playlist?> =
+        playlistDao.findByIdFlow(id.value).map { it?.toDomain() }
 
-    override fun tracksInPlaylist(id: PlaylistId): Flow<List<Track>> = flow {
-        emit(playlistTrackDao.tracksInPlaylist(id.value).map { it.toDomain() })
-    }
+    override fun tracksInPlaylist(id: PlaylistId): Flow<List<Track>> =
+        playlistTrackDao.tracksInPlaylistFlow(id.value).map { list -> list.map { it.toDomain() } }
 
     override suspend fun createPlaylist(name: String): PlaylistId {
         val id = UUID.randomUUID().toString()

@@ -14,6 +14,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import dev.nami.app.SettingsPlaceholderScreen
 import dev.nami.core.model.PlaylistId
+import dev.nami.domain.ImportM3u8Result
 import dev.nami.feature.library.AlbumDetailScreen
 import dev.nami.feature.library.ArtistDetailScreen
 import dev.nami.feature.library.LibraryScreen
@@ -24,6 +25,7 @@ import dev.nami.feature.player.QueueScreen
 import dev.nami.feature.playlists.PlaylistDetailScreen
 import dev.nami.feature.playlists.PlaylistsScreen
 import dev.nami.feature.search.SearchScreen
+import kotlinx.coroutines.flow.StateFlow
 
 private const val ROUTE_LIBRARY = "library"
 private const val ROUTE_SEARCH = "search"
@@ -43,6 +45,8 @@ fun NamiNavHost(
     onPickPlaylistCover: (PlaylistId) -> Unit,
     onExportPlaylist: (PlaylistId) -> Unit,
     onImportPlaylist: (playlistName: String) -> Unit,
+    lastImportResult: StateFlow<ImportM3u8Result?>,
+    onImportResultShown: () -> Unit,
     navController: NavHostController = rememberNavController(),
 ) {
     // Scoped here (Activity-level ViewModelStoreOwner), not inside a nav destination,
@@ -81,6 +85,8 @@ fun NamiNavHost(
                 PlaylistsScreen(
                     onPlaylistClick = { playlistId -> navController.navigate("playlist/${playlistId.value}") },
                     onImportRequested = onImportPlaylist,
+                    lastImportResult = lastImportResult,
+                    onImportResultShown = onImportResultShown,
                 )
             }
             composable(ROUTE_SETTINGS) { SettingsPlaceholderScreen() }
