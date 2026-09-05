@@ -43,6 +43,7 @@ dependencies {
     implementation(libs.compose.material3)
     implementation(libs.navigation.compose)
     implementation(libs.hilt.android)
+    implementation(libs.hilt.navigation.compose)
     ksp(libs.hilt.compiler)
 
     debugImplementation(libs.compose.ui.tooling)
