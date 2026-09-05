@@ -1,6 +1,11 @@
 package dev.nami.app.navigation
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
@@ -59,6 +64,7 @@ fun NamiNavHost(
     val nowPlayingViewModel: NowPlayingViewModel = hiltViewModel()
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
 
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(modifier = Modifier.statusBarsPadding()) {
         NavHost(
             navController = navController,
@@ -102,13 +108,10 @@ fun NamiNavHost(
             composable(ROUTE_TRASH) {
                 TrashScreen(onBack = { navController.popBackStack() })
             }
-            composable(ROUTE_NOW_PLAYING) {
-                NowPlayingScreen(
-                    onCollapse = { navController.popBackStack() },
-                    onQueueClick = { navController.navigate(ROUTE_QUEUE) },
-                    viewModel = nowPlayingViewModel,
-                )
-            }
+            // Rendered as a sliding overlay below, not here -- this destination only exists
+            // to give Now Playing a real back-stack entry so system back / popBackStack work,
+            // without the NavHost swap causing MiniPlayer/BottomBar to disappear abruptly.
+            composable(ROUTE_NOW_PLAYING) {}
             composable(ROUTE_QUEUE) {
                 QueueScreen(onBack = { navController.popBackStack() }, viewModel = nowPlayingViewModel)
             }
@@ -155,21 +158,30 @@ fun NamiNavHost(
                 )
             }
         }
-        if (currentRoute != ROUTE_NOW_PLAYING) {
-            MiniPlayer(onExpand = { navController.navigate(ROUTE_NOW_PLAYING) }, viewModel = nowPlayingViewModel)
-        }
-        if (currentRoute != ROUTE_NOW_PLAYING) {
-            NamiBottomBar(
-                currentRoute = currentRoute,
-                onTabSelected = { route ->
-                    navController.navigate(route) {
-                        popUpTo(ROUTE_LIBRARY) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                },
-                modifier = Modifier.navigationBarsPadding(),
-            )
-        }
+        MiniPlayer(onExpand = { navController.navigate(ROUTE_NOW_PLAYING) }, viewModel = nowPlayingViewModel)
+        NamiBottomBar(
+            currentRoute = currentRoute,
+            onTabSelected = { route ->
+                navController.navigate(route) {
+                    popUpTo(ROUTE_LIBRARY) { saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
+            modifier = Modifier.navigationBarsPadding(),
+        )
+    }
+
+    AnimatedVisibility(
+        visible = currentRoute == ROUTE_NOW_PLAYING,
+        enter = slideInVertically(initialOffsetY = { fullHeight -> fullHeight }),
+        exit = slideOutVertically(targetOffsetY = { fullHeight -> fullHeight }),
+    ) {
+        NowPlayingScreen(
+            onCollapse = { navController.popBackStack() },
+            onQueueClick = { navController.navigate(ROUTE_QUEUE) },
+            viewModel = nowPlayingViewModel,
+        )
+    }
     }
 }

@@ -1,6 +1,8 @@
 package dev.nami.feature.player
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +32,7 @@ import coil3.compose.AsyncImage
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.domain.PlaybackState
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NowPlayingScreen(
     onCollapse: () -> Unit,
@@ -73,6 +76,8 @@ fun NowPlayingScreen(
         Text(
             text = queue.nowPlaying?.title ?: "Ничего не играет",
             color = NamiColors.Paper100,
+            maxLines = 1,
+            modifier = Modifier.fillMaxWidth().basicMarquee(),
         )
         queue.nowPlaying?.artistName?.let { artistName ->
             Text(text = artistName, color = NamiColors.Paper70)

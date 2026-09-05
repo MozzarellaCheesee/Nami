@@ -2,7 +2,6 @@ package dev.nami.feature.library
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import dev.nami.core.designsystem.NamiColors
@@ -82,7 +82,7 @@ fun TrackListItem(
                 color = NamiColors.Paper100,
                 style = MaterialTheme.typography.bodyLarge,
                 maxLines = 1,
-                modifier = Modifier.basicMarquee(),
+                overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = subtitleFor(track),

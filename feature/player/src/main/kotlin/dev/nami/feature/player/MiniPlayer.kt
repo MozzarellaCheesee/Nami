@@ -1,6 +1,8 @@
 package dev.nami.feature.player
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -28,6 +30,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.domain.PlaybackState
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MiniPlayer(
     onExpand: () -> Unit,
@@ -67,9 +70,11 @@ fun MiniPlayer(
         Text(
             text = queue.nowPlaying?.title ?: "Ничего не играет",
             color = NamiColors.Paper100,
+            maxLines = 1,
             modifier = Modifier
                 .padding(start = 12.dp)
-                .weight(1f),
+                .weight(1f)
+                .basicMarquee(),
         )
         IconButton(onClick = viewModel::toggle) {
             Icon(
