@@ -103,6 +103,32 @@ class LibraryViewModelTest {
     }
 
     @Test
+    fun `importFolder emits progress then reaches total`() = runTest {
+        val fakeRepo = object : LibraryRepository {
+            override fun tracks() = flowOf(PagingData.empty<Track>())
+            override fun track(id: TrackId) = flowOf<Track?>(null)
+            override fun albums() = flowOf(PagingData.empty<AlbumSummary>())
+            override fun artists() = flowOf(PagingData.empty<Artist>())
+            override fun album(id: AlbumId) = flowOf<Album?>(null)
+            override fun artist(id: ArtistId) = flowOf<Artist?>(null)
+            override fun tracksInAlbum(id: AlbumId) = flowOf(emptyList<Track>())
+            override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
+            override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
+            override suspend fun import(source: ImportSource): Flow<ImportProgress> {
+                assertEquals(ImportSource.Folder("content://tree/fake"), source)
+                return flowOf(ImportProgress(1, 3), ImportProgress(3, 3))
+            }
+            override suspend fun deleteTrack(id: TrackId) {}
+            override suspend fun deleteTracks(ids: List<TrackId>) {}
+        }
+        val viewModel = LibraryViewModel(fakeRepo, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository())
+
+        viewModel.importFolder("content://tree/fake")
+
+        assertEquals(ImportProgress(3, 3), viewModel.uiState.value.importProgress)
+    }
+
+    @Test
     fun `selectTab updates uiState selectedTab`() = runTest {
         val fakeRepo = object : LibraryRepository {
             override fun tracks() = flowOf(PagingData.empty<Track>())

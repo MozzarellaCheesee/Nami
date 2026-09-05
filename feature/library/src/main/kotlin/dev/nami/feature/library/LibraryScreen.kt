@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -57,6 +59,7 @@ fun LibraryScreen(
     onAlbumClick: (AlbumId) -> Unit,
     onArtistClick: (ArtistId) -> Unit,
     onImportRequested: () -> Unit,
+    onImportFolderRequested: () -> Unit,
     viewModel: LibraryViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -115,11 +118,20 @@ fun LibraryScreen(
             }
 
             if (!selectionMode) {
-                FloatingActionButton(
-                    onClick = onImportRequested,
+                Column(
+                    horizontalAlignment = Alignment.End,
                     modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
                 ) {
-                    Icon(Icons.Filled.Add, contentDescription = "Импортировать файлы")
+                    FloatingActionButton(
+                        onClick = onImportFolderRequested,
+                        modifier = Modifier.size(40.dp),
+                    ) {
+                        Icon(Icons.Filled.Folder, contentDescription = "Импортировать папку")
+                    }
+                    androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(12.dp))
+                    FloatingActionButton(onClick = onImportRequested) {
+                        Icon(Icons.Filled.Add, contentDescription = "Импортировать файлы")
+                    }
                 }
             }
         }

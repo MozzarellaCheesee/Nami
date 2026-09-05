@@ -24,6 +24,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val pickFolder = registerForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { uri ->
+        uri?.let {
+            contentResolver.takePersistableUriPermission(
+                it,
+                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+            libraryViewModel.importFolder(it.toString())
+        }
+    }
+
     private val pickCoverImage = registerForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri -> uri?.let(playlistActionsViewModel::onCoverPicked) }
@@ -42,6 +54,7 @@ class MainActivity : ComponentActivity() {
             NamiTheme {
                 NamiNavHost(
                     onImportRequested = { pickFiles.launch(arrayOf("audio/*")) },
+                    onImportFolderRequested = { pickFolder.launch(null) },
                     onPickPlaylistCover = { playlistId ->
                         playlistActionsViewModel.requestCoverPick(playlistId)
                         pickCoverImage.launch(arrayOf("image/*"))

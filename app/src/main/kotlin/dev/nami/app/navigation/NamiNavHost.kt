@@ -44,6 +44,7 @@ private const val ROUTE_TRASH = "trash"
 @Composable
 fun NamiNavHost(
     onImportRequested: () -> Unit,
+    onImportFolderRequested: () -> Unit,
     onPickPlaylistCover: (PlaylistId) -> Unit,
     onExportPlaylist: (PlaylistId) -> Unit,
     onImportPlaylist: (playlistName: String) -> Unit,
@@ -71,6 +72,7 @@ fun NamiNavHost(
                     onAlbumClick = { albumId -> navController.navigate("album/${albumId.value}") },
                     onArtistClick = { artistId -> navController.navigate("artist/${artistId.value}") },
                     onImportRequested = onImportRequested,
+                    onImportFolderRequested = onImportFolderRequested,
                 )
             }
             composable(ROUTE_SEARCH) {

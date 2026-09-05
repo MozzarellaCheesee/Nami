@@ -73,6 +73,23 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
+    fun importFolder(treeUri: String) {
+        viewModelScope.launch {
+            try {
+                libraryRepository.import(ImportSource.Folder(treeUri)).collect { progress ->
+                    _uiState.value = _uiState.value.copy(importProgress = progress)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Partial import failure: full error handling/reporting is a later task.
+                // Swallow so viewModelScope survives and rebuildIndex still runs below.
+            } finally {
+                searchRepository.rebuildIndex()
+            }
+        }
+    }
+
     fun deleteTrack(id: TrackId) {
         deleteTracks(setOf(id))
     }
