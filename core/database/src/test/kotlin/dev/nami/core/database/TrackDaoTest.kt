@@ -3,6 +3,7 @@ package dev.nami.core.database
 import androidx.paging.PagingSource
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import dev.nami.core.database.dao.TrackDao
 import dev.nami.core.database.entity.TrackEntity
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -29,7 +30,7 @@ class TrackDaoTest {
     @After
     fun tearDown() = db.close()
 
-    private suspend fun loadFirstPage(source: PagingSource<Int, TrackEntity>) =
+    private suspend fun loadFirstPage(source: PagingSource<Int, TrackDao.TrackWithArtwork>) =
         (source.load(PagingSource.LoadParams.Refresh(key = null, loadSize = 20, placeholdersEnabled = false))
             as PagingSource.LoadResult.Page)
 
@@ -97,7 +98,7 @@ class TrackDaoTest {
         assertEquals(2000L, trashed[0].deletedAt)
 
         val page = loadFirstPage(db.trackDao().pagingSource())
-        assertEquals(emptyList(), page.data.map { it.id })
+        assertEquals(emptyList(), page.data.map { it.track.id })
     }
 
     @Test

@@ -45,13 +45,13 @@ class SearchRepositoryImplTest {
             .build()
 
     private fun fakeTrackDao(rows: List<TrackDao.TrackIndexRow> = emptyList()) = object : TrackDao {
-        override fun pagingSource(): PagingSource<Int, TrackEntity> = error("unused")
+        override fun pagingSource(): PagingSource<Int, TrackDao.TrackWithArtwork> = error("unused")
         override suspend fun findById(id: String): TrackEntity? = error("unused")
         override suspend fun findByPath(path: String): TrackEntity? = error("unused")
         override suspend fun insertAll(tracks: List<TrackEntity>) = error("unused")
         override suspend fun count(): Int = error("unused")
-        override suspend fun tracksForAlbum(albumId: String): List<TrackEntity> = error("unused")
-        override suspend fun tracksForArtist(artistId: String): List<TrackEntity> = error("unused")
+        override suspend fun tracksForAlbum(albumId: String): List<TrackDao.TrackWithArtwork> = error("unused")
+        override suspend fun tracksForArtist(artistId: String): List<TrackDao.TrackWithArtwork> = error("unused")
         override suspend fun allForIndexing(): List<TrackDao.TrackIndexRow> = rows
         override suspend fun setDeletedAt(id: String, deletedAt: Long?, path: String) = error("unused")
         override suspend fun hardDelete(id: String) = error("unused")

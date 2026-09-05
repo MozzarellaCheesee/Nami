@@ -23,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.width
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -70,7 +71,7 @@ fun ArtistDetailScreen(
                 AlbumGridItem(
                     album = album,
                     onClick = { onAlbumClick(album.id) },
-                    modifier = Modifier.padding(8.dp),
+                    modifier = Modifier.width(140.dp).padding(8.dp),
                 )
             }
         }

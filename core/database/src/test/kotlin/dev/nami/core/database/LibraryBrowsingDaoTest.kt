@@ -76,7 +76,7 @@ class LibraryBrowsingDaoTest {
 
         val tracks = db.trackDao().tracksForAlbum("al1")
 
-        assertEquals(listOf("t1", "t2", "t3"), tracks.map { it.id })
+        assertEquals(listOf("t1", "t2", "t3"), tracks.map { it.track.id })
     }
 
     @Test
@@ -92,7 +92,7 @@ class LibraryBrowsingDaoTest {
 
         val tracks = db.trackDao().tracksForArtist("a1")
 
-        assertEquals(listOf("t1"), tracks.map { it.id })
+        assertEquals(listOf("t1"), tracks.map { it.track.id })
     }
 
     @Test
@@ -109,7 +109,7 @@ class LibraryBrowsingDaoTest {
 
         val tracks = db.trackDao().tracksForArtist("a1")
 
-        assertEquals(listOf("t-new", "t-old"), tracks.map { it.id })
+        assertEquals(listOf("t-new", "t-old"), tracks.map { it.track.id })
     }
 
     private fun trackFixture(

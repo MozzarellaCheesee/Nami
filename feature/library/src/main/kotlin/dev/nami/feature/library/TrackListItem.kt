@@ -21,7 +21,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.model.Track
 
@@ -42,11 +44,22 @@ fun TrackListItem(
             .padding(horizontal = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .background(NamiColors.Ink700, RoundedCornerShape(4.dp)),
-        )
+        if (track.albumArtworkPath != null) {
+            AsyncImage(
+                model = track.albumArtworkPath,
+                contentDescription = track.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(NamiColors.Ink700, RoundedCornerShape(4.dp)),
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(NamiColors.Ink700, RoundedCornerShape(4.dp)),
+            )
+        }
         Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
             Text(
                 text = track.title,
