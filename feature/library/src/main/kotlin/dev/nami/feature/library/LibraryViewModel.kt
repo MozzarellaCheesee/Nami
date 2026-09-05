@@ -56,6 +56,10 @@ class LibraryViewModel @Inject constructor(
     val recentAlbums: StateFlow<List<AlbumSummary>> = _recentAlbums.asStateFlow()
 
     init {
+        refreshRecentAlbums()
+    }
+
+    private fun refreshRecentAlbums() {
         viewModelScope.launch {
             _recentAlbums.value = libraryRepository.recentAlbums(limit = 10)
         }
@@ -78,6 +82,7 @@ class LibraryViewModel @Inject constructor(
                 // Swallow so viewModelScope survives and rebuildIndex still runs below.
             } finally {
                 searchRepository.rebuildIndex()
+                refreshRecentAlbums()
             }
         }
     }
@@ -95,6 +100,7 @@ class LibraryViewModel @Inject constructor(
                 // Swallow so viewModelScope survives and rebuildIndex still runs below.
             } finally {
                 searchRepository.rebuildIndex()
+                refreshRecentAlbums()
             }
         }
     }
@@ -131,6 +137,7 @@ class LibraryViewModel @Inject constructor(
             libraryRepository.deleteTracks(ids.toList())
             playerRepository.removeTracks(ids)
             _uiState.value = _uiState.value.copy(lastDeletedTrackIds = ids)
+            refreshRecentAlbums()
         }
     }
 
@@ -140,6 +147,7 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch {
             ids.forEach { trashRepository.restoreTrack(it) }
             _uiState.value = _uiState.value.copy(lastDeletedTrackIds = emptySet())
+            refreshRecentAlbums()
         }
     }
 
