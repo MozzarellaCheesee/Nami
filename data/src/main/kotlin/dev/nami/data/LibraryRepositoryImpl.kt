@@ -41,6 +41,7 @@ class LibraryRepositoryImpl @Inject constructor(
     private val nativeBridge: NativeBridge,
     private val metadataResolver: MetadataResolver,
     private val artworkStore: ArtworkStore,
+    private val trashFileStore: TrashFileStore,
 ) : LibraryRepository {
 
     override fun tracks(): Flow<PagingData<Track>> =
@@ -76,6 +77,12 @@ class LibraryRepositoryImpl @Inject constructor(
 
     override fun tracksByArtist(id: ArtistId): Flow<List<Track>> = flow {
         emit(trackDao.tracksForArtist(id.value).map { it.toDomain() })
+    }
+
+    override suspend fun deleteTrack(id: TrackId) {
+        val track = trackDao.findById(id.value) ?: return
+        val trashedPath = trashFileStore.moveToTrash(id.value, track.path) ?: track.path
+        trackDao.setDeletedAt(id.value, deletedAt = System.currentTimeMillis(), path = trashedPath)
     }
 
     override fun albumsByArtist(id: ArtistId): Flow<List<AlbumSummary>> = flow {

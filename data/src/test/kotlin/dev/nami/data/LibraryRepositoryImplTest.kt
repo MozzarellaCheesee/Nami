@@ -45,7 +45,7 @@ class LibraryRepositoryImplTest {
         val resolver = MetadataResolver(db.artistDao(), db.albumDao())
         val artworkStore = ArtworkStore(context)
         val repo = LibraryRepositoryImpl(
-            context, db.trackDao(), db.artistDao(), db.albumDao(), fakeBridge, resolver, artworkStore,
+            context, db.trackDao(), db.artistDao(), db.albumDao(), fakeBridge, resolver, artworkStore, TrashFileStore(context),
         )
 
         // Register the stream directly instead of a file:// URI: Robolectric's real

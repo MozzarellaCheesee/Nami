@@ -50,7 +50,7 @@ interface PlaylistDao {
     @Query(
         """
         SELECT playlists.id AS id, playlists.name AS name, playlists.coverPath AS coverPath,
-               COUNT(playlist_tracks.trackId) AS trackCount
+               playlists.deletedAt AS deletedAt, COUNT(playlist_tracks.trackId) AS trackCount
         FROM playlists
         LEFT JOIN playlist_tracks ON playlists.id = playlist_tracks.playlistId
         WHERE playlists.deletedAt IS NOT NULL
@@ -68,5 +68,6 @@ interface PlaylistDao {
         val name: String,
         val coverPath: String?,
         val trackCount: Int,
+        val deletedAt: Long? = null,
     )
 }

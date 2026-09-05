@@ -5,6 +5,7 @@ import dev.nami.core.database.entity.PlaylistEntity
 import dev.nami.core.model.Playlist
 import dev.nami.core.model.PlaylistId
 import dev.nami.core.model.PlaylistSummary
+import dev.nami.domain.TrashedPlaylist
 
 fun PlaylistDao.PlaylistListRow.toDomain(): PlaylistSummary = PlaylistSummary(
     id = PlaylistId(id),
@@ -17,4 +18,9 @@ fun PlaylistEntity.toDomain(): Playlist = Playlist(
     id = PlaylistId(id),
     name = name,
     coverPath = coverPath,
+)
+
+fun PlaylistDao.PlaylistListRow.toTrashedDomain(): TrashedPlaylist = TrashedPlaylist(
+    playlist = toDomain(),
+    deletedAt = requireNotNull(deletedAt),
 )

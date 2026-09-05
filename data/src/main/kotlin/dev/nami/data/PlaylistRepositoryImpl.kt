@@ -55,7 +55,7 @@ class PlaylistRepositoryImpl @Inject constructor(
     }
 
     override suspend fun deletePlaylist(id: PlaylistId) {
-        playlistDao.delete(id.value)
+        playlistDao.softDelete(id.value, deletedAt = System.currentTimeMillis())
     }
 
     override suspend fun setCoverImage(id: PlaylistId, imageUri: String) {

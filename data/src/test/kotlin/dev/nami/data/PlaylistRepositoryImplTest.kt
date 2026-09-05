@@ -33,6 +33,16 @@ class PlaylistRepositoryImplTest {
         repo = PlaylistRepositoryImpl(context, db.playlistDao(), db.playlistTrackDao(), db.trackDao(), ArtworkStore(context))
     }
 
+    @Test
+    fun `deletePlaylist soft-deletes it out of pagingSource and into trashedPlaylistsFlow`() = runTest {
+        val playlistId = repo.createPlaylist("Doujin")
+
+        repo.deletePlaylist(playlistId)
+
+        val trashed = db.playlistDao().trashedPlaylistsFlow().first()
+        assertEquals(listOf(playlistId.value), trashed.map { it.id })
+    }
+
     @After
     fun tearDown() = db.close()
 
