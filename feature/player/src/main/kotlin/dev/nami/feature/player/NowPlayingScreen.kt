@@ -25,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil3.compose.AsyncImage
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.domain.PlaybackState
 
@@ -47,13 +48,26 @@ fun NowPlayingScreen(
         IconButton(onClick = onCollapse) {
             Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Свернуть", tint = NamiColors.Paper100)
         }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(310.dp)
-                .padding(vertical = 24.dp)
-                .background(NamiColors.Ink700, RoundedCornerShape(4.dp)),
-        )
+        if (queue.nowPlaying?.artworkPath != null) {
+            AsyncImage(
+                model = queue.nowPlaying?.artworkPath,
+                contentDescription = queue.nowPlaying?.title,
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(310.dp)
+                    .padding(vertical = 24.dp)
+                    .background(NamiColors.Ink700, RoundedCornerShape(4.dp)),
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(310.dp)
+                    .padding(vertical = 24.dp)
+                    .background(NamiColors.Ink700, RoundedCornerShape(4.dp)),
+            )
+        }
         Text(
             text = queue.nowPlaying?.title ?: "Ничего не играет",
             color = NamiColors.Paper100,

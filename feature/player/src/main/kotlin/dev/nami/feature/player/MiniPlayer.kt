@@ -1,6 +1,7 @@
 package dev.nami.feature.player
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -8,6 +9,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -41,14 +44,26 @@ fun MiniPlayer(
             .fillMaxWidth()
             .height(60.dp)
             .background(NamiColors.Ink800)
+            .clickable(onClick = onExpand)
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .background(NamiColors.Ink700, RoundedCornerShape(4.dp)),
-        )
+        if (queue.nowPlaying?.artworkPath != null) {
+            AsyncImage(
+                model = queue.nowPlaying?.artworkPath,
+                contentDescription = queue.nowPlaying?.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(NamiColors.Ink700, RoundedCornerShape(4.dp)),
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(NamiColors.Ink700, RoundedCornerShape(4.dp)),
+            )
+        }
         Text(
             text = queue.nowPlaying?.title ?: "Ничего не играет",
             color = NamiColors.Paper100,

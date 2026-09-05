@@ -88,12 +88,19 @@ class PlayerRepositoryImpl @Inject constructor(
         mediaId = mediaId,
         title = mediaMetadata.title?.toString().orEmpty(),
         artist = mediaMetadata.artist?.toString(),
+        artworkPath = mediaMetadata.artworkUri?.toString(),
     )
 
     private fun PlayableTrack.toMediaItem(): MediaItem = MediaItem.Builder()
         .setMediaId(id.value)
         .setUri(path)
-        .setMediaMetadata(MediaMetadata.Builder().setTitle(title).setArtist(artistName).build())
+        .setMediaMetadata(
+            MediaMetadata.Builder()
+                .setTitle(title)
+                .setArtist(artistName)
+                .apply { artworkPath?.let { setArtworkUri(android.net.Uri.parse(it)) } }
+                .build(),
+        )
         .build()
 
     override suspend fun play(tracks: List<PlayableTrack>, startIndex: Int, startMs: Long) {
