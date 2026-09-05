@@ -143,11 +143,25 @@ class LibraryRepositoryImpl @Inject constructor(
                 emit(ImportProgress(done = done, total = total))
             }
 
-            val albumId = albumIdForGroup ?: continue
-            if (albumDao.findById(albumId)?.artworkPath == null) {
-                val coverDoc = folderImportScanner.findFolderCover(group.sourceDir) ?: continue
-                val bytes = resolver.openInputStream(coverDoc.uri)?.use { it.readBytes() } ?: continue
-                artworkStore.save(albumId, bytes)?.let { path -> albumDao.setArtworkPath(albumId, path) }
+            val albumId = albumIdForGroup
+            if (albumId != null && albumDao.findById(albumId)?.artworkPath == null) {
+                val coverDoc = folderImportScanner.findFolderCover(group.sourceDir)
+                val bytes = coverDoc?.let { resolver.openInputStream(it.uri)?.use { stream -> stream.readBytes() } }
+                if (bytes != null) {
+                    artworkStore.save(albumId, bytes)?.let { path -> albumDao.setArtworkPath(albumId, path) }
+                }
+            }
+
+            val artistDir = group.artistDir
+            if (artistDir != null && group.artistFolderName != null) {
+                val artistEntity = artistDao.findByName(group.artistFolderName)
+                if (artistEntity != null && artistEntity.photoPath == null) {
+                    val photoDoc = folderImportScanner.findFolderCover(artistDir)
+                    val bytes = photoDoc?.let { resolver.openInputStream(it.uri)?.use { stream -> stream.readBytes() } }
+                    if (bytes != null) {
+                        artworkStore.save(artistEntity.id, bytes)?.let { path -> artistDao.setPhotoPath(artistEntity.id, path) }
+                    }
+                }
             }
         }
     }

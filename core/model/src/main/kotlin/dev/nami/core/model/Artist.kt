@@ -7,4 +7,5 @@ data class Artist(
     val id: ArtistId,
     val name: String,
     val sortName: String,
+    val photoPath: String? = null,
 )

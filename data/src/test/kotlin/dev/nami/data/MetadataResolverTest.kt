@@ -21,6 +21,7 @@ class MetadataResolverTest {
             override suspend fun insert(artist: ArtistEntity) = error("should not insert when found")
             override fun pagingSource(): PagingSource<Int, ArtistEntity> = error("unused")
             override suspend fun allForIndexing(): List<ArtistEntity> = error("unused")
+            override suspend fun setPhotoPath(id: String, path: String) = error("unused")
         }
         val albumDao = object : AlbumDao {
             override suspend fun findById(id: String): AlbumEntity? = null
@@ -47,6 +48,7 @@ class MetadataResolverTest {
             override suspend fun insert(artist: ArtistEntity) { inserted = artist }
             override fun pagingSource(): PagingSource<Int, ArtistEntity> = error("unused")
             override suspend fun allForIndexing(): List<ArtistEntity> = error("unused")
+            override suspend fun setPhotoPath(id: String, path: String) = error("unused")
         }
         val albumDao = object : AlbumDao {
             override suspend fun findById(id: String): AlbumEntity? = null
@@ -73,6 +75,7 @@ class MetadataResolverTest {
             override suspend fun insert(artist: ArtistEntity) = error("should not be called")
             override fun pagingSource(): PagingSource<Int, ArtistEntity> = error("unused")
             override suspend fun allForIndexing(): List<ArtistEntity> = error("unused")
+            override suspend fun setPhotoPath(id: String, path: String) = error("unused")
         }
         val albumDao = object : AlbumDao {
             override suspend fun findById(id: String): AlbumEntity? = null
@@ -97,6 +100,7 @@ class MetadataResolverTest {
             override suspend fun insert(artist: ArtistEntity) = error("unused")
             override fun pagingSource(): PagingSource<Int, ArtistEntity> = error("unused")
             override suspend fun allForIndexing(): List<ArtistEntity> = error("unused")
+            override suspend fun setPhotoPath(id: String, path: String) = error("unused")
         }
         val albumDao = object : AlbumDao {
             override suspend fun findById(id: String): AlbumEntity? = null

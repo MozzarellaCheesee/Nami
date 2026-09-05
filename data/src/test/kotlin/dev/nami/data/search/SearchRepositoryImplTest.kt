@@ -77,6 +77,7 @@ class SearchRepositoryImplTest {
         override fun pagingSource(): PagingSource<Int, ArtistEntity> = error("unused")
         override suspend fun insert(artist: ArtistEntity) = error("unused")
         override suspend fun allForIndexing(): List<ArtistEntity> = rows
+        override suspend fun setPhotoPath(id: String, path: String) = error("unused")
     }
 
     @Test

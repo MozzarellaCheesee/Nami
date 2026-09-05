@@ -27,6 +27,9 @@ interface ArtistDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(artist: ArtistEntity)
 
+    @Query("UPDATE artists SET photoPath = :path WHERE id = :id AND photoPath IS NULL")
+    suspend fun setPhotoPath(id: String, path: String)
+
     @Query(
         """
         SELECT * FROM artists

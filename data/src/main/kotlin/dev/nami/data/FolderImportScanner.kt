@@ -9,6 +9,7 @@ import javax.inject.Inject
 data class AudioGroup(
     val albumFolderName: String,
     val artistFolderName: String?,
+    val artistDir: DocumentFile?,
     val audioFiles: List<DocumentFile>,
     val sourceDir: DocumentFile,
 )
@@ -39,6 +40,7 @@ class FolderImportScanner @Inject constructor(@ApplicationContext private val co
             groups += AudioGroup(
                 albumFolderName = root.name.orEmpty(),
                 artistFolderName = null,
+                artistDir = null,
                 audioFiles = rootAudio,
                 sourceDir = root,
             )
@@ -56,6 +58,7 @@ class FolderImportScanner @Inject constructor(@ApplicationContext private val co
                 groups += AudioGroup(
                     albumFolderName = root.name.orEmpty(),
                     artistFolderName = null,
+                    artistDir = null,
                     audioFiles = discAudio,
                     sourceDir = root,
                 )
@@ -68,6 +71,7 @@ class FolderImportScanner @Inject constructor(@ApplicationContext private val co
                 groups += AudioGroup(
                     albumFolderName = dir.name.orEmpty(),
                     artistFolderName = root.name,
+                    artistDir = root,
                     audioFiles = nestedAudio,
                     sourceDir = dir,
                 )

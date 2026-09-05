@@ -8,4 +8,5 @@ data class ArtistEntity(
     @PrimaryKey val id: String,
     val name: String,
     val sortName: String,
+    val photoPath: String? = null,
 )

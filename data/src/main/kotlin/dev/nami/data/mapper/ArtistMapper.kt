@@ -8,4 +8,5 @@ fun ArtistEntity.toDomain(): Artist = Artist(
     id = ArtistId(id),
     name = name,
     sortName = sortName,
+    photoPath = photoPath,
 )

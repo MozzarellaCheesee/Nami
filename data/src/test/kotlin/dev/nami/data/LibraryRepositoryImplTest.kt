@@ -152,12 +152,14 @@ class LibraryRepositoryImplTest {
             AudioGroup(
                 albumFolderName = "Album A",
                 artistFolderName = "Farewell225",
+                artistDir = DocumentFile.fromFile(root),
                 audioFiles = listOf(DocumentFile.fromFile(trackA)),
                 sourceDir = DocumentFile.fromFile(albumADir),
             ),
             AudioGroup(
                 albumFolderName = "Album B",
                 artistFolderName = "Farewell225",
+                artistDir = DocumentFile.fromFile(root),
                 audioFiles = listOf(DocumentFile.fromFile(trackB)),
                 sourceDir = DocumentFile.fromFile(albumBDir),
             ),
@@ -203,6 +205,7 @@ class LibraryRepositoryImplTest {
             AudioGroup(
                 albumFolderName = "Album",
                 artistFolderName = null,
+                artistDir = null,
                 audioFiles = listOf(DocumentFile.fromFile(trackFile)),
                 sourceDir = DocumentFile.fromFile(albumDir),
             ),
