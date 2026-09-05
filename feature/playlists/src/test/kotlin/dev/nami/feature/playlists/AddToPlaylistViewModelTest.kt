@@ -30,7 +30,7 @@ class AddToPlaylistViewModelTest {
     fun tearDown() = Dispatchers.resetMain()
 
     private class RecordingPlaylistRepository : PlaylistRepository {
-        var addedTo: Pair<PlaylistId, TrackId>? = null
+        val addedTo = mutableListOf<Pair<PlaylistId, TrackId>>()
         var createdName: String? = null
         override fun playlists() = flowOf(PagingData.empty<PlaylistSummary>())
         override fun playlist(id: PlaylistId) = flowOf<Playlist?>(null)
@@ -43,7 +43,7 @@ class AddToPlaylistViewModelTest {
         override suspend fun deletePlaylist(id: PlaylistId) {}
         override suspend fun setCoverImage(id: PlaylistId, imageUri: String) {}
         override suspend fun addTrack(playlistId: PlaylistId, trackId: TrackId) {
-            addedTo = playlistId to trackId
+            addedTo.add(playlistId to trackId)
         }
         override suspend fun removeTrack(playlistId: PlaylistId, trackId: TrackId) {}
         override suspend fun exportM3u8(id: PlaylistId, destinationUri: String) {}
@@ -52,23 +52,39 @@ class AddToPlaylistViewModelTest {
     }
 
     @Test
-    fun `addToExistingPlaylist calls repository addTrack`() = runTest {
+    fun `addToExistingPlaylist calls repository addTrack for a single id`() = runTest {
         val repo = RecordingPlaylistRepository()
         val viewModel = AddToPlaylistViewModel(repo)
 
-        viewModel.addToExistingPlaylist(PlaylistId("p1"), TrackId("t1"))
+        viewModel.addToExistingPlaylist(PlaylistId("p1"), setOf(TrackId("t1")))
 
-        assertEquals(PlaylistId("p1") to TrackId("t1"), repo.addedTo)
+        assertEquals(listOf(PlaylistId("p1") to TrackId("t1")), repo.addedTo)
     }
 
     @Test
-    fun `addToNewPlaylist creates then adds the track`() = runTest {
+    fun `addToExistingPlaylist calls repository addTrack for every id in the set`() = runTest {
         val repo = RecordingPlaylistRepository()
         val viewModel = AddToPlaylistViewModel(repo)
 
-        viewModel.addToNewPlaylist("Doujin", TrackId("t1"))
+        viewModel.addToExistingPlaylist(PlaylistId("p1"), setOf(TrackId("t1"), TrackId("t2")))
+
+        assertEquals(
+            setOf(PlaylistId("p1") to TrackId("t1"), PlaylistId("p1") to TrackId("t2")),
+            repo.addedTo.toSet(),
+        )
+    }
+
+    @Test
+    fun `addToNewPlaylist creates then adds every selected track`() = runTest {
+        val repo = RecordingPlaylistRepository()
+        val viewModel = AddToPlaylistViewModel(repo)
+
+        viewModel.addToNewPlaylist("Doujin", setOf(TrackId("t1"), TrackId("t2")))
 
         assertEquals("Doujin", repo.createdName)
-        assertEquals(PlaylistId("new-id") to TrackId("t1"), repo.addedTo)
+        assertEquals(
+            setOf(PlaylistId("new-id") to TrackId("t1"), PlaylistId("new-id") to TrackId("t2")),
+            repo.addedTo.toSet(),
+        )
     }
 }

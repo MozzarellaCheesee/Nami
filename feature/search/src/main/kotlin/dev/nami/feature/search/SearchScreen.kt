@@ -76,7 +76,7 @@ fun SearchScreen(
     }
 
     addToPlaylistTrackId?.let { trackId ->
-        AddToPlaylistDialog(trackId = trackId, onDismiss = { addToPlaylistTrackId = null })
+        AddToPlaylistDialog(trackIds = setOf(trackId), onDismiss = { addToPlaylistTrackId = null })
     }
 }
 

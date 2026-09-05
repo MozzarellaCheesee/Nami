@@ -26,7 +26,7 @@ import dev.nami.core.model.TrackId
 
 @Composable
 fun AddToPlaylistDialog(
-    trackId: TrackId,
+    trackIds: Set<TrackId>,
     onDismiss: () -> Unit,
     viewModel: AddToPlaylistViewModel = hiltViewModel(),
 ) {
@@ -63,7 +63,7 @@ fun AddToPlaylistDialog(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable {
-                                            viewModel.addToExistingPlaylist(playlist.id, trackId)
+                                            viewModel.addToExistingPlaylist(playlist.id, trackIds)
                                             onDismiss()
                                         }
                                         .padding(vertical = 12.dp),
@@ -79,7 +79,7 @@ fun AddToPlaylistDialog(
                 TextButton(onClick = {
                     val name = newPlaylistName.orEmpty()
                     if (name.isNotBlank()) {
-                        viewModel.addToNewPlaylist(name, trackId)
+                        viewModel.addToNewPlaylist(name, trackIds)
                         onDismiss()
                     }
                 }) { Text("Создать") }

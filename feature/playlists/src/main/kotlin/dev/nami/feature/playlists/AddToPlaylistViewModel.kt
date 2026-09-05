@@ -21,14 +21,16 @@ class AddToPlaylistViewModel @Inject constructor(
     val playlists: Flow<PagingData<PlaylistSummary>> =
         playlistRepository.playlists().cachedIn(viewModelScope)
 
-    fun addToExistingPlaylist(playlistId: PlaylistId, trackId: TrackId) {
-        viewModelScope.launch { playlistRepository.addTrack(playlistId, trackId) }
+    fun addToExistingPlaylist(playlistId: PlaylistId, trackIds: Set<TrackId>) {
+        viewModelScope.launch {
+            trackIds.forEach { playlistRepository.addTrack(playlistId, it) }
+        }
     }
 
-    fun addToNewPlaylist(name: String, trackId: TrackId) {
+    fun addToNewPlaylist(name: String, trackIds: Set<TrackId>) {
         viewModelScope.launch {
             val playlistId = playlistRepository.createPlaylist(name)
-            playlistRepository.addTrack(playlistId, trackId)
+            trackIds.forEach { playlistRepository.addTrack(playlistId, it) }
         }
     }
 }
