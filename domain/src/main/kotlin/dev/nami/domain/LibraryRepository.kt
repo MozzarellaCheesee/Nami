@@ -21,6 +21,7 @@ interface LibraryRepository {
     fun tracksByArtist(id: ArtistId): Flow<List<Track>>
     fun albumsByArtist(id: ArtistId): Flow<List<AlbumSummary>>
     suspend fun import(source: ImportSource): Flow<ImportProgress>
+    suspend fun deleteTrack(id: TrackId)
 }
 
 data class ImportProgress(val done: Int, val total: Int)

@@ -14,6 +14,7 @@ interface PlaylistRepository {
     fun tracksInPlaylist(id: PlaylistId): Flow<List<Track>>
     suspend fun createPlaylist(name: String): PlaylistId
     suspend fun renamePlaylist(id: PlaylistId, name: String)
+    /** Soft-deletes: the playlist moves to trash for 30 days (see TrashRepository), not removed immediately. */
     suspend fun deletePlaylist(id: PlaylistId)
     suspend fun setCoverImage(id: PlaylistId, imageUri: String)
     suspend fun addTrack(playlistId: PlaylistId, trackId: TrackId)
