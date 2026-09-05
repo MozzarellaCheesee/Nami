@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
@@ -28,6 +29,7 @@ fun TrackListItem(
     track: Track,
     onClick: () -> Unit,
     onAddToQueue: (() -> Unit)? = null,
+    onAddToPlaylist: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -54,6 +56,11 @@ fun TrackListItem(
                 color = NamiColors.Paper70,
                 style = MaterialTheme.typography.bodySmall,
             )
+        }
+        if (onAddToPlaylist != null) {
+            IconButton(onClick = onAddToPlaylist) {
+                Icon(Icons.Filled.LibraryAdd, contentDescription = "В плейлист", tint = NamiColors.Paper70)
+            }
         }
         if (onAddToQueue != null) {
             IconButton(onClick = onAddToQueue) {

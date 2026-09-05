@@ -24,6 +24,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -34,6 +37,7 @@ import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.model.AlbumId
 import dev.nami.core.model.ArtistId
 import dev.nami.core.model.TrackId
+import dev.nami.feature.playlists.AddToPlaylistDialog
 
 @Composable
 fun LibraryScreen(
@@ -44,12 +48,17 @@ fun LibraryScreen(
     viewModel: LibraryViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var addToPlaylistTrackId by remember { mutableStateOf<TrackId?>(null) }
 
     Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
         Column {
             LibraryChipsRow(selected = uiState.selectedTab, onSelect = viewModel::selectTab)
             when (uiState.selectedTab) {
-                LibraryTab.TRACKS -> TrackListContent(viewModel, onTrackClick)
+                LibraryTab.TRACKS -> TrackListContent(
+                    viewModel = viewModel,
+                    onTrackClick = onTrackClick,
+                    onAddToPlaylist = { trackId -> addToPlaylistTrackId = trackId },
+                )
                 LibraryTab.ALBUMS -> AlbumGridContent(viewModel, onAlbumClick)
                 LibraryTab.ARTISTS -> ArtistListContent(viewModel, onArtistClick)
             }
@@ -61,6 +70,10 @@ fun LibraryScreen(
         ) {
             Icon(Icons.Filled.Add, contentDescription = "Импортировать файлы")
         }
+    }
+
+    addToPlaylistTrackId?.let { trackId ->
+        AddToPlaylistDialog(trackId = trackId, onDismiss = { addToPlaylistTrackId = null })
     }
 }
 
@@ -95,14 +108,24 @@ private fun LibraryChipsRow(selected: LibraryTab, onSelect: (LibraryTab) -> Unit
 }
 
 @Composable
-private fun TrackListContent(viewModel: LibraryViewModel, onTrackClick: (TrackId) -> Unit) {
+private fun TrackListContent(
+    viewModel: LibraryViewModel,
+    onTrackClick: (TrackId) -> Unit,
+    onAddToPlaylist: (TrackId) -> Unit,
+) {
     val tracks = viewModel.tracks.collectAsLazyPagingItems()
     if (tracks.itemCount == 0) {
         EmptyLibraryMessage()
     } else {
         LazyColumn {
             items(count = tracks.itemCount, key = tracks.itemKey { it.id.value }) { index ->
-                tracks[index]?.let { track -> TrackListItem(track = track, onClick = { onTrackClick(track.id) }) }
+                tracks[index]?.let { track ->
+                    TrackListItem(
+                        track = track,
+                        onClick = { onTrackClick(track.id) },
+                        onAddToPlaylist = { onAddToPlaylist(track.id) },
+                    )
+                }
             }
         }
     }

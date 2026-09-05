@@ -22,12 +22,17 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil3.compose.AsyncImage
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.model.Track
+import dev.nami.core.model.TrackId
+import dev.nami.feature.playlists.AddToPlaylistDialog
 
 @Composable
 fun AlbumDetailScreen(
@@ -37,6 +42,7 @@ fun AlbumDetailScreen(
     viewModel: AlbumDetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var addToPlaylistTrackId by remember { mutableStateOf<TrackId?>(null) }
 
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
         IconButton(onClick = onBack) {
@@ -86,8 +92,13 @@ fun AlbumDetailScreen(
                     track = track,
                     onClick = { onPlayTracks(uiState.tracks, index) },
                     onAddToQueue = { onAddToQueue(track) },
+                    onAddToPlaylist = { addToPlaylistTrackId = track.id },
                 )
             }
         }
+    }
+
+    addToPlaylistTrackId?.let { trackId ->
+        AddToPlaylistDialog(trackId = trackId, onDismiss = { addToPlaylistTrackId = null })
     }
 }
