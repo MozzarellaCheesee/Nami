@@ -5,10 +5,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
 import dev.nami.app.navigation.NamiNavHost
 import dev.nami.core.designsystem.NamiTheme
 import dev.nami.feature.library.LibraryViewModel
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -50,11 +54,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val importProgress = libraryViewModel.uiState
+            .map { it.importProgress }
+            .stateIn(lifecycleScope, SharingStarted.Eagerly, libraryViewModel.uiState.value.importProgress)
         setContent {
             NamiTheme {
                 NamiNavHost(
                     onImportRequested = { pickFiles.launch(arrayOf("audio/*")) },
                     onImportFolderRequested = { pickFolder.launch(null) },
+                    importProgress = importProgress,
                     onPickPlaylistCover = { playlistId ->
                         playlistActionsViewModel.requestCoverPick(playlistId)
                         pickCoverImage.launch(arrayOf("image/*"))

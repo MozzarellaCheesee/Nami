@@ -16,6 +16,7 @@ import androidx.navigation.navArgument
 import dev.nami.app.SettingsScreen
 import dev.nami.core.model.PlaylistId
 import dev.nami.domain.ImportM3u8Result
+import dev.nami.domain.ImportProgress
 import dev.nami.feature.library.AlbumDetailScreen
 import dev.nami.feature.library.ArtistDetailScreen
 import dev.nami.feature.library.LibraryScreen
@@ -45,6 +46,7 @@ private const val ROUTE_TRASH = "trash"
 fun NamiNavHost(
     onImportRequested: () -> Unit,
     onImportFolderRequested: () -> Unit,
+    importProgress: StateFlow<ImportProgress?>,
     onPickPlaylistCover: (PlaylistId) -> Unit,
     onExportPlaylist: (PlaylistId) -> Unit,
     onImportPlaylist: (playlistName: String) -> Unit,
@@ -73,6 +75,7 @@ fun NamiNavHost(
                     onArtistClick = { artistId -> navController.navigate("artist/${artistId.value}") },
                     onImportRequested = onImportRequested,
                     onImportFolderRequested = onImportFolderRequested,
+                    importProgress = importProgress,
                 )
             }
             composable(ROUTE_SEARCH) {

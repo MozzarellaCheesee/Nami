@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.LibraryAdd
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -51,7 +52,9 @@ import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.model.AlbumId
 import dev.nami.core.model.ArtistId
 import dev.nami.core.model.TrackId
+import dev.nami.domain.ImportProgress
 import dev.nami.feature.playlists.AddToPlaylistDialog
+import kotlinx.coroutines.flow.StateFlow
 
 @Composable
 fun LibraryScreen(
@@ -60,8 +63,10 @@ fun LibraryScreen(
     onArtistClick: (ArtistId) -> Unit,
     onImportRequested: () -> Unit,
     onImportFolderRequested: () -> Unit,
+    importProgress: StateFlow<ImportProgress?>,
     viewModel: LibraryViewModel = hiltViewModel(),
 ) {
+    val activeImportProgress by importProgress.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
     var addToPlaylistTrackId by remember { mutableStateOf<TrackId?>(null) }
     var showAddSelectedToPlaylist by remember { mutableStateOf(false) }
@@ -122,6 +127,9 @@ fun LibraryScreen(
                     horizontalAlignment = Alignment.End,
                     modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
                 ) {
+                    activeImportProgress?.let { progress ->
+                        ImportProgressBadge(progress = progress, modifier = Modifier.padding(bottom = 12.dp))
+                    }
                     FloatingActionButton(
                         onClick = onImportFolderRequested,
                         modifier = Modifier.size(40.dp),
@@ -148,6 +156,24 @@ fun LibraryScreen(
                 showAddSelectedToPlaylist = false
                 viewModel.clearSelection()
             },
+        )
+    }
+}
+
+@Composable
+private fun ImportProgressBadge(progress: ImportProgress, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .background(NamiColors.Ink800, RoundedCornerShape(20.dp))
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+        Text(
+            text = "Импорт: ${progress.done}/${progress.total}",
+            color = NamiColors.Paper100,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(start = 8.dp),
         )
     }
 }
