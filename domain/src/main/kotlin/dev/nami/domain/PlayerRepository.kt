@@ -9,6 +9,7 @@ data class PlayableTrack(
     val artistName: String?,
     val path: String,
     val artworkPath: String? = null,
+    val format: String? = null,
 )
 
 enum class QueueOrigin { MANUAL, CONTEXT }
@@ -18,6 +19,7 @@ data class QueueTrack(
     val title: String,
     val artistName: String?,
     val artworkPath: String? = null,
+    val format: String? = null,
 )
 
 data class QueueItem(

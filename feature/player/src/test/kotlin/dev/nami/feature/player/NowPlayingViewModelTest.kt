@@ -90,7 +90,7 @@ class NowPlayingViewModelTest {
         viewModel.playTrack(TrackId("t1"))
 
         assertEquals(
-            listOf(PlayableTrack(TrackId("t1"), "Window View", null, "/data/music/real-file.flac")),
+            listOf(PlayableTrack(TrackId("t1"), "Window View", null, "/data/music/real-file.flac", format = "flac")),
             playerRepo.playedTracks,
         )
     }
@@ -105,8 +105,8 @@ class NowPlayingViewModelTest {
 
         assertEquals(
             listOf(
-                PlayableTrack(TrackId("t1"), "Window View", "Farewell225", "/data/music/a.flac"),
-                PlayableTrack(TrackId("t2"), "Window View", "Farewell225", "/data/music/b.flac"),
+                PlayableTrack(TrackId("t1"), "Window View", "Farewell225", "/data/music/a.flac", format = "flac"),
+                PlayableTrack(TrackId("t2"), "Window View", "Farewell225", "/data/music/b.flac", format = "flac"),
             ),
             playerRepo.playedTracks,
         )
@@ -119,7 +119,10 @@ class NowPlayingViewModelTest {
 
         viewModel.addToQueue(trackFixture("t1", "/data/music/a.flac"), artistName = "Farewell225")
 
-        assertEquals(PlayableTrack(TrackId("t1"), "Window View", "Farewell225", "/data/music/a.flac"), playerRepo.addedTrack)
+        assertEquals(
+            PlayableTrack(TrackId("t1"), "Window View", "Farewell225", "/data/music/a.flac", format = "flac"),
+            playerRepo.addedTrack,
+        )
     }
 
     @Test

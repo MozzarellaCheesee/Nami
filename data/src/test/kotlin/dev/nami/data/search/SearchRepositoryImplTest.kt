@@ -68,6 +68,7 @@ class SearchRepositoryImplTest {
         override fun pagingSource(): PagingSource<Int, AlbumDao.AlbumListRow> = error("unused")
         override suspend fun insert(album: AlbumEntity) = error("unused")
         override suspend fun setArtworkPath(id: String, path: String) = error("unused")
+        override suspend fun recentAlbums(limit: Int): List<AlbumDao.AlbumListRow> = error("unused")
         override suspend fun allForIndexing(): List<AlbumDao.AlbumListRow> = rows
     }
 

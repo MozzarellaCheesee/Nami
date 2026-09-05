@@ -30,6 +30,7 @@ class MetadataResolverTest {
             override suspend fun insert(album: AlbumEntity) = error("unused")
             override suspend fun setArtworkPath(id: String, path: String) = error("unused")
             override fun pagingSource(): PagingSource<Int, AlbumDao.AlbumListRow> = error("unused")
+            override suspend fun recentAlbums(limit: Int): List<AlbumDao.AlbumListRow> = error("unused")
             override suspend fun allForIndexing(): List<AlbumDao.AlbumListRow> = error("unused")
         }
         val resolver = MetadataResolver(artistDao, albumDao)
@@ -57,6 +58,7 @@ class MetadataResolverTest {
             override suspend fun insert(album: AlbumEntity) = error("unused")
             override suspend fun setArtworkPath(id: String, path: String) = error("unused")
             override fun pagingSource(): PagingSource<Int, AlbumDao.AlbumListRow> = error("unused")
+            override suspend fun recentAlbums(limit: Int): List<AlbumDao.AlbumListRow> = error("unused")
             override suspend fun allForIndexing(): List<AlbumDao.AlbumListRow> = error("unused")
         }
         val resolver = MetadataResolver(artistDao, albumDao)
@@ -84,6 +86,7 @@ class MetadataResolverTest {
             override suspend fun insert(album: AlbumEntity) = error("unused")
             override suspend fun setArtworkPath(id: String, path: String) = error("unused")
             override fun pagingSource(): PagingSource<Int, AlbumDao.AlbumListRow> = error("unused")
+            override suspend fun recentAlbums(limit: Int): List<AlbumDao.AlbumListRow> = error("unused")
             override suspend fun allForIndexing(): List<AlbumDao.AlbumListRow> = error("unused")
         }
         val resolver = MetadataResolver(artistDao, albumDao)
@@ -109,6 +112,7 @@ class MetadataResolverTest {
             override suspend fun insert(album: AlbumEntity) { inserted = album }
             override suspend fun setArtworkPath(id: String, path: String) = error("unused")
             override fun pagingSource(): PagingSource<Int, AlbumDao.AlbumListRow> = error("unused")
+            override suspend fun recentAlbums(limit: Int): List<AlbumDao.AlbumListRow> = error("unused")
             override suspend fun allForIndexing(): List<AlbumDao.AlbumListRow> = error("unused")
         }
         val resolver = MetadataResolver(artistDao, albumDao)

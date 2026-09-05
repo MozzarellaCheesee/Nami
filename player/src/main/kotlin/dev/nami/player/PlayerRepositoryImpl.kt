@@ -89,6 +89,7 @@ class PlayerRepositoryImpl @Inject constructor(
         title = mediaMetadata.title?.toString().orEmpty(),
         artist = mediaMetadata.artist?.toString(),
         artworkPath = mediaMetadata.artworkUri?.toString(),
+        format = mediaMetadata.extras?.getString("format"),
     )
 
     private fun PlayableTrack.toMediaItem(): MediaItem = MediaItem.Builder()
@@ -99,6 +100,7 @@ class PlayerRepositoryImpl @Inject constructor(
                 .setTitle(title)
                 .setArtist(artistName)
                 .apply { artworkPath?.let { setArtworkUri(android.net.Uri.parse(it)) } }
+                .setExtras(android.os.Bundle().apply { putString("format", format) })
                 .build(),
         )
         .build()

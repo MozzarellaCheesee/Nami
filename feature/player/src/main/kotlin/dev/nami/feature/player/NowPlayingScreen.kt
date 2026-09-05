@@ -14,9 +14,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -148,31 +150,71 @@ fun NowPlayingScreen(
         queue.nowPlaying?.artistName?.let { artistName ->
             Text(text = artistName, color = NamiColors.Paper70)
         }
+        queue.nowPlaying?.format?.let { format ->
+            Text(
+                text = format.uppercase(),
+                color = NamiColors.Ai,
+                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                modifier = Modifier
+                    .padding(top = 12.dp)
+                    .background(NamiColors.Ai.copy(alpha = 0.14f), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            )
+        }
+        Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(
+                text = formatDuration(playing?.positionMs ?: 0L),
+                color = NamiColors.Paper70,
+                style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+            )
+            Text(
+                text = "-" + formatDuration(((playing?.durationMs ?: 0L) - (playing?.positionMs ?: 0L)).coerceAtLeast(0L)),
+                color = NamiColors.Paper70,
+                style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+            )
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 24.dp),
+                .padding(top = 8.dp),
             horizontalArrangement = Arrangement.Center,
         ) {
             IconButton(onClick = viewModel::skipPrevious) {
                 Icon(Icons.Filled.SkipPrevious, contentDescription = "Предыдущий", tint = NamiColors.Paper100)
             }
-            IconButton(onClick = viewModel::toggle) {
+            IconButton(
+                onClick = viewModel::toggle,
+                modifier = Modifier.size(64.dp),
+            ) {
                 Icon(
                     imageVector = if (playing?.isPlaying == true) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                     contentDescription = "Играть/пауза",
                     tint = NamiColors.Ink900,
                     modifier = Modifier
+                        .fillMaxSize()
                         .background(NamiColors.Paper100, RoundedCornerShape(20.dp))
-                        .padding(12.dp),
+                        .padding(16.dp),
                 )
             }
             IconButton(onClick = viewModel::skipNext) {
                 Icon(Icons.Filled.SkipNext, contentDescription = "Следующий", tint = NamiColors.Paper100)
             }
         }
-        androidx.compose.material3.TextButton(onClick = onQueueClick, modifier = Modifier.padding(top = 12.dp)) {
+        androidx.compose.material3.TextButton(
+            onClick = onQueueClick,
+            modifier = Modifier
+                .padding(top = 20.dp)
+                .height(44.dp)
+                .background(NamiColors.Ink800, RoundedCornerShape(22.dp)),
+        ) {
             Text(text = "Очередь", color = NamiColors.Paper70)
         }
     }
+}
+
+private fun formatDuration(ms: Long): String {
+    val totalSeconds = (ms / 1000).coerceAtLeast(0)
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return "%d:%02d".format(minutes, seconds)
 }

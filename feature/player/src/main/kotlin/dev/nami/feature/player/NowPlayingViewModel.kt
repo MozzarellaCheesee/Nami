@@ -80,5 +80,12 @@ class NowPlayingViewModel @Inject constructor(
     }
 
     private fun Track.toPlayableTrack(artistName: String?): PlayableTrack =
-        PlayableTrack(id = id, title = title, artistName = artistName ?: this.artistName, path = path, artworkPath = albumArtworkPath)
+        PlayableTrack(
+            id = id,
+            title = title,
+            artistName = artistName ?: this.artistName,
+            path = path,
+            artworkPath = albumArtworkPath,
+            format = format,
+        )
 }
