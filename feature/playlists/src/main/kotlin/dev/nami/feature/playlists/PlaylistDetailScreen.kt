@@ -135,7 +135,7 @@ fun PlaylistDetailScreen(
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             title = { Text("Удалить плейлист?") },
-            text = { Text("Треки останутся в библиотеке.") },
+            text = { Text("Треки останутся в библиотеке. Плейлист будет в корзине 30 дней.") },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.delete(onDeleted)

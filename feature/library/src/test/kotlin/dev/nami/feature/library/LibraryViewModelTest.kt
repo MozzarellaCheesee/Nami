@@ -13,6 +13,10 @@ import dev.nami.domain.ImportSource
 import dev.nami.domain.LibraryRepository
 import dev.nami.domain.SearchRepository
 import dev.nami.domain.SearchResult
+import dev.nami.domain.TrashRepository
+import dev.nami.domain.TrashedPlaylist
+import dev.nami.domain.TrashedTrack
+import dev.nami.core.model.PlaylistId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -26,6 +30,7 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class LibraryViewModelTest {
@@ -39,6 +44,17 @@ class LibraryViewModelTest {
     private val noOpSearchRepo = object : SearchRepository {
         override suspend fun search(query: String) = emptyList<SearchResult>()
         override suspend fun rebuildIndex() {}
+    }
+
+    private class FakeTrashRepository : TrashRepository {
+        var restoredTrack: TrackId? = null
+        override fun trashedTracks(): Flow<List<TrashedTrack>> = flowOf(emptyList())
+        override fun trashedPlaylists(): Flow<List<TrashedPlaylist>> = flowOf(emptyList())
+        override suspend fun restoreTrack(id: TrackId) { restoredTrack = id }
+        override suspend fun restorePlaylist(id: PlaylistId) {}
+        override suspend fun deleteTrackForever(id: TrackId) {}
+        override suspend fun deletePlaylistForever(id: PlaylistId) {}
+        override suspend fun purgeExpired() {}
     }
 
     @Test
@@ -55,8 +71,9 @@ class LibraryViewModelTest {
             override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
             override suspend fun import(source: ImportSource): Flow<ImportProgress> =
                 flowOf(ImportProgress(1, 2), ImportProgress(2, 2))
+            override suspend fun deleteTrack(id: TrackId) {}
         }
-        val viewModel = LibraryViewModel(fakeRepo, noOpSearchRepo)
+        val viewModel = LibraryViewModel(fakeRepo, noOpSearchRepo, FakeTrashRepository())
 
         viewModel.importFiles(listOf("content://fake/1", "content://fake/2"))
 
@@ -76,8 +93,9 @@ class LibraryViewModelTest {
             override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
             override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
             override suspend fun import(source: ImportSource) = flowOf(ImportProgress(0, 0))
+            override suspend fun deleteTrack(id: TrackId) {}
         }
-        val viewModel = LibraryViewModel(fakeRepo, noOpSearchRepo)
+        val viewModel = LibraryViewModel(fakeRepo, noOpSearchRepo, FakeTrashRepository())
 
         viewModel.selectTab(LibraryTab.ALBUMS)
 
@@ -103,8 +121,9 @@ class LibraryViewModelTest {
             override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
             override suspend fun import(source: ImportSource): Flow<ImportProgress> =
                 flowOf(ImportProgress(1, 1))
+            override suspend fun deleteTrack(id: TrackId) {}
         }
-        val viewModel = LibraryViewModel(fakeRepo, fakeSearchRepo)
+        val viewModel = LibraryViewModel(fakeRepo, fakeSearchRepo, FakeTrashRepository())
 
         viewModel.importFiles(listOf("content://fake/1"))
 
@@ -130,11 +149,60 @@ class LibraryViewModelTest {
             override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
             override suspend fun import(source: ImportSource): Flow<ImportProgress> =
                 flow { throw RuntimeException("boom") }
+            override suspend fun deleteTrack(id: TrackId) {}
         }
-        val viewModel = LibraryViewModel(fakeRepo, fakeSearchRepo)
+        val viewModel = LibraryViewModel(fakeRepo, fakeSearchRepo, FakeTrashRepository())
 
         viewModel.importFiles(listOf("content://fake/1"))
 
         assertEquals(true, rebuildCalled)
+    }
+
+    @Test
+    fun `deleteTrack sets lastDeletedTrackId after repository call`() = runTest {
+        val fakeLibraryRepository = object : LibraryRepository {
+            override fun tracks() = flowOf(PagingData.empty<Track>())
+            override fun track(id: TrackId) = flowOf<Track?>(null)
+            override fun albums() = flowOf(PagingData.empty<AlbumSummary>())
+            override fun artists() = flowOf(PagingData.empty<Artist>())
+            override fun album(id: AlbumId) = flowOf<Album?>(null)
+            override fun artist(id: ArtistId) = flowOf<Artist?>(null)
+            override fun tracksInAlbum(id: AlbumId) = flowOf(emptyList<Track>())
+            override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
+            override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
+            override suspend fun import(source: ImportSource) = flowOf(ImportProgress(0, 0))
+            override suspend fun deleteTrack(id: TrackId) {}
+        }
+        val fakeTrashRepository = FakeTrashRepository()
+        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, fakeTrashRepository)
+
+        viewModel.deleteTrack(TrackId("t1"))
+
+        assertEquals(TrackId("t1"), viewModel.uiState.value.lastDeletedTrackId)
+    }
+
+    @Test
+    fun `undoLastDelete restores the track and clears state`() = runTest {
+        val fakeLibraryRepository = object : LibraryRepository {
+            override fun tracks() = flowOf(PagingData.empty<Track>())
+            override fun track(id: TrackId) = flowOf<Track?>(null)
+            override fun albums() = flowOf(PagingData.empty<AlbumSummary>())
+            override fun artists() = flowOf(PagingData.empty<Artist>())
+            override fun album(id: AlbumId) = flowOf<Album?>(null)
+            override fun artist(id: ArtistId) = flowOf<Artist?>(null)
+            override fun tracksInAlbum(id: AlbumId) = flowOf(emptyList<Track>())
+            override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
+            override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
+            override suspend fun import(source: ImportSource) = flowOf(ImportProgress(0, 0))
+            override suspend fun deleteTrack(id: TrackId) {}
+        }
+        val fakeTrashRepository = FakeTrashRepository()
+        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, fakeTrashRepository)
+        viewModel.deleteTrack(TrackId("t1"))
+
+        viewModel.undoLastDelete()
+
+        assertEquals(TrackId("t1"), fakeTrashRepository.restoredTrack)
+        assertNull(viewModel.uiState.value.lastDeletedTrackId)
     }
 }

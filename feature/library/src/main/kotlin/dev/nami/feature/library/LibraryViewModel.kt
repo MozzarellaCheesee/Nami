@@ -8,10 +8,12 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.nami.core.model.AlbumSummary
 import dev.nami.core.model.Artist
 import dev.nami.core.model.Track
+import dev.nami.core.model.TrackId
 import dev.nami.domain.ImportProgress
 import dev.nami.domain.ImportSource
 import dev.nami.domain.LibraryRepository
 import dev.nami.domain.SearchRepository
+import dev.nami.domain.TrashRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,12 +27,14 @@ enum class LibraryTab { TRACKS, ALBUMS, ARTISTS }
 data class LibraryUiState(
     val importProgress: ImportProgress? = null,
     val selectedTab: LibraryTab = LibraryTab.TRACKS,
+    val lastDeletedTrackId: TrackId? = null,
 )
 
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
     private val searchRepository: SearchRepository,
+    private val trashRepository: TrashRepository,
 ) : ViewModel() {
 
     val tracks: Flow<PagingData<Track>> =
@@ -64,5 +68,24 @@ class LibraryViewModel @Inject constructor(
                 searchRepository.rebuildIndex()
             }
         }
+    }
+
+    fun deleteTrack(id: TrackId) {
+        viewModelScope.launch {
+            libraryRepository.deleteTrack(id)
+            _uiState.value = _uiState.value.copy(lastDeletedTrackId = id)
+        }
+    }
+
+    fun undoLastDelete() {
+        val id = _uiState.value.lastDeletedTrackId ?: return
+        viewModelScope.launch {
+            trashRepository.restoreTrack(id)
+            _uiState.value = _uiState.value.copy(lastDeletedTrackId = null)
+        }
+    }
+
+    fun dismissDeleteSnackbar() {
+        _uiState.value = _uiState.value.copy(lastDeletedTrackId = null)
     }
 }

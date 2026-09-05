@@ -20,8 +20,13 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,26 +54,40 @@ fun LibraryScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var addToPlaylistTrackId by remember { mutableStateOf<TrackId?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
-        Column {
-            LibraryChipsRow(selected = uiState.selectedTab, onSelect = viewModel::selectTab)
-            when (uiState.selectedTab) {
-                LibraryTab.TRACKS -> TrackListContent(
-                    viewModel = viewModel,
-                    onTrackClick = onTrackClick,
-                    onAddToPlaylist = { trackId -> addToPlaylistTrackId = trackId },
-                )
-                LibraryTab.ALBUMS -> AlbumGridContent(viewModel, onAlbumClick)
-                LibraryTab.ARTISTS -> ArtistListContent(viewModel, onArtistClick)
-            }
+    LaunchedEffect(uiState.lastDeletedTrackId) {
+        if (uiState.lastDeletedTrackId == null) return@LaunchedEffect
+        val result = snackbarHostState.showSnackbar(message = "Трек удалён", actionLabel = "Отменить")
+        if (result == SnackbarResult.ActionPerformed) {
+            viewModel.undoLastDelete()
+        } else {
+            viewModel.dismissDeleteSnackbar()
         }
+    }
 
-        FloatingActionButton(
-            onClick = onImportRequested,
-            modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
-        ) {
-            Icon(Icons.Filled.Add, contentDescription = "Импортировать файлы")
+    Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
+        Box(modifier = Modifier.fillMaxSize().padding(padding).background(NamiColors.Ink900)) {
+            Column {
+                LibraryChipsRow(selected = uiState.selectedTab, onSelect = viewModel::selectTab)
+                when (uiState.selectedTab) {
+                    LibraryTab.TRACKS -> TrackListContent(
+                        viewModel = viewModel,
+                        onTrackClick = onTrackClick,
+                        onAddToPlaylist = { trackId -> addToPlaylistTrackId = trackId },
+                        onDelete = { trackId -> viewModel.deleteTrack(trackId) },
+                    )
+                    LibraryTab.ALBUMS -> AlbumGridContent(viewModel, onAlbumClick)
+                    LibraryTab.ARTISTS -> ArtistListContent(viewModel, onArtistClick)
+                }
+            }
+
+            FloatingActionButton(
+                onClick = onImportRequested,
+                modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = "Импортировать файлы")
+            }
         }
     }
 
@@ -112,6 +131,7 @@ private fun TrackListContent(
     viewModel: LibraryViewModel,
     onTrackClick: (TrackId) -> Unit,
     onAddToPlaylist: (TrackId) -> Unit,
+    onDelete: (TrackId) -> Unit,
 ) {
     val tracks = viewModel.tracks.collectAsLazyPagingItems()
     if (tracks.itemCount == 0) {
@@ -124,6 +144,7 @@ private fun TrackListContent(
                         track = track,
                         onClick = { onTrackClick(track.id) },
                         onAddToPlaylist = { onAddToPlaylist(track.id) },
+                        onDelete = { onDelete(track.id) },
                     )
                 }
             }

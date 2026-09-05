@@ -13,7 +13,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import dev.nami.app.SettingsPlaceholderScreen
+import dev.nami.app.SettingsScreen
 import dev.nami.core.model.PlaylistId
 import dev.nami.domain.ImportM3u8Result
 import dev.nami.feature.library.AlbumDetailScreen
@@ -26,6 +26,7 @@ import dev.nami.feature.player.QueueScreen
 import dev.nami.feature.playlists.PlaylistDetailScreen
 import dev.nami.feature.playlists.PlaylistsScreen
 import dev.nami.feature.search.SearchScreen
+import dev.nami.feature.trash.TrashScreen
 import kotlinx.coroutines.flow.StateFlow
 
 private const val ROUTE_LIBRARY = "library"
@@ -37,6 +38,7 @@ private const val ROUTE_QUEUE = "queue"
 private const val ROUTE_ALBUM_DETAIL = "album/{albumId}"
 private const val ROUTE_ARTIST_DETAIL = "artist/{artistId}"
 private const val ROUTE_PLAYLIST_DETAIL = "playlist/{playlistId}"
+private const val ROUTE_TRASH = "trash"
 
 private val BOTTOM_BAR_ROUTES = setOf(ROUTE_LIBRARY, ROUTE_SEARCH, ROUTE_PLAYLISTS, ROUTE_SETTINGS)
 
@@ -90,7 +92,12 @@ fun NamiNavHost(
                     onImportResultShown = onImportResultShown,
                 )
             }
-            composable(ROUTE_SETTINGS) { SettingsPlaceholderScreen() }
+            composable(ROUTE_SETTINGS) {
+                SettingsScreen(onTrashClick = { navController.navigate(ROUTE_TRASH) })
+            }
+            composable(ROUTE_TRASH) {
+                TrashScreen(onBack = { navController.popBackStack() })
+            }
             composable(ROUTE_NOW_PLAYING) {
                 NowPlayingScreen(
                     onCollapse = { navController.popBackStack() },

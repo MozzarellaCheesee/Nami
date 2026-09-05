@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material3.IconButton
@@ -30,6 +31,7 @@ fun TrackListItem(
     onClick: () -> Unit,
     onAddToQueue: (() -> Unit)? = null,
     onAddToPlaylist: (() -> Unit)? = null,
+    onDelete: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -65,6 +67,11 @@ fun TrackListItem(
         if (onAddToQueue != null) {
             IconButton(onClick = onAddToQueue) {
                 Icon(Icons.Filled.PlaylistAdd, contentDescription = "В очередь", tint = NamiColors.Paper70)
+            }
+        }
+        if (onDelete != null) {
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Filled.Delete, contentDescription = "Удалить", tint = NamiColors.Paper70)
             }
         }
     }

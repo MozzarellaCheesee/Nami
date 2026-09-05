@@ -53,6 +53,9 @@ class SearchRepositoryImplTest {
         override suspend fun tracksForAlbum(albumId: String): List<TrackEntity> = error("unused")
         override suspend fun tracksForArtist(artistId: String): List<TrackEntity> = error("unused")
         override suspend fun allForIndexing(): List<TrackDao.TrackIndexRow> = rows
+        override suspend fun setDeletedAt(id: String, deletedAt: Long?, path: String) = error("unused")
+        override suspend fun hardDelete(id: String) = error("unused")
+        override fun trashedTracksFlow() = error("unused")
     }
 
     private fun fakeAlbumDao(rows: List<AlbumDao.AlbumListRow> = emptyList()) = object : AlbumDao {

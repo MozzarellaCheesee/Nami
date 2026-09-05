@@ -36,6 +36,7 @@ dependencies {
     implementation(project(":feature:player"))
     implementation(project(":feature:search"))
     implementation(project(":feature:playlists"))
+    implementation(project(":feature:trash"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
