@@ -20,6 +20,7 @@ import dev.nami.feature.library.LibraryScreen
 import dev.nami.feature.player.MiniPlayer
 import dev.nami.feature.player.NowPlayingScreen
 import dev.nami.feature.player.NowPlayingViewModel
+import dev.nami.feature.player.QueueScreen
 import dev.nami.feature.search.SearchScreen
 
 private const val ROUTE_LIBRARY = "library"
@@ -27,6 +28,7 @@ private const val ROUTE_SEARCH = "search"
 private const val ROUTE_PLAYLISTS = "playlists"
 private const val ROUTE_SETTINGS = "settings"
 private const val ROUTE_NOW_PLAYING = "now_playing"
+private const val ROUTE_QUEUE = "queue"
 private const val ROUTE_ALBUM_DETAIL = "album/{albumId}"
 private const val ROUTE_ARTIST_DETAIL = "artist/{artistId}"
 
@@ -37,8 +39,6 @@ fun NamiNavHost(
     onImportRequested: () -> Unit,
     navController: NavHostController = rememberNavController(),
 ) {
-    // Scoped here (Activity-level ViewModelStoreOwner), not inside a nav destination,
-    // so MiniPlayer and NowPlayingScreen share the same instance and stay in sync.
     val nowPlayingViewModel: NowPlayingViewModel = hiltViewModel()
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
 
@@ -74,9 +74,12 @@ fun NamiNavHost(
             composable(ROUTE_NOW_PLAYING) {
                 NowPlayingScreen(
                     onCollapse = { navController.popBackStack() },
-                    onQueueClick = {},
+                    onQueueClick = { navController.navigate(ROUTE_QUEUE) },
                     viewModel = nowPlayingViewModel,
                 )
+            }
+            composable(ROUTE_QUEUE) {
+                QueueScreen(onBack = { navController.popBackStack() }, viewModel = nowPlayingViewModel)
             }
             composable(
                 ROUTE_ALBUM_DETAIL,
@@ -84,10 +87,11 @@ fun NamiNavHost(
             ) {
                 AlbumDetailScreen(
                     onBack = { navController.popBackStack() },
-                    onTrackClick = { trackId ->
-                        nowPlayingViewModel.playTrack(trackId)
+                    onPlayTracks = { tracks, startIndex ->
+                        nowPlayingViewModel.playTracks(tracks, artistName = null, startIndex = startIndex)
                         navController.navigate(ROUTE_NOW_PLAYING)
                     },
+                    onAddToQueue = { track -> nowPlayingViewModel.addToQueue(track, artistName = null) },
                 )
             }
             composable(
@@ -97,10 +101,11 @@ fun NamiNavHost(
                 ArtistDetailScreen(
                     onBack = { navController.popBackStack() },
                     onAlbumClick = { albumId -> navController.navigate("album/${albumId.value}") },
-                    onTrackClick = { trackId ->
-                        nowPlayingViewModel.playTrack(trackId)
+                    onPlayTracks = { tracks, artistName, startIndex ->
+                        nowPlayingViewModel.playTracks(tracks, artistName, startIndex)
                         navController.navigate(ROUTE_NOW_PLAYING)
                     },
+                    onAddToQueue = { track, artistName -> nowPlayingViewModel.addToQueue(track, artistName) },
                 )
             }
         }
