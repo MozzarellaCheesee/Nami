@@ -17,4 +17,5 @@ data class Track(
     val dateAdded: Long,
     val lastPlayed: Long? = null,
     val playCount: Int = 0,
+    val genre: String? = null,
 )

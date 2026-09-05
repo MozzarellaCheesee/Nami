@@ -20,4 +20,14 @@ class TrackTest {
         assertEquals("t1", track.id.value)
         assertEquals("/music/t1.flac", track.path)
     }
+
+    @Test
+    fun `track carries optional genre`() {
+        val track = Track(
+            id = TrackId("t1"), title = "Window View", artistId = null, albumId = null,
+            durationMs = 180_000, path = "/music/t1.flac", format = "flac",
+            sizeBytes = 40_000_000, dateAdded = 0L, genre = "J-Rock",
+        )
+        assertEquals("J-Rock", track.genre)
+    }
 }
