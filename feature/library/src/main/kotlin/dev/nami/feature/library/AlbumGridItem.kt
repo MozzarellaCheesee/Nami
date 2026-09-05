@@ -4,9 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -20,21 +20,21 @@ import dev.nami.core.model.AlbumSummary
 
 @Composable
 fun AlbumGridItem(album: AlbumSummary, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Column(modifier = modifier.width(156.dp).clickable(onClick = onClick)) {
+    Column(modifier = modifier.fillMaxWidth().clickable(onClick = onClick)) {
         if (album.artworkPath != null) {
             AsyncImage(
                 model = album.artworkPath,
                 contentDescription = album.title,
                 modifier = Modifier
-                    .width(156.dp)
-                    .height(156.dp)
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
                     .background(NamiColors.Ink700, RoundedCornerShape(4.dp)),
             )
         } else {
             Box(
                 modifier = Modifier
-                    .width(156.dp)
-                    .height(156.dp)
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
                     .background(NamiColors.Ink700, RoundedCornerShape(4.dp)),
             )
         }

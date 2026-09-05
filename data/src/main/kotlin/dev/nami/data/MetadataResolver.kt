@@ -19,11 +19,11 @@ class MetadataResolver @Inject constructor(
         return id
     }
 
-    suspend fun resolveAlbum(title: String?, artistId: String?): String? {
+    suspend fun resolveAlbum(title: String?, artistId: String?, year: Int? = null): String? {
         if (title.isNullOrBlank()) return null
         albumDao.findByTitleAndArtist(title, artistId)?.let { return it.id }
         val id = UUID.randomUUID().toString()
-        albumDao.insert(AlbumEntity(id = id, title = title, artistId = artistId, year = null, artworkPath = null))
+        albumDao.insert(AlbumEntity(id = id, title = title, artistId = artistId, year = year, artworkPath = null))
         return id
     }
 }

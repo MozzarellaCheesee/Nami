@@ -1,6 +1,7 @@
 package dev.nami.feature.library
 
 import androidx.paging.PagingData
+import dev.nami.core.model.Album
 import dev.nami.core.model.AlbumId
 import dev.nami.core.model.AlbumSummary
 import dev.nami.core.model.Artist
@@ -39,7 +40,7 @@ class LibraryViewModelTest {
             override fun track(id: TrackId): Flow<Track?> = flowOf(null)
             override fun albums() = flowOf(PagingData.empty<AlbumSummary>())
             override fun artists() = flowOf(PagingData.empty<Artist>())
-            override fun album(id: AlbumId) = flowOf<dev.nami.core.model.Album?>(null)
+            override fun album(id: AlbumId) = flowOf<Album?>(null)
             override fun artist(id: ArtistId) = flowOf<Artist?>(null)
             override fun tracksInAlbum(id: AlbumId) = flowOf(emptyList<Track>())
             override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
@@ -61,7 +62,7 @@ class LibraryViewModelTest {
             override fun track(id: TrackId) = flowOf<Track?>(null)
             override fun albums() = flowOf(PagingData.empty<AlbumSummary>())
             override fun artists() = flowOf(PagingData.empty<Artist>())
-            override fun album(id: AlbumId) = flowOf<dev.nami.core.model.Album?>(null)
+            override fun album(id: AlbumId) = flowOf<Album?>(null)
             override fun artist(id: ArtistId) = flowOf<Artist?>(null)
             override fun tracksInAlbum(id: AlbumId) = flowOf(emptyList<Track>())
             override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())

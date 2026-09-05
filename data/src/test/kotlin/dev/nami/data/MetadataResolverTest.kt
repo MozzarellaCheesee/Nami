@@ -26,6 +26,7 @@ class MetadataResolverTest {
             override suspend fun findByTitleAndArtist(title: String, artistId: String?): AlbumEntity? = null
             override suspend fun albumsByArtist(artistId: String): List<AlbumEntity> = error("unused")
             override suspend fun insert(album: AlbumEntity) = error("unused")
+            override suspend fun setArtworkPath(id: String, path: String) = error("unused")
             override fun pagingSource(): PagingSource<Int, AlbumDao.AlbumListRow> = error("unused")
         }
         val resolver = MetadataResolver(artistDao, albumDao)
@@ -49,6 +50,7 @@ class MetadataResolverTest {
             override suspend fun findByTitleAndArtist(title: String, artistId: String?): AlbumEntity? = null
             override suspend fun albumsByArtist(artistId: String): List<AlbumEntity> = error("unused")
             override suspend fun insert(album: AlbumEntity) = error("unused")
+            override suspend fun setArtworkPath(id: String, path: String) = error("unused")
             override fun pagingSource(): PagingSource<Int, AlbumDao.AlbumListRow> = error("unused")
         }
         val resolver = MetadataResolver(artistDao, albumDao)
@@ -72,10 +74,36 @@ class MetadataResolverTest {
             override suspend fun findByTitleAndArtist(title: String, artistId: String?): AlbumEntity? = null
             override suspend fun albumsByArtist(artistId: String): List<AlbumEntity> = error("unused")
             override suspend fun insert(album: AlbumEntity) = error("unused")
+            override suspend fun setArtworkPath(id: String, path: String) = error("unused")
             override fun pagingSource(): PagingSource<Int, AlbumDao.AlbumListRow> = error("unused")
         }
         val resolver = MetadataResolver(artistDao, albumDao)
 
         assertNull(resolver.resolveArtist(null))
+    }
+
+    @Test
+    fun `resolveAlbum inserts new album with given year`() = runTest {
+        var inserted: AlbumEntity? = null
+        val artistDao = object : ArtistDao {
+            override suspend fun findById(id: String): ArtistEntity? = null
+            override suspend fun findByName(name: String): ArtistEntity? = null
+            override suspend fun insert(artist: ArtistEntity) = error("unused")
+            override fun pagingSource(): PagingSource<Int, ArtistEntity> = error("unused")
+        }
+        val albumDao = object : AlbumDao {
+            override suspend fun findById(id: String): AlbumEntity? = null
+            override suspend fun findByTitleAndArtist(title: String, artistId: String?): AlbumEntity? = null
+            override suspend fun albumsByArtist(artistId: String): List<AlbumEntity> = error("unused")
+            override suspend fun insert(album: AlbumEntity) { inserted = album }
+            override suspend fun setArtworkPath(id: String, path: String) = error("unused")
+            override fun pagingSource(): PagingSource<Int, AlbumDao.AlbumListRow> = error("unused")
+        }
+        val resolver = MetadataResolver(artistDao, albumDao)
+
+        val id = resolver.resolveAlbum("New Album", "a1", 1999)
+
+        assertEquals(1999, inserted?.year)
+        assertEquals(inserted?.id, id)
     }
 }

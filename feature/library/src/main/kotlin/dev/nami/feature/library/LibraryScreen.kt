@@ -8,8 +8,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.items
@@ -67,12 +67,14 @@ fun LibraryScreen(
 @Composable
 private fun LibraryChipsRow(selected: LibraryTab, onSelect: (LibraryTab) -> Unit) {
     val labels = mapOf(LibraryTab.TRACKS to "Треки", LibraryTab.ALBUMS to "Альбомы", LibraryTab.ARTISTS to "Артисты")
-    LazyRow(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
-        items(LibraryTab.entries) { tab ->
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        LibraryTab.entries.forEach { tab ->
             val isSelected = tab == selected
             Box(
                 modifier = Modifier
-                    .padding(start = 20.dp)
                     .height(32.dp)
                     .background(
                         if (isSelected) NamiColors.Paper100 else NamiColors.Ink800,
@@ -112,7 +114,7 @@ private fun AlbumGridContent(viewModel: LibraryViewModel, onAlbumClick: (AlbumId
     if (albums.itemCount == 0) {
         EmptyLibraryMessage()
     } else {
-        LazyVerticalGrid(columns = GridCells.Adaptive(minSize = 156.dp)) {
+        LazyVerticalGrid(columns = GridCells.Adaptive(minSize = 172.dp)) {
             items(count = albums.itemCount, key = albums.itemKey { it.id.value }) { index ->
                 albums[index]?.let { album ->
                     AlbumGridItem(

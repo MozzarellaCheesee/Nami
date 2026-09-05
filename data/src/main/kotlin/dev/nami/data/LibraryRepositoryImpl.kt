@@ -109,10 +109,10 @@ class LibraryRepositoryImpl @Inject constructor(
 
         val tags = nativeBridge.readTags(destination.path)
         val artistId = metadataResolver.resolveArtist(tags?.artist ?: tags?.albumArtist)
-        val albumId = metadataResolver.resolveAlbum(tags?.album, artistId)
+        val albumId = metadataResolver.resolveAlbum(tags?.album, artistId, tags?.year)
         val artwork = tags?.artwork
         if (albumId != null && artwork != null) {
-            artworkStore.save(albumId, artwork)
+            artworkStore.save(albumId, artwork)?.let { path -> albumDao.setArtworkPath(albumId, path) }
         }
 
         val fallbackTitle = (queryDisplayName(resolver, uri) ?: uri.lastPathSegment ?: "unknown")

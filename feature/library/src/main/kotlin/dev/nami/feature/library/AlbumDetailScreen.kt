@@ -22,6 +22,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil3.compose.AsyncImage
 import dev.nami.core.designsystem.NamiColors
 
 @Composable
@@ -35,19 +36,37 @@ fun AlbumDetailScreen(
         IconButton(onClick = onBack) {
             Icon(Icons.Filled.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
         }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(200.dp)
-                .background(NamiColors.Ink700, RoundedCornerShape(4.dp))
-                .padding(20.dp),
-        )
+        if (uiState.album?.artworkPath != null) {
+            AsyncImage(
+                model = uiState.album?.artworkPath,
+                contentDescription = uiState.album?.title,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .background(NamiColors.Ink700, RoundedCornerShape(4.dp)),
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .background(NamiColors.Ink700, RoundedCornerShape(4.dp)),
+            )
+        }
         Text(
             text = uiState.album?.title ?: "",
             color = NamiColors.Paper100,
             style = MaterialTheme.typography.headlineSmall,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
         )
+        uiState.album?.year?.let { year ->
+            Text(
+                text = year.toString(),
+                color = NamiColors.Paper70,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(horizontal = 20.dp),
+            )
+        }
         LazyColumn {
             items(uiState.tracks, key = { it.id.value }) { track ->
                 TrackListItem(track = track, onClick = { })

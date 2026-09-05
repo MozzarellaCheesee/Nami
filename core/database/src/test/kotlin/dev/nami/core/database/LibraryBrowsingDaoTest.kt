@@ -95,6 +95,23 @@ class LibraryBrowsingDaoTest {
         assertEquals(listOf("t1"), tracks.map { it.id })
     }
 
+    @Test
+    fun `tracksForArtist orders by album year desc then track order`() = runTest {
+        db.artistDao().insert(ArtistEntity(id = "a1", name = "Artist 1", sortName = "Artist 1"))
+        db.albumDao().insert(AlbumEntity(id = "al-old", title = "Old Album", artistId = "a1", year = 2000, artworkPath = null))
+        db.albumDao().insert(AlbumEntity(id = "al-new", title = "New Album", artistId = "a1", year = 2020, artworkPath = null))
+        db.trackDao().insertAll(
+            listOf(
+                trackFixture(id = "t-old", artistId = "a1", albumId = "al-old", trackNo = 1),
+                trackFixture(id = "t-new", artistId = "a1", albumId = "al-new", trackNo = 1),
+            ),
+        )
+
+        val tracks = db.trackDao().tracksForArtist("a1")
+
+        assertEquals(listOf("t-new", "t-old"), tracks.map { it.id })
+    }
+
     private fun trackFixture(
         id: String,
         albumId: String? = null,

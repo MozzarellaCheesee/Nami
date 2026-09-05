@@ -30,6 +30,9 @@ interface AlbumDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(album: AlbumEntity)
 
+    @Query("UPDATE albums SET artworkPath = :path WHERE id = :id AND artworkPath IS NULL")
+    suspend fun setArtworkPath(id: String, path: String)
+
     data class AlbumListRow(
         val id: String,
         val title: String,
