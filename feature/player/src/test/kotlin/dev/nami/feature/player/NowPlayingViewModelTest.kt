@@ -52,6 +52,13 @@ class NowPlayingViewModelTest {
         val libraryRepo = object : LibraryRepository {
             override fun tracks() = throw NotImplementedError()
             override fun track(id: TrackId): Flow<Track?> = flowOf(track)
+            override fun albums() = throw NotImplementedError()
+            override fun artists() = throw NotImplementedError()
+            override fun album(id: dev.nami.core.model.AlbumId) = throw NotImplementedError()
+            override fun artist(id: dev.nami.core.model.ArtistId) = throw NotImplementedError()
+            override fun tracksInAlbum(id: dev.nami.core.model.AlbumId) = throw NotImplementedError()
+            override fun tracksByArtist(id: dev.nami.core.model.ArtistId) = throw NotImplementedError()
+            override fun albumsByArtist(id: dev.nami.core.model.ArtistId) = throw NotImplementedError()
             override suspend fun import(source: ImportSource) = throw NotImplementedError()
         }
 
