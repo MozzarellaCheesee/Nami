@@ -52,6 +52,15 @@ class LibraryViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(LibraryUiState())
     val uiState: StateFlow<LibraryUiState> = _uiState.asStateFlow()
 
+    private val _recentAlbums = MutableStateFlow<List<AlbumSummary>>(emptyList())
+    val recentAlbums: StateFlow<List<AlbumSummary>> = _recentAlbums.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            _recentAlbums.value = libraryRepository.recentAlbums(limit = 10)
+        }
+    }
+
     fun selectTab(tab: LibraryTab) {
         _uiState.value = _uiState.value.copy(selectedTab = tab)
     }

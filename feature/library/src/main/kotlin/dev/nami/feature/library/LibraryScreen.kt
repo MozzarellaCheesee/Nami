@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -58,6 +59,7 @@ import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemKey
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.model.AlbumId
+import dev.nami.core.model.AlbumSummary
 import dev.nami.core.model.ArtistId
 import dev.nami.core.model.TrackId
 import dev.nami.domain.ImportProgress
@@ -76,6 +78,7 @@ fun LibraryScreen(
 ) {
     val activeImportProgress by importProgress.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
+    val recentAlbums by viewModel.recentAlbums.collectAsState()
     var addToPlaylistTrackId by remember { mutableStateOf<TrackId?>(null) }
     var showAddSelectedToPlaylist by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -136,7 +139,10 @@ fun LibraryScreen(
                         listState = trackListState,
                         selectionMode = selectionMode,
                         selectedTrackIds = uiState.selectedTrackIds,
+                        recentAlbums = recentAlbums,
                         onTrackClick = onTrackClick,
+                        onAlbumClick = onAlbumClick,
+                        onShowAllAlbums = { viewModel.selectTab(LibraryTab.ALBUMS) },
                         onAddToPlaylist = { trackId -> addToPlaylistTrackId = trackId },
                         onDelete = { trackId -> viewModel.deleteTrack(trackId) },
                         onToggleSelection = { trackId -> viewModel.toggleTrackSelection(trackId) },
@@ -311,7 +317,10 @@ private fun TrackListContent(
     listState: LazyListState,
     selectionMode: Boolean,
     selectedTrackIds: Set<TrackId>,
+    recentAlbums: List<AlbumSummary>,
     onTrackClick: (TrackId) -> Unit,
+    onAlbumClick: (AlbumId) -> Unit,
+    onShowAllAlbums: () -> Unit,
     onAddToPlaylist: (TrackId) -> Unit,
     onDelete: (TrackId) -> Unit,
     onToggleSelection: (TrackId) -> Unit,
@@ -321,6 +330,11 @@ private fun TrackListContent(
         EmptyLibraryMessage()
     } else {
         LazyColumn(state = listState) {
+            if (recentAlbums.isNotEmpty()) {
+                item(key = "discography-header") {
+                    DiscographySection(albums = recentAlbums, onAlbumClick = onAlbumClick, onShowAllAlbums = onShowAllAlbums)
+                }
+            }
             items(count = tracks.itemCount, key = tracks.itemKey { it.id.value }) { index ->
                 tracks[index]?.let { track ->
                     TrackListItem(
@@ -335,6 +349,37 @@ private fun TrackListContent(
                         onDelete = if (selectionMode) null else { { onDelete(track.id) } },
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DiscographySection(
+    albums: List<AlbumSummary>,
+    onAlbumClick: (AlbumId) -> Unit,
+    onShowAllAlbums: () -> Unit,
+) {
+    Column(modifier = Modifier.padding(bottom = 12.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(text = "Альбомы", color = NamiColors.Paper100, style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = "Всё →",
+                color = NamiColors.Paper70,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.clickable(onClick = onShowAllAlbums),
+            )
+        }
+        androidx.compose.foundation.lazy.LazyRow(
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            items(albums, key = { it.id.value }) { album ->
+                AlbumGridItem(album = album, onClick = { onAlbumClick(album.id) }, modifier = Modifier.width(156.dp))
             }
         }
     }
