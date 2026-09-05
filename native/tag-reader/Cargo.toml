@@ -1,0 +1,15 @@
+[package]
+name = "tag_reader"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+
+[dependencies]
+lofty = "0.21"
+uniffi = { version = "0.28", features = ["cli"] }

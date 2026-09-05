@@ -1,0 +1,3 @@
+[workspace]
+members = ["tag-reader"]
+resolver = "2"
