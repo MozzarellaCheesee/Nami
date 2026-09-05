@@ -24,6 +24,7 @@ dependencies {
     implementation(libs.paging.runtime)
     implementation(libs.room.ktx)
     implementation(libs.hilt.android)
+    implementation(libs.androidx.documentfile)
     ksp(libs.hilt.compiler)
     testImplementation(libs.junit)
     testImplementation(kotlin("test"))

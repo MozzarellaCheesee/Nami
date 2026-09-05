@@ -1,0 +1,98 @@
+package dev.nami.data
+
+import android.content.Context
+import android.net.Uri
+import androidx.documentfile.provider.DocumentFile
+import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
+
+data class AudioGroup(
+    val albumFolderName: String,
+    val artistFolderName: String?,
+    val audioFiles: List<DocumentFile>,
+    val sourceDir: DocumentFile,
+)
+
+private val AUDIO_EXTENSIONS = setOf(
+    "mp3", "flac", "ogg", "opus", "m4a", "aac", "wav", "aiff", "webm",
+    "wv", "ape", "tak", "dsf", "dff", "mod", "xm", "it", "s3m", "nsf", "spc", "vgm", "gbs",
+)
+
+private val COVER_STEMS = setOf("folder", "cover")
+private val COVER_EXTENSIONS = setOf("jpg", "jpeg", "png")
+
+private val DISC_FOLDER_NAME = Regex("^(disc|cd)\\s*\\d+$", RegexOption.IGNORE_CASE)
+
+class FolderImportScanner @Inject constructor(@ApplicationContext private val context: Context) {
+
+    fun scan(treeUri: Uri): List<AudioGroup> {
+        val root = DocumentFile.fromTreeUri(context, treeUri) ?: return emptyList()
+        return scanDirectory(root)
+    }
+
+    internal fun scanDirectory(root: DocumentFile): List<AudioGroup> {
+        val children = root.listFiles()
+        val rootAudio = children.filter { !it.isDirectory && isAudioFile(it) }
+        val groups = mutableListOf<AudioGroup>()
+
+        if (rootAudio.isNotEmpty()) {
+            groups += AudioGroup(
+                albumFolderName = root.name.orEmpty(),
+                artistFolderName = null,
+                audioFiles = rootAudio,
+                sourceDir = root,
+            )
+        }
+
+        val dirs = children.filter { it.isDirectory }
+        val (discDirs, otherDirs) = dirs.partition { DISC_FOLDER_NAME.matches(it.name.orEmpty()) }
+
+        if (discDirs.isNotEmpty()) {
+            val discAudio = discDirs.flatMap { collectAudioRecursively(it) }
+            if (discAudio.isNotEmpty()) {
+                groups += AudioGroup(
+                    albumFolderName = root.name.orEmpty(),
+                    artistFolderName = null,
+                    audioFiles = discAudio,
+                    sourceDir = root,
+                )
+            }
+        }
+
+        for (dir in otherDirs) {
+            val nestedAudio = collectAudioRecursively(dir)
+            if (nestedAudio.isNotEmpty()) {
+                groups += AudioGroup(
+                    albumFolderName = dir.name.orEmpty(),
+                    artistFolderName = root.name,
+                    audioFiles = nestedAudio,
+                    sourceDir = dir,
+                )
+            }
+        }
+
+        return groups
+    }
+
+    private fun collectAudioRecursively(dir: DocumentFile): List<DocumentFile> {
+        val children = dir.listFiles()
+        val direct = children.filter { !it.isDirectory && isAudioFile(it) }
+        val nested = children.filter { it.isDirectory }.flatMap { collectAudioRecursively(it) }
+        return direct + nested
+    }
+
+    private fun isAudioFile(doc: DocumentFile): Boolean {
+        val extension = doc.name?.substringAfterLast('.', missingDelimiterValue = "")?.lowercase()
+        return extension in AUDIO_EXTENSIONS
+    }
+
+    fun findFolderCover(dir: DocumentFile): DocumentFile? {
+        return dir.listFiles().firstOrNull { doc ->
+            if (doc.isDirectory) return@firstOrNull false
+            val name = doc.name ?: return@firstOrNull false
+            val stem = name.substringBeforeLast('.', missingDelimiterValue = name).lowercase()
+            val extension = name.substringAfterLast('.', missingDelimiterValue = "").lowercase()
+            stem in COVER_STEMS && extension in COVER_EXTENSIONS
+        }
+    }
+}

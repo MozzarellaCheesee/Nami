@@ -46,6 +46,7 @@ turbine = { module = "app.cash.turbine:turbine", version = "1.2.0" }
 androidx-room-testing = { module = "androidx.room:room-testing", version.ref = "room" }
 androidx-test-core = { module = "androidx.test:core-ktx", version = "1.6.1" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+androidx-documentfile = { module = "androidx.documentfile:documentfile", version = "1.0.1" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
