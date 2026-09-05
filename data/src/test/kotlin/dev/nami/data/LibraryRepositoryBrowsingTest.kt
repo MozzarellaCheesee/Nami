@@ -36,6 +36,7 @@ class LibraryRepositoryBrowsingTest {
         repo = LibraryRepositoryImpl(
             context, db.trackDao(), db.artistDao(), db.albumDao(), fakeBridge,
             MetadataResolver(db.artistDao(), db.albumDao()), ArtworkStore(context), TrashFileStore(context),
+            FolderImportScanner(context),
         )
     }
 

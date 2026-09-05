@@ -42,6 +42,7 @@ class LibraryRepositoryImpl @Inject constructor(
     private val metadataResolver: MetadataResolver,
     private val artworkStore: ArtworkStore,
     private val trashFileStore: TrashFileStore,
+    private val folderImportScanner: FolderImportScanner,
 ) : LibraryRepository {
 
     override fun tracks(): Flow<PagingData<Track>> =
@@ -97,8 +98,13 @@ class LibraryRepositoryImpl @Inject constructor(
         )
     }
 
-    override suspend fun import(source: ImportSource): Flow<ImportProgress> = flow {
-        val uris = (source as ImportSource.Files).uris.map { it.toUri() }
+    override suspend fun import(source: ImportSource): Flow<ImportProgress> = when (source) {
+        is ImportSource.Files -> importFiles(source.uris)
+        is ImportSource.Folder -> importFolder(source.treeUri)
+    }
+
+    private fun importFiles(uriStrings: List<String>): Flow<ImportProgress> = flow {
+        val uris = uriStrings.map { it.toUri() }
         val musicDir = File(context.filesDir, "music").apply { mkdirs() }
         val resolver = context.contentResolver
 
@@ -108,19 +114,58 @@ class LibraryRepositoryImpl @Inject constructor(
         }
     }
 
-    private suspend fun copyAndIndex(resolver: ContentResolver, uri: Uri, musicDir: File) {
+    private fun importFolder(treeUriString: String): Flow<ImportProgress> =
+        importFolderFromGroups(folderImportScanner.scan(treeUriString.toUri()))
+
+    internal fun importFolderFromGroups(groups: List<AudioGroup>): Flow<ImportProgress> = flow {
+        val musicDir = File(context.filesDir, "music").apply { mkdirs() }
+        val resolver = context.contentResolver
+        val total = groups.sumOf { it.audioFiles.size }
+        var done = 0
+
+        for (group in groups) {
+            var albumIdForGroup: String? = null
+            for (doc in group.audioFiles) {
+                val result = copyAndIndex(
+                    resolver, doc.uri, musicDir,
+                    fallbackArtist = group.artistFolderName,
+                    fallbackAlbum = group.albumFolderName,
+                )
+                if (albumIdForGroup == null) albumIdForGroup = result?.albumId
+                done++
+                emit(ImportProgress(done = done, total = total))
+            }
+
+            val albumId = albumIdForGroup ?: continue
+            if (albumDao.findById(albumId)?.artworkPath == null) {
+                val coverDoc = folderImportScanner.findFolderCover(group.sourceDir) ?: continue
+                val bytes = resolver.openInputStream(coverDoc.uri)?.use { it.readBytes() } ?: continue
+                artworkStore.save(albumId, bytes)?.let { path -> albumDao.setArtworkPath(albumId, path) }
+            }
+        }
+    }
+
+    private data class CopyAndIndexResult(val trackId: String, val albumId: String?)
+
+    private suspend fun copyAndIndex(
+        resolver: ContentResolver,
+        uri: Uri,
+        musicDir: File,
+        fallbackArtist: String? = null,
+        fallbackAlbum: String? = null,
+    ): CopyAndIndexResult? {
         val extension = resolver.getType(uri)?.substringAfterLast('/') ?: "audio"
         val destination = File(musicDir, "${UUID.randomUUID()}.$extension")
 
         resolver.openInputStream(uri)?.use { input ->
             destination.outputStream().use { output -> input.copyTo(output) }
-        } ?: return
+        } ?: return null
 
-        if (trackDao.findByPath(destination.path) != null) return
+        if (trackDao.findByPath(destination.path) != null) return null
 
         val tags = nativeBridge.readTags(destination.path)
-        val artistId = metadataResolver.resolveArtist(tags?.artist ?: tags?.albumArtist)
-        val albumId = metadataResolver.resolveAlbum(tags?.album, artistId, tags?.year)
+        val artistId = metadataResolver.resolveArtist(tags?.artist ?: tags?.albumArtist ?: fallbackArtist)
+        val albumId = metadataResolver.resolveAlbum(tags?.album ?: fallbackAlbum, artistId, tags?.year)
         val trackId = UUID.randomUUID().toString()
         val artwork = tags?.artwork
         var trackArtworkPath: String? = null
@@ -155,6 +200,7 @@ class LibraryRepositoryImpl @Inject constructor(
                 ),
             ),
         )
+        return CopyAndIndexResult(trackId = trackId, albumId = albumId)
     }
 
     // Fallbacks for files lofty can't parse (or that carry no duration in their tag).
