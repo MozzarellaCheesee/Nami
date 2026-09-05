@@ -56,8 +56,8 @@ fun LibraryScreen(
     var addToPlaylistTrackId by remember { mutableStateOf<TrackId?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
 
-    LaunchedEffect(uiState.lastDeletedTrackId) {
-        if (uiState.lastDeletedTrackId == null) return@LaunchedEffect
+    LaunchedEffect(uiState.lastDeletedTrackIds) {
+        if (uiState.lastDeletedTrackIds.isEmpty()) return@LaunchedEffect
         val result = snackbarHostState.showSnackbar(message = "Трек удалён", actionLabel = "Отменить")
         if (result == SnackbarResult.ActionPerformed) {
             viewModel.undoLastDelete()

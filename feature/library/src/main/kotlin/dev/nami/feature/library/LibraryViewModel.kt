@@ -27,7 +27,8 @@ enum class LibraryTab { TRACKS, ALBUMS, ARTISTS }
 data class LibraryUiState(
     val importProgress: ImportProgress? = null,
     val selectedTab: LibraryTab = LibraryTab.TRACKS,
-    val lastDeletedTrackId: TrackId? = null,
+    val lastDeletedTrackIds: Set<TrackId> = emptySet(),
+    val selectedTrackIds: Set<TrackId> = emptySet(),
 )
 
 @HiltViewModel
@@ -71,21 +72,44 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun deleteTrack(id: TrackId) {
+        deleteTracks(setOf(id))
+    }
+
+    fun toggleTrackSelection(id: TrackId) {
+        val current = _uiState.value.selectedTrackIds
+        _uiState.value = _uiState.value.copy(
+            selectedTrackIds = if (id in current) current - id else current + id,
+        )
+    }
+
+    fun clearSelection() {
+        _uiState.value = _uiState.value.copy(selectedTrackIds = emptySet())
+    }
+
+    fun deleteSelectedTracks() {
+        val ids = _uiState.value.selectedTrackIds
+        if (ids.isEmpty()) return
+        deleteTracks(ids)
+        clearSelection()
+    }
+
+    private fun deleteTracks(ids: Set<TrackId>) {
         viewModelScope.launch {
-            libraryRepository.deleteTrack(id)
-            _uiState.value = _uiState.value.copy(lastDeletedTrackId = id)
+            libraryRepository.deleteTracks(ids.toList())
+            _uiState.value = _uiState.value.copy(lastDeletedTrackIds = ids)
         }
     }
 
     fun undoLastDelete() {
-        val id = _uiState.value.lastDeletedTrackId ?: return
+        val ids = _uiState.value.lastDeletedTrackIds
+        if (ids.isEmpty()) return
         viewModelScope.launch {
-            trashRepository.restoreTrack(id)
-            _uiState.value = _uiState.value.copy(lastDeletedTrackId = null)
+            ids.forEach { trashRepository.restoreTrack(it) }
+            _uiState.value = _uiState.value.copy(lastDeletedTrackIds = emptySet())
         }
     }
 
     fun dismissDeleteSnackbar() {
-        _uiState.value = _uiState.value.copy(lastDeletedTrackId = null)
+        _uiState.value = _uiState.value.copy(lastDeletedTrackIds = emptySet())
     }
 }

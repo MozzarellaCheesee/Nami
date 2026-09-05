@@ -163,7 +163,7 @@ class LibraryViewModelTest {
     }
 
     @Test
-    fun `deleteTrack sets lastDeletedTrackId after repository call`() = runTest {
+    fun `deleteTrack sets lastDeletedTrackIds after repository call`() = runTest {
         val fakeLibraryRepository = object : LibraryRepository {
             override fun tracks() = flowOf(PagingData.empty<Track>())
             override fun track(id: TrackId) = flowOf<Track?>(null)
@@ -183,7 +183,7 @@ class LibraryViewModelTest {
 
         viewModel.deleteTrack(TrackId("t1"))
 
-        assertEquals(TrackId("t1"), viewModel.uiState.value.lastDeletedTrackId)
+        assertEquals(setOf(TrackId("t1")), viewModel.uiState.value.lastDeletedTrackIds)
     }
 
     @Test
@@ -209,6 +209,83 @@ class LibraryViewModelTest {
         viewModel.undoLastDelete()
 
         assertEquals(TrackId("t1"), fakeTrashRepository.restoredTrack)
-        assertNull(viewModel.uiState.value.lastDeletedTrackId)
+        assertEquals(emptySet<TrackId>(), viewModel.uiState.value.lastDeletedTrackIds)
+    }
+
+    @Test
+    fun `toggleTrackSelection adds then removes an id`() = runTest {
+        val fakeLibraryRepository = object : LibraryRepository {
+            override fun tracks() = flowOf(PagingData.empty<Track>())
+            override fun track(id: TrackId) = flowOf<Track?>(null)
+            override fun albums() = flowOf(PagingData.empty<AlbumSummary>())
+            override fun artists() = flowOf(PagingData.empty<Artist>())
+            override fun album(id: AlbumId) = flowOf<Album?>(null)
+            override fun artist(id: ArtistId) = flowOf<Artist?>(null)
+            override fun tracksInAlbum(id: AlbumId) = flowOf(emptyList<Track>())
+            override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
+            override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
+            override suspend fun import(source: ImportSource) = flowOf(ImportProgress(0, 0))
+            override suspend fun deleteTrack(id: TrackId) {}
+            override suspend fun deleteTracks(ids: List<TrackId>) {}
+        }
+        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, FakeTrashRepository())
+
+        viewModel.toggleTrackSelection(TrackId("t1"))
+        assertEquals(setOf(TrackId("t1")), viewModel.uiState.value.selectedTrackIds)
+
+        viewModel.toggleTrackSelection(TrackId("t1"))
+        assertEquals(emptySet<TrackId>(), viewModel.uiState.value.selectedTrackIds)
+    }
+
+    @Test
+    fun `deleteSelectedTracks deletes all selected ids and clears selection`() = runTest {
+        val deletedIds = mutableListOf<TrackId>()
+        val fakeLibraryRepository = object : LibraryRepository {
+            override fun tracks() = flowOf(PagingData.empty<Track>())
+            override fun track(id: TrackId) = flowOf<Track?>(null)
+            override fun albums() = flowOf(PagingData.empty<AlbumSummary>())
+            override fun artists() = flowOf(PagingData.empty<Artist>())
+            override fun album(id: AlbumId) = flowOf<Album?>(null)
+            override fun artist(id: ArtistId) = flowOf<Artist?>(null)
+            override fun tracksInAlbum(id: AlbumId) = flowOf(emptyList<Track>())
+            override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
+            override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
+            override suspend fun import(source: ImportSource) = flowOf(ImportProgress(0, 0))
+            override suspend fun deleteTrack(id: TrackId) {}
+            override suspend fun deleteTracks(ids: List<TrackId>) { deletedIds.addAll(ids) }
+        }
+        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, FakeTrashRepository())
+        viewModel.toggleTrackSelection(TrackId("t1"))
+        viewModel.toggleTrackSelection(TrackId("t2"))
+
+        viewModel.deleteSelectedTracks()
+
+        assertEquals(setOf(TrackId("t1"), TrackId("t2")), deletedIds.toSet())
+        assertEquals(emptySet<TrackId>(), viewModel.uiState.value.selectedTrackIds)
+        assertEquals(setOf(TrackId("t1"), TrackId("t2")), viewModel.uiState.value.lastDeletedTrackIds)
+    }
+
+    @Test
+    fun `clearSelection empties selectedTrackIds`() = runTest {
+        val fakeLibraryRepository = object : LibraryRepository {
+            override fun tracks() = flowOf(PagingData.empty<Track>())
+            override fun track(id: TrackId) = flowOf<Track?>(null)
+            override fun albums() = flowOf(PagingData.empty<AlbumSummary>())
+            override fun artists() = flowOf(PagingData.empty<Artist>())
+            override fun album(id: AlbumId) = flowOf<Album?>(null)
+            override fun artist(id: ArtistId) = flowOf<Artist?>(null)
+            override fun tracksInAlbum(id: AlbumId) = flowOf(emptyList<Track>())
+            override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
+            override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
+            override suspend fun import(source: ImportSource) = flowOf(ImportProgress(0, 0))
+            override suspend fun deleteTrack(id: TrackId) {}
+            override suspend fun deleteTracks(ids: List<TrackId>) {}
+        }
+        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, FakeTrashRepository())
+        viewModel.toggleTrackSelection(TrackId("t1"))
+
+        viewModel.clearSelection()
+
+        assertEquals(emptySet<TrackId>(), viewModel.uiState.value.selectedTrackIds)
     }
 }
