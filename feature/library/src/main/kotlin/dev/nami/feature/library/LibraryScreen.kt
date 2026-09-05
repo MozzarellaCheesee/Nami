@@ -1,6 +1,9 @@
 package dev.nami.feature.library
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,13 +12,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -39,6 +45,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -95,6 +102,21 @@ fun LibraryScreen(
         }
     }
 
+    val trackListState = rememberLazyListState()
+    val albumGridState = rememberLazyGridState()
+    val artistListState = rememberLazyListState()
+    // FABs float over the list instead of reserving permanent empty space at the bottom --
+    // hide them while scrolling down so they never sit over content being read, and bring
+    // them back on scroll-up or when idle.
+    val trackListScrollingDown = trackListState.isScrollingDown()
+    val albumGridScrollingDown = albumGridState.isScrollingDown()
+    val artistListScrollingDown = artistListState.isScrollingDown()
+    val fabsVisible = !when (uiState.selectedTab) {
+        LibraryTab.TRACKS -> trackListScrollingDown
+        LibraryTab.ALBUMS -> albumGridScrollingDown
+        LibraryTab.ARTISTS -> artistListScrollingDown
+    }
+
     Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding).background(NamiColors.Ink900)) {
             Column {
@@ -111,6 +133,7 @@ fun LibraryScreen(
                 when (uiState.selectedTab) {
                     LibraryTab.TRACKS -> TrackListContent(
                         viewModel = viewModel,
+                        listState = trackListState,
                         selectionMode = selectionMode,
                         selectedTrackIds = uiState.selectedTrackIds,
                         onTrackClick = onTrackClick,
@@ -118,28 +141,35 @@ fun LibraryScreen(
                         onDelete = { trackId -> viewModel.deleteTrack(trackId) },
                         onToggleSelection = { trackId -> viewModel.toggleTrackSelection(trackId) },
                     )
-                    LibraryTab.ALBUMS -> AlbumGridContent(viewModel, onAlbumClick)
-                    LibraryTab.ARTISTS -> ArtistListContent(viewModel, onArtistClick)
+                    LibraryTab.ALBUMS -> AlbumGridContent(viewModel, albumGridState, onAlbumClick)
+                    LibraryTab.ARTISTS -> ArtistListContent(viewModel, artistListState, onArtistClick)
                 }
             }
 
             if (!selectionMode) {
-                Column(
-                    horizontalAlignment = Alignment.End,
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
+                AnimatedVisibility(
+                    visible = fabsVisible,
+                    enter = slideInVertically { it },
+                    exit = slideOutVertically { it },
+                    modifier = Modifier.align(Alignment.BottomEnd),
                 ) {
-                    activeImportProgress?.let { progress ->
-                        ImportProgressBadge(progress = progress, modifier = Modifier.padding(bottom = 12.dp))
-                    }
-                    FloatingActionButton(
-                        onClick = onImportFolderRequested,
-                        modifier = Modifier.size(40.dp),
+                    Column(
+                        horizontalAlignment = Alignment.End,
+                        modifier = Modifier.padding(20.dp),
                     ) {
-                        Icon(Icons.Filled.Folder, contentDescription = "Импортировать папку")
-                    }
-                    androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(12.dp))
-                    FloatingActionButton(onClick = onImportRequested) {
-                        Icon(Icons.Filled.Add, contentDescription = "Импортировать файлы")
+                        activeImportProgress?.let { progress ->
+                            ImportProgressBadge(progress = progress, modifier = Modifier.padding(bottom = 12.dp))
+                        }
+                        FloatingActionButton(
+                            onClick = onImportFolderRequested,
+                            modifier = Modifier.size(40.dp),
+                        ) {
+                            Icon(Icons.Filled.Folder, contentDescription = "Импортировать папку")
+                        }
+                        androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(12.dp))
+                        FloatingActionButton(onClick = onImportRequested) {
+                            Icon(Icons.Filled.Add, contentDescription = "Импортировать файлы")
+                        }
                     }
                 }
             }
@@ -238,9 +268,47 @@ private fun LibraryChipsRow(selected: LibraryTab, onSelect: (LibraryTab) -> Unit
     }
 }
 
+/** True once the user has scrolled down past the top and the last delta was downward. */
+@Composable
+private fun LazyListState.isScrollingDown(): Boolean {
+    var previousIndex by remember(this) { mutableStateOf(firstVisibleItemIndex) }
+    var previousOffset by remember(this) { mutableStateOf(firstVisibleItemScrollOffset) }
+    return remember(this) {
+        derivedStateOf {
+            val down = if (previousIndex != firstVisibleItemIndex) {
+                previousIndex < firstVisibleItemIndex
+            } else {
+                previousOffset < firstVisibleItemScrollOffset
+            }
+            previousIndex = firstVisibleItemIndex
+            previousOffset = firstVisibleItemScrollOffset
+            down && firstVisibleItemIndex > 0 || (down && firstVisibleItemScrollOffset > 0)
+        }
+    }.value
+}
+
+@Composable
+private fun LazyGridState.isScrollingDown(): Boolean {
+    var previousIndex by remember(this) { mutableStateOf(firstVisibleItemIndex) }
+    var previousOffset by remember(this) { mutableStateOf(firstVisibleItemScrollOffset) }
+    return remember(this) {
+        derivedStateOf {
+            val down = if (previousIndex != firstVisibleItemIndex) {
+                previousIndex < firstVisibleItemIndex
+            } else {
+                previousOffset < firstVisibleItemScrollOffset
+            }
+            previousIndex = firstVisibleItemIndex
+            previousOffset = firstVisibleItemScrollOffset
+            down && (firstVisibleItemIndex > 0 || firstVisibleItemScrollOffset > 0)
+        }
+    }.value
+}
+
 @Composable
 private fun TrackListContent(
     viewModel: LibraryViewModel,
+    listState: LazyListState,
     selectionMode: Boolean,
     selectedTrackIds: Set<TrackId>,
     onTrackClick: (TrackId) -> Unit,
@@ -252,7 +320,7 @@ private fun TrackListContent(
     if (tracks.itemCount == 0) {
         EmptyLibraryMessage()
     } else {
-        LazyColumn(contentPadding = PaddingValues(bottom = 140.dp)) {
+        LazyColumn(state = listState) {
             items(count = tracks.itemCount, key = tracks.itemKey { it.id.value }) { index ->
                 tracks[index]?.let { track ->
                     TrackListItem(
@@ -273,12 +341,12 @@ private fun TrackListContent(
 }
 
 @Composable
-private fun AlbumGridContent(viewModel: LibraryViewModel, onAlbumClick: (AlbumId) -> Unit) {
+private fun AlbumGridContent(viewModel: LibraryViewModel, gridState: LazyGridState, onAlbumClick: (AlbumId) -> Unit) {
     val albums = viewModel.albums.collectAsLazyPagingItems()
     if (albums.itemCount == 0) {
         EmptyLibraryMessage()
     } else {
-        LazyVerticalGrid(columns = GridCells.Adaptive(minSize = 172.dp), contentPadding = PaddingValues(bottom = 140.dp)) {
+        LazyVerticalGrid(columns = GridCells.Adaptive(minSize = 172.dp), state = gridState) {
             items(count = albums.itemCount, key = albums.itemKey { it.id.value }) { index ->
                 albums[index]?.let { album ->
                     AlbumGridItem(
@@ -293,12 +361,12 @@ private fun AlbumGridContent(viewModel: LibraryViewModel, onAlbumClick: (AlbumId
 }
 
 @Composable
-private fun ArtistListContent(viewModel: LibraryViewModel, onArtistClick: (ArtistId) -> Unit) {
+private fun ArtistListContent(viewModel: LibraryViewModel, listState: LazyListState, onArtistClick: (ArtistId) -> Unit) {
     val artists = viewModel.artists.collectAsLazyPagingItems()
     if (artists.itemCount == 0) {
         EmptyLibraryMessage()
     } else {
-        LazyColumn(contentPadding = PaddingValues(bottom = 140.dp)) {
+        LazyColumn(state = listState) {
             items(count = artists.itemCount, key = artists.itemKey { it.id.value }) { index ->
                 artists[index]?.let { artist -> ArtistListItem(artist = artist, onClick = { onArtistClick(artist.id) }) }
             }

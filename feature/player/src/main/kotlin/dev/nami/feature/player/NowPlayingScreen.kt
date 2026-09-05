@@ -92,9 +92,9 @@ fun NowPlayingScreen(
             Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Свернуть", tint = NamiColors.Paper100)
         }
         val artworkModifier = Modifier
+            .padding(vertical = 24.dp)
             .fillMaxWidth()
             .aspectRatio(1f)
-            .padding(vertical = 24.dp)
             .onSizeChanged { artworkWidthPx = it.width }
             .offset { IntOffset(artworkOffsetX.roundToInt(), 0) }
             .background(NamiColors.Ink700, RoundedCornerShape(4.dp))

@@ -42,6 +42,7 @@ import dev.nami.domain.PlaybackState
 import kotlin.math.roundToInt
 
 private const val SKIP_THRESHOLD_DP = 80
+private const val ARTWORK_SIZE_DP = 40
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -54,7 +55,8 @@ fun MiniPlayer(
     val playing = state as? PlaybackState.Playing
     val density = LocalDensity.current
     val skipThresholdPx = with(density) { SKIP_THRESHOLD_DP.dp.toPx() }
-    var offsetX by remember { mutableFloatStateOf(0f) }
+    val artworkSizePx = with(density) { ARTWORK_SIZE_DP.dp.toPx() }
+    var artworkOffsetX by remember { mutableFloatStateOf(0f) }
 
     if (queue.nowPlaying == null) return
 
@@ -63,37 +65,45 @@ fun MiniPlayer(
             .fillMaxWidth()
             .height(60.dp)
             .background(NamiColors.Ink800)
-            .offset { IntOffset(offsetX.roundToInt(), 0) }
             .clickable(onClick = onExpand)
-            .draggable(
-                orientation = Orientation.Horizontal,
-                state = rememberDraggableState { delta -> offsetX += delta },
-                onDragStopped = {
-                    when {
-                        offsetX < -skipThresholdPx -> viewModel.skipNext()
-                        offsetX > skipThresholdPx -> viewModel.skipPrevious()
-                    }
-                    animate(offsetX, 0f) { value, _ -> offsetX = value }
-                },
-            )
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        val artworkModifier = Modifier
+            .size(ARTWORK_SIZE_DP.dp)
+            .offset { IntOffset(artworkOffsetX.roundToInt(), 0) }
+            .background(NamiColors.Ink700, RoundedCornerShape(4.dp))
+            .draggable(
+                orientation = Orientation.Horizontal,
+                state = rememberDraggableState { delta -> artworkOffsetX += delta },
+                onDragStopped = {
+                    val exitDistance = artworkSizePx + skipThresholdPx
+                    when {
+                        artworkOffsetX < -skipThresholdPx -> {
+                            animate(artworkOffsetX, -exitDistance) { value, _ -> artworkOffsetX = value }
+                            viewModel.skipNext()
+                            artworkOffsetX = exitDistance
+                            animate(artworkOffsetX, 0f) { value, _ -> artworkOffsetX = value }
+                        }
+                        artworkOffsetX > skipThresholdPx -> {
+                            animate(artworkOffsetX, exitDistance) { value, _ -> artworkOffsetX = value }
+                            viewModel.skipPrevious()
+                            artworkOffsetX = -exitDistance
+                            animate(artworkOffsetX, 0f) { value, _ -> artworkOffsetX = value }
+                        }
+                        else -> animate(artworkOffsetX, 0f) { value, _ -> artworkOffsetX = value }
+                    }
+                },
+            )
         if (queue.nowPlaying?.artworkPath != null) {
             AsyncImage(
                 model = queue.nowPlaying?.artworkPath,
                 contentDescription = queue.nowPlaying?.title,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(NamiColors.Ink700, RoundedCornerShape(4.dp)),
+                modifier = artworkModifier,
             )
         } else {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(NamiColors.Ink700, RoundedCornerShape(4.dp)),
-            )
+            Box(modifier = artworkModifier)
         }
         Text(
             text = queue.nowPlaying?.title ?: "Ничего не играет",

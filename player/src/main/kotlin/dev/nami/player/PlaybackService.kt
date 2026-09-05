@@ -1,6 +1,7 @@
 package dev.nami.player
 
 import androidx.media3.common.Player
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -13,7 +14,20 @@ class PlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
-        player = ExoPlayer.Builder(this).build()
+        // Local files only, no network wait -- widen the buffer window so several tracks
+        // ahead/behind the current one stay decoded and ready, instead of ExoPlayer's default
+        // which only keeps a small window and drops the back buffer entirely (causing a visible
+        // stall on skipNext/skipPrevious).
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                /* minBufferMs = */ 30_000,
+                /* maxBufferMs = */ 120_000,
+                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
+                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
+            )
+            .setBackBuffer(/* backBufferDurationMs = */ 60_000, /* retainBackBufferFromKeyframe = */ true)
+            .build()
+        player = ExoPlayer.Builder(this).setLoadControl(loadControl).build()
         mediaSession = MediaSession.Builder(this, player).build()
     }
 
