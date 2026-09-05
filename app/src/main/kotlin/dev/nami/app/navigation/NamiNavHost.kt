@@ -59,7 +59,7 @@ fun NamiNavHost(
     val nowPlayingViewModel: NowPlayingViewModel = hiltViewModel()
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
 
-    Column(modifier = Modifier.statusBarsPadding().navigationBarsPadding()) {
+    Column(modifier = Modifier.statusBarsPadding()) {
         NavHost(
             navController = navController,
             startDestination = ROUTE_LIBRARY,
@@ -168,6 +168,7 @@ fun NamiNavHost(
                         restoreState = true
                     }
                 },
+                modifier = Modifier.navigationBarsPadding(),
             )
         }
     }

@@ -33,11 +33,11 @@ private val TABS = listOf(
 )
 
 @Composable
-fun NamiBottomBar(currentRoute: String?, onTabSelected: (String) -> Unit) {
+fun NamiBottomBar(currentRoute: String?, onTabSelected: (String) -> Unit, modifier: Modifier = Modifier) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .height(48.dp)
             .background(NamiColors.Ink900),
         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
     ) {
