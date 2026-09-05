@@ -2,17 +2,17 @@ package dev.nami.feature.library
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -23,7 +23,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.foundation.layout.width
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -46,23 +45,23 @@ fun ArtistDetailScreen(
     var addToPlaylistTrackId by remember { mutableStateOf<TrackId?>(null) }
 
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
-        IconButton(onClick = onBack) {
-            Icon(Icons.Filled.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
-            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-        ) {
-            Text(
-                text = artistName ?: "",
-                color = NamiColors.Paper100,
-                style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.weight(1f),
-            )
-            if (uiState.tracks.isNotEmpty()) {
-                Button(onClick = { onPlayTracks(uiState.tracks, artistName, 0) }) {
-                    Icon(Icons.Filled.PlayArrow, contentDescription = null)
-                    Text(text = "Играть всё")
+        PhotoHeader(photoPath = uiState.artist?.photoPath, onBack = onBack) {
+            Column {
+                Text(
+                    text = artistName ?: "",
+                    color = NamiColors.Paper100,
+                    style = MaterialTheme.typography.headlineSmall,
+                )
+                Spacer(modifier = Modifier.padding(top = 12.dp))
+                if (uiState.tracks.isNotEmpty()) {
+                    IconButton(
+                        onClick = { onPlayTracks(uiState.tracks, artistName, 0) },
+                        modifier = Modifier
+                            .size(64.dp)
+                            .background(NamiColors.Paper100, RoundedCornerShape(20.dp)),
+                    ) {
+                        Icon(Icons.Filled.PlayArrow, contentDescription = "Играть всё", tint = NamiColors.Ink900)
+                    }
                 }
             }
         }
