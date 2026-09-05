@@ -114,6 +114,11 @@ class LibraryViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(selectedTrackIds = emptySet())
     }
 
+    /** Replaces the whole selection -- used by drag-select and "select all". */
+    fun setSelectedTracks(ids: Set<TrackId>) {
+        _uiState.value = _uiState.value.copy(selectedTrackIds = ids)
+    }
+
     fun deleteSelectedTracks() {
         val ids = _uiState.value.selectedTrackIds
         if (ids.isEmpty()) return

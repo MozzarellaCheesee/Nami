@@ -5,6 +5,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material3.CircularProgressIndicator
@@ -48,23 +51,32 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemKey
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.model.AlbumId
 import dev.nami.core.model.AlbumSummary
 import dev.nami.core.model.ArtistId
+import dev.nami.core.model.Track
 import dev.nami.core.model.TrackId
 import dev.nami.domain.ImportProgress
 import dev.nami.feature.playlists.AddToPlaylistDialog
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.isActive
 
 @Composable
 fun LibraryScreen(
@@ -79,6 +91,7 @@ fun LibraryScreen(
     val activeImportProgress by importProgress.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
     val recentAlbums by viewModel.recentAlbums.collectAsState()
+    val tracks = viewModel.tracks.collectAsLazyPagingItems()
     var addToPlaylistTrackId by remember { mutableStateOf<TrackId?>(null) }
     var showAddSelectedToPlaylist by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -127,6 +140,9 @@ fun LibraryScreen(
                     SelectionTopBar(
                         selectedCount = uiState.selectedTrackIds.size,
                         onCancel = viewModel::clearSelection,
+                        onSelectAll = {
+                            viewModel.setSelectedTracks(tracks.itemSnapshotList.items.mapNotNull { it?.id }.toSet())
+                        },
                         onDelete = viewModel::deleteSelectedTracks,
                         onAddToPlaylist = { showAddSelectedToPlaylist = true },
                     )
@@ -135,7 +151,7 @@ fun LibraryScreen(
                 }
                 when (uiState.selectedTab) {
                     LibraryTab.TRACKS -> TrackListContent(
-                        viewModel = viewModel,
+                        tracks = tracks,
                         listState = trackListState,
                         selectionMode = selectionMode,
                         selectedTrackIds = uiState.selectedTrackIds,
@@ -146,6 +162,7 @@ fun LibraryScreen(
                         onAddToPlaylist = { trackId -> addToPlaylistTrackId = trackId },
                         onDelete = { trackId -> viewModel.deleteTrack(trackId) },
                         onToggleSelection = { trackId -> viewModel.toggleTrackSelection(trackId) },
+                        onSetSelection = { ids -> viewModel.setSelectedTracks(ids) },
                     )
                     LibraryTab.ALBUMS -> AlbumGridContent(viewModel, albumGridState, onAlbumClick)
                     LibraryTab.ARTISTS -> ArtistListContent(viewModel, artistListState, onArtistClick)
@@ -219,6 +236,7 @@ private fun ImportProgressBadge(progress: ImportProgress, modifier: Modifier = M
 private fun SelectionTopBar(
     selectedCount: Int,
     onCancel: () -> Unit,
+    onSelectAll: () -> Unit,
     onDelete: () -> Unit,
     onAddToPlaylist: () -> Unit,
 ) {
@@ -235,6 +253,9 @@ private fun SelectionTopBar(
             style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.weight(1f).padding(start = 8.dp),
         )
+        IconButton(onClick = onSelectAll) {
+            Icon(Icons.Filled.Done, contentDescription = "Выбрать все", tint = NamiColors.Paper70)
+        }
         IconButton(onClick = onAddToPlaylist) {
             Icon(Icons.Filled.LibraryAdd, contentDescription = "В плейлист", tint = NamiColors.Paper70)
         }
@@ -311,9 +332,13 @@ private fun LazyGridState.isScrollingDown(): Boolean {
     }.value
 }
 
+private const val DISCOGRAPHY_HEADER_KEY = "discography-header"
+private const val AUTO_SCROLL_EDGE_DP = 64
+private const val AUTO_SCROLL_MAX_PX_PER_TICK = 20f
+
 @Composable
 private fun TrackListContent(
-    viewModel: LibraryViewModel,
+    tracks: LazyPagingItems<Track>,
     listState: LazyListState,
     selectionMode: Boolean,
     selectedTrackIds: Set<TrackId>,
@@ -324,14 +349,94 @@ private fun TrackListContent(
     onAddToPlaylist: (TrackId) -> Unit,
     onDelete: (TrackId) -> Unit,
     onToggleSelection: (TrackId) -> Unit,
+    onSetSelection: (Set<TrackId>) -> Unit,
 ) {
-    val tracks = viewModel.tracks.collectAsLazyPagingItems()
     if (tracks.itemCount == 0) {
         EmptyLibraryMessage()
-    } else {
+        return
+    }
+
+    // Drag-to-select: after the first long-press toggles a row (via TrackListItem's own
+    // onLongClick, unchanged below), keeping the finger down and dragging over other rows
+    // extends the selection to the range between that anchor row and the finger's row --
+    // the standard gallery-app pattern. Auto-scrolls when the finger nears the top/bottom edge.
+    var dragAnchorId by remember { mutableStateOf<TrackId?>(null) }
+    var dragging by remember { mutableStateOf(false) }
+    var dragPointerY by remember { mutableFloatStateOf(0f) }
+    var boxHeightPx by remember { mutableFloatStateOf(0f) }
+    val density = LocalDensity.current
+    val onSetSelectionState = rememberUpdatedState(onSetSelection)
+
+    fun trackIdAt(y: Float): TrackId? =
+        listState.layoutInfo.visibleItemsInfo.firstOrNull { y >= it.offset && y < it.offset + it.size }
+            ?.key
+            ?.let { it as? String }
+            ?.takeIf { it != DISCOGRAPHY_HEADER_KEY }
+            ?.let(::TrackId)
+
+    fun updateDragSelection() {
+        val anchor = dragAnchorId ?: return
+        val orderedIds = tracks.itemSnapshotList.items.map { it?.id }
+        val anchorIndex = orderedIds.indexOf(anchor)
+        if (anchorIndex == -1) return
+        val pointerIndex = trackIdAt(dragPointerY)?.let(orderedIds::indexOf)
+            ?: if (dragPointerY < boxHeightPx / 2) 0 else orderedIds.lastIndex
+        val range = minOf(anchorIndex, pointerIndex)..maxOf(anchorIndex, pointerIndex)
+        onSetSelectionState.value(range.mapNotNull { orderedIds.getOrNull(it) }.toSet())
+    }
+
+    LaunchedEffect(dragging) {
+        if (!dragging) return@LaunchedEffect
+        val edgePx = with(density) { AUTO_SCROLL_EDGE_DP.dp.toPx() }
+        while (isActive) {
+            val fromTop = dragPointerY
+            val fromBottom = boxHeightPx - dragPointerY
+            val scrollAmount = when {
+                fromTop < edgePx -> -((edgePx - fromTop).coerceAtLeast(0f) / edgePx) * AUTO_SCROLL_MAX_PX_PER_TICK
+                fromBottom < edgePx -> ((edgePx - fromBottom).coerceAtLeast(0f) / edgePx) * AUTO_SCROLL_MAX_PX_PER_TICK
+                else -> 0f
+            }
+            if (scrollAmount != 0f) {
+                listState.scrollBy(scrollAmount)
+                updateDragSelection()
+            }
+            delay(16)
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .onSizeChanged { boxHeightPx = it.height.toFloat() }
+            .then(
+                if (selectionMode) {
+                    Modifier.pointerInput(selectionMode, tracks.itemCount) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { offset ->
+                                trackIdAt(offset.y)?.let { id ->
+                                    dragAnchorId = id
+                                    dragging = true
+                                }
+                            },
+                            onDrag = { change, _ ->
+                                if (dragAnchorId != null) {
+                                    change.consume()
+                                    dragPointerY = change.position.y
+                                    updateDragSelection()
+                                }
+                            },
+                            onDragEnd = { dragging = false; dragAnchorId = null },
+                            onDragCancel = { dragging = false; dragAnchorId = null },
+                        )
+                    }
+                } else {
+                    Modifier
+                },
+            ),
+    ) {
         LazyColumn(state = listState) {
             if (recentAlbums.isNotEmpty()) {
-                item(key = "discography-header") {
+                item(key = DISCOGRAPHY_HEADER_KEY) {
                     DiscographySection(albums = recentAlbums, onAlbumClick = onAlbumClick, onShowAllAlbums = onShowAllAlbums)
                 }
             }
