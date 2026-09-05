@@ -46,4 +46,12 @@ class TrashViewModel @Inject constructor(
     fun deletePlaylistForever(id: PlaylistId) {
         viewModelScope.launch { trashRepository.deletePlaylistForever(id) }
     }
+
+    fun deleteAllForever() {
+        viewModelScope.launch {
+            val state = uiState.value
+            state.tracks.forEach { trashRepository.deleteTrackForever(it.track.id) }
+            state.playlists.forEach { trashRepository.deletePlaylistForever(it.playlist.id) }
+        }
+    }
 }

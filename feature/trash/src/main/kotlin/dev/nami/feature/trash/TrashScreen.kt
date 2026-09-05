@@ -40,12 +40,24 @@ import java.util.concurrent.TimeUnit
 fun TrashScreen(onBack: () -> Unit, viewModel: TrashViewModel = hiltViewModel()) {
     val uiState by viewModel.uiState.collectAsState()
 
+    var showClearAllConfirm by remember { mutableStateOf(false) }
+
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) {
                 Icon(Icons.Filled.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
             }
-            Text(text = "Корзина", color = NamiColors.Paper100, style = MaterialTheme.typography.headlineSmall)
+            Text(
+                text = "Корзина",
+                color = NamiColors.Paper100,
+                style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.weight(1f),
+            )
+            if (uiState.tracks.isNotEmpty() || uiState.playlists.isNotEmpty()) {
+                TextButton(onClick = { showClearAllConfirm = true }) {
+                    Text(text = "Очистить всё", color = NamiColors.Paper70)
+                }
+            }
         }
 
         if (uiState.tracks.isEmpty() && uiState.playlists.isEmpty()) {
@@ -76,6 +88,20 @@ fun TrashScreen(onBack: () -> Unit, viewModel: TrashViewModel = hiltViewModel())
                 }
             }
         }
+    }
+
+    if (showClearAllConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearAllConfirm = false },
+            title = { Text("Очистить корзину?") },
+            text = { Text("Все треки и плейлисты будут удалены навсегда. Это действие необратимо.") },
+            confirmButton = {
+                TextButton(onClick = { viewModel.deleteAllForever(); showClearAllConfirm = false }) {
+                    Text("Очистить")
+                }
+            },
+            dismissButton = { TextButton(onClick = { showClearAllConfirm = false }) { Text("Отмена") } },
+        )
     }
 }
 
