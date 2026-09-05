@@ -1,5 +1,6 @@
 package dev.nami.feature.library
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -62,6 +63,8 @@ fun LibraryScreen(
     var showAddSelectedToPlaylist by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val selectionMode = uiState.selectedTrackIds.isNotEmpty()
+
+    BackHandler(enabled = selectionMode) { viewModel.clearSelection() }
 
     LaunchedEffect(uiState.lastDeletedTrackIds) {
         if (uiState.lastDeletedTrackIds.isEmpty()) return@LaunchedEffect
