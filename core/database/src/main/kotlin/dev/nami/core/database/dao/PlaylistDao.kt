@@ -19,8 +19,14 @@ interface PlaylistDao {
     @Query("UPDATE playlists SET coverPath = :coverPath WHERE id = :id")
     suspend fun setCoverPath(id: String, coverPath: String)
 
+    @Query("UPDATE playlists SET deletedAt = :deletedAt WHERE id = :id")
+    suspend fun softDelete(id: String, deletedAt: Long)
+
+    @Query("UPDATE playlists SET deletedAt = NULL WHERE id = :id")
+    suspend fun restore(id: String)
+
     @Query("DELETE FROM playlists WHERE id = :id")
-    suspend fun delete(id: String)
+    suspend fun hardDelete(id: String)
 
     @Query("SELECT * FROM playlists WHERE id = :id")
     suspend fun findById(id: String): PlaylistEntity?
@@ -34,11 +40,28 @@ interface PlaylistDao {
                COUNT(playlist_tracks.trackId) AS trackCount
         FROM playlists
         LEFT JOIN playlist_tracks ON playlists.id = playlist_tracks.playlistId
+        WHERE playlists.deletedAt IS NULL
         GROUP BY playlists.id
         ORDER BY playlists.createdAt DESC
         """,
     )
     fun pagingSource(): PagingSource<Int, PlaylistListRow>
+
+    @Query(
+        """
+        SELECT playlists.id AS id, playlists.name AS name, playlists.coverPath AS coverPath,
+               COUNT(playlist_tracks.trackId) AS trackCount
+        FROM playlists
+        LEFT JOIN playlist_tracks ON playlists.id = playlist_tracks.playlistId
+        WHERE playlists.deletedAt IS NOT NULL
+        GROUP BY playlists.id
+        ORDER BY playlists.deletedAt DESC
+        """,
+    )
+    fun trashedPlaylistsFlow(): Flow<List<PlaylistListRow>>
+
+    @Query("SELECT deletedAt FROM playlists WHERE id = :id")
+    suspend fun deletedAtOf(id: String): Long?
 
     data class PlaylistListRow(
         val id: String,

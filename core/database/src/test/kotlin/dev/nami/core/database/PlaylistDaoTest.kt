@@ -7,6 +7,7 @@ import dev.nami.core.database.dao.PlaylistDao
 import dev.nami.core.database.entity.PlaylistEntity
 import dev.nami.core.database.entity.PlaylistTrackEntity
 import dev.nami.core.database.entity.TrackEntity
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Before
@@ -99,7 +100,7 @@ class PlaylistDaoTest {
         db.trackDao().insertAll(listOf(trackFixture("t1")))
         db.playlistTrackDao().insert(PlaylistTrackEntity("p1", "t1", 0, 1))
 
-        db.playlistDao().delete("p1")
+        db.playlistDao().hardDelete("p1")
 
         assertEquals(emptyList(), db.playlistTrackDao().tracksInPlaylist("p1"))
         assertNull(db.playlistDao().findById("p1"))
@@ -114,5 +115,35 @@ class PlaylistDaoTest {
         db.playlistTrackDao().insert(PlaylistTrackEntity("p1", "t1", 0, 1))
 
         assertEquals(1, db.playlistTrackDao().nextPosition("p1"))
+    }
+
+    @Test
+    fun `softDelete hides playlist from pagingSource and trashedPlaylistsFlow shows it`() = runTest {
+        db.playlistDao().insert(PlaylistEntity(id = "p1", name = "Mix", coverPath = null, createdAt = 1000))
+        db.playlistDao().softDelete("p1", deletedAt = 2000)
+
+        val trashed = db.playlistDao().trashedPlaylistsFlow().first()
+        assertEquals(1, trashed.size)
+        assertEquals("p1", trashed[0].id)
+
+        val page = loadFirstPage(db.playlistDao().pagingSource())
+        assertEquals(emptyList(), page.data.map { it.id })
+    }
+
+    @Test
+    fun `restore clears deletedAt`() = runTest {
+        db.playlistDao().insert(PlaylistEntity(id = "p1", name = "Mix", coverPath = null, createdAt = 1000))
+        db.playlistDao().softDelete("p1", deletedAt = 2000)
+        db.playlistDao().restore("p1")
+
+        assertNull(db.playlistDao().findById("p1")?.deletedAt)
+    }
+
+    @Test
+    fun `hardDelete removes the row permanently`() = runTest {
+        db.playlistDao().insert(PlaylistEntity(id = "p1", name = "Mix", coverPath = null, createdAt = 1000))
+        db.playlistDao().hardDelete("p1")
+
+        assertNull(db.playlistDao().findById("p1"))
     }
 }

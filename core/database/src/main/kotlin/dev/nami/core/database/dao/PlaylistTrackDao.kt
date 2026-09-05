@@ -23,7 +23,7 @@ interface PlaylistTrackDao {
         """
         SELECT tracks.* FROM playlist_tracks
         JOIN tracks ON playlist_tracks.trackId = tracks.id
-        WHERE playlist_tracks.playlistId = :playlistId
+        WHERE playlist_tracks.playlistId = :playlistId AND tracks.deletedAt IS NULL
         ORDER BY playlist_tracks.position ASC
         """,
     )
@@ -33,7 +33,7 @@ interface PlaylistTrackDao {
         """
         SELECT tracks.* FROM playlist_tracks
         JOIN tracks ON playlist_tracks.trackId = tracks.id
-        WHERE playlist_tracks.playlistId = :playlistId
+        WHERE playlist_tracks.playlistId = :playlistId AND tracks.deletedAt IS NULL
         ORDER BY playlist_tracks.position ASC
         """,
     )

@@ -3,6 +3,7 @@ package dev.nami.core.database
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import dev.nami.core.database.entity.TrackEntity
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Before
@@ -72,5 +73,38 @@ class TrackDaoTest {
         val found = db.trackDao().findByPath("/music/genre.flac")
 
         assertEquals("J-Rock", found?.genre)
+    }
+
+    @Test
+    fun `setDeletedAt hides track from pagingSource and shows it in trashedTracksFlow`() = runTest {
+        db.trackDao().insertAll(listOf(
+            TrackEntity(
+                id = "t1", title = "Song", artistId = null, albumId = null, trackNo = null,
+                discNo = null, durationMs = 1000, path = "/music/t1.flac", format = "flac",
+                sizeBytes = 100, dateAdded = 1000, lastPlayed = null, playCount = 0,
+            ),
+        ))
+        db.trackDao().setDeletedAt("t1", deletedAt = 2000, path = "/trash/t1.flac")
+
+        val trashed = db.trackDao().trashedTracksFlow().first()
+        assertEquals(1, trashed.size)
+        assertEquals("/trash/t1.flac", trashed[0].path)
+        assertEquals(2000L, trashed[0].deletedAt)
+    }
+
+    @Test
+    fun `setDeletedAt with null restores the track`() = runTest {
+        db.trackDao().insertAll(listOf(
+            TrackEntity(
+                id = "t1", title = "Song", artistId = null, albumId = null, trackNo = null,
+                discNo = null, durationMs = 1000, path = "/music/t1.flac", format = "flac",
+                sizeBytes = 100, dateAdded = 1000, lastPlayed = null, playCount = 0,
+            ),
+        ))
+        db.trackDao().setDeletedAt("t1", deletedAt = 2000, path = "/trash/t1.flac")
+        db.trackDao().setDeletedAt("t1", deletedAt = null, path = "/music/t1.flac")
+
+        assertEquals(0, db.trackDao().trashedTracksFlow().first().size)
+        assertEquals("/music/t1.flac", db.trackDao().findById("t1")?.path)
     }
 }
