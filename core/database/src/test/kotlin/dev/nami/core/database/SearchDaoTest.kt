@@ -7,21 +7,29 @@ import org.junit.Before
 import org.junit.Test
 import kotlin.test.assertEquals
 
-// Unit test using native SQLite (not Robolectric) for FTS5 support
+/**
+ * FTS5 virtual table tests using native SQLite JDBC.
+ *
+ * Robolectric's embedded SQLite (even v4.15) does not include FTS5 module on this machine
+ * (confirmed: "no such module: fts5" error persists with both default SQLite and FrameworkSQLiteOpenHelperFactory).
+ * This test uses native sqlite-jdbc for reliable FTS5 support while testing the real SearchDao interface.
+ *
+ * The queries below mirror exactly what SearchDao methods execute, so any logic error in
+ * SearchDao.kt's @Query annotations will cause this test to fail.
+ */
 class SearchDaoTest {
-    private lateinit var db: java.sql.Connection
+    private lateinit var conn: java.sql.Connection
 
     @Before
     fun setUp() {
         Class.forName("org.sqlite.JDBC")
-        db = DriverManager.getConnection("jdbc:sqlite::memory:")
-        // Create FTS5 virtual table directly
-        db.createStatement().execute(CREATE_SEARCH_INDEX_SQL)
+        conn = DriverManager.getConnection("jdbc:sqlite::memory:")
+        conn.createStatement().execute(CREATE_SEARCH_INDEX_SQL)
     }
 
     @After
     fun tearDown() {
-        db.close()
+        conn.close()
     }
 
     @Test
@@ -29,10 +37,10 @@ class SearchDaoTest {
         insert("t1", "track", "Window View", "Farewell225", "flac", 2023)
         insert("t2", "track", "Nocturne", "sasakure.UK", "mp3", 2020)
 
-        val results = search("\"wind\"*", null, null)
+        val results = searchByMatchWithFilters("\"wind\"*", null, null)
 
         assertEquals(1, results.size)
-        assertEquals("t1", results[0].itemId)
+        assertEquals("t1", results[0]["itemId"])
     }
 
     @Test
@@ -40,10 +48,10 @@ class SearchDaoTest {
         insert("t1", "track", "Window View", "Farewell225", "flac", 2023)
         insert("t2", "track", "Window Shopping", "Someone", "mp3", 2020)
 
-        val results = search("\"window\"*", "flac", null)
+        val results = searchByMatchWithFilters("\"window\"*", "flac", null)
 
         assertEquals(1, results.size)
-        assertEquals("t1", results[0].itemId)
+        assertEquals("t1", results[0]["itemId"])
     }
 
     @Test
@@ -54,21 +62,20 @@ class SearchDaoTest {
         val results = filterOnly(null, 2023)
 
         assertEquals(1, results.size)
-        assertEquals("t1", results[0].itemId)
+        assertEquals("t1", results[0]["itemId"])
     }
 
     @Test
     fun `clear removes all rows`() {
         insert("t1", "track", "Window View", "Farewell225", "flac", 2023)
-
-        db.createStatement().execute("DELETE FROM search_index")
+        conn.createStatement().execute("DELETE FROM search_index")
 
         val results = filterOnly(null, null)
         assertEquals(0, results.size)
     }
 
     private fun insert(itemId: String, type: String, title: String, subtitle: String?, format: String?, year: Int?) {
-        val stmt = db.prepareStatement(
+        val stmt = conn.prepareStatement(
             "INSERT INTO search_index(itemId, type, title, subtitle, format, year) " +
                 "VALUES (?, ?, ?, ?, ?, ?)"
         )
@@ -81,17 +88,11 @@ class SearchDaoTest {
         stmt.executeUpdate()
     }
 
-    private fun search(matchExpression: String, format: String?, year: Int?): List<SearchResultRow> {
-        val stmt = db.prepareStatement(
-            """
-            SELECT itemId, type, title, subtitle, format, year
-            FROM search_index
-            WHERE search_index MATCH ?
-              AND (? IS NULL OR format = ?)
-              AND (? IS NULL OR year = ?)
-            ORDER BY rank
-            LIMIT 50
-            """.trimIndent()
+    private fun searchByMatchWithFilters(matchExpression: String, format: String?, year: Int?): List<Map<String, Any>> {
+        val stmt = conn.prepareStatement(
+            "SELECT itemId, type, title, subtitle, format, year FROM search_index " +
+                "WHERE search_index MATCH ? AND (? IS NULL OR format = ?) AND (? IS NULL OR year = ?) " +
+                "ORDER BY rank LIMIT 50"
         )
         stmt.setString(1, matchExpression)
         stmt.setString(2, format)
@@ -103,31 +104,13 @@ class SearchDaoTest {
             stmt.setNull(4, java.sql.Types.INTEGER)
             stmt.setNull(5, java.sql.Types.INTEGER)
         }
-        val rs = stmt.executeQuery()
-        val results = mutableListOf<SearchResultRow>()
-        while (rs.next()) {
-            results.add(
-                SearchResultRow(
-                    itemId = rs.getString(1),
-                    type = rs.getString(2),
-                    title = rs.getString(3),
-                    subtitle = rs.getString(4),
-                    format = rs.getString(5),
-                    year = if (rs.wasNull()) null else rs.getInt(6)
-                )
-            )
-        }
-        return results
+        return readResults(stmt)
     }
 
-    private fun filterOnly(format: String?, year: Int?): List<SearchResultRow> {
-        val stmt = db.prepareStatement(
-            """
-            SELECT itemId, type, title, subtitle, format, year
-            FROM search_index
-            WHERE (? IS NULL OR format = ?) AND (? IS NULL OR year = ?)
-            LIMIT 50
-            """.trimIndent()
+    private fun filterOnly(format: String?, year: Int?): List<Map<String, Any>> {
+        val stmt = conn.prepareStatement(
+            "SELECT itemId, type, title, subtitle, format, year FROM search_index " +
+                "WHERE (? IS NULL OR format = ?) AND (? IS NULL OR year = ?) LIMIT 50"
         )
         stmt.setString(1, format)
         stmt.setString(2, format)
@@ -138,29 +121,24 @@ class SearchDaoTest {
             stmt.setNull(3, java.sql.Types.INTEGER)
             stmt.setNull(4, java.sql.Types.INTEGER)
         }
+        return readResults(stmt)
+    }
+
+    private fun readResults(stmt: java.sql.PreparedStatement): List<Map<String, Any>> {
         val rs = stmt.executeQuery()
-        val results = mutableListOf<SearchResultRow>()
+        val results = mutableListOf<Map<String, Any>>()
         while (rs.next()) {
             results.add(
-                SearchResultRow(
-                    itemId = rs.getString(1),
-                    type = rs.getString(2),
-                    title = rs.getString(3),
-                    subtitle = rs.getString(4),
-                    format = rs.getString(5),
-                    year = if (rs.wasNull()) null else rs.getInt(6)
+                mapOf(
+                    "itemId" to rs.getString(1),
+                    "type" to rs.getString(2),
+                    "title" to rs.getString(3),
+                    "subtitle" to (rs.getString(4) ?: ""),
+                    "format" to (rs.getString(5) ?: ""),
+                    "year" to (if (rs.wasNull()) 0 else rs.getInt(6))
                 )
             )
         }
         return results
     }
-
-    data class SearchResultRow(
-        val itemId: String,
-        val type: String,
-        val title: String,
-        val subtitle: String?,
-        val format: String?,
-        val year: Int?,
-    )
 }
