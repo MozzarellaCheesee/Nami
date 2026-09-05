@@ -21,6 +21,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -58,7 +59,12 @@ fun LibraryScreen(
 
     LaunchedEffect(uiState.lastDeletedTrackIds) {
         if (uiState.lastDeletedTrackIds.isEmpty()) return@LaunchedEffect
-        val result = snackbarHostState.showSnackbar(message = "Трек удалён", actionLabel = "Отменить")
+        val message = if (uiState.lastDeletedTrackIds.size == 1) "Трек удалён" else "Удалено треков: ${uiState.lastDeletedTrackIds.size}"
+        val result = snackbarHostState.showSnackbar(
+            message = message,
+            actionLabel = "Отменить",
+            duration = SnackbarDuration.Long,
+        )
         if (result == SnackbarResult.ActionPerformed) {
             viewModel.undoLastDelete()
         } else {
