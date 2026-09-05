@@ -26,4 +26,5 @@ include(
     ":feature:library",
     ":feature:player",
     ":feature:search",
+    ":feature:playlists",
 )
