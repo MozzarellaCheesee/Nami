@@ -19,4 +19,5 @@ data class Track(
     val playCount: Int = 0,
     val genre: String? = null,
     val albumArtworkPath: String? = null,
+    val artistName: String? = null,
 )

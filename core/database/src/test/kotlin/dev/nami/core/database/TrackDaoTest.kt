@@ -4,6 +4,7 @@ import androidx.paging.PagingSource
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import dev.nami.core.database.dao.TrackDao
+import dev.nami.core.database.entity.ArtistEntity
 import dev.nami.core.database.entity.TrackEntity
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -131,5 +132,21 @@ class TrackDaoTest {
         val page = loadFirstPage(db.trackDao().pagingSource())
 
         assertEquals("/artwork/t1_full.webp", page.data[0].albumArtworkPath)
+    }
+
+    @Test
+    fun `pagingSource joins artist name`() = runTest {
+        db.artistDao().insert(ArtistEntity(id = "a1", name = "Farewell225", sortName = "Farewell225"))
+        db.trackDao().insertAll(listOf(
+            TrackEntity(
+                id = "t1", title = "Song", artistId = "a1", albumId = null, trackNo = null,
+                discNo = null, durationMs = 1000, path = "/music/t1.flac", format = "flac",
+                sizeBytes = 100, dateAdded = 1000, lastPlayed = null, playCount = 0,
+            ),
+        ))
+
+        val page = loadFirstPage(db.trackDao().pagingSource())
+
+        assertEquals("Farewell225", page.data[0].artistName)
     }
 }

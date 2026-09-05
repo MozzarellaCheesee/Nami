@@ -13,8 +13,11 @@ import kotlinx.coroutines.flow.Flow
 interface TrackDao {
     @Query(
         """
-        SELECT tracks.*, COALESCE(albums.artworkPath, tracks.artworkPath) AS albumArtworkPath FROM tracks
+        SELECT tracks.*, COALESCE(albums.artworkPath, tracks.artworkPath) AS albumArtworkPath,
+               artists.name AS artistName
+        FROM tracks
         LEFT JOIN albums ON tracks.albumId = albums.id
+        LEFT JOIN artists ON tracks.artistId = artists.id
         WHERE tracks.deletedAt IS NULL
         ORDER BY tracks.dateAdded DESC
         """,
@@ -35,8 +38,11 @@ interface TrackDao {
 
     @Query(
         """
-        SELECT tracks.*, COALESCE(albums.artworkPath, tracks.artworkPath) AS albumArtworkPath FROM tracks
+        SELECT tracks.*, COALESCE(albums.artworkPath, tracks.artworkPath) AS albumArtworkPath,
+               artists.name AS artistName
+        FROM tracks
         LEFT JOIN albums ON tracks.albumId = albums.id
+        LEFT JOIN artists ON tracks.artistId = artists.id
         WHERE tracks.albumId = :albumId AND tracks.deletedAt IS NULL
         ORDER BY tracks.discNo ASC, tracks.trackNo ASC
         """,
@@ -45,8 +51,11 @@ interface TrackDao {
 
     @Query(
         """
-        SELECT tracks.*, COALESCE(albums.artworkPath, tracks.artworkPath) AS albumArtworkPath FROM tracks
+        SELECT tracks.*, COALESCE(albums.artworkPath, tracks.artworkPath) AS albumArtworkPath,
+               artists.name AS artistName
+        FROM tracks
         LEFT JOIN albums ON tracks.albumId = albums.id
+        LEFT JOIN artists ON tracks.artistId = artists.id
         WHERE tracks.artistId = :artistId AND tracks.deletedAt IS NULL
         ORDER BY albums.year DESC, albums.title ASC, tracks.discNo ASC, tracks.trackNo ASC
         """,
@@ -80,6 +89,7 @@ interface TrackDao {
     data class TrackWithArtwork(
         @Embedded val track: TrackEntity,
         val albumArtworkPath: String?,
+        val artistName: String?,
     )
 
     data class TrackIndexRow(
