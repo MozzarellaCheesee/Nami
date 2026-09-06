@@ -237,7 +237,14 @@ private fun ManualQueueRow(item: QueueItem, onDragBy: (Int) -> Unit, onRemove: (
                     },
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Outlined.DragHandle, contentDescription = "Перетащить", tint = NamiColors.Paper40)
+                // Was Paper40 at default 24dp -- barely visible, easy to miss as "the thing you
+                // grab" versus just a decorative icon.
+                Icon(
+                    Icons.Outlined.DragHandle,
+                    contentDescription = "Перетащить, чтобы изменить порядок",
+                    tint = NamiColors.Paper70,
+                    modifier = Modifier.size(28.dp),
+                )
             }
             IconButton(onClick = { removed = true }) {
                 Icon(Icons.Outlined.Close, contentDescription = "Удалить", tint = NamiColors.Paper70)
@@ -273,6 +280,10 @@ private fun ContextQueueRow(item: QueueItem, onRemove: () -> Unit, modifier: Mod
     ) {
         SwipeToDismissBox(
             state = dismissState,
+            // Only left (EndToStart, toward removal) is a real gesture here -- without this,
+            // swiping right still drags the row (StartToEnd is enabled by default) with nothing
+            // behind it and no action tied to it, which just looks like a stray, meaningless drag.
+            enableDismissFromStartToEnd = false,
             backgroundContent = {
                 // Only shown while actually swiping toward removal -- an icon so the gesture
                 // reads as "this is about to remove the track", not just a flat color wash.
