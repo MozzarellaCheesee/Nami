@@ -8,6 +8,9 @@ import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
@@ -43,6 +46,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -61,7 +65,6 @@ import dev.nami.domain.PlaybackState
 import kotlin.math.roundToInt
 
 private const val DISMISS_THRESHOLD_DP = 120
-private const val SKIP_THRESHOLD_DP = 96
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -75,32 +78,10 @@ fun NowPlayingScreen(
     val playing = state as? PlaybackState.Playing
     val density = LocalDensity.current
     val dismissThresholdPx = with(density) { DISMISS_THRESHOLD_DP.dp.toPx() }
-    val skipThresholdPx = with(density) { SKIP_THRESHOLD_DP.dp.toPx() }
     val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
 
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
-    var artworkOffsetX by remember { mutableFloatStateOf(0f) }
-    var artworkWidthPx by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
-
-    // Safety net for any track change that doesn't go through slideAndSkip below -- auto-advance
-    // on track completion, notification/Bluetooth remote skip controls, or a slideAndSkip
-    // coroutine that got cancelled mid-animation (e.g. gesture interrupted). Without this the
-    // offset can get stuck non-zero, showing the artwork sheared off to one side.
-    androidx.compose.runtime.LaunchedEffect(queue.nowPlaying?.id) { artworkOffsetX = 0f }
-
-    // Previous/next artwork is always composed (just clipped off-screen at rest), but Coil only
-    // starts decoding once its request actually reaches the disk/memory cache -- for a track
-    // that's never been loaded before, that can take longer than the time between the queue
-    // updating and the user starting a swipe, showing the placeholder mid-drag. Kick off the
-    // decode as soon as the neighbor is known, well ahead of any gesture.
-    val prefetchContext = LocalPlatformContext.current
-    androidx.compose.runtime.LaunchedEffect(queue.previousTrack?.artworkPath, queue.upcoming.firstOrNull()?.track?.artworkPath) {
-        val loader = prefetchContext.imageLoader
-        listOfNotNull(queue.previousTrack?.artworkPath, queue.upcoming.firstOrNull()?.track?.artworkPath).forEach { path ->
-            loader.enqueue(ImageRequest.Builder(prefetchContext).data(path).build())
-        }
-    }
 
     // Shared by the swipe gesture and the chevron button so both dismiss paths always finish
     // the slide-down themselves before popping -- see the comment on the swipe branch below.
@@ -143,94 +124,54 @@ fun NowPlayingScreen(
         IconButton(onClick = ::collapseAnimated) {
             Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = "Свернуть", tint = NamiColors.Paper100)
         }
-        val gapPx = with(density) { 16.dp.toPx() }
-        val accentColor = rememberArtworkAccentColor(queue.nowPlaying?.artworkPath)
+        // 3-page window: 0 = previous, 1 = current, 2 = next. HorizontalPager owns the drag/fling
+        // math itself (a hand-rolled offset carousel here kept shipping subtle positioning bugs),
+        // and keeps neighbor pages composed via beyondViewportPageCount so their artwork is
+        // already loading well before a swipe reaches them.
+        val pagerState = rememberPagerState(initialPage = 1) { 3 }
+        LaunchedEffectSettlePage(pagerState, queue.previousTrack != null, queue.upcoming.isNotEmpty(), viewModel)
 
-        // Shared by the swipe gesture and the prev/next buttons -- same slide-to-slot-then-reset
-        // motion either way, so pressing a button reads as "the same swipe, done for you". The
-        // actual skip call is passed in: swipe always forces the real previous track, while the
-        // previous button keeps its own restart-if-elapsed semantics (see skipPrevious below) --
-        // only which direction to slide is shared.
-        suspend fun slideAndSkip(next: Boolean, doSkip: () -> Unit) {
-            val exitDistance = artworkWidthPx.toFloat() + gapPx
-            val spec = tween<Float>(180)
-            val target = if (next) -exitDistance else exitDistance
-            animate(artworkOffsetX, target, animationSpec = spec) { value, _ -> artworkOffsetX = value }
-            doSkip()
-            artworkOffsetX = 0f
-        }
-
-        Box(
-            contentAlignment = Alignment.Center,
+        HorizontalPager(
+            state = pagerState,
+            pageSpacing = 16.dp,
+            beyondViewportPageCount = 1,
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
                 .padding(vertical = 24.dp)
-                .onSizeChanged { artworkWidthPx = it.width }
-                .clipToBounds()
-                .draggable(
-                    orientation = Orientation.Horizontal,
-                    state = rememberDraggableState { delta -> artworkOffsetX += delta },
-                    onDragStopped = {
-                        // Exactly the adjacent artwork's own slot (width + gap) -- the
-                        // next/previous cover is already rendered live at that offset while
-                        // dragging (see the Box below), so finishing the drag just needs to land
-                        // it at 0; no separate "teleport then animate back" pass is needed since
-                        // the real data is already in the right place the moment the id changes.
-                        when {
-                            artworkOffsetX < -skipThresholdPx && queue.upcoming.isNotEmpty() ->
-                                slideAndSkip(next = true, doSkip = viewModel::skipNext)
-                            artworkOffsetX > skipThresholdPx && queue.previousTrack != null ->
-                                slideAndSkip(next = false, doSkip = viewModel::skipToPreviousTrack)
-                            else -> {
-                                val spec = tween<Float>(180)
-                                animate(artworkOffsetX, 0f, animationSpec = spec) { value, _ -> artworkOffsetX = value }
-                            }
-                        }
-                    },
-                ),
-        ) {
-            // Soft accent glow behind the artwork, per Дизайн.md's "мягкое свечение цветом
-            // акцента" -- Compose has no CSS box-shadow, so a blurred radial gradient sitting
-            // behind the artwork approximates it (Modifier.blur needs API 31+; on older devices
-            // it degrades to an unblurred soft-edged gradient, still reading as a glow). Color
-            // is the current track's own dominant/vibrant tone (via Palette), not a fixed accent,
-            // falling back to --shu while loading or if extraction fails.
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.radialGradient(
-                            colors = listOf(accentColor.copy(alpha = 0.55f), accentColor.copy(alpha = 0f)),
-                        ),
-                    )
-                    .blur(32.dp),
-            )
-            val artworkModifier = Modifier
-                .fillMaxSize()
-                .background(NamiColors.Ink700, RoundedCornerShape(4.dp))
-            // Previous/current/next artwork all composed simultaneously and positioned relative
-            // to the live drag offset, so the adjacent cover slides into view continuously while
-            // the finger is still down, not only after release.
-            queue.previousTrack?.let { previous ->
+                .clipToBounds(),
+        ) { page ->
+            val track = when (page) {
+                0 -> queue.previousTrack
+                2 -> queue.upcoming.firstOrNull()?.track
+                else -> queue.nowPlaying
+            }
+            val accentColor = rememberArtworkAccentColor(track?.artworkPath)
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                // Soft accent glow behind the artwork, per Дизайн.md's "мягкое свечение цветом
+                // акцента" -- Compose has no CSS box-shadow, so a blurred radial gradient sitting
+                // behind the artwork approximates it (Modifier.blur needs API 31+; on older
+                // devices it degrades to an unblurred soft-edged gradient, still reading as a
+                // glow). Color is that page's own dominant/vibrant tone (via Palette), falling
+                // back to --shu while loading or if extraction fails.
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.radialGradient(
+                                colors = listOf(accentColor.copy(alpha = 0.55f), accentColor.copy(alpha = 0f)),
+                            ),
+                        )
+                        .blur(32.dp),
+                )
                 NowPlayingArtwork(
-                    artworkPath = previous.artworkPath,
-                    contentDescription = previous.title,
-                    modifier = artworkModifier.offset { IntOffset((artworkOffsetX - artworkWidthPx - gapPx).roundToInt(), 0) },
+                    artworkPath = track?.artworkPath,
+                    contentDescription = track?.title,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(NamiColors.Ink700, RoundedCornerShape(4.dp)),
                 )
             }
-            queue.upcoming.firstOrNull()?.track?.let { next ->
-                NowPlayingArtwork(
-                    artworkPath = next.artworkPath,
-                    contentDescription = next.title,
-                    modifier = artworkModifier.offset { IntOffset((artworkOffsetX + artworkWidthPx + gapPx).roundToInt(), 0) },
-                )
-            }
-            NowPlayingArtwork(
-                artworkPath = queue.nowPlaying?.artworkPath,
-                contentDescription = queue.nowPlaying?.title,
-                modifier = artworkModifier.offset { IntOffset(artworkOffsetX.roundToInt(), 0) },
-            )
         }
         Text(
             text = queue.nowPlaying?.title ?: "Ничего не играет",
@@ -287,12 +228,11 @@ fun NowPlayingScreen(
             horizontalArrangement = Arrangement.Center,
         ) {
             IconButton(onClick = {
-                // Restart-if-elapsed stays on the button's own semantics (skipPrevious, not the
-                // swipe's skipToPreviousTrack) -- only animate the slide when a previous track
-                // actually exists to show, so restarting the current track doesn't do a pointless
-                // slide-to-nothing-and-back.
+                // A previous track to show -> animate the pager, same as a swipe (forces the
+                // actual previous track). Nothing to show -> fall back to the button's own
+                // restart-if-elapsed semantics with no animation (nothing to slide to).
                 if (queue.previousTrack != null) {
-                    scope.launch { slideAndSkip(next = false, doSkip = viewModel::skipPrevious) }
+                    scope.launch { pagerState.animateScrollToPage(0) }
                 } else {
                     viewModel.skipPrevious()
                 }
@@ -315,7 +255,7 @@ fun NowPlayingScreen(
             }
             IconButton(onClick = {
                 if (queue.upcoming.isNotEmpty()) {
-                    scope.launch { slideAndSkip(next = true, doSkip = viewModel::skipNext) }
+                    scope.launch { pagerState.animateScrollToPage(2) }
                 } else {
                     viewModel.skipNext()
                 }
@@ -331,6 +271,33 @@ fun NowPlayingScreen(
                 .background(NamiColors.Ink800, RoundedCornerShape(22.dp)),
         ) {
             Text(text = "Очередь", color = NamiColors.Paper70)
+        }
+    }
+}
+
+// Fires the actual track change once the pager settles on the previous/next page (0/2), then
+// snaps it back to the center page (1) with no animation -- page 1 now shows the NEW current
+// track, so nothing visibly moves. Landing on 0/2 with nothing to show there (start/end of
+// queue) just snaps back without skipping.
+@Composable
+internal fun LaunchedEffectSettlePage(
+    pagerState: PagerState,
+    hasPrevious: Boolean,
+    hasNext: Boolean,
+    viewModel: NowPlayingViewModel,
+) {
+    androidx.compose.runtime.LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.settledPage }.collect { page ->
+            when (page) {
+                0 -> {
+                    if (hasPrevious) viewModel.skipToPreviousTrack()
+                    pagerState.scrollToPage(1)
+                }
+                2 -> {
+                    if (hasNext) viewModel.skipNext()
+                    pagerState.scrollToPage(1)
+                }
+            }
         }
     }
 }
