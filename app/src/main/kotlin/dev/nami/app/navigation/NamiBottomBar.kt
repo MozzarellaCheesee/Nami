@@ -36,10 +36,15 @@ private val TABS = listOf(
 @Composable
 fun NamiBottomBar(currentRoute: String?, onTabSelected: (String) -> Unit, modifier: Modifier = Modifier) {
     Row(
-        modifier = modifier
+        // background first (outer) so it paints the full resolved size of the chain below,
+        // including the navigationBarsPadding inset the caller passes in via `modifier` --
+        // background-after-padding only paints the inner 48dp content, leaving that inset
+        // transparent and dependent on whatever's drawn behind it lining up in the same color.
+        modifier = Modifier
+            .background(NamiColors.Ink900)
+            .then(modifier)
             .fillMaxWidth()
-            .height(48.dp)
-            .background(NamiColors.Ink900),
+            .height(48.dp),
         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
     ) {
         TABS.forEach { tab ->

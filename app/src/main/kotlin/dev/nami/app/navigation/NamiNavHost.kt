@@ -194,13 +194,10 @@ fun NamiNavHost(
                 )
             }
         }
-        // Hidden for the entire time Now Playing is open, including its swipe-down-to-dismiss
-        // drag/animation -- otherwise, as that screen slides down, it progressively uncovers
-        // this static bar underneath frame by frame, reading as the mini player itself "flying"
-        // up into view through a shrinking gap. It only needs to exist once Now Playing is gone.
-        if (!showNowPlaying) {
-            MiniPlayer(onExpand = { showNowPlaying = true }, viewModel = nowPlayingViewModel)
-        }
+        // Always mounted, even while Now Playing is open/closing -- it's what Now Playing's
+        // own slide-down is supposed to progressively uncover. Hiding it made it pop in
+        // abruptly the moment Now Playing finished closing instead of already being there.
+        MiniPlayer(onExpand = { showNowPlaying = true }, viewModel = nowPlayingViewModel)
         NamiBottomBar(
             currentRoute = currentRoute,
             onTabSelected = { route ->
