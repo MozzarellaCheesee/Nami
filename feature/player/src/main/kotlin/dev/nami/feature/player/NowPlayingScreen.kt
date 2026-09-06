@@ -374,7 +374,7 @@ fun NowPlayingScreen(
                 onClick = onQueueClick,
                 modifier = Modifier.weight(1f),
             )
-            NowPlayingPill(icon = Icons.Outlined.DarkMode, onClick = {}, shape = CircleShape, modifier = Modifier.size(36.dp))
+            NowPlayingPill(icon = Icons.Outlined.DarkMode, onClick = {}, shape = CircleShape, modifier = Modifier.size(48.dp))
             NowPlayingPill(text = "Текст", icon = Icons.Outlined.Subject, onClick = {}, modifier = Modifier.weight(1f))
         }
     }
@@ -394,7 +394,7 @@ private fun NowPlayingPill(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
-            .height(36.dp)
+            .height(48.dp)
             .background(NamiColors.Ink800, shape)
             .fullBlockClickable(shape = shape, onClick = onClick)
             .padding(horizontal = 8.dp),
