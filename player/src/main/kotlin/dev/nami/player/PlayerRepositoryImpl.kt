@@ -15,8 +15,13 @@ import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerQueue
 import dev.nami.domain.PlayerRepository
 import dev.nami.domain.QueueOrigin
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -43,6 +48,11 @@ class PlayerRepositoryImpl @Inject constructor(
     // already have the real data locally at play()/addToQueue() time, so cache it here and prefer
     // it over whatever the controller reports for that mediaId.
     private val trackInfoByMediaId = mutableMapOf<String, MediaItemInfo>()
+    // MediaController's onEvents only fires on discrete state changes (buffering, play/pause,
+    // track change, etc.) -- during steady playback that can be many seconds apart, so the
+    // scrubber/position only advanced in visible jumps instead of smoothly. Player calls must
+    // happen on the main thread, hence Dispatchers.Main.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     init {
         val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
@@ -58,6 +68,12 @@ class PlayerRepositoryImpl @Inject constructor(
                         }
                     },
                 )
+                scope.launch {
+                    while (true) {
+                        delay(500)
+                        controller?.takeIf { it.isPlaying }?.let(::publishState)
+                    }
+                }
             },
             MoreExecutors.directExecutor(),
         )
