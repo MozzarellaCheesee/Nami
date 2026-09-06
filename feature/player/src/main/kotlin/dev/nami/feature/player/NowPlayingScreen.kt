@@ -1,6 +1,7 @@
 package dev.nami.feature.player
 
 import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
@@ -119,66 +120,83 @@ fun NowPlayingScreen(
         IconButton(onClick = ::collapseAnimated) {
             Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = "Свернуть", tint = NamiColors.Paper100)
         }
-        val artworkModifier = Modifier
-            .padding(vertical = 24.dp)
-            .fillMaxWidth()
-            .aspectRatio(1f)
-            .onSizeChanged { artworkWidthPx = it.width }
-            .offset { IntOffset(artworkOffsetX.roundToInt(), 0) }
-            .background(NamiColors.Ink700, RoundedCornerShape(4.dp))
-            .draggable(
-                orientation = Orientation.Horizontal,
-                state = rememberDraggableState { delta -> artworkOffsetX += delta },
-                onDragStopped = {
-                    // Just the artwork's own width -- adding skipThresholdPx on top (as before)
-                    // made the old and new cover pass each other with a big empty gap between
-                    // them off-screen instead of handing off closely.
-                    val exitDistance = artworkWidthPx.toFloat()
-                    when {
-                        artworkOffsetX < -skipThresholdPx -> {
-                            animate(artworkOffsetX, -exitDistance) { value, _ -> artworkOffsetX = value }
-                            viewModel.skipNext()
-                            artworkOffsetX = exitDistance
-                            animate(artworkOffsetX, 0f) { value, _ -> artworkOffsetX = value }
+        val gapPx = with(density) { 16.dp.toPx() }
+        val accentColor = rememberArtworkAccentColor(queue.nowPlaying?.artworkPath)
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .padding(vertical = 24.dp)
+                .onSizeChanged { artworkWidthPx = it.width }
+                .draggable(
+                    orientation = Orientation.Horizontal,
+                    state = rememberDraggableState { delta -> artworkOffsetX += delta },
+                    onDragStopped = {
+                        // Exactly the adjacent artwork's own slot (width + gap) -- the
+                        // next/previous cover is already rendered live at that offset while
+                        // dragging (see the Box below), so finishing the drag just needs to land
+                        // it at 0; no separate "teleport then animate back" pass is needed since
+                        // the real data is already in the right place the moment the id changes.
+                        val exitDistance = artworkWidthPx.toFloat() + gapPx
+                        val spec = tween<Float>(180)
+                        when {
+                            artworkOffsetX < -skipThresholdPx && queue.upcoming.isNotEmpty() -> {
+                                animate(artworkOffsetX, -exitDistance, animationSpec = spec) { value, _ -> artworkOffsetX = value }
+                                viewModel.skipNext()
+                                artworkOffsetX = 0f
+                            }
+                            artworkOffsetX > skipThresholdPx && queue.previousTrack != null -> {
+                                animate(artworkOffsetX, exitDistance, animationSpec = spec) { value, _ -> artworkOffsetX = value }
+                                viewModel.skipPrevious()
+                                artworkOffsetX = 0f
+                            }
+                            else -> animate(artworkOffsetX, 0f, animationSpec = spec) { value, _ -> artworkOffsetX = value }
                         }
-                        artworkOffsetX > skipThresholdPx -> {
-                            animate(artworkOffsetX, exitDistance) { value, _ -> artworkOffsetX = value }
-                            viewModel.skipPrevious()
-                            artworkOffsetX = -exitDistance
-                            animate(artworkOffsetX, 0f) { value, _ -> artworkOffsetX = value }
-                        }
-                        else -> animate(artworkOffsetX, 0f) { value, _ -> artworkOffsetX = value }
-                    }
-                },
-            )
-
-        Box(contentAlignment = Alignment.Center) {
+                    },
+                ),
+        ) {
             // Soft accent glow behind the artwork, per Дизайн.md's "мягкое свечение цветом
             // акцента" -- Compose has no CSS box-shadow, so a blurred radial gradient sitting
             // behind the artwork approximates it (Modifier.blur needs API 31+; on older devices
-            // it degrades to an unblurred soft-edged gradient, still reading as a glow).
+            // it degrades to an unblurred soft-edged gradient, still reading as a glow). Color
+            // is the current track's own dominant/vibrant tone (via Palette), not a fixed accent,
+            // falling back to --shu while loading or if extraction fails.
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1f)
-                    .padding(vertical = 24.dp)
+                    .fillMaxSize()
                     .background(
                         Brush.radialGradient(
-                            colors = listOf(NamiColors.Shu.copy(alpha = 0.35f), NamiColors.Shu.copy(alpha = 0f)),
+                            colors = listOf(accentColor.copy(alpha = 0.55f), accentColor.copy(alpha = 0f)),
                         ),
                     )
                     .blur(32.dp),
             )
-            if (queue.nowPlaying?.artworkPath != null) {
-                AsyncImage(
-                    model = queue.nowPlaying?.artworkPath,
-                    contentDescription = queue.nowPlaying?.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = artworkModifier,
+            val artworkModifier = Modifier
+                .fillMaxSize()
+                .background(NamiColors.Ink700, RoundedCornerShape(4.dp))
+            // Previous/current/next artwork all composed simultaneously and positioned relative
+            // to the live drag offset, so the adjacent cover slides into view continuously while
+            // the finger is still down, not only after release.
+            queue.previousTrack?.let { previous ->
+                NowPlayingArtwork(
+                    artworkPath = previous.artworkPath,
+                    contentDescription = previous.title,
+                    modifier = artworkModifier.offset { IntOffset((artworkOffsetX - artworkWidthPx - gapPx).roundToInt(), 0) },
                 )
-            } else {
-                Box(modifier = artworkModifier)
             }
+            queue.upcoming.firstOrNull()?.track?.let { next ->
+                NowPlayingArtwork(
+                    artworkPath = next.artworkPath,
+                    contentDescription = next.title,
+                    modifier = artworkModifier.offset { IntOffset((artworkOffsetX + artworkWidthPx + gapPx).roundToInt(), 0) },
+                )
+            }
+            NowPlayingArtwork(
+                artworkPath = queue.nowPlaying?.artworkPath,
+                contentDescription = queue.nowPlaying?.title,
+                modifier = artworkModifier.offset { IntOffset(artworkOffsetX.roundToInt(), 0) },
+            )
         }
         Text(
             text = queue.nowPlaying?.title ?: "Ничего не играет",
@@ -264,6 +282,20 @@ fun NowPlayingScreen(
         ) {
             Text(text = "Очередь", color = NamiColors.Paper70)
         }
+    }
+}
+
+@Composable
+private fun NowPlayingArtwork(artworkPath: String?, contentDescription: String?, modifier: Modifier) {
+    if (artworkPath != null) {
+        AsyncImage(
+            model = artworkPath,
+            contentDescription = contentDescription,
+            contentScale = ContentScale.Crop,
+            modifier = modifier,
+        )
+    } else {
+        Box(modifier = modifier)
     }
 }
 

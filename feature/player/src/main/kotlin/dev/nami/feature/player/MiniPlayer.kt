@@ -1,6 +1,7 @@
 package dev.nami.feature.player
 
 import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.ContentScale
@@ -32,7 +34,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -44,12 +45,14 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.domain.PlaybackState
+import dev.nami.domain.QueueTrack
 import kotlin.math.roundToInt
 
 private const val SKIP_THRESHOLD_DP = 80
 private const val ARTWORK_SIZE_DP = 40
 private const val EXPAND_THRESHOLD_DP = 24
 private const val DISMISS_THRESHOLD_DP = 40
+private const val TRACK_GAP_DP = 16
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -64,6 +67,7 @@ fun MiniPlayer(
     val skipThresholdPx = with(density) { SKIP_THRESHOLD_DP.dp.toPx() }
     val expandThresholdPx = with(density) { EXPAND_THRESHOLD_DP.dp.toPx() }
     val dismissThresholdPx = with(density) { DISMISS_THRESHOLD_DP.dp.toPx() }
+    val gapPx = with(density) { TRACK_GAP_DP.dp.toPx() }
     val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
     var artworkOffsetX by remember { mutableFloatStateOf(0f) }
     var blockWidthPx by remember { mutableIntStateOf(0) }
@@ -84,13 +88,14 @@ fun MiniPlayer(
     // instance is already alive and showing a track -- covers "already playing, user tapped a
     // different track elsewhere" without also firing (redundantly, since the appear animation
     // in NamiNavHost already covers it) the moment MiniPlayer is first composed for a brand new track.
-    var hasSeenFirstSignal by remember { mutableStateOf(false) }
+    var hasSeenFirstSignal by remember { androidx.compose.runtime.mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(externalTrackChangeSignal) {
         if (hasSeenFirstSignal) {
-            val exitDistance = blockWidthPx.toFloat()
-            animate(artworkOffsetX, -exitDistance) { value, _ -> artworkOffsetX = value }
+            val exitDistance = blockWidthPx.toFloat() * 0.55f
+            val spec = tween<Float>(180)
+            animate(artworkOffsetX, -exitDistance, animationSpec = spec) { value, _ -> artworkOffsetX = value }
             artworkOffsetX = exitDistance
-            animate(artworkOffsetX, 0f) { value, _ -> artworkOffsetX = value }
+            animate(artworkOffsetX, 0f, animationSpec = spec) { value, _ -> artworkOffsetX = value }
         }
         hasSeenFirstSignal = true
     }
@@ -142,69 +147,64 @@ fun MiniPlayer(
                 orientation = Orientation.Horizontal,
                 state = rememberDraggableState { delta -> artworkOffsetX += delta },
                 onDragStopped = {
-                    // Just the block's own width -- adding skipThresholdPx on top (as before)
-                    // made the old and new track pass each other with a big empty gap between
-                    // them off-screen instead of handing off closely.
-                    val exitDistance = blockWidthPx.toFloat()
+                    // Exactly the adjacent block's own slot (width + gap) -- the next/previous
+                    // track is already rendered live at that offset while dragging (see the Box
+                    // below), so finishing the drag just needs to land it at 0; no separate
+                    // "teleport then animate back" pass is needed since the real data is already
+                    // in the right place the moment the id changes.
+                    val exitDistance = blockWidthPx.toFloat() + gapPx
+                    val spec = tween<Float>(180)
                     when {
-                        artworkOffsetX < -skipThresholdPx -> {
-                            animate(artworkOffsetX, -exitDistance) { value, _ -> artworkOffsetX = value }
+                        artworkOffsetX < -skipThresholdPx && queue.upcoming.isNotEmpty() -> {
+                            animate(artworkOffsetX, -exitDistance, animationSpec = spec) { value, _ -> artworkOffsetX = value }
                             viewModel.skipNext()
-                            artworkOffsetX = exitDistance
-                            animate(artworkOffsetX, 0f) { value, _ -> artworkOffsetX = value }
+                            artworkOffsetX = 0f
                         }
-                        artworkOffsetX > skipThresholdPx -> {
-                            animate(artworkOffsetX, exitDistance) { value, _ -> artworkOffsetX = value }
+                        artworkOffsetX > skipThresholdPx && queue.previousTrack != null -> {
+                            animate(artworkOffsetX, exitDistance, animationSpec = spec) { value, _ -> artworkOffsetX = value }
                             viewModel.skipPrevious()
-                            artworkOffsetX = -exitDistance
-                            animate(artworkOffsetX, 0f) { value, _ -> artworkOffsetX = value }
+                            artworkOffsetX = 0f
                         }
-                        else -> animate(artworkOffsetX, 0f) { value, _ -> artworkOffsetX = value }
+                        else -> animate(artworkOffsetX, 0f, animationSpec = spec) { value, _ -> artworkOffsetX = value }
                     }
                 },
             )
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Artwork + title slide together as one block on swipe; clip so the block doesn't
-        // visibly spill under the play/skip buttons while off to one side mid-drag.
-        Row(
+        // The current track, plus (if they exist) the previous/next track positioned just
+        // outside the visible area -- as artworkOffsetX follows the drag, they slide into view
+        // in real time, so the destination track is visible the whole time the finger is down,
+        // not only after release.
+        Box(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth()
                 .clipToBounds()
-                .onSizeChanged { blockWidthPx = it.width }
-                .offset { IntOffset(artworkOffsetX.roundToInt(), 0) },
-            verticalAlignment = Alignment.CenterVertically,
+                .onSizeChanged { blockWidthPx = it.width },
+            contentAlignment = Alignment.CenterStart,
         ) {
-            val artworkModifier = Modifier
-                .size(ARTWORK_SIZE_DP.dp)
-                .background(NamiColors.Ink700, RoundedCornerShape(4.dp))
-            if (queue.nowPlaying?.artworkPath != null) {
-                AsyncImage(
-                    model = queue.nowPlaying?.artworkPath,
-                    contentDescription = queue.nowPlaying?.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = artworkModifier,
+            val blockWidthDp = with(density) { blockWidthPx.toDp() }
+            queue.previousTrack?.let { previous ->
+                MiniPlayerTrackBlock(
+                    track = previous,
+                    modifier = Modifier
+                        .width(blockWidthDp)
+                        .offset { IntOffset((artworkOffsetX + gapPx - blockWidthPx - gapPx).roundToInt(), 0) },
                 )
-            } else {
-                Box(modifier = artworkModifier)
             }
-            Column(modifier = Modifier.padding(start = 12.dp).weight(1f)) {
-                Text(
-                    text = queue.nowPlaying?.title ?: "Ничего не играет",
-                    color = NamiColors.Paper100,
-                    maxLines = 1,
-                    modifier = Modifier.fillMaxWidth().basicMarquee(iterations = Int.MAX_VALUE),
+            MiniPlayerTrackBlock(
+                track = queue.nowPlaying,
+                modifier = Modifier
+                    .width(blockWidthDp)
+                    .offset { IntOffset(artworkOffsetX.roundToInt(), 0) },
+            )
+            queue.upcoming.firstOrNull()?.track?.let { next ->
+                MiniPlayerTrackBlock(
+                    track = next,
+                    modifier = Modifier
+                        .width(blockWidthDp)
+                        .offset { IntOffset((artworkOffsetX + blockWidthPx + gapPx).roundToInt(), 0) },
                 )
-                queue.nowPlaying?.artistName?.let { artistName ->
-                    Text(
-                        text = artistName,
-                        color = NamiColors.Paper70,
-                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                    )
-                }
             }
         }
         IconButton(onClick = viewModel::toggle) {
@@ -215,5 +215,40 @@ fun MiniPlayer(
             )
         }
     }
+    }
+}
+
+@Composable
+private fun MiniPlayerTrackBlock(track: QueueTrack?, modifier: Modifier = Modifier) {
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        val artworkModifier = Modifier
+            .size(ARTWORK_SIZE_DP.dp)
+            .background(NamiColors.Ink700, RoundedCornerShape(4.dp))
+        if (track?.artworkPath != null) {
+            AsyncImage(
+                model = track.artworkPath,
+                contentDescription = track.title,
+                contentScale = ContentScale.Crop,
+                modifier = artworkModifier,
+            )
+        } else {
+            Box(modifier = artworkModifier)
+        }
+        Column(modifier = Modifier.padding(start = 12.dp).weight(1f)) {
+            Text(
+                text = track?.title ?: "Ничего не играет",
+                color = NamiColors.Paper100,
+                maxLines = 1,
+                modifier = Modifier.fillMaxWidth().basicMarquee(iterations = Int.MAX_VALUE),
+            )
+            track?.artistName?.let { artistName ->
+                Text(
+                    text = artistName,
+                    color = NamiColors.Paper70,
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                )
+            }
+        }
     }
 }

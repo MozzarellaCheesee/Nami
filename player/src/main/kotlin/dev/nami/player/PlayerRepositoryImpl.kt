@@ -78,10 +78,15 @@ class PlayerRepositoryImpl @Inject constructor(
         } else {
             (currentIndex + 1 until player.mediaItemCount).map { i -> player.getMediaItemAt(i).toMediaItemInfo() }
         }
+        val previous = if (currentIndex == androidx.media3.common.C.INDEX_UNSET || currentIndex <= 0) {
+            null
+        } else {
+            player.getMediaItemAt(currentIndex - 1).toMediaItemInfo()
+        }
         // Drop stale origins for items no longer in the timeline (played-through or removed).
         val liveIds = upcoming.mapTo(mutableSetOf()) { it.mediaId }
         originByMediaId.keys.retainAll(liveIds)
-        _queue.value = buildPlayerQueue(nowPlaying, upcoming, originByMediaId)
+        _queue.value = buildPlayerQueue(nowPlaying, upcoming, originByMediaId, previous)
     }
 
     private fun MediaItem.toMediaItemInfo(): MediaItemInfo = MediaItemInfo(

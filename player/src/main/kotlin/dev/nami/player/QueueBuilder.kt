@@ -18,6 +18,7 @@ fun buildPlayerQueue(
     nowPlaying: MediaItemInfo?,
     upcoming: List<MediaItemInfo>,
     originByMediaId: Map<String, QueueOrigin>,
+    previous: MediaItemInfo? = null,
 ): PlayerQueue {
     val nowPlayingTrack = nowPlaying?.let {
         QueueTrack(TrackId(it.mediaId), it.title, it.artist, it.artworkPath, it.format)
@@ -28,5 +29,8 @@ fun buildPlayerQueue(
             origin = originByMediaId[info.mediaId] ?: QueueOrigin.CONTEXT,
         )
     }
-    return PlayerQueue(nowPlayingTrack, upcomingItems)
+    val previousTrack = previous?.let {
+        QueueTrack(TrackId(it.mediaId), it.title, it.artist, it.artworkPath, it.format)
+    }
+    return PlayerQueue(nowPlayingTrack, upcomingItems, previousTrack)
 }

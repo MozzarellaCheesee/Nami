@@ -30,9 +30,13 @@ data class QueueItem(
 data class PlayerQueue(
     val nowPlaying: QueueTrack?,
     val upcoming: List<QueueItem>,
+    // Only the immediately preceding track (not a full history) -- just enough to render a
+    // "swipe right reveals this" preview in Now Playing/MiniPlayer without a bigger history
+    // feature.
+    val previousTrack: QueueTrack? = null,
 ) {
     companion object {
-        val EMPTY = PlayerQueue(nowPlaying = null, upcoming = emptyList())
+        val EMPTY = PlayerQueue(nowPlaying = null, upcoming = emptyList(), previousTrack = null)
     }
 }
 
