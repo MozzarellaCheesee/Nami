@@ -40,9 +40,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -215,9 +217,12 @@ private fun QueueTrackInfo(item: QueueItem, modifier: Modifier = Modifier) {
 private fun QueueRow(item: QueueItem, onDragBy: (Int) -> Unit, onRemove: () -> Unit, modifier: Modifier = Modifier) {
     val currentOnDragBy by rememberUpdatedState(onDragBy)
     val density = LocalDensity.current
-    // Accumulates raw drag distance; every time it crosses half a row, fire one live move and
-    // give back that much so the row keeps tracking the finger without snapping.
+    val scope = rememberCoroutineScope()
+    // dragOffsetPx follows the finger exactly (visual only). firedOffsetPx tracks how much of
+    // that has already been converted into list moves, so a move never resets/snaps the visual
+    // offset -- it just keeps sliding smoothly under the finger.
     var dragOffsetPx by remember { mutableStateOf(0f) }
+    var firedOffsetPx by remember { mutableStateOf(0f) }
     var dragging by remember { mutableStateOf(false) }
     val moveUnitPx = with(density) { (QUEUE_ROW_HEIGHT / 2).toPx() }
     var removed by remember { mutableStateOf(false) }
@@ -291,22 +296,27 @@ private fun QueueRow(item: QueueItem, onDragBy: (Int) -> Unit, onRemove: () -> U
                                         // threshold, instead of only computing one jump on
                                         // release -- this is what makes other rows actually
                                         // shift out of the way while the drag is in progress.
-                                        while (dragOffsetPx >= moveUnitPx) {
-                                            dragOffsetPx -= moveUnitPx
+                                        // The visual offset (dragOffsetPx) is never touched here,
+                                        // only how much of it has been "spent" on moves so far --
+                                        // the row keeps tracking the finger 1:1.
+                                        while (dragOffsetPx - firedOffsetPx >= moveUnitPx) {
+                                            firedOffsetPx += moveUnitPx
                                             currentOnDragBy(1)
                                         }
-                                        while (dragOffsetPx <= -moveUnitPx) {
-                                            dragOffsetPx += moveUnitPx
+                                        while (dragOffsetPx - firedOffsetPx <= -moveUnitPx) {
+                                            firedOffsetPx -= moveUnitPx
                                             currentOnDragBy(-1)
                                         }
                                     },
                                     onDragEnd = {
-                                        dragOffsetPx = 0f
                                         dragging = false
+                                        firedOffsetPx = 0f
+                                        scope.launch { animate(dragOffsetPx, 0f) { value, _ -> dragOffsetPx = value } }
                                     },
                                     onDragCancel = {
-                                        dragOffsetPx = 0f
                                         dragging = false
+                                        firedOffsetPx = 0f
+                                        scope.launch { animate(dragOffsetPx, 0f) { value, _ -> dragOffsetPx = value } }
                                     },
                                 )
                             },
