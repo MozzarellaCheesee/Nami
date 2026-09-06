@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PlaylistAdd
 import androidx.compose.material.icons.outlined.Shuffle
@@ -102,6 +103,10 @@ fun ArtistDiscographyScreen(
         ContextActionSheet(
             onDismiss = { albumMenuId = null },
             actions = listOf(
+                ContextAction("Редактировать альбом", Icons.Outlined.Edit) {
+                    albumMenuId = null
+                    onAlbumClick(albumId)
+                },
                 ContextAction("Добавить в очередь", Icons.Outlined.PlaylistAdd) {
                     tracksByAlbum[albumId].orEmpty().forEach { onAddToQueue(it, artistName) }
                 },
@@ -153,7 +158,7 @@ private fun AlbumDiscographyBlock(
                     .background(Brush.verticalGradient(0.5f to Color.Transparent, 1f to NamiColors.Ink900)),
             )
         }
-        Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp).clickable(onClick = onAlbumClick)) {
             Text(
                 text = if (album.isSingle) "СИНГЛ" else "АЛЬБОМ",
                 color = NamiColors.Ai,
