@@ -69,9 +69,12 @@ fun WaveformScrubber(
                 )
             },
     ) {
-        val barWidthPx = BAR_WIDTH_DP.dp.toPx()
-        val gapPx = BAR_GAP_DP.dp.toPx()
-        val step = barWidthPx + gapPx
+        // Bars are laid out as a fraction of the actual canvas width, not a fixed dp step --
+        // a fixed step (BAR_COUNT * (barWidth+gap)) rarely equals the real measured width,
+        // leaving the bars stuck to one side with a gap on the other, and desyncing the played
+        // portion (computed from the real width) from where the bars themselves are drawn.
+        val step = size.width / BAR_COUNT
+        val barWidthPx = step * (BAR_WIDTH_DP.toFloat() / (BAR_WIDTH_DP + BAR_GAP_DP))
         val playedBars = (heights.size * displayedProgress).roundToInt()
         heights.forEachIndexed { index, heightFraction ->
             val barHeightPx = size.height * heightFraction
