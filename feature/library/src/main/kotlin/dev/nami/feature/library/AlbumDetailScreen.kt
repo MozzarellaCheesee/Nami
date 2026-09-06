@@ -171,7 +171,7 @@ fun AlbumDetailScreen(
                             ContextAction("Переименовать", Icons.Outlined.Edit) { showRenameDialog = true },
                             ContextAction("Изменить обложку", Icons.Outlined.Image) { uiState.album?.let { onPickCoverRequested(it.id) } },
                             ContextAction("Добавить треки", Icons.Outlined.LibraryAdd) { showAddTracksDialog = true },
-                            ContextAction("Изменить артиста", Icons.Outlined.Person) { showPickArtistDialog = true },
+                            ContextAction("Артисты", Icons.Outlined.Person) { showPickArtistDialog = true },
                             ContextAction(
                                 if (uiState.album?.isSingle == true) "Убрать метку \"сингл\"" else "Отметить как сингл",
                                 Icons.Outlined.Star,
@@ -259,11 +259,10 @@ fun AlbumDetailScreen(
     }
 
     if (showPickArtistDialog) {
-        PickArtistDialog(
-            onPick = { artistId ->
-                viewModel.setArtist(artistId)
-                showPickArtistDialog = false
-            },
+        ManageAlbumArtistsDialog(
+            artists = uiState.artists,
+            onAdd = { artistId -> viewModel.addArtist(artistId) },
+            onRemove = { artistId -> viewModel.removeArtist(artistId) },
             onDismiss = { showPickArtistDialog = false },
         )
     }

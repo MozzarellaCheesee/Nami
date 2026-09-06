@@ -103,6 +103,9 @@ class LibraryRepositoryImpl @Inject constructor(
                 artworkPath = null,
             ),
         )
+        if (artistId != null) {
+            albumDao.addArtist(dev.nami.core.database.entity.AlbumArtistCrossRef(id, artistId.value))
+        }
         return AlbumId(id)
     }
 
@@ -120,7 +123,22 @@ class LibraryRepositoryImpl @Inject constructor(
     }
 
     override suspend fun setAlbumArtist(id: AlbumId, artistId: ArtistId?) {
+        // The single-artist picker replaces the whole credit list with just this one artist --
+        // addAlbumArtist/removeAlbumArtist below are the ones that add to/trim an existing list.
         albumDao.setArtistId(id.value, artistId?.value)
+        albumDao.clearArtists(id.value)
+        if (artistId != null) albumDao.addArtist(dev.nami.core.database.entity.AlbumArtistCrossRef(id.value, artistId.value))
+    }
+
+    override fun albumArtists(id: AlbumId): Flow<List<Artist>> =
+        albumDao.observeArtistsForAlbum(id.value).map { rows -> rows.map { it.toDomain() } }
+
+    override suspend fun addAlbumArtist(id: AlbumId, artistId: ArtistId) {
+        albumDao.addArtist(dev.nami.core.database.entity.AlbumArtistCrossRef(id.value, artistId.value))
+    }
+
+    override suspend fun removeAlbumArtist(id: AlbumId, artistId: ArtistId) {
+        albumDao.removeArtist(id.value, artistId.value)
     }
 
     override suspend fun addTrackToAlbum(trackId: TrackId, albumId: AlbumId) {

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import dev.nami.core.database.NamiDatabase
+import dev.nami.core.database.entity.AlbumArtistCrossRef
 import dev.nami.core.database.entity.AlbumEntity
 import dev.nami.core.database.entity.ArtistEntity
 import dev.nami.core.database.entity.TrackEntity
@@ -47,6 +48,7 @@ class LibraryRepositoryBrowsingTest {
     fun `tracksInAlbum returns tracks ordered by track number`() = runTest {
         db.artistDao().insert(ArtistEntity(id = "a1", name = "Farewell225", sortName = "Farewell225"))
         db.albumDao().insert(AlbumEntity(id = "al1", title = "Doujin Compilation", artistId = "a1", year = 2023, artworkPath = null))
+        db.albumDao().addArtist(AlbumArtistCrossRef(albumId = "al1", artistId = "a1"))
         db.trackDao().insertAll(
             listOf(
                 trackFixture(id = "t2", albumId = "al1", trackNo = 2),
@@ -63,6 +65,7 @@ class LibraryRepositoryBrowsingTest {
     fun `albumsByArtist maps album rows for that artist`() = runTest {
         db.artistDao().insert(ArtistEntity(id = "a1", name = "Farewell225", sortName = "Farewell225"))
         db.albumDao().insert(AlbumEntity(id = "al1", title = "Doujin Compilation", artistId = "a1", year = 2023, artworkPath = null))
+        db.albumDao().addArtist(AlbumArtistCrossRef(albumId = "al1", artistId = "a1"))
         db.trackDao().insertAll(listOf(trackFixture(id = "t1", albumId = "al1")))
 
         val albums = repo.albumsByArtist(ArtistId("a1")).first()

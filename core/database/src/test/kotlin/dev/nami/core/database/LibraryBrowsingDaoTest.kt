@@ -4,6 +4,7 @@ import androidx.paging.PagingSource
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import dev.nami.core.database.dao.AlbumDao
+import dev.nami.core.database.entity.AlbumArtistCrossRef
 import dev.nami.core.database.entity.AlbumEntity
 import dev.nami.core.database.entity.ArtistEntity
 import dev.nami.core.database.entity.TrackEntity
@@ -42,6 +43,7 @@ class LibraryBrowsingDaoTest {
         db.albumDao().insert(
             AlbumEntity(id = "al1", title = "Doujin Compilation", artistId = "a1", year = 2023, artworkPath = null),
         )
+        db.albumDao().addArtist(AlbumArtistCrossRef(albumId = "al1", artistId = "a1"))
         db.trackDao().insertAll(listOf(trackFixture(id = "t1", albumId = "al1", artistId = "a1")))
 
         val page = loadFirstPage(db.albumDao().pagingSource())

@@ -5,8 +5,18 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import dev.nami.core.database.entity.AlbumArtistCrossRef
 import dev.nami.core.database.entity.AlbumEntity
 import kotlinx.coroutines.flow.Flow
+
+// Shared by every query below that lists albums: an album can be credited to more than one
+// artist (album_artists), so the display name is every credited artist's name, comma-joined,
+// rather than a plain LEFT JOIN on albums.artistId (which only ever showed one).
+private const val ARTIST_NAMES_SUBQUERY = """
+    (SELECT GROUP_CONCAT(artists.name, ', ') FROM album_artists
+     JOIN artists ON artists.id = album_artists.artistId
+     WHERE album_artists.albumId = albums.id)
+"""
 
 @Dao
 interface AlbumDao {
@@ -24,7 +34,7 @@ interface AlbumDao {
     @Query(
         """
         SELECT * FROM albums
-        WHERE artistId = :artistId
+        WHERE EXISTS (SELECT 1 FROM album_artists WHERE album_artists.albumId = albums.id AND album_artists.artistId = :artistId)
         AND EXISTS (SELECT 1 FROM tracks WHERE tracks.albumId = albums.id AND tracks.deletedAt IS NULL)
         ORDER BY year DESC, title ASC
         """,
@@ -33,8 +43,8 @@ interface AlbumDao {
 
     @Query(
         """
-        SELECT albums.id AS id, albums.title AS title, artists.name AS artistName, albums.artworkPath AS artworkPath
-        FROM albums LEFT JOIN artists ON albums.artistId = artists.id
+        SELECT albums.id AS id, albums.title AS title, $ARTIST_NAMES_SUBQUERY AS artistName, albums.artworkPath AS artworkPath
+        FROM albums
         WHERE EXISTS (SELECT 1 FROM tracks WHERE tracks.albumId = albums.id AND tracks.deletedAt IS NULL)
         ORDER BY albums.title ASC
         """,
@@ -43,17 +53,6 @@ interface AlbumDao {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(album: AlbumEntity)
-
-    @Query(
-        """
-        SELECT albums.id AS id, albums.title AS title, artists.name AS artistName, albums.artworkPath AS artworkPath
-        FROM albums LEFT JOIN artists ON albums.artistId = artists.id
-        WHERE EXISTS (SELECT 1 FROM tracks WHERE tracks.albumId = albums.id AND tracks.deletedAt IS NULL)
-        ORDER BY albums.title DESC
-        LIMIT :limit
-        """,
-    )
-    suspend fun recentAlbums(limit: Int): List<AlbumListRow>
 
     @Query("UPDATE albums SET artworkPath = :path WHERE id = :id AND artworkPath IS NULL")
     suspend fun setArtworkPath(id: String, path: String)
@@ -69,13 +68,38 @@ interface AlbumDao {
     @Query("UPDATE albums SET isSingle = :isSingle WHERE id = :id")
     suspend fun setIsSingle(id: String, isSingle: Boolean)
 
+    // Replaces the "primary" artist column AND resets album_artists to just that one artist --
+    // this is the single-artist picker (AlbumDetailScreen's "Изменить артиста"), distinct from
+    // addArtist/removeArtist below which manage the multi-artist credit list without touching it.
     @Query("UPDATE albums SET artistId = :artistId WHERE id = :id")
     suspend fun setArtistId(id: String, artistId: String?)
 
+    @Query("DELETE FROM album_artists WHERE albumId = :albumId")
+    suspend fun clearArtists(albumId: String)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun addArtist(ref: AlbumArtistCrossRef)
+
+    @Query("DELETE FROM album_artists WHERE albumId = :albumId AND artistId = :artistId")
+    suspend fun removeArtist(albumId: String, artistId: String)
+
+    @Query("SELECT artistId FROM album_artists WHERE albumId = :albumId")
+    fun observeArtistIdsForAlbum(albumId: String): Flow<List<String>>
+
     @Query(
         """
-        SELECT albums.id AS id, albums.title AS title, artists.name AS artistName, albums.artworkPath AS artworkPath
-        FROM albums LEFT JOIN artists ON albums.artistId = artists.id
+        SELECT artists.* FROM artists
+        JOIN album_artists ON artists.id = album_artists.artistId
+        WHERE album_artists.albumId = :albumId
+        ORDER BY artists.name ASC
+        """,
+    )
+    fun observeArtistsForAlbum(albumId: String): Flow<List<dev.nami.core.database.entity.ArtistEntity>>
+
+    @Query(
+        """
+        SELECT albums.id AS id, albums.title AS title, $ARTIST_NAMES_SUBQUERY AS artistName, albums.artworkPath AS artworkPath
+        FROM albums
         WHERE EXISTS (SELECT 1 FROM tracks WHERE tracks.albumId = albums.id AND tracks.deletedAt IS NULL)
         ORDER BY albums.title DESC
         LIMIT :limit
@@ -85,8 +109,8 @@ interface AlbumDao {
 
     @Query(
         """
-        SELECT albums.id AS id, albums.title AS title, artists.name AS artistName, albums.artworkPath AS artworkPath
-        FROM albums LEFT JOIN artists ON albums.artistId = artists.id
+        SELECT albums.id AS id, albums.title AS title, $ARTIST_NAMES_SUBQUERY AS artistName, albums.artworkPath AS artworkPath
+        FROM albums
         WHERE EXISTS (SELECT 1 FROM tracks WHERE tracks.albumId = albums.id AND tracks.deletedAt IS NULL)
         """,
     )

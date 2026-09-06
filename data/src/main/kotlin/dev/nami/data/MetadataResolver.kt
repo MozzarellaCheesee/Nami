@@ -2,6 +2,7 @@ package dev.nami.data
 
 import dev.nami.core.database.dao.AlbumDao
 import dev.nami.core.database.dao.ArtistDao
+import dev.nami.core.database.entity.AlbumArtistCrossRef
 import dev.nami.core.database.entity.AlbumEntity
 import dev.nami.core.database.entity.ArtistEntity
 import java.util.UUID
@@ -37,6 +38,7 @@ class MetadataResolver @Inject constructor(
         albumDao.findByTitleAndArtist(title, artistId)?.let { return it.id }
         val id = UUID.randomUUID().toString()
         albumDao.insert(AlbumEntity(id = id, title = title, artistId = artistId, year = year, artworkPath = null))
+        if (artistId != null) albumDao.addArtist(AlbumArtistCrossRef(id, artistId))
         return id
     }
 }

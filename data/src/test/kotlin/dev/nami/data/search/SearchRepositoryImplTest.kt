@@ -54,7 +54,8 @@ class SearchRepositoryImplTest {
         override suspend fun insertAll(tracks: List<TrackEntity>) = error("unused")
         override suspend fun count(): Int = error("unused")
         override suspend fun tracksForAlbum(albumId: String): List<TrackDao.TrackWithArtwork> = error("unused")
-        override suspend fun tracksForArtist(artistId: String): List<TrackDao.TrackWithArtwork> = error("unused")
+        override fun observeTracksForAlbum(albumId: String) = error("unused")
+        override fun tracksForArtist(artistId: String) = error("unused")
         override suspend fun allForIndexing(): List<TrackDao.TrackIndexRow> = rows
         override suspend fun setDeletedAt(id: String, deletedAt: Long?, path: String) = error("unused")
         override suspend fun hardDelete(id: String) = error("unused")
@@ -62,7 +63,9 @@ class SearchRepositoryImplTest {
         override suspend fun updateTitle(id: String, title: String) = error("unused")
         override suspend fun updateArtworkPath(id: String, path: String) = error("unused")
         override suspend fun setAlbumId(id: String, albumId: String?) = error("unused")
+        override suspend fun setArtistId(id: String, artistId: String?) = error("unused")
         override fun trashedTracksFlow() = error("unused")
+        override suspend fun incrementPlayCount(id: String) = error("unused")
     }
 
     private fun fakeAlbumDao(rows: List<AlbumDao.AlbumListRow> = emptyList()) = object : AlbumDao {
@@ -75,7 +78,14 @@ class SearchRepositoryImplTest {
         override suspend fun updateTitle(id: String, title: String) = error("unused")
         override suspend fun updateArtworkPath(id: String, path: String) = error("unused")
         override suspend fun setIsSingle(id: String, isSingle: Boolean) = error("unused")
-        override suspend fun recentAlbums(limit: Int): List<AlbumDao.AlbumListRow> = error("unused")
+        override suspend fun setArtistId(id: String, artistId: String?) = error("unused")
+        override suspend fun clearArtists(albumId: String) = error("unused")
+        override suspend fun addArtist(ref: dev.nami.core.database.entity.AlbumArtistCrossRef) = error("unused")
+        override suspend fun removeArtist(albumId: String, artistId: String) = error("unused")
+        override fun observeById(id: String) = error("unused")
+        override fun observeArtistIdsForAlbum(albumId: String) = error("unused")
+        override fun observeArtistsForAlbum(albumId: String) = error("unused")
+        override fun observeRecentAlbums(limit: Int) = error("unused")
         override suspend fun allForIndexing(): List<AlbumDao.AlbumListRow> = rows
     }
 

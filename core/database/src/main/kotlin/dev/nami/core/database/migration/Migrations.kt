@@ -91,3 +91,28 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
         db.execSQL("ALTER TABLE albums ADD COLUMN isSingle INTEGER NOT NULL DEFAULT 0")
     }
 }
+
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS album_artists (
+                albumId TEXT NOT NULL,
+                artistId TEXT NOT NULL,
+                PRIMARY KEY(albumId, artistId),
+                FOREIGN KEY(albumId) REFERENCES albums(id) ON DELETE CASCADE,
+                FOREIGN KEY(artistId) REFERENCES artists(id) ON DELETE CASCADE
+            )
+            """,
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_album_artists_artistId ON album_artists(artistId)")
+        // Every album already had at most one artist -- seed the join table from it so existing
+        // albums keep showing their artist once queries switch to reading from this table.
+        db.execSQL(
+            """
+            INSERT INTO album_artists(albumId, artistId)
+            SELECT id, artistId FROM albums WHERE artistId IS NOT NULL
+            """,
+        )
+    }
+}

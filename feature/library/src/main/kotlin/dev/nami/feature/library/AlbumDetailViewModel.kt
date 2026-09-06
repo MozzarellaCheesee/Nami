@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.nami.core.model.Album
 import dev.nami.core.model.AlbumId
+import dev.nami.core.model.Artist
 import dev.nami.core.model.ArtistId
 import dev.nami.core.model.Track
 import dev.nami.core.model.TrackId
@@ -24,7 +25,11 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-data class AlbumDetailUiState(val album: Album? = null, val tracks: List<Track> = emptyList())
+data class AlbumDetailUiState(
+    val album: Album? = null,
+    val tracks: List<Track> = emptyList(),
+    val artists: List<Artist> = emptyList(),
+)
 
 @HiltViewModel
 class AlbumDetailViewModel @Inject constructor(
@@ -43,10 +48,13 @@ class AlbumDetailViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     init {
-        libraryRepository.album(albumId)
-            .combine(libraryRepository.tracksInAlbum(albumId)) { album, tracks ->
-                AlbumDetailUiState(album = album, tracks = tracks)
-            }
+        combine(
+            libraryRepository.album(albumId),
+            libraryRepository.tracksInAlbum(albumId),
+            libraryRepository.albumArtists(albumId),
+        ) { album, tracks, artists ->
+            AlbumDetailUiState(album = album, tracks = tracks, artists = artists)
+        }
             .onEach { _uiState.value = it }
             .launchIn(viewModelScope)
     }
@@ -61,6 +69,14 @@ class AlbumDetailViewModel @Inject constructor(
 
     fun setArtist(artistId: ArtistId?) {
         viewModelScope.launch { libraryRepository.setAlbumArtist(albumId, artistId) }
+    }
+
+    fun addArtist(artistId: ArtistId) {
+        viewModelScope.launch { libraryRepository.addAlbumArtist(albumId, artistId) }
+    }
+
+    fun removeArtist(artistId: ArtistId) {
+        viewModelScope.launch { libraryRepository.removeAlbumArtist(albumId, artistId) }
     }
 
     fun removeTrackFromAlbum(trackId: TrackId) {

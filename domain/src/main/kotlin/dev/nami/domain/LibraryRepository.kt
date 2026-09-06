@@ -30,7 +30,12 @@ interface LibraryRepository {
     suspend fun renameAlbum(id: AlbumId, title: String)
     suspend fun setAlbumCover(id: AlbumId, imageUri: String)
     suspend fun setAlbumIsSingle(id: AlbumId, isSingle: Boolean)
+    /** Replaces the album's whole artist-credit list with just this one artist (or clears it). */
     suspend fun setAlbumArtist(id: AlbumId, artistId: ArtistId?)
+    /** Every artist credited on the album -- can be more than one (compilations, splits, features). */
+    fun albumArtists(id: AlbumId): Flow<List<Artist>>
+    suspend fun addAlbumArtist(id: AlbumId, artistId: ArtistId)
+    suspend fun removeAlbumArtist(id: AlbumId, artistId: ArtistId)
     suspend fun addTrackToAlbum(trackId: TrackId, albumId: AlbumId)
     suspend fun removeTrackFromAlbum(trackId: TrackId)
     suspend fun addTrackToArtist(trackId: TrackId, artistId: ArtistId)

@@ -8,6 +8,7 @@ import dev.nami.core.database.dao.PlaylistDao
 import dev.nami.core.database.dao.PlaylistTrackDao
 import dev.nami.core.database.dao.SearchDao
 import dev.nami.core.database.dao.TrackDao
+import dev.nami.core.database.entity.AlbumArtistCrossRef
 import dev.nami.core.database.entity.AlbumEntity
 import dev.nami.core.database.entity.ArtistEntity
 import dev.nami.core.database.entity.PlaylistEntity
@@ -17,9 +18,9 @@ import dev.nami.core.database.entity.TrackEntity
 @Database(
     entities = [
         TrackEntity::class, ArtistEntity::class, AlbumEntity::class,
-        PlaylistEntity::class, PlaylistTrackEntity::class,
+        PlaylistEntity::class, PlaylistTrackEntity::class, AlbumArtistCrossRef::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 abstract class NamiDatabase : RoomDatabase() {
