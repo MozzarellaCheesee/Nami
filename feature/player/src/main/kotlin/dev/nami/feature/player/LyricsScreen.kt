@@ -1,7 +1,15 @@
 package dev.nami.feature.player
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -39,7 +47,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -74,33 +81,55 @@ fun LyricsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val playbackState by nowPlayingViewModel.playbackState.collectAsState()
+    val queue by nowPlayingViewModel.queue.collectAsState()
     val density = LocalDensity.current
     val dismissThresholdPx = with(density) { DISMISS_THRESHOLD_DP.dp.toPx() }
     val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
     var dragOffsetY by remember { mutableStateOf(0f) }
     var showEditor by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    // Shared by the drag gesture and the back button -- both need the same "slide fully off,
+    // THEN flip the state" sequence instead of an instant cut.
+    fun dismiss() {
+        scope.launch {
+            animate(dragOffsetY, screenHeightPx) { value, _ -> dragOffsetY = value }
+            onBack()
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize().offset { IntOffset(0, dragOffsetY.roundToInt()) }) {
+        // Same ambient blurred-artwork backdrop as Now Playing -- the dark scrim on top keeps
+        // contrast/legibility regardless of how light the artwork itself is, no per-pixel text
+        // color logic needed, it's the same trick the rest of the app already relies on.
+        val backgroundArtworkPath = queue.nowPlaying?.artworkPath
+        if (backgroundArtworkPath != null) {
+            AsyncImage(
+                model = backgroundArtworkPath,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().blur(64.dp),
+            )
+        }
+        Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900.copy(alpha = if (backgroundArtworkPath != null) 0.72f else 1f)))
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .offset { IntOffset(0, dragOffsetY.roundToInt()) }
-            .background(NamiColors.Ink900)
             .statusBarsPadding()
             .draggable(
                 orientation = Orientation.Vertical,
                 state = rememberDraggableState { delta -> dragOffsetY = (dragOffsetY + delta).coerceAtLeast(0f) },
                 onDragStopped = { velocity ->
                     if (dragOffsetY > dismissThresholdPx || velocity > 2000f) {
-                        animate(dragOffsetY, screenHeightPx) { value, _ -> dragOffsetY = value }
-                        onBack()
+                        dismiss()
                     } else {
-                        animate(dragOffsetY, 0f) { value, _ -> dragOffsetY = value }
+                        scope.launch { animate(dragOffsetY, 0f) { value, _ -> dragOffsetY = value } }
                     }
                 },
             ),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
-            IconButton(onClick = onBack) {
+            IconButton(onClick = { dismiss() }) {
                 Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
             }
             Text(text = "Текст песни", color = NamiColors.Paper100, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
@@ -143,6 +172,7 @@ fun LyricsScreen(
             onSkipNext = nowPlayingViewModel::skipNext,
         )
     }
+    }
 
     if (showEditor) {
         ManualSyncEditor(
@@ -165,7 +195,14 @@ private fun SyncedLyricsList(lyrics: Lyrics, positionMs: Long, onLineClick: (Lon
     // remember(lyrics), which only re-runs when the LYRICS change) and kept reading whatever
     // `positionMs` happened to be at that first composition forever after, so the highlighted
     // line and autoscroll never advanced. This recomposes with `positionMs` normally instead.
-    val currentIndex = lyrics.lines.indexOfLast { it.timeMs <= positionMs }.coerceAtLeast(0)
+    // -1 (not coerced to 0) before the first line's own timestamp -- vocals commonly start well
+    // into the track, and clamping to 0 was lighting up line one as "currently playing" the whole
+    // silent intro.
+    val currentIndex = if (positionMs < lyrics.lines.firstOrNull()?.timeMs ?: 0L) {
+        -1
+    } else {
+        lyrics.lines.indexOfLast { it.timeMs <= positionMs }
+    }
     var lastCentered by remember { mutableIntStateOf(-1) }
     LaunchedEffect(currentIndex) {
         if (currentIndex != lastCentered) {
@@ -189,20 +226,26 @@ private fun SyncedLyricsList(lyrics: Lyrics, positionMs: Long, onLineClick: (Lon
                 // further they are from what's playing, same falloff as most karaoke-style lyric
                 // views (Apple/YT Music), instead of a flat dim/bright split.
                 val distance = kotlin.math.abs(index - currentIndex)
-                val alpha = when {
+                val targetAlpha = when {
                     distance == 0 -> 1f
                     distance == 1 -> 0.55f
                     distance == 2 -> 0.3f
                     else -> 0.15f
                 }
                 val isCurrent = distance == 0
+                // Animated, not an instant cut -- alpha/scale ease between lines as the active
+                // one changes, same spirit as the karaoke-style reference (a smooth handoff, not
+                // a hard flip from one line to the next).
+                val alpha by animateFloatAsState(targetAlpha, tween(350), label = "lyric-line-alpha")
+                val scale by animateFloatAsState(if (isCurrent) 1f else 0.92f, tween(350), label = "lyric-line-scale")
                 Text(
                     text = line.text.ifBlank { "…" },
-                    color = (if (isCurrent) NamiColors.Paper100 else NamiColors.Paper100).copy(alpha = alpha),
-                    style = if (isCurrent) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.titleLarge,
+                    color = NamiColors.Paper100.copy(alpha = alpha),
+                    style = MaterialTheme.typography.headlineMedium,
                     fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
                     modifier = Modifier
                         .fillMaxWidth()
+                        .graphicsLayer { scaleX = scale; scaleY = scale; transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f) }
                         .clickable { onLineClick(line.timeMs) }
                         .padding(vertical = 14.dp),
                 )
@@ -237,7 +280,9 @@ private fun LyricsTransportBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 32.dp, vertical = 20.dp),
+            .navigationBarsPadding()
+            .padding(horizontal = 32.dp, vertical = 20.dp)
+            .padding(bottom = 16.dp),
         horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {

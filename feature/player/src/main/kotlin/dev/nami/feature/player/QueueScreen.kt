@@ -49,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerId
@@ -68,6 +69,7 @@ import dev.nami.domain.QueueItem
 import dev.nami.domain.QueueOrigin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -170,11 +172,33 @@ fun QueueScreen(
         }
     }
 
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    // Shared by the drag gesture and the back button -- both slide fully off THEN flip state,
+    // instead of the button doing an instant cut while only the swipe gesture animated.
+    fun dismiss() {
+        scope.launch {
+            animate(dragOffsetY, screenHeightPx) { value, _ -> dragOffsetY = value }
+            onBack()
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize().offset { IntOffset(0, dragOffsetY.roundToInt()) }) {
+        // Same ambient blurred-artwork backdrop as Now Playing/Lyrics -- one consistent look for
+        // every screen stacked over the player, not a flat Ink900 fill just for this one.
+        val backgroundArtworkPath = queue.nowPlaying?.artworkPath
+        if (backgroundArtworkPath != null) {
+            AsyncImage(
+                model = backgroundArtworkPath,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().blur(64.dp),
+            )
+        }
+        Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900.copy(alpha = if (backgroundArtworkPath != null) 0.72f else 1f)))
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .offset { IntOffset(0, dragOffsetY.roundToInt()) }
-            .background(NamiColors.Ink900)
             .statusBarsPadding()
             .draggable(
                 orientation = Orientation.Vertical,
@@ -183,16 +207,15 @@ fun QueueScreen(
                 },
                 onDragStopped = { velocity ->
                     if (dragOffsetY > dismissThresholdPx || velocity > 2000f) {
-                        animate(dragOffsetY, screenHeightPx) { value, _ -> dragOffsetY = value }
-                        onBack()
+                        dismiss()
                     } else {
-                        animate(dragOffsetY, 0f) { value, _ -> dragOffsetY = value }
+                        scope.launch { animate(dragOffsetY, 0f) { value, _ -> dragOffsetY = value } }
                     }
                 },
             ),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
-            IconButton(onClick = onBack) {
+            IconButton(onClick = { dismiss() }) {
                 Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
             }
             Text(text = "Очередь", color = NamiColors.Paper100, style = MaterialTheme.typography.titleLarge)
@@ -351,6 +374,7 @@ fun QueueScreen(
                 }
             }
         }
+    }
     }
 }
 

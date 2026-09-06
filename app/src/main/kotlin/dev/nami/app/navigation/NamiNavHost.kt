@@ -5,6 +5,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -351,7 +352,11 @@ fun NamiNavHost(
     AnimatedVisibility(
         visible = showQueue,
         enter = slideInVertically(initialOffsetY = { fullHeight -> fullHeight }),
-        exit = ExitTransition.None,
+        // Unlike NowPlaying, Queue/Lyrics don't already animate themselves off-screen before the
+        // system back gesture/button flips this to false -- their own drag-dismiss does, but
+        // hardware back skips straight to the BackHandler above, so this exit is what animates
+        // that path instead of an instant cut.
+        exit = slideOutVertically(targetOffsetY = { fullHeight -> fullHeight }),
     ) {
         QueueScreen(onBack = { showQueue = false }, viewModel = nowPlayingViewModel)
     }
@@ -359,7 +364,7 @@ fun NamiNavHost(
     AnimatedVisibility(
         visible = showLyrics,
         enter = slideInVertically(initialOffsetY = { fullHeight -> fullHeight }),
-        exit = ExitTransition.None,
+        exit = slideOutVertically(targetOffsetY = { fullHeight -> fullHeight }),
     ) {
         LyricsScreen(onBack = { showLyrics = false }, nowPlayingViewModel = nowPlayingViewModel)
     }
