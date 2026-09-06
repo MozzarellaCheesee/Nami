@@ -178,13 +178,25 @@ class LyricsViewModel @Inject constructor(
             return
         }
         _showTranslation.value = true
-        if (tl.translation != null) return
+        if (tl.translation == null) runTranslation(tl.path, tl.lyrics)
+    }
+
+    /** Long-press on the translate button: re-runs it even if a (possibly bad -- garbled by an
+     * old bug, or just wrong) cached translation already exists, overwriting the cache. */
+    fun forceRetranslate() {
+        val tl = trackAndLyrics.value
+        if (tl?.lyrics == null) return
+        _showTranslation.value = true
+        runTranslation(tl.path, tl.lyrics)
+    }
+
+    private fun runTranslation(path: String, lyrics: Lyrics) {
         viewModelScope.launch {
             _isTranslating.value = true
             try {
-                val translated = lyricsRepository.translateToRussian(tl.lyrics.lines.map { it.text })
+                val translated = lyricsRepository.translateToRussian(lyrics.lines.map { it.text })
                 if (translated != null) {
-                    lyricsRepository.saveTranslation(tl.path, translated)
+                    lyricsRepository.saveTranslation(path, translated)
                     reloadSignal.value++
                 }
             } finally {
@@ -204,12 +216,24 @@ class LyricsViewModel @Inject constructor(
             return
         }
         _showFurigana.value = true
-        if (tl.furigana != null) return
+        if (tl.furigana == null) runFurigana(tl.path, tl.lyrics)
+    }
+
+    /** Long-press on the furigana button: re-runs it even over an existing cache -- same escape
+     * hatch as [forceRetranslate], for a stale/bad cached result. */
+    fun forceRegenerateFurigana() {
+        val tl = trackAndLyrics.value
+        if (tl?.lyrics == null) return
+        _showFurigana.value = true
+        runFurigana(tl.path, tl.lyrics)
+    }
+
+    private fun runFurigana(path: String, lyrics: Lyrics) {
         viewModelScope.launch {
             _isGeneratingFurigana.value = true
             try {
-                val generated = lyricsRepository.generateFurigana(tl.lyrics.lines.map { it.text })
-                lyricsRepository.saveFurigana(tl.path, generated)
+                val generated = lyricsRepository.generateFurigana(lyrics.lines.map { it.text })
+                lyricsRepository.saveFurigana(path, generated)
                 reloadSignal.value++
             } finally {
                 _isGeneratingFurigana.value = false

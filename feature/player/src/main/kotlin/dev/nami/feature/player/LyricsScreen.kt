@@ -4,8 +4,11 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
@@ -85,6 +88,7 @@ private const val GAP_FRACTION_BEFORE_SILENT = 0.7f
  * highlight) and its dictionary/Anki/LRCLIB pieces aren't here -- this is the load-bearing first
  * slice: parse/show/auto-scroll/tap-to-seek synced lyrics from a local .lrc, and a manual
  * tap-to-stamp editor for tracks that don't have one yet. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LyricsScreen(
     onBack: () -> Unit,
@@ -153,7 +157,18 @@ fun LyricsScreen(
                     modifier = Modifier.padding(horizontal = 8.dp).size(20.dp),
                 )
             } else if (hasLyrics) {
-                IconButton(onClick = { viewModel.toggleFurigana() }) {
+                // Long-press forces a redo even over a cached (possibly stale/bad) result --
+                // IconButton has no onLongClick, so this is a plain sized+clipped Box instead.
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .combinedClickable(
+                            onClick = { viewModel.toggleFurigana() },
+                            onLongClick = { viewModel.forceRegenerateFurigana() },
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
                     Text(
                         "振",
                         color = if (uiState.showFurigana) NamiColors.Shu else NamiColors.Paper70,
@@ -168,10 +183,19 @@ fun LyricsScreen(
                     modifier = Modifier.padding(horizontal = 8.dp).size(20.dp),
                 )
             } else if (hasLyrics) {
-                IconButton(onClick = { viewModel.toggleTranslation() }) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .combinedClickable(
+                            onClick = { viewModel.toggleTranslation() },
+                            onLongClick = { viewModel.forceRetranslate() },
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
                     Icon(
                         Icons.Outlined.Translate,
-                        contentDescription = "Перевод",
+                        contentDescription = "Перевод (долгое нажатие -- пересчитать заново)",
                         tint = if (uiState.showTranslation) NamiColors.Shu else NamiColors.Paper70,
                     )
                 }
