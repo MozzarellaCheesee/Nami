@@ -96,6 +96,11 @@ class CollapsingHeaderState(maxHeightPx: Float, private val minHeightPx: Float) 
         private set
     private val maxHeightPx = maxHeightPx
 
+    /** 0f fully expanded, 1f fully collapsed -- drives any scroll-reactive UI (e.g. a compact
+     * header row's avatar shrinking as the photo collapses). */
+    val collapseFraction: Float
+        get() = ((maxHeightPx - heightPx) / (maxHeightPx - minHeightPx)).coerceIn(0f, 1f)
+
     val nestedScrollConnection = object : NestedScrollConnection {
         override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
             if (available.y < 0 && heightPx > minHeightPx) {
