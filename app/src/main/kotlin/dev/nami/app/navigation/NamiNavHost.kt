@@ -126,8 +126,12 @@ fun NamiNavHost(
                 }
                 LibraryScreen(
                     onTrackClick = { trackId ->
-                        nowPlayingViewModel.playFromLibrary(trackId)
-                        if (autoOpenPlayer) showNowPlaying = true
+                        if (queue.nowPlaying?.id == trackId) {
+                            showNowPlaying = true
+                        } else {
+                            nowPlayingViewModel.playFromLibrary(trackId)
+                            if (autoOpenPlayer) showNowPlaying = true
+                        }
                     },
                     onAlbumClick = { albumId -> navController.navigate("album/${albumId.value}") },
                     onArtistClick = { artistId -> navController.navigate("artist/${artistId.value}") },
@@ -140,8 +144,12 @@ fun NamiNavHost(
             composable(ROUTE_SEARCH) {
                 SearchScreen(
                     onTrackClick = { trackId ->
-                        nowPlayingViewModel.playTrack(trackId)
-                        if (autoOpenPlayer) showNowPlaying = true
+                        if (queue.nowPlaying?.id == trackId) {
+                            showNowPlaying = true
+                        } else {
+                            nowPlayingViewModel.playTrack(trackId)
+                            if (autoOpenPlayer) showNowPlaying = true
+                        }
                     },
                     onAlbumClick = { albumId -> navController.navigate("album/${albumId.value}") },
                     onArtistClick = { artistId -> navController.navigate("artist/${artistId.value}") },
@@ -171,8 +179,12 @@ fun NamiNavHost(
                 AlbumDetailScreen(
                     onBack = { navController.popBackStack() },
                     onPlayTracks = { tracks, startIndex ->
-                        nowPlayingViewModel.playTracks(tracks, artistName = null, startIndex = startIndex)
-                        if (autoOpenPlayer) showNowPlaying = true
+                        if (queue.nowPlaying?.id == tracks.getOrNull(startIndex)?.id) {
+                            showNowPlaying = true
+                        } else {
+                            nowPlayingViewModel.playTracks(tracks, artistName = null, startIndex = startIndex)
+                            if (autoOpenPlayer) showNowPlaying = true
+                        }
                     },
                     onAddToQueue = { track -> nowPlayingViewModel.addToQueue(track, artistName = null) },
                     onPickCoverRequested = onPickAlbumCover,
@@ -187,8 +199,12 @@ fun NamiNavHost(
                     onBack = { navController.popBackStack() },
                     onAlbumClick = { albumId -> navController.navigate("album/${albumId.value}") },
                     onPlayTracks = { tracks, artistName, startIndex ->
-                        nowPlayingViewModel.playTracks(tracks, artistName, startIndex)
-                        if (autoOpenPlayer) showNowPlaying = true
+                        if (queue.nowPlaying?.id == tracks.getOrNull(startIndex)?.id) {
+                            showNowPlaying = true
+                        } else {
+                            nowPlayingViewModel.playTracks(tracks, artistName, startIndex)
+                            if (autoOpenPlayer) showNowPlaying = true
+                        }
                     },
                     onAddToQueue = { track, artistName -> nowPlayingViewModel.addToQueue(track, artistName) },
                     onPickPhotoRequested = onPickArtistPhoto,
@@ -202,8 +218,12 @@ fun NamiNavHost(
                     onBack = { navController.popBackStack() },
                     onDeleted = { navController.popBackStack() },
                     onPlayTracks = { tracks, startIndex ->
-                        nowPlayingViewModel.playTracks(tracks, artistName = null, startIndex = startIndex)
-                        if (autoOpenPlayer) showNowPlaying = true
+                        if (queue.nowPlaying?.id == tracks.getOrNull(startIndex)?.id) {
+                            showNowPlaying = true
+                        } else {
+                            nowPlayingViewModel.playTracks(tracks, artistName = null, startIndex = startIndex)
+                            if (autoOpenPlayer) showNowPlaying = true
+                        }
                     },
                     onExportRequested = onExportPlaylist,
                     onPickCoverRequested = onPickPlaylistCover,
