@@ -31,6 +31,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import dev.nami.app.SettingsScreen
+import dev.nami.app.SettingsViewModel
 import dev.nami.core.model.AlbumId
 import dev.nami.core.model.ArtistId
 import dev.nami.core.model.PlaylistId
@@ -80,6 +81,8 @@ fun NamiNavHost(
     // so MiniPlayer and NowPlayingScreen share the same instance and stay in sync.
     val nowPlayingViewModel: NowPlayingViewModel = hiltViewModel()
     val queue by nowPlayingViewModel.queue.collectAsState()
+    val settingsViewModel: SettingsViewModel = hiltViewModel()
+    val autoOpenPlayer by settingsViewModel.autoOpenPlayer.collectAsState()
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
 
     // Now Playing is deliberately NOT a NavHost destination: NavHost only keeps its current
@@ -124,7 +127,7 @@ fun NamiNavHost(
                 LibraryScreen(
                     onTrackClick = { trackId ->
                         nowPlayingViewModel.playFromLibrary(trackId)
-                        showNowPlaying = true
+                        if (autoOpenPlayer) showNowPlaying = true
                     },
                     onAlbumClick = { albumId -> navController.navigate("album/${albumId.value}") },
                     onArtistClick = { artistId -> navController.navigate("artist/${artistId.value}") },
@@ -138,7 +141,7 @@ fun NamiNavHost(
                 SearchScreen(
                     onTrackClick = { trackId ->
                         nowPlayingViewModel.playTrack(trackId)
-                        showNowPlaying = true
+                        if (autoOpenPlayer) showNowPlaying = true
                     },
                     onAlbumClick = { albumId -> navController.navigate("album/${albumId.value}") },
                     onArtistClick = { artistId -> navController.navigate("artist/${artistId.value}") },
@@ -169,7 +172,7 @@ fun NamiNavHost(
                     onBack = { navController.popBackStack() },
                     onPlayTracks = { tracks, startIndex ->
                         nowPlayingViewModel.playTracks(tracks, artistName = null, startIndex = startIndex)
-                        showNowPlaying = true
+                        if (autoOpenPlayer) showNowPlaying = true
                     },
                     onAddToQueue = { track -> nowPlayingViewModel.addToQueue(track, artistName = null) },
                     onPickCoverRequested = onPickAlbumCover,
@@ -185,7 +188,7 @@ fun NamiNavHost(
                     onAlbumClick = { albumId -> navController.navigate("album/${albumId.value}") },
                     onPlayTracks = { tracks, artistName, startIndex ->
                         nowPlayingViewModel.playTracks(tracks, artistName, startIndex)
-                        showNowPlaying = true
+                        if (autoOpenPlayer) showNowPlaying = true
                     },
                     onAddToQueue = { track, artistName -> nowPlayingViewModel.addToQueue(track, artistName) },
                     onPickPhotoRequested = onPickArtistPhoto,
@@ -200,7 +203,7 @@ fun NamiNavHost(
                     onDeleted = { navController.popBackStack() },
                     onPlayTracks = { tracks, startIndex ->
                         nowPlayingViewModel.playTracks(tracks, artistName = null, startIndex = startIndex)
-                        showNowPlaying = true
+                        if (autoOpenPlayer) showNowPlaying = true
                     },
                     onExportRequested = onExportPlaylist,
                     onPickCoverRequested = onPickPlaylistCover,
