@@ -38,6 +38,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.MenuBook
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.outlined.TouchApp
@@ -110,6 +111,7 @@ fun LyricsScreen(
     // dictionary lookup only kicks in once this is switched on, so casually tapping through the
     // lyrics to seek around doesn't keep popping up word definitions.
     var wordSelectMode by remember { mutableStateOf(false) }
+    var showToolsMenu by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     // Shared by the drag gesture and the back button -- both need the same "slide fully off,
     // THEN flip the state" sequence instead of an instant cut.
@@ -165,8 +167,27 @@ fun LyricsScreen(
             )
             val hasLyrics = uiState.lyrics != null && uiState.lyrics!!.lines.isNotEmpty()
             if (hasLyrics) {
-                // Live, not generated/cached -- tokenizing one line is fast, so this is just a
-                // display flip, no long-press-to-regenerate escape hatch needed.
+                IconButton(onClick = { showToolsMenu = !showToolsMenu }) {
+                    Icon(Icons.Outlined.MoreVert, contentDescription = "Инструменты", tint = NamiColors.Paper70)
+                }
+            }
+        }
+
+        // Anchored under the "..." button, not inline in the row -- a narrow, heavily-rounded
+        // pill that slides out sideways instead of the row of icons permanently crowding (and,
+        // at one point, wrapping) the header.
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showToolsMenu,
+            enter = androidx.compose.animation.expandHorizontally(expandFrom = Alignment.End) + androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.shrinkHorizontally(shrinkTowards = Alignment.End) + androidx.compose.animation.fadeOut(),
+            modifier = Modifier.align(Alignment.End).padding(end = 4.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .background(NamiColors.Ink700, androidx.compose.foundation.shape.RoundedCornerShape(28.dp))
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
+            ) {
                 IconButton(onClick = { viewModel.toggleFurigana() }) {
                     Text(
                         "振",
@@ -175,11 +196,7 @@ fun LyricsScreen(
                     )
                 }
                 IconButton(onClick = { showVocabulary = true }) {
-                    Icon(
-                        Icons.Outlined.MenuBook,
-                        contentDescription = "Мой словарик",
-                        tint = NamiColors.Paper70,
-                    )
+                    Icon(Icons.Outlined.MenuBook, contentDescription = "Мой словарик", tint = NamiColors.Paper70)
                 }
                 IconButton(onClick = { wordSelectMode = !wordSelectMode }) {
                     Icon(
@@ -188,57 +205,57 @@ fun LyricsScreen(
                         tint = if (wordSelectMode) NamiColors.Shu else NamiColors.Paper70,
                     )
                 }
-            }
-            if (uiState.isGeneratingRomaji) {
-                androidx.compose.material3.CircularProgressIndicator(
-                    color = NamiColors.Paper70,
-                    strokeWidth = 2.dp,
-                    modifier = Modifier.padding(horizontal = 8.dp).size(20.dp),
-                )
-            } else if (hasLyrics) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(androidx.compose.foundation.shape.CircleShape)
-                        .combinedClickable(
-                            onClick = { viewModel.toggleRomaji() },
-                            onLongClick = { viewModel.forceRegenerateRomaji() },
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        "R",
-                        color = if (uiState.showRomaji) NamiColors.Shu else NamiColors.Paper70,
-                        style = MaterialTheme.typography.titleMedium,
+                if (uiState.isGeneratingRomaji) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        color = NamiColors.Paper70,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.padding(horizontal = 8.dp).size(20.dp),
                     )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .combinedClickable(
+                                onClick = { viewModel.toggleRomaji() },
+                                onLongClick = { viewModel.forceRegenerateRomaji() },
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            "R",
+                            color = if (uiState.showRomaji) NamiColors.Shu else NamiColors.Paper70,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                    }
                 }
-            }
-            if (uiState.isTranslating) {
-                androidx.compose.material3.CircularProgressIndicator(
-                    color = NamiColors.Paper70,
-                    strokeWidth = 2.dp,
-                    modifier = Modifier.padding(horizontal = 8.dp).size(20.dp),
-                )
-            } else if (hasLyrics) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(androidx.compose.foundation.shape.CircleShape)
-                        .combinedClickable(
-                            onClick = { viewModel.toggleTranslation() },
-                            onLongClick = { viewModel.forceRetranslate() },
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        Icons.Outlined.Translate,
-                        contentDescription = "Перевод (долгое нажатие -- пересчитать заново)",
-                        tint = if (uiState.showTranslation) NamiColors.Shu else NamiColors.Paper70,
+                if (uiState.isTranslating) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        color = NamiColors.Paper70,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.padding(horizontal = 8.dp).size(20.dp),
                     )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .combinedClickable(
+                                onClick = { viewModel.toggleTranslation() },
+                                onLongClick = { viewModel.forceRetranslate() },
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Outlined.Translate,
+                            contentDescription = "Перевод (долгое нажатие -- пересчитать заново)",
+                            tint = if (uiState.showTranslation) NamiColors.Shu else NamiColors.Paper70,
+                        )
+                    }
                 }
-            }
-            IconButton(onClick = { showEditor = true }) {
-                Icon(Icons.Outlined.Edit, contentDescription = "Синхронизировать вручную", tint = NamiColors.Paper70)
+                IconButton(onClick = { showEditor = true }) {
+                    Icon(Icons.Outlined.Edit, contentDescription = "Синхронизировать вручную", tint = NamiColors.Paper70)
+                }
             }
         }
 
