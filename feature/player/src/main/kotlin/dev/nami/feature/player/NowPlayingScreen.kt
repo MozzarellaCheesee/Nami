@@ -80,6 +80,12 @@ fun NowPlayingScreen(
     var artworkWidthPx by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
 
+    // Safety net for any track change that doesn't go through slideAndSkip below -- auto-advance
+    // on track completion, notification/Bluetooth remote skip controls, or a slideAndSkip
+    // coroutine that got cancelled mid-animation (e.g. gesture interrupted). Without this the
+    // offset can get stuck non-zero, showing the artwork sheared off to one side.
+    androidx.compose.runtime.LaunchedEffect(queue.nowPlaying?.id) { artworkOffsetX = 0f }
+
     // Shared by the swipe gesture and the chevron button so both dismiss paths always finish
     // the slide-down themselves before popping -- see the comment on the swipe branch below.
     fun collapseAnimated() {
