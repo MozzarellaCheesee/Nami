@@ -1,5 +1,13 @@
 package dev.nami.feature.library
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -67,14 +75,20 @@ fun TrackListItem(
             .padding(horizontal = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (isCurrentTrack) {
-            Box(
-                modifier = Modifier
-                    .width(2.dp)
-                    .height(32.dp)
-                    .background(NamiColors.Shu),
-            )
-            Spacer(modifier = Modifier.width(14.dp))
+        AnimatedVisibility(
+            visible = isCurrentTrack,
+            enter = expandHorizontally(animationSpec = tween(200)) + fadeIn(tween(200)),
+            exit = shrinkHorizontally(animationSpec = tween(200)) + fadeOut(tween(200)),
+        ) {
+            Row {
+                Box(
+                    modifier = Modifier
+                        .width(2.dp)
+                        .height(32.dp)
+                        .background(NamiColors.Shu),
+                )
+                Spacer(modifier = Modifier.width(14.dp))
+            }
         }
         if (track.albumArtworkPath != null) {
             AsyncImage(
@@ -93,22 +107,33 @@ fun TrackListItem(
             )
         }
         Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
+            val titleColor by animateColorAsState(
+                targetValue = if (isCurrentTrack) NamiColors.Shu else NamiColors.Paper100,
+                animationSpec = tween(200),
+                label = "track-title-color",
+            )
             Text(
                 text = track.title,
-                color = if (isCurrentTrack) NamiColors.Shu else NamiColors.Paper100,
+                color = titleColor,
                 style = MaterialTheme.typography.bodyLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (isCurrentTrack) {
-                MiniPlayingIndicator(isPlaying = isPlaying, modifier = Modifier.padding(top = 4.dp))
-            } else {
-                Text(
-                    text = subtitleFor(track),
-                    color = NamiColors.Paper70,
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                )
+            androidx.compose.animation.AnimatedContent(
+                targetState = isCurrentTrack,
+                transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(200)) },
+                label = "track-subtitle",
+            ) { showIndicator ->
+                if (showIndicator) {
+                    MiniPlayingIndicator(isPlaying = isPlaying, modifier = Modifier.padding(top = 4.dp))
+                } else {
+                    Text(
+                        text = subtitleFor(track),
+                        color = NamiColors.Paper70,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                    )
+                }
             }
         }
         if (selectionMode) {
