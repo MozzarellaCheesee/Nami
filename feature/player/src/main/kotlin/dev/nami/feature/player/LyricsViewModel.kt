@@ -7,6 +7,7 @@ import dev.nami.core.model.DictionaryEntry
 import dev.nami.core.model.LyricLine
 import dev.nami.core.model.Lyrics
 import dev.nami.core.model.TrackId
+import dev.nami.core.model.WordTiming
 import dev.nami.core.model.WordToken
 import dev.nami.domain.DictionaryRepository
 import dev.nami.domain.LibraryRepository
@@ -14,6 +15,8 @@ import dev.nami.domain.LyricsRepository
 import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerRepository
 import dev.nami.domain.VocabularyRepository
+import dev.nami.domain.WhisperAligner
+import dev.nami.domain.WordTimingMatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -46,6 +49,10 @@ data class LyricsUiState(
     val showRomaji: Boolean = false,
     val isGeneratingRomaji: Boolean = false,
     val wordLookup: WordLookup? = null,
+    val wordTimings: List<List<WordTiming>>? = null,
+    val preciseSyncSupported: Boolean = false,
+    val isPreciseSyncing: Boolean = false,
+    val preciseSyncProgress: Float = 0f,
 )
 
 @HiltViewModel
@@ -55,6 +62,7 @@ class LyricsViewModel @Inject constructor(
     private val lyricsRepository: LyricsRepository,
     private val dictionaryRepository: DictionaryRepository,
     private val vocabularyRepository: VocabularyRepository,
+    private val whisperAligner: WhisperAligner,
 ) : ViewModel() {
 
     private data class TrackAndLyrics(
@@ -66,6 +74,7 @@ class LyricsViewModel @Inject constructor(
         val lyrics: Lyrics?,
         val translation: List<String>?,
         val romaji: List<String>?,
+        val wordTimings: List<List<WordTiming>>?,
     )
 
     // Bumped after a successful LRCLIB fetch/manual save/translation is written to its sidecar
@@ -82,8 +91,9 @@ class LyricsViewModel @Inject constructor(
                         lyricsRepository.lyricsForPath(track.path),
                         lyricsRepository.translationForPath(track.path),
                         lyricsRepository.romajiForPath(track.path),
-                    ) { lyrics, translation, romaji ->
-                        TrackAndLyrics(track.id, track.path, track.title, track.artistName, track.durationMs, lyrics, translation, romaji)
+                        lyricsRepository.wordTimingsForPath(track.path),
+                    ) { lyrics, translation, romaji, wordTimings ->
+                        TrackAndLyrics(track.id, track.path, track.title, track.artistName, track.durationMs, lyrics, translation, romaji, wordTimings)
                     }
                 }
             }
@@ -100,6 +110,8 @@ class LyricsViewModel @Inject constructor(
     private val _showRomaji = MutableStateFlow(false)
     private val _isGeneratingRomaji = MutableStateFlow(false)
     private val _wordLookup = MutableStateFlow<WordLookup?>(null)
+    private val _isPreciseSyncing = MutableStateFlow(false)
+    private val _preciseSyncProgress = MutableStateFlow(0f)
     // Never re-hit LRCLIB for a track once tried this session, hit or miss -- there is no
     // "retry automatically forever" here, only the one manual re-check the user can trigger from
     // the empty state (also routed through fetchOnline, but that call bypasses this guard).
@@ -107,7 +119,7 @@ class LyricsViewModel @Inject constructor(
 
     val uiState: StateFlow<LyricsUiState> = combine(
         trackAndLyrics, _positionMs, _isFetchingOnline, _showTranslation, _isTranslating,
-        _showFurigana, _showRomaji, _isGeneratingRomaji, _wordLookup,
+        _showFurigana, _showRomaji, _isGeneratingRomaji, _wordLookup, _isPreciseSyncing, _preciseSyncProgress,
     ) { values ->
         val tl = values[0] as TrackAndLyrics?
         val pos = values[1] as Long
@@ -119,6 +131,8 @@ class LyricsViewModel @Inject constructor(
         val generatingRomaji = values[7] as Boolean
         @Suppress("UNCHECKED_CAST")
         val wordLookup = values[8] as WordLookup?
+        val preciseSyncing = values[9] as Boolean
+        val preciseSyncProgress = values[10] as Float
         LyricsUiState(
             trackId = tl?.trackId,
             trackPath = tl?.path,
@@ -134,6 +148,10 @@ class LyricsViewModel @Inject constructor(
             showRomaji = showRomaji,
             isGeneratingRomaji = generatingRomaji,
             wordLookup = wordLookup,
+            wordTimings = tl?.wordTimings,
+            preciseSyncSupported = whisperAligner.isSupported(),
+            isPreciseSyncing = preciseSyncing,
+            preciseSyncProgress = preciseSyncProgress,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LyricsUiState())
 
@@ -292,6 +310,32 @@ class LyricsViewModel @Inject constructor(
 
     fun seekTo(ms: Long) {
         viewModelScope.launch { playerRepository.seek(ms) }
+    }
+
+    /** "Точная синхронизация" -- runs on-device whisper.cpp word-level alignment over the actual
+     * track audio and replaces the linear-interpolation karaoke sweep with real timing. Downloads
+     * the ~500MB model on first use. Arm64-v8a only (gated in the UI via preciseSyncSupported). */
+    fun runPreciseSync() {
+        val tl = trackAndLyrics.value
+        if (tl?.lyrics == null || _isPreciseSyncing.value) return
+        viewModelScope.launch {
+            _isPreciseSyncing.value = true
+            _preciseSyncProgress.value = 0f
+            try {
+                if (!whisperAligner.isModelDownloaded()) {
+                    val downloaded = whisperAligner.downloadModel { progress -> _preciseSyncProgress.value = progress * 0.5f }
+                    if (!downloaded) return@launch
+                }
+                _preciseSyncProgress.value = 0.5f
+                val words = whisperAligner.alignWords(tl.path, language = "ja") ?: return@launch
+                val perLine = WordTimingMatcher.match(tl.lyrics, words)
+                lyricsRepository.saveWordTimings(tl.path, perLine)
+                reloadSignal.value++
+            } finally {
+                _isPreciseSyncing.value = false
+                _preciseSyncProgress.value = 0f
+            }
+        }
     }
 
     /** Manual sync: [lineTexts] in order, [stampedMs] the position captured for each as the user

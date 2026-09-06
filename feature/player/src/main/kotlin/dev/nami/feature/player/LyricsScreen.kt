@@ -37,6 +37,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.MusicNote
@@ -112,6 +113,7 @@ fun LyricsScreen(
     // lyrics to seek around doesn't keep popping up word definitions.
     var wordSelectMode by remember { mutableStateOf(false) }
     var showToolsMenu by remember { mutableStateOf(false) }
+    var showPreciseSyncConfirm by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     // Shared by the drag gesture and the back button -- both need the same "slide fully off,
     // THEN flip the state" sequence instead of an instant cut.
@@ -201,6 +203,7 @@ fun LyricsScreen(
                     translation = uiState.translation.takeIf { uiState.showTranslation },
                     showFurigana = uiState.showFurigana,
                     romaji = uiState.romaji.takeIf { uiState.showRomaji },
+                    wordTimings = uiState.wordTimings,
                     positionMs = uiState.positionMs,
                     onLineClick = { viewModel.seekTo(it) },
                     tokenizeLine = { viewModel.tokenizeLine(it) },
@@ -304,8 +307,47 @@ fun LyricsScreen(
             IconButton(onClick = { showEditor = true }) {
                 Icon(Icons.Outlined.Edit, contentDescription = "Синхронизировать вручную", tint = NamiColors.Paper70)
             }
+            // Real per-word timing (on-device whisper.cpp) instead of the linear-interpolation
+            // karaoke sweep -- arm64-v8a only, and a ~500MB one-time model download, so this is
+            // opt-in and hidden entirely when unsupported rather than failing at runtime.
+            if (uiState.preciseSyncSupported) {
+                if (uiState.isPreciseSyncing) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        progress = { uiState.preciseSyncProgress },
+                        color = NamiColors.Shu,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.padding(vertical = 8.dp).size(20.dp),
+                    )
+                } else {
+                    IconButton(onClick = { showPreciseSyncConfirm = true }) {
+                        Icon(
+                            Icons.Outlined.GraphicEq,
+                            contentDescription = "Точная синхронизация караоке (Whisper, офлайн)",
+                            tint = if (uiState.wordTimings != null) NamiColors.Shu else NamiColors.Paper70,
+                        )
+                    }
+                }
+            }
         }
     }
+    }
+
+    if (showPreciseSyncConfirm) {
+        dev.nami.core.designsystem.NamiAlertDialog(
+            onDismissRequest = { showPreciseSyncConfirm = false },
+            title = { Text("Точная синхронизация", color = NamiColors.Paper100) },
+            text = {
+                Text(
+                    "Разберёт текст по словам прямо на устройстве (whisper.cpp). При первом запуске " +
+                        "скачает модель распознавания (~500 МБ) и займёт какое-то время на анализ трека.",
+                    color = NamiColors.Paper70,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showPreciseSyncConfirm = false; viewModel.runPreciseSync() }) { Text("Запустить") }
+            },
+            dismissButton = { TextButton(onClick = { showPreciseSyncConfirm = false }) { Text("Отмена") } },
+        )
     }
 
     if (showEditor) {
@@ -386,6 +428,7 @@ private fun SyncedLyricsList(
     translation: List<String>?,
     showFurigana: Boolean,
     romaji: List<String>?,
+    wordTimings: List<List<dev.nami.core.model.WordTiming>>?,
     positionMs: Long,
     onLineClick: (Long) -> Unit,
     tokenizeLine: suspend (String) -> List<dev.nami.core.model.WordToken>,
@@ -411,9 +454,18 @@ private fun SyncedLyricsList(
     // lit as "active" through it.
     val nextLine = lyrics.lines.getOrNull(rawIndex + 1)
     val currentLine = lyrics.lines.getOrNull(rawIndex)
+    // With real word timings for the current line, "singing has actually stopped" is just
+    // "past the last known word's end" -- no more guessing a fixed fraction of the gap, which
+    // was wrong (too early or too late) whenever a line's actual sung duration didn't match
+    // that guess, including flagging a gap as silent while the vocalist was still singing.
+    val currentLineWords = wordTimings?.getOrNull(rawIndex)
     val inGap = currentLine != null && nextLine != null &&
         (nextLine.timeMs - currentLine.timeMs) > GAP_MS &&
-        positionMs > currentLine.timeMs + ((nextLine.timeMs - currentLine.timeMs) * GAP_FRACTION_BEFORE_SILENT).toLong()
+        if (!currentLineWords.isNullOrEmpty()) {
+            positionMs > currentLineWords.last().endMs
+        } else {
+            positionMs > currentLine.timeMs + ((nextLine.timeMs - currentLine.timeMs) * GAP_FRACTION_BEFORE_SILENT).toLong()
+        }
     val currentIndex = if (inGap) -1 else rawIndex
     var lastCentered by remember { mutableIntStateOf(-1) }
     // Scrolls by the raw (gap-inclusive) index -- during an instrumental break there's no active
@@ -485,13 +537,21 @@ private fun SyncedLyricsList(
                             modifier = Modifier.padding(bottom = 2.dp),
                         )
                     }
-                    // Linear on-device estimate, not real per-word timing (no free source for
-                    // that exists -- checked; Musixmatch/Suno-class APIs need a paid key, Spotify
-                    // /Yandex internal endpoints are unofficial ToS violations). Sweeps evenly
-                    // across the line between its own timestamp and the next line's.
+                    // Real per-word span (from an on-device Whisper alignment pass, "точная
+                    // синхронизация") when available -- otherwise the linear on-device estimate
+                    // (no free source for real word-level timing otherwise exists -- checked;
+                    // Musixmatch/Suno-class APIs need a paid key, Spotify/Yandex internal
+                    // endpoints are unofficial ToS violations), sweeping evenly across the line
+                    // between its own timestamp and the next line's.
                     val itemNextLine = lyrics.lines.getOrNull(index + 1)
+                    val itemWords = wordTimings?.getOrNull(index)
                     val karaokeProgress = when {
                         !isCurrent -> if (index < currentIndex) 1f else 0f
+                        !itemWords.isNullOrEmpty() -> {
+                            val start = itemWords.first().startMs
+                            val end = itemWords.last().endMs
+                            if (end <= start) 1f else ((positionMs - start).toFloat() / (end - start).toFloat()).coerceIn(0f, 1f)
+                        }
                         itemNextLine == null -> 1f
                         else -> ((positionMs - line.timeMs).toFloat() / (itemNextLine.timeMs - line.timeMs).toFloat()).coerceIn(0f, 1f)
                     }

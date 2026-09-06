@@ -23,6 +23,7 @@ include(
     ":core:database",
     ":core:designsystem",
     ":core:native",
+    ":core:whisper",
     ":domain",
     ":data",
     ":player",

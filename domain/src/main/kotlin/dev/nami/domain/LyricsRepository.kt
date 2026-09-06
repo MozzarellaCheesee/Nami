@@ -1,6 +1,7 @@
 package dev.nami.domain
 
 import dev.nami.core.model.Lyrics
+import dev.nami.core.model.WordTiming
 import dev.nami.core.model.WordToken
 import kotlinx.coroutines.flow.Flow
 
@@ -40,4 +41,10 @@ interface LyricsRepository {
      * split for both, computed live (Kuromoji tokenizing one short line is fast enough not to
      * need caching, unlike a whole-track translation/romaji pass). */
     suspend fun tokenizeLine(line: String): List<WordToken>
+
+    /** Result of a WhisperAligner pass, one word list per [LyricLine] (outer index matches
+     * [Lyrics.lines]) -- cached next to the .lrc so the ~minute-long alignment only runs once
+     * per track. Null when no precise sync has been run yet. */
+    fun wordTimingsForPath(path: String): Flow<List<List<WordTiming>>?>
+    suspend fun saveWordTimings(path: String, perLine: List<List<WordTiming>>)
 }

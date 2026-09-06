@@ -1,0 +1,21 @@
+[package]
+name = "whisper_align"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+
+[dependencies]
+uniffi = { version = "0.28", features = ["cli"] }
+
+# whisper-rs cross-compiles whisper.cpp itself (needs the Android NDK's clang/cmake toolchain) --
+# only usable when actually building for the device. The host build of this crate exists purely
+# so uniffi-bindgen can introspect it to generate Kotlin bindings, so the host side stays a stub
+# and never links whisper.cpp at all (avoids fighting the host toolchain for a build we never run).
+[target.'cfg(target_os = "android")'.dependencies]
+whisper-rs = "0.13"

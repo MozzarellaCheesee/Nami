@@ -1,6 +1,7 @@
 package dev.nami.data
 
 import dev.nami.core.model.Lyrics
+import dev.nami.core.model.WordTiming
 import dev.nami.core.model.WordToken
 import dev.nami.domain.LyricsRepository
 import kotlinx.coroutines.Dispatchers
@@ -84,4 +85,40 @@ class LyricsRepositoryImpl @Inject constructor() : LyricsRepository {
 
     override suspend fun tokenizeLine(line: String): List<WordToken> =
         withContext(Dispatchers.Default) { WordTokenizer.tokenize(line) }
+
+    private fun wordTimingsFile(path: String) = File(sibling(path, ".words.txt"))
+
+    // One line per lyric line (blank if no words matched that line); each word as
+    // "wordstartMsendMs", words separated by tabs -- plain text, same spirit as the
+    // other sidecar caches here, no JSON dependency needed for this shape.
+    override fun wordTimingsForPath(path: String): Flow<List<List<WordTiming>>?> = flow {
+        emit(
+            withContext(Dispatchers.IO) {
+                val file = wordTimingsFile(path)
+                if (!file.exists()) return@withContext null
+                file.readLines().map { line ->
+                    if (line.isBlank()) {
+                        emptyList()
+                    } else {
+                        line.split("\t").mapNotNull { entry ->
+                            val parts = entry.split("")
+                            if (parts.size != 3) return@mapNotNull null
+                            val start = parts[1].toLongOrNull() ?: return@mapNotNull null
+                            val end = parts[2].toLongOrNull() ?: return@mapNotNull null
+                            WordTiming(parts[0], start, end)
+                        }
+                    }
+                }
+            },
+        )
+    }
+
+    override suspend fun saveWordTimings(path: String, perLine: List<List<WordTiming>>) {
+        withContext(Dispatchers.IO) {
+            val text = perLine.joinToString("\n") { words ->
+                words.joinToString("\t") { "${it.word}${it.startMs}${it.endMs}" }
+            }
+            wordTimingsFile(path).writeText(text)
+        }
+    }
 }

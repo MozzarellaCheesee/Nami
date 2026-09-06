@@ -46,6 +46,7 @@ dependencies {
     implementation(project(":core:database"))
     implementation(project(":core:designsystem"))
     implementation(project(":core:native"))
+    implementation(project(":core:whisper"))
     implementation(project(":domain"))
     implementation(project(":data"))
     implementation(project(":player"))
