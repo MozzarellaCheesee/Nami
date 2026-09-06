@@ -1,16 +1,22 @@
 // QueueScreen.kt
 package dev.nami.feature.player
 
+import androidx.compose.animation.core.animate
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,8 +43,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil3.compose.AsyncImage
 import dev.nami.core.designsystem.NamiColors
@@ -47,6 +56,7 @@ import dev.nami.domain.QueueOrigin
 
 private val QUEUE_ROW_HEIGHT = 64.dp
 private val ARTWORK_SIZE = 44.dp
+private const val DISMISS_THRESHOLD_DP = 120
 
 @Composable
 fun QueueScreen(
@@ -58,7 +68,32 @@ fun QueueScreen(
     val context = queue.upcoming.filter { it.origin == QueueOrigin.CONTEXT }
     val contextStartIndex = manual.size
 
-    Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
+    val density = LocalDensity.current
+    val dismissThresholdPx = with(density) { DISMISS_THRESHOLD_DP.dp.toPx() }
+    val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
+    var dragOffsetY by remember { mutableStateOf(0f) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .offset { IntOffset(0, dragOffsetY.roundToInt()) }
+            .background(NamiColors.Ink900)
+            .statusBarsPadding()
+            .draggable(
+                orientation = Orientation.Vertical,
+                state = rememberDraggableState { delta ->
+                    dragOffsetY = (dragOffsetY + delta).coerceAtLeast(0f)
+                },
+                onDragStopped = { velocity ->
+                    if (dragOffsetY > dismissThresholdPx || velocity > 2000f) {
+                        animate(dragOffsetY, screenHeightPx) { value, _ -> dragOffsetY = value }
+                        onBack()
+                    } else {
+                        animate(dragOffsetY, 0f) { value, _ -> dragOffsetY = value }
+                    }
+                },
+            ),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
             IconButton(onClick = onBack) {
                 Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
