@@ -58,6 +58,15 @@ val cargoNdkBuild by tasks.registering(Exec::class) {
         "-t", "arm64-v8a",
         "build", "--release",
     )
+    // whisper.cpp is built as a static lib linked into our cdylib, but that cdylib still
+    // dynamically links libc++_shared.so (the NDK's C++ runtime) -- without shipping it
+    // alongside, dlopen fails at runtime with "library libc++_shared.so not found".
+    doLast {
+        copy {
+            from("$ndkHome/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so")
+            into(file("src/main/jniLibs/arm64-v8a"))
+        }
+    }
 }
 
 val cargoHostBuild by tasks.registering(Exec::class) {
