@@ -256,8 +256,18 @@ fun ArtistDetailScreen(
                 .size(with(density) { currentWidthPx.toDp() }, with(density) { currentHeightPx.toDp() })
                 .clip(RoundedCornerShape(cornerRadiusDp.dp))
             if (effectivePhotoPath != null) {
+                // Decode size is pinned to the header's max dimensions regardless of the
+                // currently animated display size -- Modifier.size() changing every scroll frame
+                // otherwise makes Coil re-resolve (and often re-decode) the target size on every
+                // frame, which showed up as visible tearing/ghosting mid-slide. Compose just
+                // scales the one decoded bitmap to fit the animated size; that's a cheap redraw,
+                // not a new decode.
+                val request = coil3.request.ImageRequest.Builder(coil3.compose.LocalPlatformContext.current)
+                    .data(effectivePhotoPath)
+                    .size(screenWidthPx.roundToInt(), headerMaxHeightPx.roundToInt())
+                    .build()
                 AsyncImage(
-                    model = effectivePhotoPath,
+                    model = request,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = slideModifier,
