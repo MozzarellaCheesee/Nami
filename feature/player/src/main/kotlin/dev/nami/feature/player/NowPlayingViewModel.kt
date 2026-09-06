@@ -10,7 +10,9 @@ import dev.nami.domain.PlayableTrack
 import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerQueue
 import dev.nami.domain.PlayerRepository
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -24,10 +26,18 @@ class NowPlayingViewModel @Inject constructor(
     val playbackState: StateFlow<PlaybackState> = playerRepository.state
     val queue: StateFlow<PlayerQueue> = playerRepository.queue
 
+    private val _externalTrackChangeSignal = MutableStateFlow(0)
+    /** Bumped by playTrack/playFromLibrary/playTracks -- the "a track was selected from a list tap"
+     * entry points -- but never by skipNext/skipPrevious, so MiniPlayer can play its track-change
+     * slide animation for taps without it colliding with the animation a manual swipe already
+     * plays for itself. */
+    val externalTrackChangeSignal: StateFlow<Int> = _externalTrackChangeSignal.asStateFlow()
+
     fun playTrack(trackId: TrackId) {
         viewModelScope.launch {
             val track = libraryRepository.track(trackId).first() ?: return@launch
             playerRepository.play(listOf(track.toPlayableTrack(artistName = null)), startIndex = 0)
+            _externalTrackChangeSignal.value++
         }
     }
 
@@ -42,12 +52,14 @@ class NowPlayingViewModel @Inject constructor(
             val startIndex = tracks.indexOfFirst { it.id == trackId }
             if (startIndex < 0) return@launch
             playerRepository.play(tracks.map { it.toPlayableTrack(artistName = null) }, startIndex = startIndex)
+            _externalTrackChangeSignal.value++
         }
     }
 
     fun playTracks(tracks: List<Track>, artistName: String?, startIndex: Int) {
         viewModelScope.launch {
             playerRepository.play(tracks.map { it.toPlayableTrack(artistName) }, startIndex = startIndex)
+            _externalTrackChangeSignal.value++
         }
     }
 
