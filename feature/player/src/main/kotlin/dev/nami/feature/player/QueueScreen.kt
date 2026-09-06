@@ -7,7 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Box
@@ -97,6 +97,11 @@ fun QueueScreen(
     val dismissThresholdPx = with(density) { DISMISS_THRESHOLD_DP.dp.toPx() }
     val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
     var dragOffsetY by remember { mutableStateOf(0f) }
+    // The row actively being drag-reordered skips animateItem() -- otherwise its own placement
+    // animation (sliding to the new slot over ~a few hundred ms) fights the graphicsLayer offset
+    // correction that assumes the slot has already moved, causing a visible jump/lag under the
+    // finger. Non-dragged rows still animate out of the way normally.
+    var draggingKey by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier
@@ -150,14 +155,16 @@ fun QueueScreen(
                     )
                 }
                 itemsIndexed(manual, key = { index, _ -> manualKeys[index] }) { index, item ->
+                    val key = manualKeys[index]
                     QueueRow(
                         item = item,
                         onDragBy = { relativeMove ->
                             val target = (index + relativeMove).coerceIn(0, manual.lastIndex)
                             if (target != index) viewModel.moveQueueItem(index, target)
                         },
+                        onDraggingChange = { isDragging -> draggingKey = if (isDragging) key else null },
                         onRemove = { viewModel.removeQueueItem(index) },
-                        modifier = Modifier.animateItem(),
+                        modifier = if (draggingKey == key) Modifier else Modifier.animateItem(),
                     )
                 }
             }
@@ -170,14 +177,16 @@ fun QueueScreen(
                     )
                 }
                 itemsIndexed(context, key = { index, _ -> contextKeys[index] }) { index, item ->
+                    val key = contextKeys[index]
                     QueueRow(
                         item = item,
                         onDragBy = { relativeMove ->
                             val target = (index + relativeMove).coerceIn(0, context.lastIndex)
                             if (target != index) viewModel.moveQueueItem(contextStartIndex + index, contextStartIndex + target)
                         },
+                        onDraggingChange = { isDragging -> draggingKey = if (isDragging) key else null },
                         onRemove = { viewModel.removeQueueItem(contextStartIndex + index) },
-                        modifier = Modifier.animateItem(),
+                        modifier = if (draggingKey == key) Modifier else Modifier.animateItem(),
                     )
                 }
             }
@@ -214,8 +223,15 @@ private fun QueueTrackInfo(item: QueueItem, modifier: Modifier = Modifier) {
 // both reorderable and removable the same way. Drag the handle to reorder live (within its own
 // section), swipe left to remove -- no separate delete button, swipe is the only way out.
 @Composable
-private fun QueueRow(item: QueueItem, onDragBy: (Int) -> Unit, onRemove: () -> Unit, modifier: Modifier = Modifier) {
+private fun QueueRow(
+    item: QueueItem,
+    onDragBy: (Int) -> Unit,
+    onDraggingChange: (Boolean) -> Unit,
+    onRemove: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val currentOnDragBy by rememberUpdatedState(onDragBy)
+    val currentOnDraggingChange by rememberUpdatedState(onDraggingChange)
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
     // dragOffsetPx follows the finger exactly (visual only). firedOffsetPx tracks how much of
@@ -292,8 +308,13 @@ private fun QueueRow(item: QueueItem, onDragBy: (Int) -> Unit, onRemove: () -> U
                             .padding(start = 8.dp)
                             .size(40.dp)
                             .pointerInput(Unit) {
-                                detectDragGesturesAfterLongPress(
-                                    onDragStart = { dragging = true },
+                                // A dedicated handle icon, isolated from the row's own swipe/click
+                                // gestures -- no need to wait for a long press before it starts.
+                                detectDragGestures(
+                                    onDragStart = {
+                                        dragging = true
+                                        currentOnDraggingChange(true)
+                                    },
                                     onDrag = { change, dragAmount ->
                                         change.consume()
                                         dragOffsetPx += dragAmount.y
@@ -315,6 +336,7 @@ private fun QueueRow(item: QueueItem, onDragBy: (Int) -> Unit, onRemove: () -> U
                                     },
                                     onDragEnd = {
                                         dragging = false
+                                        currentOnDraggingChange(false)
                                         // Collapse to just the unspent residual (display value is
                                         // unchanged by this), then animate that down to 0.
                                         dragOffsetPx -= firedOffsetPx
@@ -323,6 +345,7 @@ private fun QueueRow(item: QueueItem, onDragBy: (Int) -> Unit, onRemove: () -> U
                                     },
                                     onDragCancel = {
                                         dragging = false
+                                        currentOnDraggingChange(false)
                                         dragOffsetPx -= firedOffsetPx
                                         firedOffsetPx = 0f
                                         scope.launch { animate(dragOffsetPx, 0f) { value, _ -> dragOffsetPx = value } }
