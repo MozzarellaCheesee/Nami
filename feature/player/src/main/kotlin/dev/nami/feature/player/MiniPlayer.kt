@@ -23,6 +23,9 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import coil3.compose.AsyncImage
+import coil3.compose.LocalPlatformContext
+import coil3.imageLoader
+import coil3.request.ImageRequest
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
@@ -80,6 +83,16 @@ fun MiniPlayer(
     androidx.compose.runtime.LaunchedEffect(queue.nowPlaying?.id) {
         dragOffsetY = 0f
         artworkOffsetX = 0f
+    }
+
+    // See the matching comment in NowPlayingScreen -- kick off the neighbor artwork's decode as
+    // soon as it's known, so it's already cached by the time a swipe reveals it.
+    val prefetchContext = LocalPlatformContext.current
+    androidx.compose.runtime.LaunchedEffect(queue.previousTrack?.artworkPath, queue.upcoming.firstOrNull()?.track?.artworkPath) {
+        val loader = prefetchContext.imageLoader
+        listOfNotNull(queue.previousTrack?.artworkPath, queue.upcoming.firstOrNull()?.track?.artworkPath).forEach { path ->
+            loader.enqueue(ImageRequest.Builder(prefetchContext).data(path).build())
+        }
     }
 
     val externalTrackChangeSignal by viewModel.externalTrackChangeSignal.collectAsState()

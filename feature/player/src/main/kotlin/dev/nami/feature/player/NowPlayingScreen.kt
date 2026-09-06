@@ -53,6 +53,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil3.compose.AsyncImage
+import coil3.compose.LocalPlatformContext
+import coil3.imageLoader
+import coil3.request.ImageRequest
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.domain.PlaybackState
 import kotlin.math.roundToInt
@@ -85,6 +88,19 @@ fun NowPlayingScreen(
     // coroutine that got cancelled mid-animation (e.g. gesture interrupted). Without this the
     // offset can get stuck non-zero, showing the artwork sheared off to one side.
     androidx.compose.runtime.LaunchedEffect(queue.nowPlaying?.id) { artworkOffsetX = 0f }
+
+    // Previous/next artwork is always composed (just clipped off-screen at rest), but Coil only
+    // starts decoding once its request actually reaches the disk/memory cache -- for a track
+    // that's never been loaded before, that can take longer than the time between the queue
+    // updating and the user starting a swipe, showing the placeholder mid-drag. Kick off the
+    // decode as soon as the neighbor is known, well ahead of any gesture.
+    val prefetchContext = LocalPlatformContext.current
+    androidx.compose.runtime.LaunchedEffect(queue.previousTrack?.artworkPath, queue.upcoming.firstOrNull()?.track?.artworkPath) {
+        val loader = prefetchContext.imageLoader
+        listOfNotNull(queue.previousTrack?.artworkPath, queue.upcoming.firstOrNull()?.track?.artworkPath).forEach { path ->
+            loader.enqueue(ImageRequest.Builder(prefetchContext).data(path).build())
+        }
+    }
 
     // Shared by the swipe gesture and the chevron button so both dismiss paths always finish
     // the slide-down themselves before popping -- see the comment on the swipe branch below.
