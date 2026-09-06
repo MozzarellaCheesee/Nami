@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.nami.core.model.AlbumId
 import dev.nami.core.model.AlbumSummary
 import dev.nami.core.model.Artist
 import dev.nami.core.model.Track
@@ -20,6 +21,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -30,6 +32,7 @@ data class LibraryUiState(
     val selectedTab: LibraryTab = LibraryTab.TRACKS,
     val lastDeletedTrackIds: Set<TrackId> = emptySet(),
     val selectedTrackIds: Set<TrackId> = emptySet(),
+    val selectedAlbumIds: Set<AlbumId> = emptySet(),
 )
 
 @HiltViewModel
@@ -155,5 +158,33 @@ class LibraryViewModel @Inject constructor(
 
     fun dismissDeleteSnackbar() {
         _uiState.value = _uiState.value.copy(lastDeletedTrackIds = emptySet())
+    }
+
+    fun renameTrack(id: TrackId, title: String) {
+        viewModelScope.launch { libraryRepository.renameTrack(id, title) }
+    }
+
+    fun toggleAlbumSelection(id: AlbumId) {
+        val current = _uiState.value.selectedAlbumIds
+        _uiState.value = _uiState.value.copy(
+            selectedAlbumIds = if (id in current) current - id else current + id,
+        )
+    }
+
+    fun clearAlbumSelection() {
+        _uiState.value = _uiState.value.copy(selectedAlbumIds = emptySet())
+    }
+
+    fun deleteSelectedAlbums() {
+        val ids = _uiState.value.selectedAlbumIds
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            ids.forEach { albumId ->
+                val trackIds = libraryRepository.tracksInAlbum(albumId).first().map { it.id }
+                libraryRepository.deleteTracks(trackIds)
+            }
+            refreshRecentAlbums()
+            clearAlbumSelection()
+        }
     }
 }

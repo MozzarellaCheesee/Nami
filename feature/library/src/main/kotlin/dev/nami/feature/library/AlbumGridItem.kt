@@ -1,7 +1,8 @@
 package dev.nami.feature.library
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -25,30 +27,43 @@ import coil3.compose.AsyncImage
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.model.AlbumSummary
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AlbumGridItem(
     album: AlbumSummary,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     onMoreClick: (() -> Unit)? = null,
+    selectionMode: Boolean = false,
+    isSelected: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier.fillMaxWidth().clickable(onClick = onClick)) {
-        if (album.artworkPath != null) {
-            AsyncImage(
-                model = album.artworkPath,
-                contentDescription = album.title,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1f)
-                    .background(NamiColors.Ink700, RoundedCornerShape(4.dp)),
-            )
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1f)
-                    .background(NamiColors.Ink700, RoundedCornerShape(4.dp)),
-            )
+    Column(modifier = modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick)) {
+        Box {
+            if (album.artworkPath != null) {
+                AsyncImage(
+                    model = album.artworkPath,
+                    contentDescription = album.title,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1f)
+                        .background(NamiColors.Ink700, RoundedCornerShape(4.dp)),
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1f)
+                        .background(NamiColors.Ink700, RoundedCornerShape(4.dp)),
+                )
+            }
+            if (selectionMode) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = null,
+                    modifier = Modifier.align(Alignment.TopEnd),
+                )
+            }
         }
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -62,7 +77,7 @@ fun AlbumGridItem(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            if (onMoreClick != null) {
+            if (onMoreClick != null && !selectionMode) {
                 IconButton(onClick = onMoreClick, modifier = Modifier.size(24.dp)) {
                     Icon(Icons.Filled.MoreVert, contentDescription = "Действия с альбомом", tint = NamiColors.Paper40)
                 }

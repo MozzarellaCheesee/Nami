@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlaylistAdd
@@ -45,6 +46,8 @@ fun TrackListItem(
     onAddToQueue: (() -> Unit)? = null,
     onAddToPlaylist: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
+    onRename: (() -> Unit)? = null,
+    onRemoveFromAlbum: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
     selectionMode: Boolean = false,
     isSelected: Boolean = false,
@@ -93,7 +96,7 @@ fun TrackListItem(
         }
         if (selectionMode) {
             Checkbox(checked = isSelected, onCheckedChange = null)
-        } else if (onAddToPlaylist != null || onAddToQueue != null || onDelete != null) {
+        } else if (onAddToPlaylist != null || onAddToQueue != null || onDelete != null || onRename != null || onRemoveFromAlbum != null) {
             Box {
                 IconButton(onClick = { showMenu = true }) {
                     Icon(Icons.Filled.MoreVert, contentDescription = "Ещё", tint = NamiColors.Paper40)
@@ -110,6 +113,20 @@ fun TrackListItem(
                         DropdownMenuItem(
                             text = { Text("В очередь") },
                             leadingIcon = { Icon(Icons.Filled.PlaylistAdd, contentDescription = null) },
+                            onClick = { showMenu = false; action() },
+                        )
+                    }
+                    onRename?.let { action ->
+                        DropdownMenuItem(
+                            text = { Text("Переименовать") },
+                            leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
+                            onClick = { showMenu = false; action() },
+                        )
+                    }
+                    onRemoveFromAlbum?.let { action ->
+                        DropdownMenuItem(
+                            text = { Text("Убрать из альбома") },
+                            leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) },
                             onClick = { showMenu = false; action() },
                         )
                     }

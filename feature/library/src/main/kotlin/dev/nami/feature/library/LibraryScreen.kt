@@ -94,10 +94,13 @@ fun LibraryScreen(
     val tracks = viewModel.tracks.collectAsLazyPagingItems()
     var addToPlaylistTrackId by remember { mutableStateOf<TrackId?>(null) }
     var showAddSelectedToPlaylist by remember { mutableStateOf(false) }
+    var renameTrack by remember { mutableStateOf<Track?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val selectionMode = uiState.selectedTrackIds.isNotEmpty()
+    val albumSelectionMode = uiState.selectedAlbumIds.isNotEmpty()
 
     BackHandler(enabled = selectionMode) { viewModel.clearSelection() }
+    BackHandler(enabled = albumSelectionMode) { viewModel.clearAlbumSelection() }
 
     DisposableEffect(Unit) {
         onDispose { viewModel.clearSelection() }
@@ -146,6 +149,12 @@ fun LibraryScreen(
                         onDelete = viewModel::deleteSelectedTracks,
                         onAddToPlaylist = { showAddSelectedToPlaylist = true },
                     )
+                } else if (albumSelectionMode) {
+                    AlbumSelectionTopBar(
+                        selectedCount = uiState.selectedAlbumIds.size,
+                        onCancel = viewModel::clearAlbumSelection,
+                        onDelete = viewModel::deleteSelectedAlbums,
+                    )
                 } else {
                     LibraryChipsRow(selected = uiState.selectedTab, onSelect = viewModel::selectTab)
                 }
@@ -163,8 +172,16 @@ fun LibraryScreen(
                         onDelete = { trackId -> viewModel.deleteTrack(trackId) },
                         onToggleSelection = { trackId -> viewModel.toggleTrackSelection(trackId) },
                         onSetSelection = { ids -> viewModel.setSelectedTracks(ids) },
+                        onRenameTrack = { track -> renameTrack = track },
                     )
-                    LibraryTab.ALBUMS -> AlbumGridContent(viewModel, albumGridState, onAlbumClick)
+                    LibraryTab.ALBUMS -> AlbumGridContent(
+                        viewModel = viewModel,
+                        gridState = albumGridState,
+                        onAlbumClick = onAlbumClick,
+                        albumSelectionMode = albumSelectionMode,
+                        selectedAlbumIds = uiState.selectedAlbumIds,
+                        onToggleAlbumSelection = { albumId -> viewModel.toggleAlbumSelection(albumId) },
+                    )
                     LibraryTab.ARTISTS -> ArtistListContent(viewModel, artistListState, onArtistClick)
                 }
             }
@@ -201,6 +218,15 @@ fun LibraryScreen(
 
     addToPlaylistTrackId?.let { trackId ->
         AddToPlaylistDialog(trackIds = setOf(trackId), onDismiss = { addToPlaylistTrackId = null })
+    }
+
+    renameTrack?.let { track ->
+        RenameDialog(
+            currentName = track.title,
+            title = "Переименовать трек",
+            onRename = { newTitle -> viewModel.renameTrack(track.id, newTitle) },
+            onDismiss = { renameTrack = null },
+        )
     }
 
     if (showAddSelectedToPlaylist) {
@@ -259,6 +285,27 @@ private fun SelectionTopBar(
         IconButton(onClick = onAddToPlaylist) {
             Icon(Icons.Filled.LibraryAdd, contentDescription = "В плейлист", tint = NamiColors.Paper70)
         }
+        IconButton(onClick = onDelete) {
+            Icon(Icons.Filled.Delete, contentDescription = "Удалить", tint = NamiColors.Paper70)
+        }
+    }
+}
+
+@Composable
+private fun AlbumSelectionTopBar(selectedCount: Int, onCancel: () -> Unit, onDelete: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onCancel) {
+            Icon(Icons.Filled.Close, contentDescription = "Отменить выбор", tint = NamiColors.Paper100)
+        }
+        Text(
+            text = "Выбрано: $selectedCount",
+            color = NamiColors.Paper100,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f).padding(start = 8.dp),
+        )
         IconButton(onClick = onDelete) {
             Icon(Icons.Filled.Delete, contentDescription = "Удалить", tint = NamiColors.Paper70)
         }
@@ -350,6 +397,7 @@ private fun TrackListContent(
     onDelete: (TrackId) -> Unit,
     onToggleSelection: (TrackId) -> Unit,
     onSetSelection: (Set<TrackId>) -> Unit,
+    onRenameTrack: (Track) -> Unit,
 ) {
     if (tracks.itemCount == 0) {
         EmptyLibraryMessage()
@@ -457,6 +505,7 @@ private fun TrackListContent(
                         isSelected = track.id in selectedTrackIds,
                         onAddToPlaylist = if (selectionMode) null else { { onAddToPlaylist(track.id) } },
                         onDelete = if (selectionMode) null else { { onDelete(track.id) } },
+                        onRename = if (selectionMode) null else { { onRenameTrack(track) } },
                     )
                 }
             }
@@ -496,7 +545,14 @@ private fun DiscographySection(
 }
 
 @Composable
-private fun AlbumGridContent(viewModel: LibraryViewModel, gridState: LazyGridState, onAlbumClick: (AlbumId) -> Unit) {
+private fun AlbumGridContent(
+    viewModel: LibraryViewModel,
+    gridState: LazyGridState,
+    onAlbumClick: (AlbumId) -> Unit,
+    albumSelectionMode: Boolean,
+    selectedAlbumIds: Set<AlbumId>,
+    onToggleAlbumSelection: (AlbumId) -> Unit,
+) {
     val albums = viewModel.albums.collectAsLazyPagingItems()
     if (albums.itemCount == 0) {
         EmptyLibraryMessage()
@@ -506,7 +562,12 @@ private fun AlbumGridContent(viewModel: LibraryViewModel, gridState: LazyGridSta
                 albums[index]?.let { album ->
                     AlbumGridItem(
                         album = album,
-                        onClick = { onAlbumClick(album.id) },
+                        onClick = {
+                            if (albumSelectionMode) onToggleAlbumSelection(album.id) else onAlbumClick(album.id)
+                        },
+                        onLongClick = { onToggleAlbumSelection(album.id) },
+                        selectionMode = albumSelectionMode,
+                        isSelected = album.id in selectedAlbumIds,
                         modifier = Modifier.padding(8.dp),
                     )
                 }
