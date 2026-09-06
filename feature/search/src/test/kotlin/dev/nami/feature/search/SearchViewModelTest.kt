@@ -29,7 +29,7 @@ class SearchViewModelTest {
     fun `updating query debounces then emits results`() = runTest {
         val fakeRepo = object : SearchRepository {
             override suspend fun search(query: String): List<SearchResult> =
-                listOf(SearchResult.TrackResult(TrackId("t1"), "Window View", "Farewell225"))
+                listOf(SearchResult.TrackResult(TrackId("t1"), "Window View", "Farewell225", null))
             override suspend fun rebuildIndex() {}
         }
         val viewModel = SearchViewModel(fakeRepo)

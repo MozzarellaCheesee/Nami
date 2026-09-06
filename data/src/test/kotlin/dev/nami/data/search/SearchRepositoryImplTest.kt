@@ -48,7 +48,7 @@ class SearchRepositoryImplTest {
         override fun pagingSource(): PagingSource<Int, TrackDao.TrackWithArtwork> = error("unused")
         override suspend fun allOrderedWithArtwork(): List<TrackDao.TrackWithArtwork> = error("unused")
         override suspend fun findById(id: String): TrackEntity? = error("unused")
-        override suspend fun findByIdWithArtwork(id: String): TrackDao.TrackWithArtwork? = error("unused")
+        override suspend fun findByIdWithArtwork(id: String): TrackDao.TrackWithArtwork? = null
         override suspend fun findByPath(path: String): TrackEntity? = error("unused")
         override suspend fun findDuplicate(title: String, artistId: String?, albumId: String?, durationMs: Long): TrackEntity? = error("unused")
         override suspend fun insertAll(tracks: List<TrackEntity>) = error("unused")
@@ -69,7 +69,7 @@ class SearchRepositoryImplTest {
     }
 
     private fun fakeAlbumDao(rows: List<AlbumDao.AlbumListRow> = emptyList()) = object : AlbumDao {
-        override suspend fun findById(id: String): AlbumEntity? = error("unused")
+        override suspend fun findById(id: String): AlbumEntity? = null
         override suspend fun findByTitleAndArtist(title: String, artistId: String?): AlbumEntity? = error("unused")
         override suspend fun albumsByArtist(artistId: String): List<AlbumEntity> = error("unused")
         override fun pagingSource(): PagingSource<Int, AlbumDao.AlbumListRow> = error("unused")
@@ -171,8 +171,8 @@ class SearchRepositoryImplTest {
         assertEquals("flac", capturedFormat)
         assertEquals(2023, capturedYear)
         assertEquals(3, results.size)
-        assertEquals(SearchResult.TrackResult(dev.nami.core.model.TrackId("t1"), "Window View", "Farewell225"), results[0])
-        assertEquals(SearchResult.AlbumResult(dev.nami.core.model.AlbumId("al1"), "Doujin Compilation", "Farewell225"), results[1])
+        assertEquals(SearchResult.TrackResult(dev.nami.core.model.TrackId("t1"), "Window View", "Farewell225", null), results[0])
+        assertEquals(SearchResult.AlbumResult(dev.nami.core.model.AlbumId("al1"), "Doujin Compilation", "Farewell225", null), results[1])
         assertEquals(SearchResult.ArtistResult(dev.nami.core.model.ArtistId("a1"), "Farewell225"), results[2])
     }
 

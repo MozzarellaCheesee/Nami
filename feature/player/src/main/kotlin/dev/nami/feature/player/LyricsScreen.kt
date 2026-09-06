@@ -191,14 +191,34 @@ fun LyricsScreen(
             IconButton(onClick = { onBack() }) {
                 Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
             }
-            Text(
-                text = "Текст песни",
-                color = NamiColors.Paper100,
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 1,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
+                    .background(NamiColors.Ink700),
+            ) {
+                queue.nowPlaying?.artworkPath?.let { path ->
+                    AsyncImage(model = path, contentDescription = null, modifier = Modifier.fillMaxSize())
+                }
+            }
+            Column(modifier = Modifier.weight(1f).padding(start = 10.dp)) {
+                Text(
+                    text = queue.nowPlaying?.title ?: "Текст песни",
+                    color = NamiColors.Paper100,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+                queue.nowPlaying?.artistName?.let { artist ->
+                    Text(
+                        text = artist,
+                        color = NamiColors.Ai,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                }
+            }
             val hasLyrics = uiState.lyrics != null && uiState.lyrics!!.lines.isNotEmpty()
             if (hasLyrics) {
                 IconButton(onClick = { showToolsMenu = !showToolsMenu }) {

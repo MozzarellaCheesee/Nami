@@ -16,7 +16,11 @@ import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.onEach
 import javax.inject.Inject
 
-data class SearchUiState(val query: String = "", val results: List<SearchResult> = emptyList())
+data class SearchUiState(
+    val query: String = "",
+    val results: List<SearchResult> = emptyList(),
+    val recentQueries: List<String> = emptyList(),
+)
 
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 @HiltViewModel
@@ -29,18 +33,45 @@ class SearchViewModel @Inject constructor(
 
     private val queryFlow = MutableStateFlow("")
 
+    // In-memory only (not persisted) -- a nice-to-have recall of this session's own searches,
+    // not a durable history feature (Дизайн.md's mock shows it as a light convenience, not
+    // something worth a DB table + migration for).
+    private val recentQueries = LinkedHashSet<String>()
+    private companion object {
+        const val MAX_RECENT = 8
+    }
+
     init {
         queryFlow
             .debounce(200)
             .mapLatest { query ->
                 if (query.isBlank()) emptyList() else searchRepository.search(query)
             }
-            .onEach { results -> _uiState.value = _uiState.value.copy(results = results) }
+            .onEach { results ->
+                _uiState.value = _uiState.value.copy(results = results)
+                // Records a search once it actually found something, debounced (200ms of no
+                // typing) -- not on every keystroke, which would fill the list with fragments
+                // instead of finished searches.
+                if (results.isNotEmpty()) rememberQuery(_uiState.value.query)
+            }
             .launchIn(viewModelScope)
     }
 
     fun onQueryChange(query: String) {
         _uiState.value = _uiState.value.copy(query = query)
         queryFlow.value = query
+    }
+
+    private fun rememberQuery(query: String) {
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) return
+        recentQueries.remove(trimmed)
+        recentQueries.add(trimmed)
+        while (recentQueries.size > MAX_RECENT) recentQueries.remove(recentQueries.first())
+        _uiState.value = _uiState.value.copy(recentQueries = recentQueries.toList().asReversed())
+    }
+
+    fun onRecentQueryClick(query: String) {
+        onQueryChange(query)
     }
 }

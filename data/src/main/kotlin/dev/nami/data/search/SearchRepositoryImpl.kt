@@ -58,9 +58,15 @@ class SearchRepositoryImpl @Inject constructor(
         return rows.map { it.toDomain() }
     }
 
-    private fun SearchDao.SearchResultRow.toDomain(): SearchResult = when (type) {
-        "track" -> SearchResult.TrackResult(TrackId(itemId), title, subtitle)
-        "album" -> SearchResult.AlbumResult(AlbumId(itemId), title, subtitle)
+    // The FTS index itself doesn't carry artwork (adding a column to an fts5 table needs care,
+    // and search results are already capped at 50 with debounced typing, so a per-result lookup
+    // against the existing track/album DAOs is simpler than migrating the index for this).
+    private suspend fun SearchDao.SearchResultRow.toDomain(): SearchResult = when (type) {
+        "track" -> {
+            val track = trackDao.findByIdWithArtwork(itemId)
+            SearchResult.TrackResult(TrackId(itemId), title, subtitle, track?.albumArtworkPath ?: track?.track?.artworkPath)
+        }
+        "album" -> SearchResult.AlbumResult(AlbumId(itemId), title, subtitle, albumDao.findById(itemId)?.artworkPath)
         else -> SearchResult.ArtistResult(ArtistId(itemId), title)
     }
 }
