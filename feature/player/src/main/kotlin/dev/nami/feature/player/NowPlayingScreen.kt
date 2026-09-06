@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -109,6 +110,7 @@ fun NowPlayingScreen(
             .fillMaxSize()
             .offset { IntOffset(0, dragOffsetY.roundToInt()) }
             .background(NamiColors.Ink900)
+            .statusBarsPadding()
             .navigationBarsPadding()
             .draggable(
                 orientation = Orientation.Vertical,
@@ -241,7 +243,7 @@ fun NowPlayingScreen(
             onSeek = { fraction -> viewModel.seek((fraction * durationMs).toLong()) },
             onProgressPreview = { fraction -> previewProgress = fraction },
             onPreviewEnd = { previewProgress = null },
-            modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
         )
         Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(
@@ -258,8 +260,15 @@ fun NowPlayingScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 8.dp),
-            horizontalArrangement = Arrangement.Center,
+                .padding(top = 16.dp),
+            // SpaceEvenly instead of Center: the play button (64dp) is much bigger than
+            // prev/next (48dp default touch target), so a plain Center bunched them together
+            // off to one side instead of spread evenly across the row.
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            // Center: prev/next (48dp) and play (64dp) differ in height -- Row defaults to
+            // top-aligning children, which floated the smaller buttons above the play button's
+            // vertical center instead of level with it.
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = {
                 // A previous track to show -> animate the pager, same as a swipe (forces the
