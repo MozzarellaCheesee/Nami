@@ -181,7 +181,10 @@ fun QueueScreen(
     // the same breath so only the outer AnimatedVisibility's own exit transition (in
     // NamiNavHost) animates the slide-down, instead of two competing animations.
     fun dismiss() {
-        dragOffsetY = 0f
+        // Not resetting dragOffsetY here -- doing so snapped the screen back to the top for one
+        // frame (visible as a jump/teleport) before AnimatedVisibility's own exit transition
+        // started sliding it back down from 0. Leaving it wherever the swipe left it means the
+        // screen is already most of the way off-screen when the exit transition takes over.
         onBack()
     }
 
