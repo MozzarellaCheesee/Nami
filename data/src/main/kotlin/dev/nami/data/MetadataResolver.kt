@@ -12,11 +12,24 @@ class MetadataResolver @Inject constructor(
     private val albumDao: AlbumDao,
 ) {
     suspend fun resolveArtist(name: String?): String? {
-        if (name.isNullOrBlank()) return null
-        artistDao.findByName(name)?.let { return it.id }
+        val primaryName = primaryArtistName(name) ?: return null
+        artistDao.findByName(primaryName)?.let { return it.id }
         val id = UUID.randomUUID().toString()
-        artistDao.insert(ArtistEntity(id = id, name = name, sortName = name))
+        artistDao.insert(ArtistEntity(id = id, name = primaryName, sortName = primaryName))
         return id
+    }
+
+    // "Artist A feat. Artist B" / "Artist A ft. B" / "Artist A (feat. B)" tags would otherwise
+    // resolve as a brand-new, distinct artist (and thus a new album) per collaboration credit --
+    // keep just the primary artist so featured guests don't fragment the library.
+    private val featPattern = Regex(
+        """\s*[(\[]?\s*(feat\.?|ft\.?|featuring)\s+.*""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    internal fun primaryArtistName(name: String?): String? {
+        if (name.isNullOrBlank()) return null
+        return name.replace(featPattern, "").trim().takeIf { it.isNotBlank() } ?: name.trim()
     }
 
     suspend fun resolveAlbum(title: String?, artistId: String?, year: Int? = null): String? {
