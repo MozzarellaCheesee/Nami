@@ -9,4 +9,5 @@ data class Album(
     val artistId: ArtistId?,
     val year: Int?,
     val artworkPath: String?,
+    val isSingle: Boolean = false,
 )

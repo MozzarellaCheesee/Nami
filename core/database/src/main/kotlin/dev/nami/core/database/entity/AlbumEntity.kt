@@ -23,4 +23,5 @@ data class AlbumEntity(
     val artistId: String?,
     val year: Int?,
     val artworkPath: String?,
+    val isSingle: Boolean = false,
 )

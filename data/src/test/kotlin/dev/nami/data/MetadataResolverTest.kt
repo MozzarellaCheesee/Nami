@@ -23,6 +23,8 @@ class MetadataResolverTest {
             override suspend fun findByIdWithPhoto(id: String): ArtistDao.ArtistWithPhoto? = error("unused")
             override suspend fun allForIndexing(): List<ArtistEntity> = error("unused")
             override suspend fun setPhotoPath(id: String, path: String) = error("unused")
+            override suspend fun updateName(id: String, name: String) = error("unused")
+            override suspend fun updatePhotoPath(id: String, path: String) = error("unused")
         }
         val albumDao = object : AlbumDao {
             override suspend fun findById(id: String): AlbumEntity? = null
@@ -30,6 +32,9 @@ class MetadataResolverTest {
             override suspend fun albumsByArtist(artistId: String): List<AlbumEntity> = error("unused")
             override suspend fun insert(album: AlbumEntity) = error("unused")
             override suspend fun setArtworkPath(id: String, path: String) = error("unused")
+            override suspend fun updateTitle(id: String, title: String) = error("unused")
+            override suspend fun updateArtworkPath(id: String, path: String) = error("unused")
+            override suspend fun setIsSingle(id: String, isSingle: Boolean) = error("unused")
             override fun pagingSource(): PagingSource<Int, AlbumDao.AlbumListRow> = error("unused")
             override suspend fun recentAlbums(limit: Int): List<AlbumDao.AlbumListRow> = error("unused")
             override suspend fun allForIndexing(): List<AlbumDao.AlbumListRow> = error("unused")
@@ -52,6 +57,8 @@ class MetadataResolverTest {
             override suspend fun findByIdWithPhoto(id: String): ArtistDao.ArtistWithPhoto? = error("unused")
             override suspend fun allForIndexing(): List<ArtistEntity> = error("unused")
             override suspend fun setPhotoPath(id: String, path: String) = error("unused")
+            override suspend fun updateName(id: String, name: String) = error("unused")
+            override suspend fun updatePhotoPath(id: String, path: String) = error("unused")
         }
         val albumDao = object : AlbumDao {
             override suspend fun findById(id: String): AlbumEntity? = null
@@ -59,6 +66,9 @@ class MetadataResolverTest {
             override suspend fun albumsByArtist(artistId: String): List<AlbumEntity> = error("unused")
             override suspend fun insert(album: AlbumEntity) = error("unused")
             override suspend fun setArtworkPath(id: String, path: String) = error("unused")
+            override suspend fun updateTitle(id: String, title: String) = error("unused")
+            override suspend fun updateArtworkPath(id: String, path: String) = error("unused")
+            override suspend fun setIsSingle(id: String, isSingle: Boolean) = error("unused")
             override fun pagingSource(): PagingSource<Int, AlbumDao.AlbumListRow> = error("unused")
             override suspend fun recentAlbums(limit: Int): List<AlbumDao.AlbumListRow> = error("unused")
             override suspend fun allForIndexing(): List<AlbumDao.AlbumListRow> = error("unused")
@@ -82,6 +92,8 @@ class MetadataResolverTest {
             override suspend fun findByIdWithPhoto(id: String): ArtistDao.ArtistWithPhoto? = error("unused")
             override suspend fun allForIndexing(): List<ArtistEntity> = error("unused")
             override suspend fun setPhotoPath(id: String, path: String) = error("unused")
+            override suspend fun updateName(id: String, name: String) = error("unused")
+            override suspend fun updatePhotoPath(id: String, path: String) = error("unused")
         }
         val albumDao = object : AlbumDao {
             override suspend fun findById(id: String): AlbumEntity? = null
@@ -89,6 +101,9 @@ class MetadataResolverTest {
             override suspend fun albumsByArtist(artistId: String): List<AlbumEntity> = error("unused")
             override suspend fun insert(album: AlbumEntity) = error("unused")
             override suspend fun setArtworkPath(id: String, path: String) = error("unused")
+            override suspend fun updateTitle(id: String, title: String) = error("unused")
+            override suspend fun updateArtworkPath(id: String, path: String) = error("unused")
+            override suspend fun setIsSingle(id: String, isSingle: Boolean) = error("unused")
             override fun pagingSource(): PagingSource<Int, AlbumDao.AlbumListRow> = error("unused")
             override suspend fun recentAlbums(limit: Int): List<AlbumDao.AlbumListRow> = error("unused")
             override suspend fun allForIndexing(): List<AlbumDao.AlbumListRow> = error("unused")
@@ -112,6 +127,8 @@ class MetadataResolverTest {
             override suspend fun findByIdWithPhoto(id: String): ArtistDao.ArtistWithPhoto? = error("unused")
             override suspend fun allForIndexing(): List<ArtistEntity> = error("unused")
             override suspend fun setPhotoPath(id: String, path: String) = error("unused")
+            override suspend fun updateName(id: String, name: String) = error("unused")
+            override suspend fun updatePhotoPath(id: String, path: String) = error("unused")
         }
         val albumDao = object : AlbumDao {
             override suspend fun findById(id: String): AlbumEntity? = null
@@ -119,6 +136,9 @@ class MetadataResolverTest {
             override suspend fun albumsByArtist(artistId: String): List<AlbumEntity> = error("unused")
             override suspend fun insert(album: AlbumEntity) = error("unused")
             override suspend fun setArtworkPath(id: String, path: String) = error("unused")
+            override suspend fun updateTitle(id: String, title: String) = error("unused")
+            override suspend fun updateArtworkPath(id: String, path: String) = error("unused")
+            override suspend fun setIsSingle(id: String, isSingle: Boolean) = error("unused")
             override fun pagingSource(): PagingSource<Int, AlbumDao.AlbumListRow> = error("unused")
             override suspend fun recentAlbums(limit: Int): List<AlbumDao.AlbumListRow> = error("unused")
             override suspend fun allForIndexing(): List<AlbumDao.AlbumListRow> = error("unused")
@@ -139,6 +159,8 @@ class MetadataResolverTest {
             override suspend fun findByIdWithPhoto(id: String): ArtistDao.ArtistWithPhoto? = error("unused")
             override suspend fun allForIndexing(): List<ArtistEntity> = error("unused")
             override suspend fun setPhotoPath(id: String, path: String) = error("unused")
+            override suspend fun updateName(id: String, name: String) = error("unused")
+            override suspend fun updatePhotoPath(id: String, path: String) = error("unused")
         }
         val albumDao = object : AlbumDao {
             override suspend fun findById(id: String): AlbumEntity? = null
@@ -146,6 +168,9 @@ class MetadataResolverTest {
             override suspend fun albumsByArtist(artistId: String): List<AlbumEntity> = error("unused")
             override suspend fun insert(album: AlbumEntity) { inserted = album }
             override suspend fun setArtworkPath(id: String, path: String) = error("unused")
+            override suspend fun updateTitle(id: String, title: String) = error("unused")
+            override suspend fun updateArtworkPath(id: String, path: String) = error("unused")
+            override suspend fun setIsSingle(id: String, isSingle: Boolean) = error("unused")
             override fun pagingSource(): PagingSource<Int, AlbumDao.AlbumListRow> = error("unused")
             override suspend fun recentAlbums(limit: Int): List<AlbumDao.AlbumListRow> = error("unused")
             override suspend fun allForIndexing(): List<AlbumDao.AlbumListRow> = error("unused")

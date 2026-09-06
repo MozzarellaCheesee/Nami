@@ -52,6 +52,17 @@ interface AlbumDao {
     @Query("UPDATE albums SET artworkPath = :path WHERE id = :id AND artworkPath IS NULL")
     suspend fun setArtworkPath(id: String, path: String)
 
+    @Query("UPDATE albums SET title = :title WHERE id = :id")
+    suspend fun updateTitle(id: String, title: String)
+
+    // Unconditional -- unlike setArtworkPath (import's "only if null" writer), this is for the
+    // user explicitly replacing an album's cover.
+    @Query("UPDATE albums SET artworkPath = :path WHERE id = :id")
+    suspend fun updateArtworkPath(id: String, path: String)
+
+    @Query("UPDATE albums SET isSingle = :isSingle WHERE id = :id")
+    suspend fun setIsSingle(id: String, isSingle: Boolean)
+
     @Query(
         """
         SELECT albums.id AS id, albums.title AS title, artists.name AS artistName, albums.artworkPath AS artworkPath

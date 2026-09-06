@@ -22,6 +22,15 @@ interface LibraryRepository {
     fun album(id: AlbumId): Flow<Album?>
     fun artist(id: ArtistId): Flow<Artist?>
     fun tracksInAlbum(id: AlbumId): Flow<List<Track>>
+    suspend fun renameTrack(id: TrackId, title: String)
+    suspend fun setTrackCover(id: TrackId, imageUri: String)
+    suspend fun renameAlbum(id: AlbumId, title: String)
+    suspend fun setAlbumCover(id: AlbumId, imageUri: String)
+    suspend fun setAlbumIsSingle(id: AlbumId, isSingle: Boolean)
+    suspend fun addTrackToAlbum(trackId: TrackId, albumId: AlbumId)
+    suspend fun removeTrackFromAlbum(trackId: TrackId)
+    suspend fun renameArtist(id: ArtistId, name: String)
+    suspend fun setArtistPhoto(id: ArtistId, imageUri: String)
     fun tracksByArtist(id: ArtistId): Flow<List<Track>>
     fun albumsByArtist(id: ArtistId): Flow<List<AlbumSummary>>
     suspend fun import(source: ImportSource): Flow<ImportProgress>

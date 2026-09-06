@@ -85,6 +85,45 @@ class LibraryRepositoryImpl @Inject constructor(
         emit(trackDao.tracksForAlbum(id.value).map { it.toDomain() })
     }
 
+    override suspend fun renameTrack(id: TrackId, title: String) {
+        trackDao.updateTitle(id.value, title)
+    }
+
+    override suspend fun setTrackCover(id: TrackId, imageUri: String) {
+        val bytes = context.contentResolver.openInputStream(imageUri.toUri())?.use { it.readBytes() } ?: return
+        artworkStore.save(id.value, bytes)?.let { path -> trackDao.updateArtworkPath(id.value, path) }
+    }
+
+    override suspend fun renameAlbum(id: AlbumId, title: String) {
+        albumDao.updateTitle(id.value, title)
+    }
+
+    override suspend fun setAlbumCover(id: AlbumId, imageUri: String) {
+        val bytes = context.contentResolver.openInputStream(imageUri.toUri())?.use { it.readBytes() } ?: return
+        artworkStore.save(id.value, bytes)?.let { path -> albumDao.updateArtworkPath(id.value, path) }
+    }
+
+    override suspend fun setAlbumIsSingle(id: AlbumId, isSingle: Boolean) {
+        albumDao.setIsSingle(id.value, isSingle)
+    }
+
+    override suspend fun addTrackToAlbum(trackId: TrackId, albumId: AlbumId) {
+        trackDao.setAlbumId(trackId.value, albumId.value)
+    }
+
+    override suspend fun removeTrackFromAlbum(trackId: TrackId) {
+        trackDao.setAlbumId(trackId.value, null)
+    }
+
+    override suspend fun renameArtist(id: ArtistId, name: String) {
+        artistDao.updateName(id.value, name)
+    }
+
+    override suspend fun setArtistPhoto(id: ArtistId, imageUri: String) {
+        val bytes = context.contentResolver.openInputStream(imageUri.toUri())?.use { it.readBytes() } ?: return
+        artworkStore.save(id.value, bytes)?.let { path -> artistDao.updatePhotoPath(id.value, path) }
+    }
+
     override fun tracksByArtist(id: ArtistId): Flow<List<Track>> = flow {
         emit(trackDao.tracksForArtist(id.value).map { it.toDomain() })
     }

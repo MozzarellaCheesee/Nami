@@ -20,4 +20,5 @@ fun AlbumEntity.toDomain(): Album = Album(
     artistId = artistId?.let(::ArtistId),
     year = year,
     artworkPath = artworkPath,
+    isSingle = isSingle,
 )

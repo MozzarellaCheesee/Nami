@@ -120,6 +120,18 @@ interface TrackDao {
     @Query("UPDATE tracks SET artworkPath = :path WHERE id = :id AND artworkPath IS NULL")
     suspend fun setArtworkPath(id: String, path: String)
 
+    @Query("UPDATE tracks SET title = :title WHERE id = :id")
+    suspend fun updateTitle(id: String, title: String)
+
+    // Unconditional -- unlike setArtworkPath (import's "only if null" writer), this is for the
+    // user explicitly replacing a track's own (albumless) cover.
+    @Query("UPDATE tracks SET artworkPath = :path WHERE id = :id")
+    suspend fun updateArtworkPath(id: String, path: String)
+
+    // null detaches the track from any album (used by "remove from album").
+    @Query("UPDATE tracks SET albumId = :albumId WHERE id = :id")
+    suspend fun setAlbumId(id: String, albumId: String?)
+
     @Query("SELECT * FROM tracks WHERE deletedAt IS NOT NULL ORDER BY deletedAt DESC")
     fun trashedTracksFlow(): Flow<List<TrackEntity>>
 

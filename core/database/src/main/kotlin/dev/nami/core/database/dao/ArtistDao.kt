@@ -51,6 +51,14 @@ interface ArtistDao {
     @Query("UPDATE artists SET photoPath = :path WHERE id = :id AND photoPath IS NULL")
     suspend fun setPhotoPath(id: String, path: String)
 
+    @Query("UPDATE artists SET name = :name, sortName = :name WHERE id = :id")
+    suspend fun updateName(id: String, name: String)
+
+    // Unconditional -- unlike setPhotoPath (import's "only if null" writer), this is for the
+    // user explicitly replacing an artist's photo.
+    @Query("UPDATE artists SET photoPath = :path WHERE id = :id")
+    suspend fun updatePhotoPath(id: String, path: String)
+
     @Query(
         """
         SELECT * FROM artists

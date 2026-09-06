@@ -59,6 +59,9 @@ class SearchRepositoryImplTest {
         override suspend fun setDeletedAt(id: String, deletedAt: Long?, path: String) = error("unused")
         override suspend fun hardDelete(id: String) = error("unused")
         override suspend fun setArtworkPath(id: String, path: String) = error("unused")
+        override suspend fun updateTitle(id: String, title: String) = error("unused")
+        override suspend fun updateArtworkPath(id: String, path: String) = error("unused")
+        override suspend fun setAlbumId(id: String, albumId: String?) = error("unused")
         override fun trashedTracksFlow() = error("unused")
     }
 
@@ -69,6 +72,9 @@ class SearchRepositoryImplTest {
         override fun pagingSource(): PagingSource<Int, AlbumDao.AlbumListRow> = error("unused")
         override suspend fun insert(album: AlbumEntity) = error("unused")
         override suspend fun setArtworkPath(id: String, path: String) = error("unused")
+        override suspend fun updateTitle(id: String, title: String) = error("unused")
+        override suspend fun updateArtworkPath(id: String, path: String) = error("unused")
+        override suspend fun setIsSingle(id: String, isSingle: Boolean) = error("unused")
         override suspend fun recentAlbums(limit: Int): List<AlbumDao.AlbumListRow> = error("unused")
         override suspend fun allForIndexing(): List<AlbumDao.AlbumListRow> = rows
     }
@@ -81,6 +87,8 @@ class SearchRepositoryImplTest {
         override suspend fun insert(artist: ArtistEntity) = error("unused")
         override suspend fun allForIndexing(): List<ArtistEntity> = rows
         override suspend fun setPhotoPath(id: String, path: String) = error("unused")
+        override suspend fun updateName(id: String, name: String) = error("unused")
+        override suspend fun updatePhotoPath(id: String, path: String) = error("unused")
     }
 
     @Test
