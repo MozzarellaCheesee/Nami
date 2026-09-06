@@ -248,7 +248,12 @@ private fun QueueRow(item: QueueItem, onDragBy: (Int) -> Unit, onRemove: () -> U
         // gestures on separate layers means dragging up/down never touches swipe state.
         Box(
             modifier = Modifier
-                .graphicsLayer { translationY = dragOffsetPx }
+                // Each fired move actually shifts this row's slot in the list by one row height
+                // (via the reorder + animateItem on the other rows), so the leftover visual
+                // offset needed is only what hasn't been "spent" on a move yet -- using the raw
+                // finger delta here was double-counting the shift, drifting the row far from
+                // the finger with every move fired.
+                .graphicsLayer { translationY = dragOffsetPx - firedOffsetPx }
                 .zIndex(if (dragging) 1f else 0f),
         ) {
             SwipeToDismissBox(
@@ -310,11 +315,15 @@ private fun QueueRow(item: QueueItem, onDragBy: (Int) -> Unit, onRemove: () -> U
                                     },
                                     onDragEnd = {
                                         dragging = false
+                                        // Collapse to just the unspent residual (display value is
+                                        // unchanged by this), then animate that down to 0.
+                                        dragOffsetPx -= firedOffsetPx
                                         firedOffsetPx = 0f
                                         scope.launch { animate(dragOffsetPx, 0f) { value, _ -> dragOffsetPx = value } }
                                     },
                                     onDragCancel = {
                                         dragging = false
+                                        dragOffsetPx -= firedOffsetPx
                                         firedOffsetPx = 0f
                                         scope.launch { animate(dragOffsetPx, 0f) { value, _ -> dragOffsetPx = value } }
                                     },
