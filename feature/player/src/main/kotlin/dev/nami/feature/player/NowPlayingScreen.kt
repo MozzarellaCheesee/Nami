@@ -318,7 +318,7 @@ fun NowPlayingScreen(
                 color = NamiColors.Ai,
                 style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
                 modifier = Modifier
-                    .padding(top = 20.dp)
+                    .padding(top = 32.dp)
                     .background(NamiColors.Ai.copy(alpha = 0.14f), RoundedCornerShape(4.dp))
                     .padding(horizontal = 6.dp, vertical = 2.dp),
             )
@@ -327,7 +327,7 @@ fun NowPlayingScreen(
         // stubs -- neither an AMOLED/night toggle nor a lyrics screen exists yet, so these are
         // present per the mockup but currently no-ops.
         Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             NowPlayingPill(text = "Очередь", onClick = onQueueClick, modifier = Modifier.weight(1f))
