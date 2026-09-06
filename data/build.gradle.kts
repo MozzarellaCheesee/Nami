@@ -26,6 +26,7 @@ dependencies {
     implementation(libs.hilt.android)
     implementation(libs.androidx.documentfile)
     implementation(libs.androidx.core.ktx)
+    implementation(libs.mlkit.translate)
     ksp(libs.hilt.compiler)
     testImplementation(libs.junit)
     testImplementation(kotlin("test"))

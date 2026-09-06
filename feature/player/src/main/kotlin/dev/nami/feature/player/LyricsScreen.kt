@@ -35,6 +35,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.MusicNote
+import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.SkipNext
@@ -140,6 +141,21 @@ fun LyricsScreen(
                 Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
             }
             Text(text = "Текст песни", color = NamiColors.Paper100, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            if (uiState.isTranslating) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    color = NamiColors.Paper70,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.padding(horizontal = 8.dp).size(20.dp),
+                )
+            } else if (uiState.lyrics != null && uiState.lyrics!!.lines.isNotEmpty()) {
+                IconButton(onClick = { viewModel.toggleTranslation() }) {
+                    Icon(
+                        Icons.Outlined.Translate,
+                        contentDescription = "Перевод",
+                        tint = if (uiState.showTranslation) NamiColors.Shu else NamiColors.Paper70,
+                    )
+                }
+            }
             IconButton(onClick = { showEditor = true }) {
                 Icon(Icons.Outlined.Edit, contentDescription = "Синхронизировать вручную", tint = NamiColors.Paper70)
             }
@@ -168,7 +184,12 @@ fun LyricsScreen(
             }
         } else {
             Box(modifier = Modifier.weight(1f)) {
-                SyncedLyricsList(lyrics = lyrics, positionMs = uiState.positionMs, onLineClick = { viewModel.seekTo(it) })
+                SyncedLyricsList(
+                    lyrics = lyrics,
+                    translation = uiState.translation.takeIf { uiState.showTranslation },
+                    positionMs = uiState.positionMs,
+                    onLineClick = { viewModel.seekTo(it) },
+                )
             }
         }
 
@@ -195,7 +216,7 @@ fun LyricsScreen(
 }
 
 @Composable
-private fun SyncedLyricsList(lyrics: Lyrics, positionMs: Long, onLineClick: (Long) -> Unit) {
+private fun SyncedLyricsList(lyrics: Lyrics, translation: List<String>?, positionMs: Long, onLineClick: (Long) -> Unit) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     // Plain recomputation, not derivedStateOf -- derivedStateOf's lambda was captured once (by
@@ -272,17 +293,31 @@ private fun SyncedLyricsList(lyrics: Lyrics, positionMs: Long, onLineClick: (Lon
                 // a hard flip from one line to the next).
                 val alpha by animateFloatAsState(targetAlpha, tween(350), label = "lyric-line-alpha")
                 val scale by animateFloatAsState(if (isCurrent) 1f else 0.92f, tween(350), label = "lyric-line-scale")
-                Text(
-                    text = line.text.ifBlank { "…" },
-                    color = NamiColors.Paper100.copy(alpha = alpha),
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .graphicsLayer { scaleX = scale; scaleY = scale; transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f) }
                         .clickable { onLineClick(line.timeMs) }
                         .padding(vertical = 14.dp),
-                )
+                ) {
+                    Text(
+                        text = line.text.ifBlank { "…" },
+                        color = NamiColors.Paper100.copy(alpha = alpha),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                    )
+                    // Smaller, under the original -- furigana would go ABOVE the kanji instead,
+                    // that piece needs a Japanese morphological analyzer (lindera, native/Rust)
+                    // this pass didn't include.
+                    translation?.getOrNull(index)?.let { translatedText ->
+                        Text(
+                            text = translatedText,
+                            color = NamiColors.Paper70.copy(alpha = alpha),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
+                }
             }
         }
         // Edge fade so lines don't just hard-cut at the top/bottom of the list -- was solid

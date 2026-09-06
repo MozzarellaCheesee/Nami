@@ -40,4 +40,24 @@ class LyricsRepositoryImpl @Inject constructor() : LyricsRepository {
         withContext(Dispatchers.IO) {
             LrcLibClient.findSyncedLyrics(title, artistName, durationMs)?.let { LrcParser.parse(it) }
         }
+
+    private fun translationFile(path: String) = File(sibling(path, ".ru.txt"))
+
+    override fun translationForPath(path: String): Flow<List<String>?> = flow {
+        emit(
+            withContext(Dispatchers.IO) {
+                val file = translationFile(path)
+                if (file.exists()) file.readLines() else null
+            },
+        )
+    }
+
+    override suspend fun saveTranslation(path: String, lines: List<String>) {
+        withContext(Dispatchers.IO) {
+            translationFile(path).writeText(lines.joinToString("\n"))
+        }
+    }
+
+    override suspend fun translateToRussian(lines: List<String>): List<String>? =
+        MlKitTranslator.translateToRussian(lines)
 }

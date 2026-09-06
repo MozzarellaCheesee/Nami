@@ -19,4 +19,13 @@ interface LyricsRepository {
      * title/artist/duration. Null on no match, instrumental track, or any network/parse failure;
      * callers treat that the same as "nothing found" and fall through to manual entry. */
     suspend fun fetchFromLrcLib(title: String, artistName: String?, durationMs: Long): Lyrics?
+
+    /** Cached translation, one line per original lyric line, same order -- a sibling file next to
+     * the .lrc so it survives restarts and never needs re-translating once done. */
+    fun translationForPath(path: String): Flow<List<String>?>
+    suspend fun saveTranslation(path: String, lines: List<String>)
+
+    /** On-device (ML Kit) translation to Russian -- the model downloads once over network on
+     * first use per language pair, then runs fully offline. Null on download/translate failure. */
+    suspend fun translateToRussian(lines: List<String>): List<String>?
 }

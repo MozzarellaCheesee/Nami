@@ -30,6 +30,9 @@ data class LyricsUiState(
     val lyrics: Lyrics? = null,
     val positionMs: Long = 0,
     val isFetchingOnline: Boolean = false,
+    val translation: List<String>? = null,
+    val showTranslation: Boolean = false,
+    val isTranslating: Boolean = false,
 )
 
 @HiltViewModel
@@ -46,10 +49,12 @@ class LyricsViewModel @Inject constructor(
         val artistName: String?,
         val durationMs: Long,
         val lyrics: Lyrics?,
+        val translation: List<String>?,
     )
 
-    // Bumped after a successful LRCLIB fetch is saved to the sidecar .lrc, so lyricsForPath (a
-    // one-shot read, not a file watcher) gets re-read and picks up what was just written.
+    // Bumped after a successful LRCLIB fetch/manual save/translation is written to its sidecar
+    // file, so the (one-shot, not file-watching) reads below get re-run and pick up what was
+    // just written.
     private val reloadSignal = MutableStateFlow(0)
 
     private val trackAndLyrics: StateFlow<TrackAndLyrics?> = playerRepository.state
@@ -57,8 +62,11 @@ class LyricsViewModel @Inject constructor(
         .flatMapLatest { playing ->
             libraryRepository.track(playing.trackId).filterNotNull().flatMapLatest { track ->
                 reloadSignal.flatMapLatest { _ ->
-                    lyricsRepository.lyricsForPath(track.path).map { lyrics ->
-                        TrackAndLyrics(track.id, track.path, track.title, track.artistName, track.durationMs, lyrics)
+                    combine(
+                        lyricsRepository.lyricsForPath(track.path),
+                        lyricsRepository.translationForPath(track.path),
+                    ) { lyrics, translation ->
+                        TrackAndLyrics(track.id, track.path, track.title, track.artistName, track.durationMs, lyrics, translation)
                     }
                 }
             }
@@ -67,18 +75,30 @@ class LyricsViewModel @Inject constructor(
 
     private val _positionMs = MutableStateFlow(0L)
     private val _isFetchingOnline = MutableStateFlow(false)
+    private val _showTranslation = MutableStateFlow(false)
+    private val _isTranslating = MutableStateFlow(false)
     // Never re-hit LRCLIB for a track once tried this session, hit or miss -- there is no
     // "retry automatically forever" here, only the one manual re-check the user can trigger from
     // the empty state (also routed through fetchOnline, but that call bypasses this guard).
     private val triedOnlineFetch = mutableSetOf<TrackId>()
 
-    val uiState: StateFlow<LyricsUiState> = combine(trackAndLyrics, _positionMs, _isFetchingOnline) { tl, pos, fetching ->
+    val uiState: StateFlow<LyricsUiState> = combine(
+        trackAndLyrics, _positionMs, _isFetchingOnline, _showTranslation, _isTranslating,
+    ) { values ->
+        val tl = values[0] as TrackAndLyrics?
+        val pos = values[1] as Long
+        val fetching = values[2] as Boolean
+        val showTranslation = values[3] as Boolean
+        val translating = values[4] as Boolean
         LyricsUiState(
             trackId = tl?.trackId,
             trackPath = tl?.path,
             lyrics = tl?.lyrics,
             positionMs = pos,
             isFetchingOnline = fetching,
+            translation = tl?.translation,
+            showTranslation = showTranslation,
+            isTranslating = translating,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LyricsUiState())
 
@@ -117,6 +137,32 @@ class LyricsViewModel @Inject constructor(
                 }
             } finally {
                 _isFetchingOnline.value = false
+            }
+        }
+    }
+
+    /** The button in the header: on first tap for a track with no cached translation, kicks off
+     * an ML Kit translate (downloads its offline model on first-ever use) and caches the result
+     * next to the .lrc; every tap after that is just show/hide, no repeat network/CPU work. */
+    fun toggleTranslation() {
+        val tl = trackAndLyrics.value
+        if (tl?.lyrics == null) return
+        if (_showTranslation.value) {
+            _showTranslation.value = false
+            return
+        }
+        _showTranslation.value = true
+        if (tl.translation != null) return
+        viewModelScope.launch {
+            _isTranslating.value = true
+            try {
+                val translated = lyricsRepository.translateToRussian(tl.lyrics.lines.map { it.text })
+                if (translated != null) {
+                    lyricsRepository.saveTranslation(tl.path, translated)
+                    reloadSignal.value++
+                }
+            } finally {
+                _isTranslating.value = false
             }
         }
     }
