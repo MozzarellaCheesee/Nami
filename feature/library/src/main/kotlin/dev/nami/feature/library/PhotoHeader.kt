@@ -11,15 +11,25 @@ import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import dev.nami.core.designsystem.NamiColors
+import kotlin.math.max
+import kotlin.math.min
 
 /**
  * Photo header for Album/Artist detail screens per Дизайн.md §4: the cover/photo fills the top,
@@ -66,5 +76,47 @@ fun PhotoHeader(
         Box(modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
             content()
         }
+    }
+}
+
+/**
+ * Drives a [PhotoHeader] that shrinks toward [minHeight] as the list below scrolls down (freeing
+ * up scroll area) and grows back to [maxHeight] once the list is scrolled back to the top --
+ * a standard collapsing-toolbar handoff via [NestedScrollConnection]: this consumes scroll deltas
+ * to resize the header BEFORE the list gets them (shrinking), and takes what the list couldn't
+ * consume at its own top edge AFTER it scrolls (expanding), so the two never fight over the
+ * same drag.
+ */
+class CollapsingHeaderState(maxHeightPx: Float, private val minHeightPx: Float) {
+    var heightPx by mutableFloatStateOf(maxHeightPx)
+        private set
+    private val maxHeightPx = maxHeightPx
+
+    val nestedScrollConnection = object : NestedScrollConnection {
+        override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+            if (available.y < 0 && heightPx > minHeightPx) {
+                val delta = max(available.y, minHeightPx - heightPx)
+                heightPx += delta
+                return Offset(0f, delta)
+            }
+            return Offset.Zero
+        }
+
+        override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+            if (available.y > 0 && heightPx < maxHeightPx) {
+                val delta = min(available.y, maxHeightPx - heightPx)
+                heightPx += delta
+                return Offset(0f, delta)
+            }
+            return Offset.Zero
+        }
+    }
+}
+
+@Composable
+fun rememberCollapsingHeaderState(maxHeight: Dp, minHeight: Dp): CollapsingHeaderState {
+    val density = LocalDensity.current
+    return remember {
+        with(density) { CollapsingHeaderState(maxHeight.toPx(), minHeight.toPx()) }
     }
 }

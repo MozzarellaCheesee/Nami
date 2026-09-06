@@ -30,6 +30,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
@@ -55,8 +57,19 @@ fun AlbumDetailScreen(
     var showAddTracksDialog by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
-    Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
-        PhotoHeader(photoPath = uiState.album?.artworkPath, onBack = onBack) {
+    val density = LocalDensity.current
+    val headerState = rememberCollapsingHeaderState(maxHeight = 360.dp, minHeight = 120.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(NamiColors.Ink900)
+            .nestedScroll(headerState.nestedScrollConnection),
+    ) {
+        PhotoHeader(
+            photoPath = uiState.album?.artworkPath,
+            onBack = onBack,
+            height = with(density) { headerState.heightPx.toDp() },
+        ) {
             Column {
                 Text(
                     text = uiState.album?.title ?: "",
