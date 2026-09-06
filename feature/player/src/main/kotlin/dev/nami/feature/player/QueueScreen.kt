@@ -289,6 +289,13 @@ private fun QueueRow(
     val currentOnDragTo by rememberUpdatedState(onDragTo)
     val currentOnDragPositionChange by rememberUpdatedState(onDragPositionChange)
     val currentScrollCompensationPx by rememberUpdatedState(scrollCompensationPx)
+    // If autoscroll carries this row far enough, LazyColumn recycles/disposes it like any other
+    // item leaving the viewport -- mid-drag, with no chance for onDragEnd/onDragCancel to run.
+    // Without this, the autoscroll loop up in QueueScreen never gets its "stop" signal and keeps
+    // scrolling forever. onDispose is the one callback guaranteed to fire even when torn down.
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose { currentOnDragPositionChange(null) }
+    }
     val density = LocalDensity.current
     val rowHeightPx = with(density) { rowHeight.toPx() }
     var dragOffsetPx by remember { mutableStateOf(0f) }
