@@ -444,7 +444,14 @@ private fun TrackListContent(
                     TrackListItem(
                         track = track,
                         onClick = {
-                            if (selectionMode) onToggleSelection(track.id) else onTrackClick(track.id)
+                            // The row's own clickable still sees the pointer-up that follows a
+                            // long-press-with-no-movement (the parent gesture above only
+                            // consumes movement, not a plain release) and would otherwise fire
+                            // its own click right after this row was just made the drag anchor
+                            // -- toggling it straight back off. Swallow that one ghost click.
+                            if (track.id != dragAnchorId) {
+                                if (selectionMode) onToggleSelection(track.id) else onTrackClick(track.id)
+                            }
                         },
                         selectionMode = selectionMode,
                         isSelected = track.id in selectedTrackIds,
