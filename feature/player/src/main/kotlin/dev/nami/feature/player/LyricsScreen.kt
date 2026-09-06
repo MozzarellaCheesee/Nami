@@ -155,7 +155,14 @@ fun LyricsScreen(
             IconButton(onClick = { dismiss() }) {
                 Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
             }
-            Text(text = "Текст песни", color = NamiColors.Paper100, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            Text(
+                text = "Текст песни",
+                color = NamiColors.Paper100,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
             val hasLyrics = uiState.lyrics != null && uiState.lyrics!!.lines.isNotEmpty()
             if (hasLyrics) {
                 // Live, not generated/cached -- tokenizing one line is fast, so this is just a
