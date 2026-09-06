@@ -1,7 +1,10 @@
 // QueueScreen.kt
 package dev.nami.feature.player
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animate
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -32,12 +35,14 @@ import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -124,7 +129,7 @@ fun QueueScreen(
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                     )
                 }
-                itemsIndexed(manual, key = { index, item -> "manual-$index-${item.track.id.value}" }) { index, item ->
+                itemsIndexed(manual, key = { _, item -> "manual-${item.track.id.value}" }) { index, item ->
                     ManualQueueRow(
                         item = item,
                         onDragBy = { relativeMove ->
@@ -132,6 +137,7 @@ fun QueueScreen(
                             if (target != index) viewModel.moveQueueItem(index, target)
                         },
                         onRemove = { viewModel.removeQueueItem(index) },
+                        modifier = Modifier.animateItem(),
                     )
                 }
             }
@@ -143,10 +149,11 @@ fun QueueScreen(
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                     )
                 }
-                itemsIndexed(context, key = { index, item -> "context-$index-${item.track.id.value}" }) { index, item ->
+                itemsIndexed(context, key = { _, item -> "context-${item.track.id.value}" }) { index, item ->
                     ContextQueueRow(
                         item = item,
                         onRemove = { viewModel.removeQueueItem(contextStartIndex + index) },
+                        modifier = Modifier.animateItem(),
                     )
                 }
             }
@@ -180,89 +187,125 @@ private fun QueueTrackInfo(item: QueueItem, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun ManualQueueRow(item: QueueItem, onDragBy: (Int) -> Unit, onRemove: () -> Unit) {
+private fun ManualQueueRow(item: QueueItem, onDragBy: (Int) -> Unit, onRemove: () -> Unit, modifier: Modifier = Modifier) {
     val currentOnDragBy by rememberUpdatedState(onDragBy)
     val density = LocalDensity.current
     var dragOffsetPx by remember { mutableStateOf(0f) }
-    val rowHeightPx = with(density) { QUEUE_ROW_HEIGHT.toPx() }
+    var dragging by remember { mutableStateOf(false) }
+    // Half a row, not a full one -- a full-row drag distance to register even a single-position
+    // move read as "nothing is happening" for most of the gesture.
+    val moveUnitPx = with(density) { (QUEUE_ROW_HEIGHT / 2).toPx() }
+    var removed by remember { mutableStateOf(false) }
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(QUEUE_ROW_HEIGHT)
-            .graphicsLayer { translationY = dragOffsetPx }
-            .padding(horizontal = 20.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    AnimatedVisibility(
+        visible = !removed,
+        exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut(),
+        modifier = modifier,
     ) {
-        QueueTrackInfo(item = item, modifier = Modifier.weight(1f))
-        Box(
+        Row(
             modifier = Modifier
-                .padding(start = 8.dp)
-                .size(40.dp)
-                .pointerInput(Unit) {
-                    detectDragGesturesAfterLongPress(
-                        onDrag = { change, dragAmount ->
-                            change.consume()
-                            dragOffsetPx += dragAmount.y
-                        },
-                        onDragEnd = {
-                            val moveBy = (dragOffsetPx / rowHeightPx).toInt()
-                            dragOffsetPx = 0f
-                            if (moveBy != 0) currentOnDragBy(moveBy)
-                        },
-                        onDragCancel = { dragOffsetPx = 0f },
-                    )
-                },
-            contentAlignment = Alignment.Center,
+                .fillMaxWidth()
+                .height(QUEUE_ROW_HEIGHT)
+                .graphicsLayer { translationY = dragOffsetPx }
+                .background(if (dragging) NamiColors.Ink700 else NamiColors.Ink900)
+                .padding(horizontal = 20.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Outlined.DragHandle, contentDescription = "Перетащить", tint = NamiColors.Paper40)
+            QueueTrackInfo(item = item, modifier = Modifier.weight(1f))
+            Box(
+                modifier = Modifier
+                    .padding(start = 8.dp)
+                    .size(40.dp)
+                    .pointerInput(Unit) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { dragging = true },
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                dragOffsetPx += dragAmount.y
+                            },
+                            onDragEnd = {
+                                val moveBy = (dragOffsetPx / moveUnitPx).toInt()
+                                dragOffsetPx = 0f
+                                dragging = false
+                                if (moveBy != 0) currentOnDragBy(moveBy)
+                            },
+                            onDragCancel = {
+                                dragOffsetPx = 0f
+                                dragging = false
+                            },
+                        )
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Outlined.DragHandle, contentDescription = "Перетащить", tint = NamiColors.Paper40)
+            }
+            IconButton(onClick = { removed = true }) {
+                Icon(Icons.Outlined.Close, contentDescription = "Удалить", tint = NamiColors.Paper70)
+            }
         }
-        IconButton(onClick = onRemove) {
-            Icon(Icons.Outlined.Close, contentDescription = "Удалить", tint = NamiColors.Paper70)
+    }
+
+    LaunchedEffect(removed) {
+        if (removed) {
+            delay(200)
+            onRemove()
         }
     }
 }
 
 @Composable
-private fun ContextQueueRow(item: QueueItem, onRemove: () -> Unit) {
-    val currentOnRemove by rememberUpdatedState(onRemove)
+private fun ContextQueueRow(item: QueueItem, onRemove: () -> Unit, modifier: Modifier = Modifier) {
+    var removed by remember { mutableStateOf(false) }
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
             if (value == SwipeToDismissBoxValue.EndToStart) {
-                currentOnRemove()
+                removed = true
                 true
             } else {
                 false
             }
         },
     )
-    SwipeToDismissBox(
-        state = dismissState,
-        backgroundContent = {
-            // Only shown while actually swiping toward removal -- progress-scaled icon so the
-            // gesture reads as "this is about to remove the track", not just a flat color wash.
-            Box(
-                modifier = Modifier.fillMaxSize().background(NamiColors.Kin),
-                contentAlignment = Alignment.CenterEnd,
-            ) {
-                Icon(
-                    Icons.Outlined.Close,
-                    contentDescription = "Убрать из очереди",
-                    tint = NamiColors.Ink900,
-                    modifier = Modifier.padding(end = 24.dp).size(28.dp),
-                )
-            }
-        },
+    AnimatedVisibility(
+        visible = !removed,
+        exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut(),
+        modifier = modifier,
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(QUEUE_ROW_HEIGHT)
-                .background(NamiColors.Ink900)
-                .padding(horizontal = 20.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        SwipeToDismissBox(
+            state = dismissState,
+            backgroundContent = {
+                // Only shown while actually swiping toward removal -- an icon so the gesture
+                // reads as "this is about to remove the track", not just a flat color wash.
+                Box(
+                    modifier = Modifier.fillMaxSize().background(NamiColors.Kin),
+                    contentAlignment = Alignment.CenterEnd,
+                ) {
+                    Icon(
+                        Icons.Outlined.Close,
+                        contentDescription = "Убрать из очереди",
+                        tint = NamiColors.Ink900,
+                        modifier = Modifier.padding(end = 24.dp).size(28.dp),
+                    )
+                }
+            },
         ) {
-            QueueTrackInfo(item = item)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(QUEUE_ROW_HEIGHT)
+                    .background(NamiColors.Ink900)
+                    .padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                QueueTrackInfo(item = item)
+            }
+        }
+    }
+
+    LaunchedEffect(removed) {
+        if (removed) {
+            delay(200)
+            onRemove()
         }
     }
 }
