@@ -3,13 +3,17 @@ package dev.nami.feature.player
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.nami.core.model.DictionaryEntry
 import dev.nami.core.model.LyricLine
 import dev.nami.core.model.Lyrics
 import dev.nami.core.model.TrackId
+import dev.nami.core.model.WordToken
+import dev.nami.domain.DictionaryRepository
 import dev.nami.domain.LibraryRepository
 import dev.nami.domain.LyricsRepository
 import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerRepository
+import dev.nami.domain.VocabularyRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -25,21 +29,23 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+data class WordLookup(val token: WordToken, val entries: List<DictionaryEntry>, val contextLine: String)
+
 data class LyricsUiState(
     val trackId: TrackId? = null,
     val trackPath: String? = null,
+    val trackTitle: String? = null,
     val lyrics: Lyrics? = null,
     val positionMs: Long = 0,
     val isFetchingOnline: Boolean = false,
     val translation: List<String>? = null,
     val showTranslation: Boolean = false,
     val isTranslating: Boolean = false,
-    val furigana: List<String>? = null,
     val showFurigana: Boolean = false,
-    val isGeneratingFurigana: Boolean = false,
     val romaji: List<String>? = null,
     val showRomaji: Boolean = false,
     val isGeneratingRomaji: Boolean = false,
+    val wordLookup: WordLookup? = null,
 )
 
 @HiltViewModel
@@ -47,6 +53,8 @@ class LyricsViewModel @Inject constructor(
     private val playerRepository: PlayerRepository,
     private val libraryRepository: LibraryRepository,
     private val lyricsRepository: LyricsRepository,
+    private val dictionaryRepository: DictionaryRepository,
+    private val vocabularyRepository: VocabularyRepository,
 ) : ViewModel() {
 
     private data class TrackAndLyrics(
@@ -57,7 +65,6 @@ class LyricsViewModel @Inject constructor(
         val durationMs: Long,
         val lyrics: Lyrics?,
         val translation: List<String>?,
-        val furigana: List<String>?,
         val romaji: List<String>?,
     )
 
@@ -74,10 +81,9 @@ class LyricsViewModel @Inject constructor(
                     combine(
                         lyricsRepository.lyricsForPath(track.path),
                         lyricsRepository.translationForPath(track.path),
-                        lyricsRepository.furiganaForPath(track.path),
                         lyricsRepository.romajiForPath(track.path),
-                    ) { lyrics, translation, furigana, romaji ->
-                        TrackAndLyrics(track.id, track.path, track.title, track.artistName, track.durationMs, lyrics, translation, furigana, romaji)
+                    ) { lyrics, translation, romaji ->
+                        TrackAndLyrics(track.id, track.path, track.title, track.artistName, track.durationMs, lyrics, translation, romaji)
                     }
                 }
             }
@@ -88,10 +94,12 @@ class LyricsViewModel @Inject constructor(
     private val _isFetchingOnline = MutableStateFlow(false)
     private val _showTranslation = MutableStateFlow(false)
     private val _isTranslating = MutableStateFlow(false)
+    // Live, not cached -- unlike translation/romaji, tokenizing one line with Kuromoji is fast
+    // enough that furigana doesn't need generation/caching at all, just a display toggle.
     private val _showFurigana = MutableStateFlow(false)
-    private val _isGeneratingFurigana = MutableStateFlow(false)
     private val _showRomaji = MutableStateFlow(false)
     private val _isGeneratingRomaji = MutableStateFlow(false)
+    private val _wordLookup = MutableStateFlow<WordLookup?>(null)
     // Never re-hit LRCLIB for a track once tried this session, hit or miss -- there is no
     // "retry automatically forever" here, only the one manual re-check the user can trigger from
     // the empty state (also routed through fetchOnline, but that call bypasses this guard).
@@ -99,7 +107,7 @@ class LyricsViewModel @Inject constructor(
 
     val uiState: StateFlow<LyricsUiState> = combine(
         trackAndLyrics, _positionMs, _isFetchingOnline, _showTranslation, _isTranslating,
-        _showFurigana, _isGeneratingFurigana, _showRomaji, _isGeneratingRomaji,
+        _showFurigana, _showRomaji, _isGeneratingRomaji, _wordLookup,
     ) { values ->
         val tl = values[0] as TrackAndLyrics?
         val pos = values[1] as Long
@@ -107,24 +115,25 @@ class LyricsViewModel @Inject constructor(
         val showTranslation = values[3] as Boolean
         val translating = values[4] as Boolean
         val showFurigana = values[5] as Boolean
-        val generatingFurigana = values[6] as Boolean
-        val showRomaji = values[7] as Boolean
-        val generatingRomaji = values[8] as Boolean
+        val showRomaji = values[6] as Boolean
+        val generatingRomaji = values[7] as Boolean
+        @Suppress("UNCHECKED_CAST")
+        val wordLookup = values[8] as WordLookup?
         LyricsUiState(
             trackId = tl?.trackId,
             trackPath = tl?.path,
+            trackTitle = tl?.title,
             lyrics = tl?.lyrics,
             positionMs = pos,
             isFetchingOnline = fetching,
             translation = tl?.translation,
             showTranslation = showTranslation,
             isTranslating = translating,
-            furigana = tl?.furigana,
             showFurigana = showFurigana,
-            isGeneratingFurigana = generatingFurigana,
             romaji = tl?.romaji,
             showRomaji = showRomaji,
             isGeneratingRomaji = generatingRomaji,
+            wordLookup = wordLookup,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LyricsUiState())
 
@@ -133,9 +142,9 @@ class LyricsViewModel @Inject constructor(
             .onEach { state -> if (state is PlaybackState.Playing) _positionMs.value = state.positionMs }
             .launchIn(viewModelScope)
 
-        // The show-translation/show-furigana toggles are per-track, not global: without this,
-        // switching to a track with neither cached left both header buttons lit orange ("on")
-        // carried over from the previous track, while nothing was actually shown.
+        // The show-translation/show-furigana/show-romaji toggles are per-track, not global:
+        // without this, switching to a track with nothing cached left the header buttons lit
+        // orange ("on") carried over from the previous track, while nothing was actually shown.
         trackAndLyrics
             .filterNotNull()
             .distinctUntilChangedBy { it.trackId }
@@ -143,6 +152,7 @@ class LyricsViewModel @Inject constructor(
                 _showTranslation.value = false
                 _showFurigana.value = false
                 _showRomaji.value = false
+                _wordLookup.value = null
             }
             .launchIn(viewModelScope)
 
@@ -218,43 +228,13 @@ class LyricsViewModel @Inject constructor(
         }
     }
 
-    /** Same shape as [toggleTranslation] but Kuromoji runs fully on-device -- no network, no
-     * model download -- so the only reason to cache it at all is to not re-tokenize every time
-     * the screen reopens. */
     fun toggleFurigana() {
         val tl = trackAndLyrics.value
         if (tl?.lyrics == null) return
-        if (_showFurigana.value) {
-            _showFurigana.value = false
-            return
-        }
-        _showFurigana.value = true
-        if (tl.furigana == null) runFurigana(tl.path, tl.lyrics)
+        _showFurigana.value = !_showFurigana.value
     }
 
-    /** Long-press on the furigana button: re-runs it even over an existing cache -- same escape
-     * hatch as [forceRetranslate], for a stale/bad cached result. */
-    fun forceRegenerateFurigana() {
-        val tl = trackAndLyrics.value
-        if (tl?.lyrics == null) return
-        _showFurigana.value = true
-        runFurigana(tl.path, tl.lyrics)
-    }
-
-    private fun runFurigana(path: String, lyrics: Lyrics) {
-        viewModelScope.launch {
-            _isGeneratingFurigana.value = true
-            try {
-                val generated = lyricsRepository.generateFurigana(lyrics.lines.map { it.text })
-                lyricsRepository.saveFurigana(path, generated)
-                reloadSignal.value++
-            } finally {
-                _isGeneratingFurigana.value = false
-            }
-        }
-    }
-
-    /** Same shape as [toggleFurigana], whole-line romaji instead of per-kanji readings. */
+    /** Same shape as [toggleTranslation], whole-line romaji instead of per-kanji readings. */
     fun toggleRomaji() {
         val tl = trackAndLyrics.value
         if (tl?.lyrics == null) return
@@ -284,6 +264,30 @@ class LyricsViewModel @Inject constructor(
                 _isGeneratingRomaji.value = false
             }
         }
+    }
+
+    /** Splits a line into tappable words -- used for both the furigana ruby-text layout and the
+     * word-tap dictionary lookup below, so the two always agree on word boundaries. */
+    suspend fun tokenizeLine(line: String): List<WordToken> = lyricsRepository.tokenizeLine(line)
+
+    /** Tap a word in the lyrics -> look it up by its dictionary (base) form, not the conjugated
+     * surface form actually printed -- JMdict headwords are citation forms ("食べる", not "食べた"). */
+    fun lookupWord(token: WordToken, contextLine: String) {
+        viewModelScope.launch {
+            val entries = dictionaryRepository.lookup(token.baseForm)
+            _wordLookup.value = WordLookup(token, entries, contextLine)
+        }
+    }
+
+    fun dismissWordLookup() {
+        _wordLookup.value = null
+    }
+
+    /** "В словарик" from the word lookup popup -- saved with the line/track it came from, per
+     * План.md's "слова из песен с контекстной строкой и ссылкой на трек". */
+    fun addToVocabulary(word: String, reading: String, meaning: String, contextLine: String) {
+        val trackTitle = uiState.value.trackTitle ?: return
+        viewModelScope.launch { vocabularyRepository.add(word, reading, meaning, contextLine, trackTitle) }
     }
 
     fun seekTo(ms: Long) {

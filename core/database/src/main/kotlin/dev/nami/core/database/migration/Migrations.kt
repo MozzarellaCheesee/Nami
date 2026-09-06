@@ -116,3 +116,21 @@ val MIGRATION_8_9 = object : Migration(8, 9) {
         )
     }
 }
+
+val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS vocabulary (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                word TEXT NOT NULL,
+                reading TEXT NOT NULL,
+                meaning TEXT NOT NULL,
+                contextLine TEXT NOT NULL,
+                trackTitle TEXT NOT NULL,
+                addedAt INTEGER NOT NULL
+            )
+            """,
+        )
+    }
+}

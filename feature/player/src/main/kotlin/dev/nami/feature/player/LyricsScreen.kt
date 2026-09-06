@@ -37,6 +37,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.rounded.Pause
@@ -103,6 +104,7 @@ fun LyricsScreen(
     val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
     var dragOffsetY by remember { mutableStateOf(0f) }
     var showEditor by remember { mutableStateOf(false) }
+    var showVocabulary by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     // Shared by the drag gesture and the back button -- both need the same "slide fully off,
     // THEN flip the state" sequence instead of an instant cut.
@@ -150,29 +152,21 @@ fun LyricsScreen(
             }
             Text(text = "Текст песни", color = NamiColors.Paper100, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
             val hasLyrics = uiState.lyrics != null && uiState.lyrics!!.lines.isNotEmpty()
-            if (uiState.isGeneratingFurigana) {
-                androidx.compose.material3.CircularProgressIndicator(
-                    color = NamiColors.Paper70,
-                    strokeWidth = 2.dp,
-                    modifier = Modifier.padding(horizontal = 8.dp).size(20.dp),
-                )
-            } else if (hasLyrics) {
-                // Long-press forces a redo even over a cached (possibly stale/bad) result --
-                // IconButton has no onLongClick, so this is a plain sized+clipped Box instead.
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(androidx.compose.foundation.shape.CircleShape)
-                        .combinedClickable(
-                            onClick = { viewModel.toggleFurigana() },
-                            onLongClick = { viewModel.forceRegenerateFurigana() },
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
+            if (hasLyrics) {
+                // Live, not generated/cached -- tokenizing one line is fast, so this is just a
+                // display flip, no long-press-to-regenerate escape hatch needed.
+                IconButton(onClick = { viewModel.toggleFurigana() }) {
                     Text(
                         "振",
                         color = if (uiState.showFurigana) NamiColors.Shu else NamiColors.Paper70,
                         style = MaterialTheme.typography.titleMedium,
+                    )
+                }
+                IconButton(onClick = { showVocabulary = true }) {
+                    Icon(
+                        Icons.Outlined.MenuBook,
+                        contentDescription = "Мой словарик",
+                        tint = NamiColors.Paper70,
                     )
                 }
             }
@@ -255,10 +249,12 @@ fun LyricsScreen(
                 SyncedLyricsList(
                     lyrics = lyrics,
                     translation = uiState.translation.takeIf { uiState.showTranslation },
-                    furigana = uiState.furigana.takeIf { uiState.showFurigana },
+                    showFurigana = uiState.showFurigana,
                     romaji = uiState.romaji.takeIf { uiState.showRomaji },
                     positionMs = uiState.positionMs,
                     onLineClick = { viewModel.seekTo(it) },
+                    tokenizeLine = { viewModel.tokenizeLine(it) },
+                    onWordTap = { token, contextLine -> viewModel.lookupWord(token, contextLine) },
                 )
             }
         }
@@ -283,16 +279,77 @@ fun LyricsScreen(
             onDismiss = { showEditor = false },
         )
     }
+
+    uiState.wordLookup?.let { lookup ->
+        WordLookupDialog(
+            lookup = lookup,
+            onDismiss = { viewModel.dismissWordLookup() },
+            onAddToVocabulary = { meaning ->
+                viewModel.addToVocabulary(lookup.token.baseForm, lookup.token.readingHiragana, meaning, lookup.contextLine)
+                viewModel.dismissWordLookup()
+            },
+        )
+    }
+
+    if (showVocabulary) {
+        VocabularyScreen(onBack = { showVocabulary = false })
+    }
+}
+
+@Composable
+private fun WordLookupDialog(lookup: WordLookup, onDismiss: () -> Unit, onAddToVocabulary: (String) -> Unit) {
+    dev.nami.core.designsystem.NamiAlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(lookup.token.baseForm, color = NamiColors.Paper100)
+                Text(
+                    "「${lookup.token.readingHiragana}」",
+                    color = NamiColors.Paper70,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+            }
+        },
+        text = {
+            if (lookup.entries.isEmpty()) {
+                Text("Ничего не нашлось в словаре", color = NamiColors.Paper70)
+            } else {
+                Column {
+                    lookup.entries.take(5).forEach { entry ->
+                        Column(modifier = Modifier.padding(bottom = 10.dp)) {
+                            if (entry.partsOfSpeech.isNotEmpty()) {
+                                Text(
+                                    entry.partsOfSpeech.joinToString(", "),
+                                    color = NamiColors.Ai,
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                            Text(entry.glosses.joinToString("; "), color = NamiColors.Paper100)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onAddToVocabulary(lookup.entries.firstOrNull()?.glosses?.firstOrNull().orEmpty()) }) {
+                Text("В словарик")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } },
+    )
 }
 
 @Composable
 private fun SyncedLyricsList(
     lyrics: Lyrics,
     translation: List<String>?,
-    furigana: List<String>?,
+    showFurigana: Boolean,
     romaji: List<String>?,
     positionMs: Long,
     onLineClick: (Long) -> Unit,
+    tokenizeLine: suspend (String) -> List<dev.nami.core.model.WordToken>,
+    onWordTap: (dev.nami.core.model.WordToken, String) -> Unit,
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -387,22 +444,26 @@ private fun SyncedLyricsList(
                             modifier = Modifier.padding(bottom = 2.dp),
                         )
                     }
-                    val furiganaLine = furigana?.getOrNull(index)
-                    if (furiganaLine != null) {
-                        FuriganaLine(
-                            annotated = furiganaLine,
-                            fallback = line.text,
-                            color = NamiColors.Paper100.copy(alpha = alpha),
-                            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
-                        )
-                    } else {
-                        Text(
-                            text = line.text.ifBlank { "…" },
-                            color = NamiColors.Paper100.copy(alpha = alpha),
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
-                        )
+                    // Linear on-device estimate, not real per-word timing (no free source for
+                    // that exists -- checked; Musixmatch/Suno-class APIs need a paid key, Spotify
+                    // /Yandex internal endpoints are unofficial ToS violations). Sweeps evenly
+                    // across the line between its own timestamp and the next line's.
+                    val itemNextLine = lyrics.lines.getOrNull(index + 1)
+                    val karaokeProgress = when {
+                        !isCurrent -> if (index < currentIndex) 1f else 0f
+                        itemNextLine == null -> 1f
+                        else -> ((positionMs - line.timeMs).toFloat() / (itemNextLine.timeMs - line.timeMs).toFloat()).coerceIn(0f, 1f)
                     }
+                    TappableLine(
+                        line = line.text,
+                        showFurigana = showFurigana,
+                        color = NamiColors.Paper100.copy(alpha = alpha),
+                        sungColor = NamiColors.Shu.copy(alpha = alpha),
+                        karaokeProgress = if (isCurrent) karaokeProgress else null,
+                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                        tokenizeLine = tokenizeLine,
+                        onWordTap = { token -> onWordTap(token, line.text) },
+                    )
                     translation?.getOrNull(index)?.let { translatedText ->
                         Text(
                             text = translatedText,
@@ -422,40 +483,47 @@ private fun SyncedLyricsList(
     }
 }
 
-private data class FuriSegment(val text: String, val reading: String?)
-
-// Matches FuriganaGenerator's "surface[hiragana]" encoding -- either an annotated run or a plain
-// (no-brackets) run, alternating through the whole line.
-private val furiganaSegmentRegex = Regex("([^\\[\\]]+)\\[([^\\]]+)\\]|([^\\[\\]]+)")
-
-private fun parseFurigana(annotated: String): List<FuriSegment> =
-    furiganaSegmentRegex.findAll(annotated).map { m ->
-        if (m.groupValues[1].isNotEmpty()) FuriSegment(m.groupValues[1], m.groupValues[2]) else FuriSegment(m.groupValues[3], null)
-    }.toList()
-
-/** Ruby-text layout: reading in small hiragana above, original characters below -- the
- * conventional furigana placement (as opposed to the translation, which sits below in smaller
- * text). Falls back to plain [fallback] text if the annotated string doesn't parse into anything
- * (defensive; FuriganaGenerator always emits at least one plain segment). */
+/** One rendering for original-text lines: tokenized live (Kuromoji, via [tokenizeLine]) into
+ * words -- the SAME split used for both the furigana ruby-text overlay and for tap-to-dictionary,
+ * so a reading is always positioned directly above the exact kanji it belongs to (one word, one
+ * column, reading on top) rather than two independently-computed segmentations drifting apart. */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun FuriganaLine(annotated: String, fallback: String, color: androidx.compose.ui.graphics.Color, fontWeight: FontWeight) {
-    val segments = remember(annotated) { parseFurigana(annotated) }
-    if (segments.isEmpty()) {
-        Text(text = fallback.ifBlank { "…" }, color = color, style = MaterialTheme.typography.headlineMedium, fontWeight = fontWeight)
+private fun TappableLine(
+    line: String,
+    showFurigana: Boolean,
+    color: androidx.compose.ui.graphics.Color,
+    sungColor: androidx.compose.ui.graphics.Color,
+    karaokeProgress: Float?,
+    fontWeight: FontWeight,
+    tokenizeLine: suspend (String) -> List<dev.nami.core.model.WordToken>,
+    onWordTap: (dev.nami.core.model.WordToken) -> Unit,
+) {
+    val tokens by androidx.compose.runtime.produceState(initialValue = emptyList<dev.nami.core.model.WordToken>(), line) {
+        value = tokenizeLine(line)
+    }
+    if (tokens.isEmpty()) {
+        Text(text = line.ifBlank { "…" }, color = color, style = MaterialTheme.typography.headlineMedium, fontWeight = fontWeight)
         return
     }
+    val totalLen = tokens.sumOf { it.surface.length }.coerceAtLeast(1)
+    val sungChars = if (karaokeProgress != null) (totalLen * karaokeProgress).roundToInt() else 0
+    var cumulative = 0
     androidx.compose.foundation.layout.FlowRow(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(2.dp)) {
-        segments.forEach { segment ->
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        tokens.forEach { token ->
+            val tokenEnd = cumulative + token.surface.length
+            val isSung = karaokeProgress != null && tokenEnd <= sungChars
+            cumulative = tokenEnd
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.clickable { onWordTap(token) },
+            ) {
+                if (showFurigana) {
+                    Text(text = if (token.hasKanji) token.readingHiragana else "", color = color, fontSize = 11.sp)
+                }
                 Text(
-                    text = segment.reading.orEmpty(),
-                    color = color,
-                    fontSize = 11.sp,
-                )
-                Text(
-                    text = segment.text,
-                    color = color,
+                    text = token.surface,
+                    color = if (karaokeProgress != null && isSung) sungColor else color,
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = fontWeight,
                 )

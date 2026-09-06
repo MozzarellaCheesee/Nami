@@ -17,6 +17,7 @@ import dev.nami.core.database.dao.PlaylistDao
 import dev.nami.core.database.dao.PlaylistTrackDao
 import dev.nami.core.database.dao.SearchDao
 import dev.nami.core.database.dao.TrackDao
+import dev.nami.core.database.dao.VocabularyDao
 import dev.nami.core.database.migration.MIGRATION_1_2
 import dev.nami.core.database.migration.MIGRATION_2_3
 import dev.nami.core.database.migration.MIGRATION_3_4
@@ -25,6 +26,7 @@ import dev.nami.core.database.migration.MIGRATION_5_6
 import dev.nami.core.database.migration.MIGRATION_6_7
 import dev.nami.core.database.migration.MIGRATION_7_8
 import dev.nami.core.database.migration.MIGRATION_8_9
+import dev.nami.core.database.migration.MIGRATION_9_10
 import io.requery.android.database.sqlite.RequerySQLiteOpenHelperFactory
 import javax.inject.Singleton
 
@@ -36,7 +38,7 @@ object DatabaseModule {
     fun provideDatabase(@ApplicationContext context: Context): NamiDatabase =
         Room.databaseBuilder(context, NamiDatabase::class.java, "nami.db")
             .openHelperFactory(RequerySQLiteOpenHelperFactory())
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
             .addCallback(
                 object : RoomDatabase.Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
@@ -64,4 +66,7 @@ object DatabaseModule {
 
     @Provides
     fun providePlaylistTrackDao(db: NamiDatabase): PlaylistTrackDao = db.playlistTrackDao()
+
+    @Provides
+    fun provideVocabularyDao(db: NamiDatabase): VocabularyDao = db.vocabularyDao()
 }

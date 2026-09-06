@@ -1,6 +1,7 @@
 package dev.nami.domain
 
 import dev.nami.core.model.Lyrics
+import dev.nami.core.model.WordToken
 import kotlinx.coroutines.flow.Flow
 
 /** Keyed by the track's file path (not id) -- lyrics live as a plain sibling .lrc file next to
@@ -29,18 +30,14 @@ interface LyricsRepository {
      * first use per language pair, then runs fully offline. Null on download/translate failure. */
     suspend fun translateToRussian(lines: List<String>): List<String>?
 
-    /** Furigana-annotated text, one line per original lyric line, same order and format as
-     * [translationForPath]'s cache -- "surface[hiragana]" segments, see FuriganaGenerator. */
-    fun furiganaForPath(path: String): Flow<List<String>?>
-    suspend fun saveFurigana(path: String, lines: List<String>)
-
-    /** Pure on-device morphological analysis (Kuromoji) -- no network, no model download, always
-     * available once the track has lyrics at all. */
-    suspend fun generateFurigana(lines: List<String>): List<String>
-
-    /** Same cache/generation shape as furigana, whole-line Hepburn romaji instead of per-kanji
-     * readings -- План.md's "romaji / оригинал / перевод" triplet mode. */
+    /** Same cache/generation shape as translation, whole-line Hepburn romaji instead of a
+     * per-kanji reading overlay -- План.md's "romaji / оригинал / перевод" triplet mode. */
     fun romajiForPath(path: String): Flow<List<String>?>
     suspend fun saveRomaji(path: String, lines: List<String>)
     suspend fun generateRomaji(lines: List<String>): List<String>
+
+    /** Splits a line into words for furigana ruby-text display and tap-to-dictionary -- the same
+     * split for both, computed live (Kuromoji tokenizing one short line is fast enough not to
+     * need caching, unlike a whole-track translation/romaji pass). */
+    suspend fun tokenizeLine(line: String): List<WordToken>
 }

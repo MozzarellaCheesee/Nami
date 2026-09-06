@@ -8,19 +8,22 @@ import dev.nami.core.database.dao.PlaylistDao
 import dev.nami.core.database.dao.PlaylistTrackDao
 import dev.nami.core.database.dao.SearchDao
 import dev.nami.core.database.dao.TrackDao
+import dev.nami.core.database.dao.VocabularyDao
 import dev.nami.core.database.entity.AlbumArtistCrossRef
 import dev.nami.core.database.entity.AlbumEntity
 import dev.nami.core.database.entity.ArtistEntity
 import dev.nami.core.database.entity.PlaylistEntity
 import dev.nami.core.database.entity.PlaylistTrackEntity
 import dev.nami.core.database.entity.TrackEntity
+import dev.nami.core.database.entity.VocabularyEntity
 
 @Database(
     entities = [
         TrackEntity::class, ArtistEntity::class, AlbumEntity::class,
         PlaylistEntity::class, PlaylistTrackEntity::class, AlbumArtistCrossRef::class,
+        VocabularyEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = true,
 )
 abstract class NamiDatabase : RoomDatabase() {
@@ -30,4 +33,5 @@ abstract class NamiDatabase : RoomDatabase() {
     abstract fun searchDao(): SearchDao
     abstract fun playlistDao(): PlaylistDao
     abstract fun playlistTrackDao(): PlaylistTrackDao
+    abstract fun vocabularyDao(): VocabularyDao
 }
