@@ -152,6 +152,10 @@ fun NowPlayingScreen(
                 }
             }
         }
+        // Pushes everything below (artwork, title, controls, pills) down to the bottom of the
+        // screen instead of leaving a big empty gap under the pill row -- only the top row stays
+        // pinned to its own place.
+        androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))
         // 3-page window: 0 = previous, 1 = current, 2 = next. HorizontalPager owns the drag/fling
         // math itself (a hand-rolled offset carousel here kept shipping subtle positioning bugs),
         // and keeps neighbor pages composed via beyondViewportPageCount so their artwork is
