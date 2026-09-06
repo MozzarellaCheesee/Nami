@@ -25,11 +25,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Subject
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -82,6 +89,11 @@ fun NowPlayingScreen(
 
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
     val scope = rememberCoroutineScope()
+    var showOverflowMenu by remember { mutableStateOf(false) }
+    // Local-only stub -- no "favorites" concept exists in the domain layer yet, so this doesn't
+    // persist across tracks/sessions. Resets whenever the playing track changes.
+    var isFavorite by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(queue.nowPlaying?.id) { isFavorite = false }
 
     // Shared by the swipe gesture and the chevron button so both dismiss paths always finish
     // the slide-down themselves before popping -- see the comment on the swipe branch below.
@@ -121,8 +133,22 @@ fun NowPlayingScreen(
             )
             .padding(20.dp),
     ) {
-        IconButton(onClick = ::collapseAnimated) {
-            Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = "Свернуть", tint = NamiColors.Paper100)
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            IconButton(onClick = ::collapseAnimated) {
+                Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = "Свернуть", tint = NamiColors.Paper100)
+            }
+            Box {
+                IconButton(onClick = { showOverflowMenu = true }) {
+                    Icon(Icons.Outlined.MoreVert, contentDescription = "Ещё", tint = NamiColors.Paper100)
+                }
+                // Stub: no queue-source/playlist-origin data is plumbed through yet (see
+                // Дизайн.md §4.3's "Из плейлиста ..." label, also skipped for the same reason),
+                // so this menu has nothing real to act on beyond dismissing itself.
+                DropdownMenu(expanded = showOverflowMenu, onDismissRequest = { showOverflowMenu = false }) {
+                    DropdownMenuItem(text = { Text("Аудиотракт") }, onClick = { showOverflowMenu = false })
+                    DropdownMenuItem(text = { Text("Таймер сна") }, onClick = { showOverflowMenu = false })
+                }
+            }
         }
         // 3-page window: 0 = previous, 1 = current, 2 = next. HorizontalPager owns the drag/fling
         // math itself (a hand-rolled offset carousel here kept shipping subtle positioning bugs),
@@ -182,12 +208,22 @@ fun NowPlayingScreen(
                 }
             }
         }
-        Text(
-            text = queue.nowPlaying?.title ?: "Ничего не играет",
-            color = NamiColors.Paper100,
-            maxLines = 1,
-            modifier = Modifier.fillMaxWidth().basicMarquee(iterations = Int.MAX_VALUE),
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = queue.nowPlaying?.title ?: "Ничего не играет",
+                color = NamiColors.Paper100,
+                maxLines = 1,
+                modifier = Modifier.weight(1f).basicMarquee(iterations = Int.MAX_VALUE),
+            )
+            // Stub, see isFavorite's declaration above -- not persisted anywhere yet.
+            IconButton(onClick = { isFavorite = !isFavorite }, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                    contentDescription = if (isFavorite) "Убрать из избранного" else "В избранное",
+                    tint = if (isFavorite) NamiColors.Shu else NamiColors.Paper100,
+                )
+            }
+        }
         queue.nowPlaying?.artistName?.let { artistName ->
             Text(text = artistName, color = NamiColors.Paper70)
         }
@@ -274,15 +310,38 @@ fun NowPlayingScreen(
                     .padding(horizontal = 6.dp, vertical = 2.dp),
             )
         }
-        androidx.compose.material3.TextButton(
-            onClick = onQueueClick,
-            modifier = Modifier
-                .padding(top = 20.dp)
-                .height(44.dp)
-                .background(NamiColors.Ink800, RoundedCornerShape(22.dp)),
+        // Bottom pill row per Дизайн.md §4.3: Очередь (real), night mode + lyrics ("Текст") are
+        // stubs -- neither an AMOLED/night toggle nor a lyrics screen exists yet, so these are
+        // present per the mockup but currently no-ops.
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(text = "Очередь", color = NamiColors.Paper70)
+            NowPlayingPill(text = "Очередь", onClick = onQueueClick, modifier = Modifier.weight(1f))
+            NowPlayingPill(icon = Icons.Outlined.DarkMode, onClick = {}, modifier = Modifier.weight(1f))
+            NowPlayingPill(text = "Текст", icon = Icons.Outlined.Subject, onClick = {}, modifier = Modifier.weight(1f))
         }
+    }
+}
+
+@Composable
+private fun NowPlayingPill(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    text: String? = null,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+) {
+    androidx.compose.material3.TextButton(
+        onClick = onClick,
+        modifier = modifier
+            .height(44.dp)
+            .background(NamiColors.Ink800, RoundedCornerShape(22.dp)),
+    ) {
+        icon?.let {
+            Icon(it, contentDescription = text, tint = NamiColors.Paper70, modifier = Modifier.size(20.dp))
+            if (text != null) androidx.compose.foundation.layout.Spacer(modifier = Modifier.padding(start = 4.dp))
+        }
+        text?.let { Text(text = it, color = NamiColors.Paper70) }
     }
 }
 

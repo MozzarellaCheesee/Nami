@@ -58,7 +58,7 @@ fun AlbumDetailScreen(
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
     val density = LocalDensity.current
-    val headerState = rememberCollapsingHeaderState(maxHeight = 360.dp, minHeight = 120.dp)
+    val headerState = rememberCollapsingHeaderState(maxHeight = 360.dp, minHeight = 170.dp)
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -75,6 +75,8 @@ fun AlbumDetailScreen(
                     text = uiState.album?.title ?: "",
                     color = NamiColors.Paper100,
                     style = MaterialTheme.typography.headlineSmall,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 )
                 uiState.album?.year?.let { year ->
                     Text(text = year.toString(), color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall)

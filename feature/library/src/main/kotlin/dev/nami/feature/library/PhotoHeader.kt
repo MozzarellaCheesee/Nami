@@ -17,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -45,7 +46,10 @@ fun PhotoHeader(
     height: Dp = 360.dp,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    Box(modifier = modifier.fillMaxWidth().height(height)) {
+    // clipToBounds: as the header shrinks (see CollapsingHeaderState), a long title in [content]
+    // can measure taller than the current height -- without a clip, that overflow bleeds past
+    // the header's edges into the track list below instead of just getting cropped.
+    Box(modifier = modifier.fillMaxWidth().height(height).clipToBounds()) {
         if (photoPath != null) {
             AsyncImage(
                 model = photoPath,

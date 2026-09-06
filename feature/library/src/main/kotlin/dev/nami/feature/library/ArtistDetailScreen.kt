@@ -58,7 +58,7 @@ fun ArtistDetailScreen(
     var showRenameDialog by remember { mutableStateOf(false) }
 
     val density = LocalDensity.current
-    val headerState = rememberCollapsingHeaderState(maxHeight = 360.dp, minHeight = 120.dp)
+    val headerState = rememberCollapsingHeaderState(maxHeight = 360.dp, minHeight = 170.dp)
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -75,6 +75,8 @@ fun ArtistDetailScreen(
                     text = artistName ?: "",
                     color = NamiColors.Paper100,
                     style = MaterialTheme.typography.headlineSmall,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 )
                 Spacer(modifier = Modifier.padding(top = 12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
