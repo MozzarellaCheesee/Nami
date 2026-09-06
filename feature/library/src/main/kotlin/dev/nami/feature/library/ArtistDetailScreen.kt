@@ -273,27 +273,32 @@ fun ArtistDetailScreen(
                     .data(effectivePhotoPath)
                     .size(screenWidthPx.roundToInt(), headerMaxHeightPx.roundToInt())
                     .build()
-                AsyncImage(
-                    model = request,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = slideModifier,
-                )
+                Box(modifier = slideModifier) {
+                    AsyncImage(
+                        model = request,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    // The gradient used to be a separate Box sized off the header's own
+                    // (independently animated) height, which fell out of sync with the photo's
+                    // real position/size mid-slide -- the photo visibly poked out past the
+                    // gradient's edge. Sharing slideModifier keeps them pixel-identical always.
+                    // Fades out entirely by the time it's a small circle, where a gradient
+                    // wouldn't read as anything but a smudge.
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { alpha = 1f - progress }
+                            .background(Brush.verticalGradient(0.4f to Color.Transparent, 1f to NamiColors.Ink900)),
+                    )
+                }
             } else {
                 // No photo anywhere to fall back to -- still slide/shrink a plain placeholder so
                 // the reserved slot isn't left visually empty.
                 Box(modifier = slideModifier.background(NamiColors.Ink700))
             }
         }
-
-        // Gradient fade sits on top of the sliding photo (so it's always fading against the
-        // photo, not against nothing) but below the back button.
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(headerHeightDp)
-                .background(Brush.verticalGradient(0.4f to Color.Transparent, 1f to NamiColors.Ink900)),
-        )
 
         IconButton(
             onClick = onBack,
