@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -78,6 +79,7 @@ fun NamiNavHost(
     // Scoped here (Activity-level ViewModelStoreOwner), not inside a nav destination,
     // so MiniPlayer and NowPlayingScreen share the same instance and stay in sync.
     val nowPlayingViewModel: NowPlayingViewModel = hiltViewModel()
+    val queue by nowPlayingViewModel.queue.collectAsState()
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
 
     // Now Playing is deliberately NOT a NavHost destination: NavHost only keeps its current
@@ -208,7 +210,17 @@ fun NamiNavHost(
         // Always mounted, even while Now Playing is open/closing -- it's what Now Playing's
         // own slide-down is supposed to progressively uncover. Hiding it made it pop in
         // abruptly the moment Now Playing finished closing instead of already being there.
-        MiniPlayer(onExpand = { showNowPlaying = true }, viewModel = nowPlayingViewModel)
+        // The AnimatedVisibility here only handles the very first appearance (nothing was
+        // playing, now something is) -- exit is instant because MiniPlayer's own swipe-down
+        // dismiss already animates its height to 0 before queue.nowPlaying goes null (see
+        // MiniPlayer.kt), so by the time this flips invisible there's nothing left to see.
+        AnimatedVisibility(
+            visible = queue.nowPlaying != null,
+            enter = slideInVertically(initialOffsetY = { it }),
+            exit = ExitTransition.None,
+        ) {
+            MiniPlayer(onExpand = { showNowPlaying = true }, viewModel = nowPlayingViewModel)
+        }
         NamiBottomBar(
             currentRoute = currentRoute,
             onTabSelected = { route ->

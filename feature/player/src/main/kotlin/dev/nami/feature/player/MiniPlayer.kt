@@ -32,6 +32,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -75,6 +76,23 @@ fun MiniPlayer(
     androidx.compose.runtime.LaunchedEffect(queue.nowPlaying?.id) {
         dragOffsetY = 0f
         artworkOffsetX = 0f
+    }
+
+    val externalTrackChangeSignal by viewModel.externalTrackChangeSignal.collectAsState()
+    // Skip the very first collected value (whatever it happens to be at this composition's
+    // mount) so the animation only plays for a signal bump that happens WHILE this MiniPlayer
+    // instance is already alive and showing a track -- covers "already playing, user tapped a
+    // different track elsewhere" without also firing (redundantly, since the appear animation
+    // in NamiNavHost already covers it) the moment MiniPlayer is first composed for a brand new track.
+    var hasSeenFirstSignal by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(externalTrackChangeSignal) {
+        if (hasSeenFirstSignal) {
+            val exitDistance = blockWidthPx.toFloat() + skipThresholdPx
+            animate(artworkOffsetX, -exitDistance) { value, _ -> artworkOffsetX = value }
+            artworkOffsetX = exitDistance
+            animate(artworkOffsetX, 0f) { value, _ -> artworkOffsetX = value }
+        }
+        hasSeenFirstSignal = true
     }
 
     if (queue.nowPlaying == null) return
