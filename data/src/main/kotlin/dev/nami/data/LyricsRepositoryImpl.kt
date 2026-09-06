@@ -80,4 +80,24 @@ class LyricsRepositoryImpl @Inject constructor() : LyricsRepository {
 
     override suspend fun generateFurigana(lines: List<String>): List<String> =
         withContext(Dispatchers.Default) { FuriganaGenerator.annotate(lines) }
+
+    private fun romajiFile(path: String) = File(sibling(path, ".romaji.txt"))
+
+    override fun romajiForPath(path: String): Flow<List<String>?> = flow {
+        emit(
+            withContext(Dispatchers.IO) {
+                val file = romajiFile(path)
+                if (file.exists()) file.readLines() else null
+            },
+        )
+    }
+
+    override suspend fun saveRomaji(path: String, lines: List<String>) {
+        withContext(Dispatchers.IO) {
+            romajiFile(path).writeText(lines.joinToString("\n"))
+        }
+    }
+
+    override suspend fun generateRomaji(lines: List<String>): List<String> =
+        withContext(Dispatchers.Default) { RomajiGenerator.generate(lines) }
 }

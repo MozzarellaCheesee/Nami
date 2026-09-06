@@ -37,6 +37,9 @@ data class LyricsUiState(
     val furigana: List<String>? = null,
     val showFurigana: Boolean = false,
     val isGeneratingFurigana: Boolean = false,
+    val romaji: List<String>? = null,
+    val showRomaji: Boolean = false,
+    val isGeneratingRomaji: Boolean = false,
 )
 
 @HiltViewModel
@@ -55,6 +58,7 @@ class LyricsViewModel @Inject constructor(
         val lyrics: Lyrics?,
         val translation: List<String>?,
         val furigana: List<String>?,
+        val romaji: List<String>?,
     )
 
     // Bumped after a successful LRCLIB fetch/manual save/translation is written to its sidecar
@@ -71,8 +75,9 @@ class LyricsViewModel @Inject constructor(
                         lyricsRepository.lyricsForPath(track.path),
                         lyricsRepository.translationForPath(track.path),
                         lyricsRepository.furiganaForPath(track.path),
-                    ) { lyrics, translation, furigana ->
-                        TrackAndLyrics(track.id, track.path, track.title, track.artistName, track.durationMs, lyrics, translation, furigana)
+                        lyricsRepository.romajiForPath(track.path),
+                    ) { lyrics, translation, furigana, romaji ->
+                        TrackAndLyrics(track.id, track.path, track.title, track.artistName, track.durationMs, lyrics, translation, furigana, romaji)
                     }
                 }
             }
@@ -85,6 +90,8 @@ class LyricsViewModel @Inject constructor(
     private val _isTranslating = MutableStateFlow(false)
     private val _showFurigana = MutableStateFlow(false)
     private val _isGeneratingFurigana = MutableStateFlow(false)
+    private val _showRomaji = MutableStateFlow(false)
+    private val _isGeneratingRomaji = MutableStateFlow(false)
     // Never re-hit LRCLIB for a track once tried this session, hit or miss -- there is no
     // "retry automatically forever" here, only the one manual re-check the user can trigger from
     // the empty state (also routed through fetchOnline, but that call bypasses this guard).
@@ -92,7 +99,7 @@ class LyricsViewModel @Inject constructor(
 
     val uiState: StateFlow<LyricsUiState> = combine(
         trackAndLyrics, _positionMs, _isFetchingOnline, _showTranslation, _isTranslating,
-        _showFurigana, _isGeneratingFurigana,
+        _showFurigana, _isGeneratingFurigana, _showRomaji, _isGeneratingRomaji,
     ) { values ->
         val tl = values[0] as TrackAndLyrics?
         val pos = values[1] as Long
@@ -101,6 +108,8 @@ class LyricsViewModel @Inject constructor(
         val translating = values[4] as Boolean
         val showFurigana = values[5] as Boolean
         val generatingFurigana = values[6] as Boolean
+        val showRomaji = values[7] as Boolean
+        val generatingRomaji = values[8] as Boolean
         LyricsUiState(
             trackId = tl?.trackId,
             trackPath = tl?.path,
@@ -113,6 +122,9 @@ class LyricsViewModel @Inject constructor(
             furigana = tl?.furigana,
             showFurigana = showFurigana,
             isGeneratingFurigana = generatingFurigana,
+            romaji = tl?.romaji,
+            showRomaji = showRomaji,
+            isGeneratingRomaji = generatingRomaji,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LyricsUiState())
 
@@ -130,6 +142,7 @@ class LyricsViewModel @Inject constructor(
             .onEach {
                 _showTranslation.value = false
                 _showFurigana.value = false
+                _showRomaji.value = false
             }
             .launchIn(viewModelScope)
 
@@ -237,6 +250,38 @@ class LyricsViewModel @Inject constructor(
                 reloadSignal.value++
             } finally {
                 _isGeneratingFurigana.value = false
+            }
+        }
+    }
+
+    /** Same shape as [toggleFurigana], whole-line romaji instead of per-kanji readings. */
+    fun toggleRomaji() {
+        val tl = trackAndLyrics.value
+        if (tl?.lyrics == null) return
+        if (_showRomaji.value) {
+            _showRomaji.value = false
+            return
+        }
+        _showRomaji.value = true
+        if (tl.romaji == null) runRomaji(tl.path, tl.lyrics)
+    }
+
+    fun forceRegenerateRomaji() {
+        val tl = trackAndLyrics.value
+        if (tl?.lyrics == null) return
+        _showRomaji.value = true
+        runRomaji(tl.path, tl.lyrics)
+    }
+
+    private fun runRomaji(path: String, lyrics: Lyrics) {
+        viewModelScope.launch {
+            _isGeneratingRomaji.value = true
+            try {
+                val generated = lyricsRepository.generateRomaji(lyrics.lines.map { it.text })
+                lyricsRepository.saveRomaji(path, generated)
+                reloadSignal.value++
+            } finally {
+                _isGeneratingRomaji.value = false
             }
         }
     }

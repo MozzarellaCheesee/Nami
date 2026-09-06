@@ -176,6 +176,30 @@ fun LyricsScreen(
                     )
                 }
             }
+            if (uiState.isGeneratingRomaji) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    color = NamiColors.Paper70,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.padding(horizontal = 8.dp).size(20.dp),
+                )
+            } else if (hasLyrics) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .combinedClickable(
+                            onClick = { viewModel.toggleRomaji() },
+                            onLongClick = { viewModel.forceRegenerateRomaji() },
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "R",
+                        color = if (uiState.showRomaji) NamiColors.Shu else NamiColors.Paper70,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                }
+            }
             if (uiState.isTranslating) {
                 androidx.compose.material3.CircularProgressIndicator(
                     color = NamiColors.Paper70,
@@ -232,6 +256,7 @@ fun LyricsScreen(
                     lyrics = lyrics,
                     translation = uiState.translation.takeIf { uiState.showTranslation },
                     furigana = uiState.furigana.takeIf { uiState.showFurigana },
+                    romaji = uiState.romaji.takeIf { uiState.showRomaji },
                     positionMs = uiState.positionMs,
                     onLineClick = { viewModel.seekTo(it) },
                 )
@@ -265,6 +290,7 @@ private fun SyncedLyricsList(
     lyrics: Lyrics,
     translation: List<String>?,
     furigana: List<String>?,
+    romaji: List<String>?,
     positionMs: Long,
     onLineClick: (Long) -> Unit,
 ) {
@@ -351,6 +377,16 @@ private fun SyncedLyricsList(
                         .clickable { onLineClick(line.timeMs) }
                         .padding(vertical = 14.dp),
                 ) {
+                    // План.md's romaji/original/translation triplet -- romaji goes above the
+                    // original line, translation below it.
+                    romaji?.getOrNull(index)?.let { romajiText ->
+                        Text(
+                            text = romajiText,
+                            color = NamiColors.Paper70.copy(alpha = alpha),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(bottom = 2.dp),
+                        )
+                    }
                     val furiganaLine = furigana?.getOrNull(index)
                     if (furiganaLine != null) {
                         FuriganaLine(

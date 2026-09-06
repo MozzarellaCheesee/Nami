@@ -37,4 +37,10 @@ interface LyricsRepository {
     /** Pure on-device morphological analysis (Kuromoji) -- no network, no model download, always
      * available once the track has lyrics at all. */
     suspend fun generateFurigana(lines: List<String>): List<String>
+
+    /** Same cache/generation shape as furigana, whole-line Hepburn romaji instead of per-kanji
+     * readings -- План.md's "romaji / оригинал / перевод" triplet mode. */
+    fun romajiForPath(path: String): Flow<List<String>?>
+    suspend fun saveRomaji(path: String, lines: List<String>)
+    suspend fun generateRomaji(lines: List<String>): List<String>
 }
