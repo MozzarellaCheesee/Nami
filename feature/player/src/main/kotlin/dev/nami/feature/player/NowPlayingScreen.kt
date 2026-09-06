@@ -6,6 +6,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -176,10 +177,16 @@ fun NowPlayingScreen(
                 ),
             )
         }
-        // Pushes everything below (artwork, title, controls, pills) down to the bottom of the
-        // screen instead of leaving a big empty gap under the pill row -- only the top row stays
-        // pinned to its own place.
-        androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))
+        // Scrollable instead of a weighted bottom-pin: on a short screen (or with all the extra
+        // controls added since -- shuffle/repeat, taller pills), the content below no longer
+        // reliably fits, and a weight(1f) spacer just gets squeezed to 0dp while the tail (the
+        // pill row) overflows past the bottom edge and gets clipped there, looking like it never
+        // grew no matter how tall it's set. Scrolling means it's always fully reachable instead.
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(androidx.compose.foundation.rememberScrollState()),
+        ) {
         // 3-page window: 0 = previous, 1 = current, 2 = next. HorizontalPager owns the drag/fling
         // math itself (a hand-rolled offset carousel here kept shipping subtle positioning bugs),
         // and keeps neighbor pages composed via beyondViewportPageCount so their artwork is
@@ -376,6 +383,7 @@ fun NowPlayingScreen(
             )
             NowPlayingPill(icon = Icons.Outlined.DarkMode, onClick = {}, shape = CircleShape, modifier = Modifier.size(56.dp))
             NowPlayingPill(text = "Текст", icon = Icons.Outlined.Subject, onClick = {}, modifier = Modifier.weight(1f))
+        }
         }
     }
 }
