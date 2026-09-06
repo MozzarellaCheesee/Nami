@@ -78,6 +78,7 @@ class SearchRepositoryImplTest {
         override suspend fun updateTitle(id: String, title: String) = error("unused")
         override suspend fun updateArtworkPath(id: String, path: String) = error("unused")
         override suspend fun setIsSingle(id: String, isSingle: Boolean) = error("unused")
+        override suspend fun setYear(id: String, year: Int?) = error("unused")
         override suspend fun setArtistId(id: String, artistId: String?) = error("unused")
         override suspend fun clearArtists(albumId: String) = error("unused")
         override suspend fun addArtist(ref: dev.nami.core.database.entity.AlbumArtistCrossRef) = error("unused")

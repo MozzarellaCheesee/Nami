@@ -33,6 +33,9 @@ data class LyricsUiState(
     val translation: List<String>? = null,
     val showTranslation: Boolean = false,
     val isTranslating: Boolean = false,
+    val furigana: List<String>? = null,
+    val showFurigana: Boolean = false,
+    val isGeneratingFurigana: Boolean = false,
 )
 
 @HiltViewModel
@@ -50,6 +53,7 @@ class LyricsViewModel @Inject constructor(
         val durationMs: Long,
         val lyrics: Lyrics?,
         val translation: List<String>?,
+        val furigana: List<String>?,
     )
 
     // Bumped after a successful LRCLIB fetch/manual save/translation is written to its sidecar
@@ -65,8 +69,9 @@ class LyricsViewModel @Inject constructor(
                     combine(
                         lyricsRepository.lyricsForPath(track.path),
                         lyricsRepository.translationForPath(track.path),
-                    ) { lyrics, translation ->
-                        TrackAndLyrics(track.id, track.path, track.title, track.artistName, track.durationMs, lyrics, translation)
+                        lyricsRepository.furiganaForPath(track.path),
+                    ) { lyrics, translation, furigana ->
+                        TrackAndLyrics(track.id, track.path, track.title, track.artistName, track.durationMs, lyrics, translation, furigana)
                     }
                 }
             }
@@ -77,6 +82,8 @@ class LyricsViewModel @Inject constructor(
     private val _isFetchingOnline = MutableStateFlow(false)
     private val _showTranslation = MutableStateFlow(false)
     private val _isTranslating = MutableStateFlow(false)
+    private val _showFurigana = MutableStateFlow(false)
+    private val _isGeneratingFurigana = MutableStateFlow(false)
     // Never re-hit LRCLIB for a track once tried this session, hit or miss -- there is no
     // "retry automatically forever" here, only the one manual re-check the user can trigger from
     // the empty state (also routed through fetchOnline, but that call bypasses this guard).
@@ -84,12 +91,15 @@ class LyricsViewModel @Inject constructor(
 
     val uiState: StateFlow<LyricsUiState> = combine(
         trackAndLyrics, _positionMs, _isFetchingOnline, _showTranslation, _isTranslating,
+        _showFurigana, _isGeneratingFurigana,
     ) { values ->
         val tl = values[0] as TrackAndLyrics?
         val pos = values[1] as Long
         val fetching = values[2] as Boolean
         val showTranslation = values[3] as Boolean
         val translating = values[4] as Boolean
+        val showFurigana = values[5] as Boolean
+        val generatingFurigana = values[6] as Boolean
         LyricsUiState(
             trackId = tl?.trackId,
             trackPath = tl?.path,
@@ -99,6 +109,9 @@ class LyricsViewModel @Inject constructor(
             translation = tl?.translation,
             showTranslation = showTranslation,
             isTranslating = translating,
+            furigana = tl?.furigana,
+            showFurigana = showFurigana,
+            isGeneratingFurigana = generatingFurigana,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LyricsUiState())
 
@@ -163,6 +176,30 @@ class LyricsViewModel @Inject constructor(
                 }
             } finally {
                 _isTranslating.value = false
+            }
+        }
+    }
+
+    /** Same shape as [toggleTranslation] but Kuromoji runs fully on-device -- no network, no
+     * model download -- so the only reason to cache it at all is to not re-tokenize every time
+     * the screen reopens. */
+    fun toggleFurigana() {
+        val tl = trackAndLyrics.value
+        if (tl?.lyrics == null) return
+        if (_showFurigana.value) {
+            _showFurigana.value = false
+            return
+        }
+        _showFurigana.value = true
+        if (tl.furigana != null) return
+        viewModelScope.launch {
+            _isGeneratingFurigana.value = true
+            try {
+                val generated = lyricsRepository.generateFurigana(tl.lyrics.lines.map { it.text })
+                lyricsRepository.saveFurigana(tl.path, generated)
+                reloadSignal.value++
+            } finally {
+                _isGeneratingFurigana.value = false
             }
         }
     }

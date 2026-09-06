@@ -60,4 +60,24 @@ class LyricsRepositoryImpl @Inject constructor() : LyricsRepository {
 
     override suspend fun translateToRussian(lines: List<String>): List<String>? =
         MlKitTranslator.translateToRussian(lines)
+
+    private fun furiganaFile(path: String) = File(sibling(path, ".furi.txt"))
+
+    override fun furiganaForPath(path: String): Flow<List<String>?> = flow {
+        emit(
+            withContext(Dispatchers.IO) {
+                val file = furiganaFile(path)
+                if (file.exists()) file.readLines() else null
+            },
+        )
+    }
+
+    override suspend fun saveFurigana(path: String, lines: List<String>) {
+        withContext(Dispatchers.IO) {
+            furiganaFile(path).writeText(lines.joinToString("\n"))
+        }
+    }
+
+    override suspend fun generateFurigana(lines: List<String>): List<String> =
+        withContext(Dispatchers.Default) { FuriganaGenerator.annotate(lines) }
 }

@@ -63,6 +63,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.model.Lyrics
 import dev.nami.core.designsystem.NamiColors
@@ -141,13 +142,29 @@ fun LyricsScreen(
                 Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
             }
             Text(text = "Текст песни", color = NamiColors.Paper100, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            val hasLyrics = uiState.lyrics != null && uiState.lyrics!!.lines.isNotEmpty()
+            if (uiState.isGeneratingFurigana) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    color = NamiColors.Paper70,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.padding(horizontal = 8.dp).size(20.dp),
+                )
+            } else if (hasLyrics) {
+                IconButton(onClick = { viewModel.toggleFurigana() }) {
+                    Text(
+                        "振",
+                        color = if (uiState.showFurigana) NamiColors.Shu else NamiColors.Paper70,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                }
+            }
             if (uiState.isTranslating) {
                 androidx.compose.material3.CircularProgressIndicator(
                     color = NamiColors.Paper70,
                     strokeWidth = 2.dp,
                     modifier = Modifier.padding(horizontal = 8.dp).size(20.dp),
                 )
-            } else if (uiState.lyrics != null && uiState.lyrics!!.lines.isNotEmpty()) {
+            } else if (hasLyrics) {
                 IconButton(onClick = { viewModel.toggleTranslation() }) {
                     Icon(
                         Icons.Outlined.Translate,
@@ -187,6 +204,7 @@ fun LyricsScreen(
                 SyncedLyricsList(
                     lyrics = lyrics,
                     translation = uiState.translation.takeIf { uiState.showTranslation },
+                    furigana = uiState.furigana.takeIf { uiState.showFurigana },
                     positionMs = uiState.positionMs,
                     onLineClick = { viewModel.seekTo(it) },
                 )
@@ -216,7 +234,13 @@ fun LyricsScreen(
 }
 
 @Composable
-private fun SyncedLyricsList(lyrics: Lyrics, translation: List<String>?, positionMs: Long, onLineClick: (Long) -> Unit) {
+private fun SyncedLyricsList(
+    lyrics: Lyrics,
+    translation: List<String>?,
+    furigana: List<String>?,
+    positionMs: Long,
+    onLineClick: (Long) -> Unit,
+) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     // Plain recomputation, not derivedStateOf -- derivedStateOf's lambda was captured once (by
@@ -300,15 +324,22 @@ private fun SyncedLyricsList(lyrics: Lyrics, translation: List<String>?, positio
                         .clickable { onLineClick(line.timeMs) }
                         .padding(vertical = 14.dp),
                 ) {
-                    Text(
-                        text = line.text.ifBlank { "…" },
-                        color = NamiColors.Paper100.copy(alpha = alpha),
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
-                    )
-                    // Smaller, under the original -- furigana would go ABOVE the kanji instead,
-                    // that piece needs a Japanese morphological analyzer (lindera, native/Rust)
-                    // this pass didn't include.
+                    val furiganaLine = furigana?.getOrNull(index)
+                    if (furiganaLine != null) {
+                        FuriganaLine(
+                            annotated = furiganaLine,
+                            fallback = line.text,
+                            color = NamiColors.Paper100.copy(alpha = alpha),
+                            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                        )
+                    } else {
+                        Text(
+                            text = line.text.ifBlank { "…" },
+                            color = NamiColors.Paper100.copy(alpha = alpha),
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                        )
+                    }
                     translation?.getOrNull(index)?.let { translatedText ->
                         Text(
                             text = translatedText,
@@ -320,34 +351,53 @@ private fun SyncedLyricsList(lyrics: Lyrics, translation: List<String>?, positio
                 }
             }
         }
-        // Edge fade so lines don't just hard-cut at the top/bottom of the list -- was solid
-        // opaque Ink900 fading to transparent, which read as a flat grey patch stacked right on
-        // top of the ambient blurred backdrop showing everywhere else (right where it meets the
-        // header/transport bar, the two spots this was most obvious). Same alpha as the scrim
-        // over the rest of the screen instead of full opacity, so it's the same background, only
-        // built up a little for text legibility, not a visibly different patch.
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(140.dp)
-                .align(Alignment.TopCenter)
-                .background(
-                    androidx.compose.ui.graphics.Brush.verticalGradient(
-                        listOf(NamiColors.Ink900.copy(alpha = 0.72f), androidx.compose.ui.graphics.Color.Transparent),
-                    ),
-                ),
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(200.dp)
-                .align(Alignment.BottomCenter)
-                .background(
-                    androidx.compose.ui.graphics.Brush.verticalGradient(
-                        listOf(androidx.compose.ui.graphics.Color.Transparent, NamiColors.Ink900.copy(alpha = 0.72f)),
-                    ),
-                ),
-        )
+        // No separate edge-fade box here anymore -- it was a second scrim stacked on top of the
+        // screen's own ambient one (0.72 alpha over 0.72 alpha compounds to ~0.92, reading as a
+        // flat near-opaque patch right at the header/transport seams instead of "the same
+        // background"). The per-line alpha falloff above already does the fade-into-background
+        // job on its own; the whole screen now shares one uniform scrim, no darker bands.
+    }
+}
+
+private data class FuriSegment(val text: String, val reading: String?)
+
+// Matches FuriganaGenerator's "surface[hiragana]" encoding -- either an annotated run or a plain
+// (no-brackets) run, alternating through the whole line.
+private val furiganaSegmentRegex = Regex("([^\\[\\]]+)\\[([^\\]]+)\\]|([^\\[\\]]+)")
+
+private fun parseFurigana(annotated: String): List<FuriSegment> =
+    furiganaSegmentRegex.findAll(annotated).map { m ->
+        if (m.groupValues[1].isNotEmpty()) FuriSegment(m.groupValues[1], m.groupValues[2]) else FuriSegment(m.groupValues[3], null)
+    }.toList()
+
+/** Ruby-text layout: reading in small hiragana above, original characters below -- the
+ * conventional furigana placement (as opposed to the translation, which sits below in smaller
+ * text). Falls back to plain [fallback] text if the annotated string doesn't parse into anything
+ * (defensive; FuriganaGenerator always emits at least one plain segment). */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun FuriganaLine(annotated: String, fallback: String, color: androidx.compose.ui.graphics.Color, fontWeight: FontWeight) {
+    val segments = remember(annotated) { parseFurigana(annotated) }
+    if (segments.isEmpty()) {
+        Text(text = fallback.ifBlank { "…" }, color = color, style = MaterialTheme.typography.headlineMedium, fontWeight = fontWeight)
+        return
+    }
+    androidx.compose.foundation.layout.FlowRow(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(2.dp)) {
+        segments.forEach { segment ->
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = segment.reading.orEmpty(),
+                    color = color,
+                    fontSize = 11.sp,
+                )
+                Text(
+                    text = segment.text,
+                    color = color,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = fontWeight,
+                )
+            }
+        }
     }
 }
 

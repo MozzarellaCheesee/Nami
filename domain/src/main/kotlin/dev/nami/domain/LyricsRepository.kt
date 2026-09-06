@@ -28,4 +28,13 @@ interface LyricsRepository {
     /** On-device (ML Kit) translation to Russian -- the model downloads once over network on
      * first use per language pair, then runs fully offline. Null on download/translate failure. */
     suspend fun translateToRussian(lines: List<String>): List<String>?
+
+    /** Furigana-annotated text, one line per original lyric line, same order and format as
+     * [translationForPath]'s cache -- "surface[hiragana]" segments, see FuriganaGenerator. */
+    fun furiganaForPath(path: String): Flow<List<String>?>
+    suspend fun saveFurigana(path: String, lines: List<String>)
+
+    /** Pure on-device morphological analysis (Kuromoji) -- no network, no model download, always
+     * available once the track has lyrics at all. */
+    suspend fun generateFurigana(lines: List<String>): List<String>
 }
