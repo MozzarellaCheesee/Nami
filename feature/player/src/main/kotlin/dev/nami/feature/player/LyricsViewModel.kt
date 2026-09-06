@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
@@ -118,6 +119,18 @@ class LyricsViewModel @Inject constructor(
     init {
         playerRepository.state
             .onEach { state -> if (state is PlaybackState.Playing) _positionMs.value = state.positionMs }
+            .launchIn(viewModelScope)
+
+        // The show-translation/show-furigana toggles are per-track, not global: without this,
+        // switching to a track with neither cached left both header buttons lit orange ("on")
+        // carried over from the previous track, while nothing was actually shown.
+        trackAndLyrics
+            .filterNotNull()
+            .distinctUntilChangedBy { it.trackId }
+            .onEach {
+                _showTranslation.value = false
+                _showFurigana.value = false
+            }
             .launchIn(viewModelScope)
 
         // The actual "minimum effort" part: no local .lrc found -> try LRCLIB automatically,

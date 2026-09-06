@@ -24,7 +24,11 @@ object MlKitTranslator {
         )
         return try {
             translator.downloadModelIfNeeded(DownloadConditions.Builder().build()).await()
-            lines.map { line -> if (line.isBlank()) line else translator.translate(line).await() }
+            // A Latin-heavy line (English mixed into the lyrics) fed to a JA->RU translator as
+            // if it were all Japanese comes back garbled -- passed through untranslated instead.
+            lines.map { line ->
+                if (line.isBlank() || !isJapaneseDominant(line)) line else translator.translate(line).await()
+            }
         } catch (e: Exception) {
             Log.w("MlKitTranslator", "translation failed: ${e.message}")
             null

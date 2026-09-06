@@ -17,7 +17,10 @@ object FuriganaGenerator {
     fun annotate(lines: List<String>): List<String> = lines.map { annotateLine(it) }
 
     private fun annotateLine(line: String): String {
-        if (line.isBlank()) return line
+        // A Latin-heavy line (English mixed into the lyrics) breaks Kuromoji's tokenizer --
+        // IPADIC has no English dictionary, so it falls back to garbage per-character tokens and
+        // the resulting ruby-text layout comes out visibly broken. Leave those lines alone.
+        if (line.isBlank() || !isJapaneseDominant(line)) return line
         return tokenizer.tokenize(line).joinToString("") { token ->
             val surface = token.surface
             val reading = token.reading

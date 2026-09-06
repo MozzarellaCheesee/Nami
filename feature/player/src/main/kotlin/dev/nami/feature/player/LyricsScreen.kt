@@ -72,11 +72,14 @@ import kotlin.math.roundToInt
 
 private const val DISMISS_THRESHOLD_DP = 120
 // A gap this long between two lines is an instrumental break, not just normal breathing room
-// between sung lines -- past LINE_DURATION_ASSUMPTION_MS into it, nothing is "currently playing"
-// even though the last line's timestamp has technically passed, so it shouldn't stay lit as if
-// the vocalist were still on it.
+// between sung lines.
 private const val GAP_MS = 5000L
-private const val LINE_DURATION_ASSUMPTION_MS = 2500L
+// How far INTO that gap (as a fraction) before assuming the vocalist is actually done and it's
+// safe to show "nothing playing" -- a fixed millisecond guess (the original approach) was wrong
+// for any line whose actual sung duration didn't match the guess, cutting the highlight before
+// the line was finished. Scaling with the gap's own size adapts to lines of very different length
+// without needing per-line duration data.
+private const val GAP_FRACTION_BEFORE_SILENT = 0.7f
 
 /** Three of План.md's four "18. Экран лирики" modes (furigana, romaji triplet, karaoke word
  * highlight) and its dictionary/Anki/LRCLIB pieces aren't here -- this is the load-bearing first
@@ -262,7 +265,7 @@ private fun SyncedLyricsList(
     val currentLine = lyrics.lines.getOrNull(rawIndex)
     val inGap = currentLine != null && nextLine != null &&
         (nextLine.timeMs - currentLine.timeMs) > GAP_MS &&
-        positionMs > currentLine.timeMs + LINE_DURATION_ASSUMPTION_MS
+        positionMs > currentLine.timeMs + ((nextLine.timeMs - currentLine.timeMs) * GAP_FRACTION_BEFORE_SILENT).toLong()
     val currentIndex = if (inGap) -1 else rawIndex
     var lastCentered by remember { mutableIntStateOf(-1) }
     // Scrolls by the raw (gap-inclusive) index -- during an instrumental break there's no active
