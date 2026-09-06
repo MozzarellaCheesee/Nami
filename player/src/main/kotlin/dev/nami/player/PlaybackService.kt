@@ -1,5 +1,7 @@
 package dev.nami.player
 
+import android.app.PendingIntent
+import android.content.Intent
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
@@ -7,6 +9,10 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import dev.nami.core.model.TrackId
 import dev.nami.domain.PlaybackState
+
+/** Set on the intent MainActivity is launched with from the system media notification/status-bar
+ * chip, so it can open Now Playing directly instead of whatever screen the user left. */
+const val EXTRA_OPEN_PLAYER = "dev.nami.player.OPEN_PLAYER"
 
 class PlaybackService : MediaSessionService() {
     private lateinit var player: ExoPlayer
@@ -28,7 +34,22 @@ class PlaybackService : MediaSessionService() {
             .setBackBuffer(/* backBufferDurationMs = */ 60_000, /* retainBackBufferFromKeyframe = */ true)
             .build()
         player = ExoPlayer.Builder(this).setLoadControl(loadControl).build()
-        mediaSession = MediaSession.Builder(this, player).build()
+        // Without a session activity, the system media notification/status-bar chip has nothing
+        // to launch on tap. EXTRA_OPEN_PLAYER tells MainActivity to open Now Playing directly
+        // instead of just the last screen the user left.
+        // Can't reference MainActivity's class directly -- it lives in the :app module, which
+        // depends on :player, not the other way around.
+        val openIntent = Intent().apply {
+            setClassName(packageName, "dev.nami.app.MainActivity")
+            putExtra(EXTRA_OPEN_PLAYER, true)
+        }
+        val sessionActivity = PendingIntent.getActivity(
+            this,
+            0,
+            openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        mediaSession = MediaSession.Builder(this, player).setSessionActivity(sessionActivity).build()
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession =

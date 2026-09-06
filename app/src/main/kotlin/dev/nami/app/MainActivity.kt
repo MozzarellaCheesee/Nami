@@ -1,5 +1,6 @@
 package dev.nami.app
 
+import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -13,6 +14,8 @@ import dagger.hilt.android.AndroidEntryPoint
 import dev.nami.app.navigation.NamiNavHost
 import dev.nami.core.designsystem.NamiTheme
 import dev.nami.feature.library.LibraryViewModel
+import dev.nami.player.EXTRA_OPEN_PLAYER
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -23,6 +26,16 @@ class MainActivity : ComponentActivity() {
     private val libraryViewModel: LibraryViewModel by viewModels()
     private val playlistActionsViewModel: PlaylistActionsViewModel by viewModels()
     private val metadataActionsViewModel: MetadataActionsViewModel by viewModels()
+
+    // Bumped whenever an intent (fresh launch or onNewIntent, e.g. tapping the system media
+    // notification/status-bar chip) asks to open the player directly.
+    private val openPlayerSignal = MutableStateFlow(0)
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_OPEN_PLAYER, false)) openPlayerSignal.value++
+    }
 
     private val pickFiles = registerForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
@@ -71,6 +84,7 @@ class MainActivity : ComponentActivity() {
         // buttons overlay directly on the app's own dark background instead of a separate solid
         // system-drawn bar.
         enableEdgeToEdge(navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
+        if (intent.getBooleanExtra(EXTRA_OPEN_PLAYER, false)) openPlayerSignal.value++
         val importProgress = libraryViewModel.uiState
             .map { it.importProgress }
             .stateIn(lifecycleScope, SharingStarted.Eagerly, libraryViewModel.uiState.value.importProgress)
@@ -102,6 +116,7 @@ class MainActivity : ComponentActivity() {
                         metadataActionsViewModel.requestArtistPhotoPick(artistId)
                         pickArtistPhotoImage.launch(arrayOf("image/*"))
                     },
+                    openPlayerSignal = openPlayerSignal,
                 )
             }
         }

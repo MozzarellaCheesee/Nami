@@ -75,6 +75,7 @@ fun NamiNavHost(
     onImportResultShown: () -> Unit,
     onPickAlbumCover: (AlbumId) -> Unit,
     onPickArtistPhoto: (ArtistId) -> Unit,
+    openPlayerSignal: StateFlow<Int> = kotlinx.coroutines.flow.MutableStateFlow(0),
     navController: NavHostController = rememberNavController(),
 ) {
     // Scoped here (Activity-level ViewModelStoreOwner), not inside a nav destination,
@@ -93,6 +94,15 @@ fun NamiNavHost(
     // visual, and system back is wired by hand via BackHandler instead of the nav graph.
     var showNowPlaying by remember { mutableStateOf(false) }
     BackHandler(enabled = showNowPlaying) { showNowPlaying = false }
+
+    // Tapping the system media notification/status-bar chip bumps this from MainActivity --
+    // skip the initial value (0) so it only reacts to an actual tap, not first composition.
+    val openPlayerSignalValue by openPlayerSignal.collectAsState()
+    var hasSeenInitialOpenSignal by remember { mutableStateOf(false) }
+    LaunchedEffect(openPlayerSignalValue) {
+        if (hasSeenInitialOpenSignal) showNowPlaying = true
+        hasSeenInitialOpenSignal = true
+    }
 
     // Bumped each time the Library tab is tapped, to reset its sub-tab to Tracks without
     // recreating LibraryViewModel/its Paging flows -- an earlier fix used a fresh nav entry
