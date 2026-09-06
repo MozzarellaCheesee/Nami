@@ -1,10 +1,10 @@
 package dev.nami.app.navigation
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +12,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import dev.nami.core.designsystem.NamiColors
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -43,7 +47,6 @@ private const val ROUTE_LIBRARY = "library"
 private const val ROUTE_SEARCH = "search"
 private const val ROUTE_PLAYLISTS = "playlists"
 private const val ROUTE_SETTINGS = "settings"
-private const val ROUTE_NOW_PLAYING = "now_playing"
 private const val ROUTE_QUEUE = "queue"
 private const val ROUTE_ALBUM_DETAIL = "album/{albumId}"
 private const val ROUTE_ARTIST_DETAIL = "artist/{artistId}"
@@ -68,6 +71,15 @@ fun NamiNavHost(
     val nowPlayingViewModel: NowPlayingViewModel = hiltViewModel()
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
 
+    // Now Playing is deliberately NOT a NavHost destination: NavHost only keeps its current
+    // destination's composition alive, so pushing a "now_playing" route used to dispose the
+    // whole Library screen (Paging, recentAlbums, scroll position, ViewModel) behind it -- every
+    // expand/collapse paid for a full reload. Tracking it as plain state keeps Library (or
+    // whatever screen was open) mounted underneath the whole time; the overlay below is purely
+    // visual, and system back is wired by hand via BackHandler instead of the nav graph.
+    var showNowPlaying by remember { mutableStateOf(false) }
+    BackHandler(enabled = showNowPlaying) { showNowPlaying = false }
+
     Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
     Column(modifier = Modifier.statusBarsPadding()) {
         NavHost(
@@ -88,7 +100,7 @@ fun NamiNavHost(
                 LibraryScreen(
                     onTrackClick = { trackId ->
                         nowPlayingViewModel.playFromLibrary(trackId)
-                        navController.navigate(ROUTE_NOW_PLAYING)
+                        showNowPlaying = true
                     },
                     onAlbumClick = { albumId -> navController.navigate("album/${albumId.value}") },
                     onArtistClick = { artistId -> navController.navigate("artist/${artistId.value}") },
@@ -101,7 +113,7 @@ fun NamiNavHost(
                 SearchScreen(
                     onTrackClick = { trackId ->
                         nowPlayingViewModel.playTrack(trackId)
-                        navController.navigate(ROUTE_NOW_PLAYING)
+                        showNowPlaying = true
                     },
                     onAlbumClick = { albumId -> navController.navigate("album/${albumId.value}") },
                     onArtistClick = { artistId -> navController.navigate("artist/${artistId.value}") },
@@ -121,10 +133,6 @@ fun NamiNavHost(
             composable(ROUTE_TRASH) {
                 TrashScreen(onBack = { navController.popBackStack() })
             }
-            // Rendered as a sliding overlay below, not here -- this destination only exists
-            // to give Now Playing a real back-stack entry so system back / popBackStack work,
-            // without the NavHost swap causing MiniPlayer/BottomBar to disappear abruptly.
-            composable(ROUTE_NOW_PLAYING) {}
             composable(ROUTE_QUEUE) {
                 QueueScreen(onBack = { navController.popBackStack() }, viewModel = nowPlayingViewModel)
             }
@@ -136,7 +144,7 @@ fun NamiNavHost(
                     onBack = { navController.popBackStack() },
                     onPlayTracks = { tracks, startIndex ->
                         nowPlayingViewModel.playTracks(tracks, artistName = null, startIndex = startIndex)
-                        navController.navigate(ROUTE_NOW_PLAYING)
+                        showNowPlaying = true
                     },
                     onAddToQueue = { track -> nowPlayingViewModel.addToQueue(track, artistName = null) },
                 )
@@ -150,7 +158,7 @@ fun NamiNavHost(
                     onAlbumClick = { albumId -> navController.navigate("album/${albumId.value}") },
                     onPlayTracks = { tracks, artistName, startIndex ->
                         nowPlayingViewModel.playTracks(tracks, artistName, startIndex)
-                        navController.navigate(ROUTE_NOW_PLAYING)
+                        showNowPlaying = true
                     },
                     onAddToQueue = { track, artistName -> nowPlayingViewModel.addToQueue(track, artistName) },
                 )
@@ -164,14 +172,14 @@ fun NamiNavHost(
                     onDeleted = { navController.popBackStack() },
                     onPlayTracks = { tracks, startIndex ->
                         nowPlayingViewModel.playTracks(tracks, artistName = null, startIndex = startIndex)
-                        navController.navigate(ROUTE_NOW_PLAYING)
+                        showNowPlaying = true
                     },
                     onExportRequested = onExportPlaylist,
                     onPickCoverRequested = onPickPlaylistCover,
                 )
             }
         }
-        MiniPlayer(onExpand = { navController.navigate(ROUTE_NOW_PLAYING) }, viewModel = nowPlayingViewModel)
+        MiniPlayer(onExpand = { showNowPlaying = true }, viewModel = nowPlayingViewModel)
         NamiBottomBar(
             currentRoute = currentRoute,
             onTabSelected = { route ->
@@ -197,16 +205,16 @@ fun NamiNavHost(
     }
 
     AnimatedVisibility(
-        visible = currentRoute == ROUTE_NOW_PLAYING,
+        visible = showNowPlaying,
         enter = slideInVertically(initialOffsetY = { fullHeight -> fullHeight }),
         // Instant exit: NowPlayingScreen always finishes its own slide-down animation (swipe
-        // or the collapse chevron, both routed through the same code) before popping the back
-        // stack, so by the time this flips to invisible the screen is already fully off-canvas
-        // -- an animated exit here would just add a second, redundant slide on top of that one.
+        // or the collapse chevron, both routed through the same code) before flipping this to
+        // false, so by that point the screen is already fully off-canvas -- an animated exit
+        // here would just add a second, redundant slide on top of that one.
         exit = ExitTransition.None,
     ) {
         NowPlayingScreen(
-            onCollapse = { navController.popBackStack() },
+            onCollapse = { showNowPlaying = false },
             onQueueClick = { navController.navigate(ROUTE_QUEUE) },
             viewModel = nowPlayingViewModel,
         )
