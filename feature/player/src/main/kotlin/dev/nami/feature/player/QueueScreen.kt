@@ -66,20 +66,13 @@ private val QUEUE_ROW_HEIGHT = 64.dp
 private val ARTWORK_SIZE = 44.dp
 private const val DISMISS_THRESHOLD_DP = 120
 
-// The same track can legitimately appear more than once in the queue (added to queue twice,
-// present in an album AND queued manually, etc.) -- PlayerRepositoryImpl's own known limitation
-// note says as much. Keying LazyColumn purely by track id then crashes with "Key ... was already
-// used" the moment that happens. Only duplicates get a disambiguating suffix, so the common
-// (no-duplicate) case keeps a fully stable key for animateItem()/reorder tracking.
-private fun dedupedKeys(items: List<QueueItem>, prefix: String): List<String> {
-    val seen = mutableMapOf<String, Int>()
-    return items.map { item ->
-        val id = item.track.id.value
-        val occurrence = seen.getOrDefault(id, 0)
-        seen[id] = occurrence + 1
-        if (occurrence == 0) "$prefix-$id" else "$prefix-$id-$occurrence"
-    }
-}
+// Wrapping each item with its position in the ORIGINAL (source-of-truth) list gives every slot
+// a key that's stable and unique even when the same track appears twice in the queue -- no need
+// to special-case duplicate track ids. originalIndex is also exactly what moveQueueItem needs to
+// commit a drag: "the item that started at originalIndex is now at this position".
+private data class SlotItem(val item: QueueItem, val originalIndex: Int)
+
+private fun toSlots(items: List<QueueItem>) = items.mapIndexed { index, item -> SlotItem(item, index) }
 
 @Composable
 fun QueueScreen(
@@ -90,18 +83,24 @@ fun QueueScreen(
     val manual = queue.upcoming.filter { it.origin == QueueOrigin.MANUAL }
     val context = queue.upcoming.filter { it.origin == QueueOrigin.CONTEXT }
     val contextStartIndex = manual.size
-    val manualKeys = remember(manual) { dedupedKeys(manual, "manual") }
-    val contextKeys = remember(context) { dedupedKeys(context, "context") }
+
+    // Reordering is purely local while a drag is in progress -- moveQueueItem goes through
+    // ExoPlayer, which doesn't update `queue` synchronously, so firing it on every threshold
+    // crossed during the drag left the displayed list lagging behind the assumed state (visible
+    // as a gap/drift between the row and the finger). Local list state updates instantly instead;
+    // the real move is committed once, when the drag ends.
+    var manualOrder by remember(manual) { mutableStateOf(toSlots(manual)) }
+    var contextOrder by remember(context) { mutableStateOf(toSlots(context)) }
 
     val density = LocalDensity.current
     val dismissThresholdPx = with(density) { DISMISS_THRESHOLD_DP.dp.toPx() }
     val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
     var dragOffsetY by remember { mutableStateOf(0f) }
-    // The row actively being drag-reordered skips animateItem() -- otherwise its own placement
-    // animation (sliding to the new slot over ~a few hundred ms) fights the graphicsLayer offset
-    // correction that assumes the slot has already moved, causing a visible jump/lag under the
-    // finger. Non-dragged rows still animate out of the way normally.
-    var draggingKey by remember { mutableStateOf<String?>(null) }
+    // The row actively being drag-reordered skips animateItem() -- its position is already
+    // driven live by the local reorder above, and its own placement animation would fight the
+    // graphicsLayer offset correction, causing a visible jump/lag under the finger.
+    var draggingManualKey by remember { mutableStateOf<Int?>(null) }
+    var draggingContextKey by remember { mutableStateOf<Int?>(null) }
 
     Column(
         modifier = Modifier
@@ -154,17 +153,26 @@ fun QueueScreen(
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                     )
                 }
-                itemsIndexed(manual, key = { index, _ -> manualKeys[index] }) { index, item ->
-                    val key = manualKeys[index]
+                itemsIndexed(manualOrder, key = { _, slot -> slot.originalIndex }) { index, slot ->
                     QueueRow(
-                        item = item,
+                        item = slot.item,
                         onDragBy = { relativeMove ->
-                            val target = (index + relativeMove).coerceIn(0, manual.lastIndex)
-                            if (target != index) viewModel.moveQueueItem(index, target)
+                            val target = (index + relativeMove).coerceIn(0, manualOrder.lastIndex)
+                            if (target != index) {
+                                manualOrder = manualOrder.toMutableList().apply { add(target, removeAt(index)) }
+                            }
                         },
-                        onDraggingChange = { isDragging -> draggingKey = if (isDragging) key else null },
+                        onDraggingChange = { isDragging ->
+                            if (isDragging) {
+                                draggingManualKey = slot.originalIndex
+                            } else {
+                                draggingManualKey = null
+                                val finalIndex = manualOrder.indexOfFirst { it.originalIndex == slot.originalIndex }
+                                if (finalIndex != slot.originalIndex) viewModel.moveQueueItem(slot.originalIndex, finalIndex)
+                            }
+                        },
                         onRemove = { viewModel.removeQueueItem(index) },
-                        modifier = if (draggingKey == key) Modifier else Modifier.animateItem(),
+                        modifier = if (draggingManualKey == slot.originalIndex) Modifier else Modifier.animateItem(),
                     )
                 }
             }
@@ -176,17 +184,28 @@ fun QueueScreen(
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                     )
                 }
-                itemsIndexed(context, key = { index, _ -> contextKeys[index] }) { index, item ->
-                    val key = contextKeys[index]
+                itemsIndexed(contextOrder, key = { _, slot -> slot.originalIndex }) { index, slot ->
                     QueueRow(
-                        item = item,
+                        item = slot.item,
                         onDragBy = { relativeMove ->
-                            val target = (index + relativeMove).coerceIn(0, context.lastIndex)
-                            if (target != index) viewModel.moveQueueItem(contextStartIndex + index, contextStartIndex + target)
+                            val target = (index + relativeMove).coerceIn(0, contextOrder.lastIndex)
+                            if (target != index) {
+                                contextOrder = contextOrder.toMutableList().apply { add(target, removeAt(index)) }
+                            }
                         },
-                        onDraggingChange = { isDragging -> draggingKey = if (isDragging) key else null },
+                        onDraggingChange = { isDragging ->
+                            if (isDragging) {
+                                draggingContextKey = slot.originalIndex
+                            } else {
+                                draggingContextKey = null
+                                val finalIndex = contextOrder.indexOfFirst { it.originalIndex == slot.originalIndex }
+                                if (finalIndex != slot.originalIndex) {
+                                    viewModel.moveQueueItem(contextStartIndex + slot.originalIndex, contextStartIndex + finalIndex)
+                                }
+                            }
+                        },
                         onRemove = { viewModel.removeQueueItem(contextStartIndex + index) },
-                        modifier = if (draggingKey == key) Modifier else Modifier.animateItem(),
+                        modifier = if (draggingContextKey == slot.originalIndex) Modifier else Modifier.animateItem(),
                     )
                 }
             }
