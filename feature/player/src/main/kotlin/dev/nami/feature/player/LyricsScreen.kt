@@ -134,22 +134,17 @@ fun LyricsScreen(
         }
     }
     val scope = rememberCoroutineScope()
-    // Shared by the drag gesture and the back button -- both need the same "slide fully off,
-    // THEN flip the state" sequence instead of an instant cut.
+    // Swipe-to-dismiss used to manually animate dragOffsetY to screenHeightPx and only THEN call
+    // onBack() -- meant to look like one continuous slide, but that coroutine sometimes never
+    // reached onBack() at all (composable disposed/recomposed mid-animation cancels it, and a
+    // spring's "close enough" settling can also just take a while), leaving showLyrics stuck
+    // true forever: the screen sat fully slid off-screen but never actually closed, so
+    // reopening was a silent no-op. onBack() now always fires immediately and synchronously;
+    // dragOffsetY resets to 0 in the same breath so only the outer AnimatedVisibility's own exit
+    // transition (in NamiNavHost) animates the slide-down, instead of two competing animations.
     fun dismiss() {
-        scope.launch {
-            // finally, not a plain call after animate() -- if this coroutine's job gets
-            // cancelled mid-animation (composable disposed/recomposed for any reason before the
-            // slide finishes), the bare sequential version above never reached onBack() at all,
-            // leaving showLyrics stuck true: the screen sits fully slid off-screen (dragOffsetY
-            // already huge) but the flag never flips, so tapping the lyrics button again is a
-            // no-op and it silently never reopens.
-            try {
-                animate(dragOffsetY, screenHeightPx) { value, _ -> dragOffsetY = value }
-            } finally {
-                onBack()
-            }
-        }
+        dragOffsetY = 0f
+        onBack()
     }
 
     Box(modifier = Modifier.fillMaxSize().offset { IntOffset(0, dragOffsetY.roundToInt()) }) {
