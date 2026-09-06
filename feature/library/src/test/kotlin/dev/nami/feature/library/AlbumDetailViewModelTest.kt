@@ -9,8 +9,14 @@ import dev.nami.core.model.Track
 import dev.nami.core.model.TrackId
 import dev.nami.domain.ImportSource
 import dev.nami.domain.LibraryRepository
+import dev.nami.domain.PlaybackState
+import dev.nami.domain.PlayableTrack
+import dev.nami.domain.PlayerQueue
+import dev.nami.domain.PlayerRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -62,9 +68,23 @@ class AlbumDetailViewModelTest {
             override suspend fun deleteTrack(id: TrackId) = throw NotImplementedError()
             override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
+        val fakePlayerRepo = object : PlayerRepository {
+            override val state: StateFlow<PlaybackState> = MutableStateFlow(PlaybackState.Idle)
+            override val queue: StateFlow<PlayerQueue> = MutableStateFlow(PlayerQueue.EMPTY)
+            override suspend fun play(tracks: List<PlayableTrack>, startIndex: Int, startMs: Long) {}
+            override suspend fun toggle() {}
+            override suspend fun seek(ms: Long) {}
+            override suspend fun skipNext() {}
+            override suspend fun skipPrevious() {}
+            override suspend fun addToQueue(track: PlayableTrack) {}
+            override suspend fun moveQueueItem(fromIndex: Int, toIndex: Int) {}
+            override suspend fun removeQueueItem(index: Int) {}
+            override suspend fun removeTracks(ids: Set<TrackId>) {}
+            override suspend fun stop() {}
+        }
         val savedStateHandle = SavedStateHandle(mapOf("albumId" to "al1"))
 
-        val viewModel = AlbumDetailViewModel(fakeRepo, savedStateHandle)
+        val viewModel = AlbumDetailViewModel(fakeRepo, fakePlayerRepo, savedStateHandle)
 
         assertEquals(album, viewModel.uiState.value.album)
         assertEquals(listOf(track), viewModel.uiState.value.tracks)

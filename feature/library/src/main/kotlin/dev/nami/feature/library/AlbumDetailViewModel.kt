@@ -9,12 +9,17 @@ import dev.nami.core.model.AlbumId
 import dev.nami.core.model.Track
 import dev.nami.core.model.TrackId
 import dev.nami.domain.LibraryRepository
+import dev.nami.domain.PlaybackState
+import dev.nami.domain.PlayerRepository
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -23,6 +28,7 @@ data class AlbumDetailUiState(val album: Album? = null, val tracks: List<Track> 
 @HiltViewModel
 class AlbumDetailViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
+    private val playerRepository: PlayerRepository,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -30,6 +36,10 @@ class AlbumDetailViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(AlbumDetailUiState())
     val uiState: StateFlow<AlbumDetailUiState> = _uiState.asStateFlow()
+
+    val nowPlaying: StateFlow<NowPlayingRow?> = playerRepository.state
+        .map { state -> (state as? PlaybackState.Playing)?.let { NowPlayingRow(it.trackId, it.isPlaying) } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     init {
         libraryRepository.album(albumId)

@@ -13,19 +13,25 @@ import dev.nami.core.model.TrackId
 import dev.nami.domain.ImportProgress
 import dev.nami.domain.ImportSource
 import dev.nami.domain.LibraryRepository
+import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerRepository
 import dev.nami.domain.SearchRepository
 import dev.nami.domain.TrashRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 enum class LibraryTab { TRACKS, ALBUMS, ARTISTS }
+
+data class NowPlayingRow(val trackId: TrackId, val isPlaying: Boolean)
 
 data class LibraryUiState(
     val importProgress: ImportProgress? = null,
@@ -57,6 +63,10 @@ class LibraryViewModel @Inject constructor(
 
     private val _recentAlbums = MutableStateFlow<List<AlbumSummary>>(emptyList())
     val recentAlbums: StateFlow<List<AlbumSummary>> = _recentAlbums.asStateFlow()
+
+    val nowPlaying: StateFlow<NowPlayingRow?> = playerRepository.state
+        .map { state -> (state as? PlaybackState.Playing)?.let { NowPlayingRow(it.trackId, it.isPlaying) } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     init {
         refreshRecentAlbums()
