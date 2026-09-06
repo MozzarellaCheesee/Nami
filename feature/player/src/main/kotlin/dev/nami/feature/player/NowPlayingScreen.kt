@@ -175,14 +175,23 @@ fun NowPlayingScreen(
                     .padding(horizontal = 6.dp, vertical = 2.dp),
             )
         }
-        Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+        val durationMs = playing?.durationMs ?: 0L
+        val positionMs = playing?.positionMs ?: 0L
+        val progress = if (durationMs > 0) (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
+        WaveformScrubber(
+            seedKey = queue.nowPlaying?.id?.value ?: "",
+            progress = progress,
+            onSeek = { fraction -> viewModel.seek((fraction * durationMs).toLong()) },
+            modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+        )
+        Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(
-                text = formatDuration(playing?.positionMs ?: 0L),
+                text = formatDuration(positionMs),
                 color = NamiColors.Paper70,
                 style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
             )
             Text(
-                text = "-" + formatDuration(((playing?.durationMs ?: 0L) - (playing?.positionMs ?: 0L)).coerceAtLeast(0L)),
+                text = "-" + formatDuration((durationMs - positionMs).coerceAtLeast(0L)),
                 color = NamiColors.Paper70,
                 style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
             )
