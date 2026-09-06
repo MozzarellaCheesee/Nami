@@ -3,7 +3,6 @@ package dev.nami.app.navigation
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
@@ -200,12 +199,11 @@ fun NamiNavHost(
     AnimatedVisibility(
         visible = currentRoute == ROUTE_NOW_PLAYING,
         enter = slideInVertically(initialOffsetY = { fullHeight -> fullHeight }),
-        // Short exit: the screen underneath should show up quickly after a swipe-to-dismiss
-        // instead of waiting on a full-length transition.
-        exit = slideOutVertically(
-            animationSpec = tween(150),
-            targetOffsetY = { fullHeight -> fullHeight },
-        ),
+        // Instant exit: NowPlayingScreen always finishes its own slide-down animation (swipe
+        // or the collapse chevron, both routed through the same code) before popping the back
+        // stack, so by the time this flips to invisible the screen is already fully off-canvas
+        // -- an animated exit here would just add a second, redundant slide on top of that one.
+        exit = ExitTransition.None,
     ) {
         NowPlayingScreen(
             onCollapse = { navController.popBackStack() },

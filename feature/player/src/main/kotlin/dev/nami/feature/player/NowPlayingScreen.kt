@@ -35,7 +35,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
@@ -70,6 +72,16 @@ fun NowPlayingScreen(
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
     var artworkOffsetX by remember { mutableFloatStateOf(0f) }
     var artworkWidthPx by remember { mutableIntStateOf(0) }
+    val scope = rememberCoroutineScope()
+
+    // Shared by the swipe gesture and the chevron button so both dismiss paths always finish
+    // the slide-down themselves before popping -- see the comment on the swipe branch below.
+    fun collapseAnimated() {
+        scope.launch {
+            animate(dragOffsetY, screenHeightPx) { value, _ -> dragOffsetY = value }
+            onCollapse()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -84,13 +96,15 @@ fun NowPlayingScreen(
                 },
                 onDragStopped = { velocity ->
                     if (dragOffsetY > dismissThresholdPx || velocity > 2000f) {
-                        // Pop immediately so the screen underneath shows up without waiting on
-                        // our own slide -- the composable stays alive through AnimatedVisibility's
-                        // exit transition, so finishing the offset animation afterwards still
-                        // plays out smoothly (and offscreen) instead of stacking a second
-                        // animation on top like before.
-                        onCollapse()
+                        // Finish sliding fully off-screen ourselves, THEN pop -- popping first
+                        // (tried before) let the Library screen and MiniPlayer underneath
+                        // become visible/interactive while this screen was still mid-slide on
+                        // top of them, and stacked AnimatedVisibility's own exit slide on top of
+                        // this one's offset, compounding into a visible gap/glitch. Popping only
+                        // once this is already fully off-screen makes AnimatedVisibility's exit
+                        // (now instant, see NamiNavHost) invisible -- there's nothing left to see.
                         animate(dragOffsetY, screenHeightPx) { value, _ -> dragOffsetY = value }
+                        onCollapse()
                     } else {
                         animate(dragOffsetY, 0f) { value, _ -> dragOffsetY = value }
                     }
@@ -98,7 +112,7 @@ fun NowPlayingScreen(
             )
             .padding(20.dp),
     ) {
-        IconButton(onClick = onCollapse) {
+        IconButton(onClick = ::collapseAnimated) {
             Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Свернуть", tint = NamiColors.Paper100)
         }
         val artworkModifier = Modifier
