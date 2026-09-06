@@ -86,6 +86,7 @@ private const val DISMISS_THRESHOLD_DP = 120
 fun NowPlayingScreen(
     onCollapse: () -> Unit,
     onQueueClick: () -> Unit,
+    onLyricsClick: () -> Unit,
     viewModel: NowPlayingViewModel = hiltViewModel(),
 ) {
     val state by viewModel.playbackState.collectAsState()
@@ -391,7 +392,7 @@ fun NowPlayingScreen(
                 modifier = Modifier.weight(1f),
             )
             NowPlayingPill(icon = Icons.Outlined.DarkMode, onClick = {}, shape = CircleShape, modifier = Modifier.size(48.dp))
-            NowPlayingPill(text = "Текст", icon = Icons.Outlined.Subject, onClick = {}, modifier = Modifier.weight(1f))
+            NowPlayingPill(text = "Текст", icon = Icons.Outlined.Subject, onClick = onLyricsClick, modifier = Modifier.weight(1f))
         }
     }
     }

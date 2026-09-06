@@ -44,6 +44,7 @@ import dev.nami.feature.library.ArtistDiscographyScreen
 import dev.nami.feature.library.LibraryScreen
 import dev.nami.feature.library.LibraryTab
 import dev.nami.feature.library.LibraryViewModel
+import dev.nami.feature.player.LyricsScreen
 import dev.nami.feature.player.MiniPlayer
 import dev.nami.feature.player.NowPlayingScreen
 import dev.nami.feature.player.NowPlayingViewModel
@@ -108,6 +109,8 @@ fun NamiNavHost(
     // Registered after showNowPlaying's, so it takes priority (last-mounted BackHandler wins)
     // while both are showing -- back should close Queue first, not skip straight past it.
     BackHandler(enabled = showQueue) { showQueue = false }
+    var showLyrics by remember { mutableStateOf(false) }
+    BackHandler(enabled = showLyrics) { showLyrics = false }
 
     // Tapping the system media notification/status-bar chip bumps this from MainActivity --
     // skip the initial value (0) so it only reacts to an actual tap, not first composition.
@@ -336,6 +339,7 @@ fun NamiNavHost(
         NowPlayingScreen(
             onCollapse = { showNowPlaying = false },
             onQueueClick = { showQueue = true },
+            onLyricsClick = { showLyrics = true },
             viewModel = nowPlayingViewModel,
         )
     }
@@ -350,6 +354,14 @@ fun NamiNavHost(
         exit = ExitTransition.None,
     ) {
         QueueScreen(onBack = { showQueue = false }, viewModel = nowPlayingViewModel)
+    }
+
+    AnimatedVisibility(
+        visible = showLyrics,
+        enter = slideInVertically(initialOffsetY = { fullHeight -> fullHeight }),
+        exit = ExitTransition.None,
+    ) {
+        LyricsScreen(onBack = { showLyrics = false })
     }
     }
 }

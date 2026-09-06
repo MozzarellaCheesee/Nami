@@ -1,0 +1,237 @@
+package dev.nami.feature.player
+
+import androidx.compose.animation.core.animate
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import dev.nami.core.model.Lyrics
+import dev.nami.core.designsystem.NamiColors
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
+
+private const val DISMISS_THRESHOLD_DP = 120
+
+/** Three of План.md's four "18. Экран лирики" modes (furigana, romaji triplet, karaoke word
+ * highlight) and its dictionary/Anki/LRCLIB pieces aren't here -- this is the load-bearing first
+ * slice: parse/show/auto-scroll/tap-to-seek synced lyrics from a local .lrc, and a manual
+ * tap-to-stamp editor for tracks that don't have one yet. */
+@Composable
+fun LyricsScreen(
+    onBack: () -> Unit,
+    viewModel: LyricsViewModel = hiltViewModel(),
+) {
+    val uiState by viewModel.uiState.collectAsState()
+    val density = LocalDensity.current
+    val dismissThresholdPx = with(density) { DISMISS_THRESHOLD_DP.dp.toPx() }
+    val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
+    var dragOffsetY by remember { mutableStateOf(0f) }
+    var showEditor by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .offset { IntOffset(0, dragOffsetY.roundToInt()) }
+            .background(NamiColors.Ink900)
+            .statusBarsPadding()
+            .draggable(
+                orientation = Orientation.Vertical,
+                state = rememberDraggableState { delta -> dragOffsetY = (dragOffsetY + delta).coerceAtLeast(0f) },
+                onDragStopped = { velocity ->
+                    if (dragOffsetY > dismissThresholdPx || velocity > 2000f) {
+                        animate(dragOffsetY, screenHeightPx) { value, _ -> dragOffsetY = value }
+                        onBack()
+                    } else {
+                        animate(dragOffsetY, 0f) { value, _ -> dragOffsetY = value }
+                    }
+                },
+            ),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
+            }
+            Text(text = "Текст песни", color = NamiColors.Paper100, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            IconButton(onClick = { showEditor = true }) {
+                Icon(Icons.Outlined.Edit, contentDescription = "Синхронизировать вручную", tint = NamiColors.Paper70)
+            }
+        }
+
+        val lyrics = uiState.lyrics
+        if (lyrics == null || lyrics.lines.isEmpty()) {
+            Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Spacer(modifier = Modifier.height(64.dp))
+                Text(text = "Текста нет", color = NamiColors.Paper70)
+                Text(
+                    text = "Добавить и синхронизировать",
+                    color = NamiColors.Shu,
+                    modifier = Modifier.padding(top = 12.dp).clickable { showEditor = true },
+                )
+            }
+        } else {
+            SyncedLyricsList(lyrics = lyrics, positionMs = uiState.positionMs, onLineClick = { viewModel.seekTo(it) })
+        }
+    }
+
+    if (showEditor) {
+        ManualSyncEditor(
+            initialText = uiState.lyrics?.lines?.joinToString("\n") { it.text } ?: "",
+            currentPositionMs = { uiState.positionMs },
+            onSave = { texts, stamps ->
+                viewModel.saveManualSync(texts, stamps)
+                showEditor = false
+            },
+            onDismiss = { showEditor = false },
+        )
+    }
+}
+
+@Composable
+private fun SyncedLyricsList(lyrics: Lyrics, positionMs: Long, onLineClick: (Long) -> Unit) {
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val currentIndex by remember(lyrics) {
+        derivedStateOf {
+            lyrics.lines.indexOfLast { it.timeMs <= positionMs }.coerceAtLeast(0)
+        }
+    }
+    var lastCentered by remember { mutableIntStateOf(-1) }
+    LaunchedEffect(currentIndex) {
+        if (currentIndex != lastCentered) {
+            lastCentered = currentIndex
+            scope.launch {
+                listState.animateScrollToItem(
+                    index = (currentIndex - 2).coerceAtLeast(0),
+                )
+            }
+        }
+    }
+
+    LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
+        itemsIndexed(lyrics.lines) { index, line ->
+            val isCurrent = index == currentIndex
+            Text(
+                text = line.text.ifBlank { "…" },
+                color = if (isCurrent) NamiColors.Shu else NamiColors.Paper40,
+                style = if (isCurrent) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium,
+                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onLineClick(line.timeMs) }
+                    .padding(vertical = 10.dp),
+            )
+        }
+        item { Spacer(modifier = Modifier.height(300.dp)) }
+    }
+}
+
+/** Paste plain lines, then tap "Отметить" through the track once to stamp each line's timestamp
+ * from the current playback position -- the offline equivalent of План.md's "играешь трек,
+ * тапаешь на каждой строке" sync editor. */
+@Composable
+private fun ManualSyncEditor(
+    initialText: String,
+    currentPositionMs: () -> Long,
+    onSave: (List<String>, List<Long>) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var text by remember { mutableStateOf(initialText) }
+    var syncing by remember { mutableStateOf(false) }
+    var stamps by remember { mutableStateOf<List<Long>>(emptyList()) }
+    val lines = remember(text) { text.lines().filter { it.isNotBlank() } }
+
+    Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
+        if (!syncing) {
+            Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Outlined.ArrowBack, contentDescription = "Отмена", tint = NamiColors.Paper100)
+                    }
+                    Text(text = "Текст песни", color = NamiColors.Paper100, style = MaterialTheme.typography.titleLarge)
+                }
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    placeholder = { Text("Вставь текст, по строке на строку") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                    modifier = Modifier.fillMaxWidth().weight(1f).padding(vertical = 12.dp),
+                )
+                TextButton(
+                    onClick = { stamps = emptyList(); syncing = true },
+                    enabled = lines.isNotEmpty(),
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Синхронизировать (${lines.size} строк)") }
+            }
+        } else {
+            val currentLineIndex = stamps.size
+            Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { syncing = false }) {
+                        Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад к тексту", tint = NamiColors.Paper100)
+                    }
+                    Text(text = "Строка ${(currentLineIndex + 1).coerceAtMost(lines.size)} из ${lines.size}", color = NamiColors.Paper70)
+                }
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = lines.getOrNull(currentLineIndex) ?: "Готово",
+                        color = NamiColors.Paper100,
+                        style = MaterialTheme.typography.headlineSmall,
+                    )
+                }
+                TextButton(
+                    onClick = {
+                        if (currentLineIndex < lines.size) {
+                            stamps = stamps + currentPositionMs()
+                            if (stamps.size == lines.size) onSave(lines, stamps)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(if (currentLineIndex < lines.size) "Отметить" else "Сохранено") }
+            }
+        }
+    }
+}

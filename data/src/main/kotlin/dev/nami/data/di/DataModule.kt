@@ -5,10 +5,12 @@ import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import dev.nami.data.LibraryRepositoryImpl
+import dev.nami.data.LyricsRepositoryImpl
 import dev.nami.data.PlaylistRepositoryImpl
 import dev.nami.data.TrashRepositoryImpl
 import dev.nami.data.search.SearchRepositoryImpl
 import dev.nami.domain.LibraryRepository
+import dev.nami.domain.LyricsRepository
 import dev.nami.domain.PlaylistRepository
 import dev.nami.domain.SearchRepository
 import dev.nami.domain.TrashRepository
@@ -20,6 +22,10 @@ abstract class DataModule {
     @Binds
     @Singleton
     abstract fun bindLibraryRepository(impl: LibraryRepositoryImpl): LibraryRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindLyricsRepository(impl: LyricsRepositoryImpl): LyricsRepository
 
     @Binds
     @Singleton
