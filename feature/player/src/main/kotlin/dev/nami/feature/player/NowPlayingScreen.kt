@@ -6,7 +6,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -177,16 +176,9 @@ fun NowPlayingScreen(
                 ),
             )
         }
-        // Scrollable instead of a weighted bottom-pin: on a short screen (or with all the extra
-        // controls added since -- shuffle/repeat, taller pills), the content below no longer
-        // reliably fits, and a weight(1f) spacer just gets squeezed to 0dp while the tail (the
-        // pill row) overflows past the bottom edge and gets clipped there, looking like it never
-        // grew no matter how tall it's set. Scrolling means it's always fully reachable instead.
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(androidx.compose.foundation.rememberScrollState()),
-        ) {
+        androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))
+        // No scroll: everything must fit on-screen at once. Reduced top gap before the artwork
+        // frees up the vertical room this needs, instead of a scrollable body.
         // 3-page window: 0 = previous, 1 = current, 2 = next. HorizontalPager owns the drag/fling
         // math itself (a hand-rolled offset carousel here kept shipping subtle positioning bugs),
         // and keeps neighbor pages composed via beyondViewportPageCount so their artwork is
@@ -200,7 +192,7 @@ fun NowPlayingScreen(
         // is still a perfect square instead of a square-container's worth of height stuffed into
         // a narrower page.
         val peekDp = 28.dp
-        androidx.compose.foundation.layout.BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp)) {
+        androidx.compose.foundation.layout.BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 24.dp)) {
             val pageWidth = maxWidth - peekDp * 2
             HorizontalPager(
                 state = pagerState,
@@ -381,9 +373,8 @@ fun NowPlayingScreen(
                 onClick = onQueueClick,
                 modifier = Modifier.weight(1f),
             )
-            NowPlayingPill(icon = Icons.Outlined.DarkMode, onClick = {}, shape = CircleShape, modifier = Modifier.size(56.dp))
+            NowPlayingPill(icon = Icons.Outlined.DarkMode, onClick = {}, shape = CircleShape, modifier = Modifier.size(48.dp))
             NowPlayingPill(text = "Текст", icon = Icons.Outlined.Subject, onClick = {}, modifier = Modifier.weight(1f))
-        }
         }
     }
 }
@@ -402,7 +393,7 @@ private fun NowPlayingPill(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
-            .height(56.dp)
+            .height(48.dp)
             .background(NamiColors.Ink800, shape)
             .fullBlockClickable(shape = shape, onClick = onClick)
             .padding(horizontal = 8.dp),
