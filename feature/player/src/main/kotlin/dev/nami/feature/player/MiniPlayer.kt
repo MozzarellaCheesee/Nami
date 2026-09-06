@@ -174,7 +174,7 @@ fun MiniPlayer(
                     text = queue.nowPlaying?.title ?: "Ничего не играет",
                     color = NamiColors.Paper100,
                     maxLines = 1,
-                    modifier = Modifier.fillMaxWidth().basicMarquee(),
+                    modifier = Modifier.fillMaxWidth().basicMarquee(iterations = Int.MAX_VALUE),
                 )
                 queue.nowPlaying?.artistName?.let { artistName ->
                     Text(
