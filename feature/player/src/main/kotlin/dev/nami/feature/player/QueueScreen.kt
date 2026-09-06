@@ -42,9 +42,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -95,26 +99,32 @@ fun QueueScreen(
     var dragOffsetY by remember { mutableStateOf(0f) }
 
     val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
     // List's own bounds in root coordinates -- compared against the dragged row's live finger
     // position to decide when to autoscroll. Captured once on layout, doesn't change during drag.
     var listTop by remember { mutableStateOf(0f) }
     var listBottom by remember { mutableStateOf(0f) }
     val edgePx = with(density) { AUTOSCROLL_EDGE_DP.dp.toPx() }
-    // Non-null while a row's drag handle is held -- the absolute (root) Y the finger is
-    // currently at. Drives the autoscroll loop below; null stops it.
-    var dragPointerY by remember { mutableStateOf<Float?>(null) }
-
-    LaunchedEffect(dragPointerY, listTop, listBottom) {
-        val pointerY = dragPointerY ?: return@LaunchedEffect
+    // Explicit Job instead of a LaunchedEffect keyed on the pointer position: that position
+    // changes on nearly every pixel of movement, so keying on it restarted/raced the effect
+    // constantly and could leave a scroll loop running past release. A single job, cancelled and
+    // replaced on every update (including the final "stop" on release), is deterministic.
+    var autoscrollJob by remember { mutableStateOf<Job?>(null) }
+    fun updateAutoscroll(pointerY: Float?) {
+        autoscrollJob?.cancel()
+        autoscrollJob = null
+        if (pointerY == null) return
         val delta = when {
             pointerY < listTop + edgePx -> -AUTOSCROLL_SPEED_PX_PER_FRAME
             pointerY > listBottom - edgePx -> AUTOSCROLL_SPEED_PX_PER_FRAME
             else -> 0f
         }
-        if (delta == 0f) return@LaunchedEffect
-        while (true) {
-            listState.scrollBy(delta)
-            delay(16)
+        if (delta == 0f) return
+        autoscrollJob = scope.launch {
+            while (isActive) {
+                listState.scrollBy(delta)
+                delay(16)
+            }
         }
     }
 
@@ -185,7 +195,7 @@ fun QueueScreen(
                             val target = (index + relativeMove).coerceIn(0, manualSlots.lastIndex)
                             if (target != index) viewModel.moveQueueItem(index, target)
                         },
-                        onDragPositionChange = { rootY -> dragPointerY = rootY },
+                        onDragPositionChange = { rootY -> updateAutoscroll(rootY) },
                         onRemove = { viewModel.removeQueueItem(index) },
                         modifier = Modifier.animateItem(),
                     )
@@ -209,7 +219,7 @@ fun QueueScreen(
                                 viewModel.moveQueueItem(contextStartIndex + index, contextStartIndex + target)
                             }
                         },
-                        onDragPositionChange = { rootY -> dragPointerY = rootY },
+                        onDragPositionChange = { rootY -> updateAutoscroll(rootY) },
                         onRemove = { viewModel.removeQueueItem(contextStartIndex + index) },
                         modifier = Modifier.animateItem(),
                     )
@@ -282,16 +292,18 @@ private fun QueueRow(
     AnimatedVisibility(
         visible = !removed,
         exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut(),
-        modifier = modifier,
+        // zIndex has to sit on the item's own root modifier -- LazyColumn only lifts an item
+        // above its siblings in the parent's draw order when zIndex is set here, not on some
+        // descendant nested further inside the item's content (that only reorders drawing among
+        // that item's own children, not the item as a whole against other items in the list).
+        modifier = modifier.zIndex(if (dragging) 1f else 0f),
     ) {
-        // The vertical drag offset/zIndex live OUTSIDE SwipeToDismissBox entirely -- applying
-        // them to content inside the swipe box let its dismiss background (the yellow "Kin"
-        // wash) get triggered by a purely vertical drag. Keeping the two gestures on separate
-        // layers means dragging up/down never touches swipe state.
+        // The vertical drag offset lives OUTSIDE SwipeToDismissBox entirely -- applying it to
+        // content inside the swipe box let its dismiss background (the yellow "Kin" wash) get
+        // triggered by a purely vertical drag. Keeping the two gestures on separate layers means
+        // dragging up/down never touches swipe state.
         Box(
-            modifier = Modifier
-                .graphicsLayer { translationY = dragOffsetPx }
-                .zIndex(if (dragging) 1f else 0f),
+            modifier = Modifier.graphicsLayer { translationY = dragOffsetPx },
         ) {
             SwipeToDismissBox(
                 state = dismissState,
