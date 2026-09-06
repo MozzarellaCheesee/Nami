@@ -123,6 +123,21 @@ fun NowPlayingScreen(
         }
         val gapPx = with(density) { 16.dp.toPx() }
         val accentColor = rememberArtworkAccentColor(queue.nowPlaying?.artworkPath)
+
+        // Shared by the swipe gesture and the prev/next buttons -- same slide-to-slot-then-reset
+        // motion either way, so pressing a button reads as "the same swipe, done for you". The
+        // actual skip call is passed in: swipe always forces the real previous track, while the
+        // previous button keeps its own restart-if-elapsed semantics (see skipPrevious below) --
+        // only which direction to slide is shared.
+        suspend fun slideAndSkip(next: Boolean, doSkip: () -> Unit) {
+            val exitDistance = artworkWidthPx.toFloat() + gapPx
+            val spec = tween<Float>(180)
+            val target = if (next) -exitDistance else exitDistance
+            animate(artworkOffsetX, target, animationSpec = spec) { value, _ -> artworkOffsetX = value }
+            doSkip()
+            artworkOffsetX = 0f
+        }
+
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
@@ -140,20 +155,15 @@ fun NowPlayingScreen(
                         // dragging (see the Box below), so finishing the drag just needs to land
                         // it at 0; no separate "teleport then animate back" pass is needed since
                         // the real data is already in the right place the moment the id changes.
-                        val exitDistance = artworkWidthPx.toFloat() + gapPx
-                        val spec = tween<Float>(180)
                         when {
-                            artworkOffsetX < -skipThresholdPx && queue.upcoming.isNotEmpty() -> {
-                                animate(artworkOffsetX, -exitDistance, animationSpec = spec) { value, _ -> artworkOffsetX = value }
-                                viewModel.skipNext()
-                                artworkOffsetX = 0f
+                            artworkOffsetX < -skipThresholdPx && queue.upcoming.isNotEmpty() ->
+                                slideAndSkip(next = true, doSkip = viewModel::skipNext)
+                            artworkOffsetX > skipThresholdPx && queue.previousTrack != null ->
+                                slideAndSkip(next = false, doSkip = viewModel::skipToPreviousTrack)
+                            else -> {
+                                val spec = tween<Float>(180)
+                                animate(artworkOffsetX, 0f, animationSpec = spec) { value, _ -> artworkOffsetX = value }
                             }
-                            artworkOffsetX > skipThresholdPx && queue.previousTrack != null -> {
-                                animate(artworkOffsetX, exitDistance, animationSpec = spec) { value, _ -> artworkOffsetX = value }
-                                viewModel.skipToPreviousTrack()
-                                artworkOffsetX = 0f
-                            }
-                            else -> animate(artworkOffsetX, 0f, animationSpec = spec) { value, _ -> artworkOffsetX = value }
                         }
                     },
                 ),
@@ -254,7 +264,17 @@ fun NowPlayingScreen(
                 .padding(top = 8.dp),
             horizontalArrangement = Arrangement.Center,
         ) {
-            IconButton(onClick = viewModel::skipPrevious) {
+            IconButton(onClick = {
+                // Restart-if-elapsed stays on the button's own semantics (skipPrevious, not the
+                // swipe's skipToPreviousTrack) -- only animate the slide when a previous track
+                // actually exists to show, so restarting the current track doesn't do a pointless
+                // slide-to-nothing-and-back.
+                if (queue.previousTrack != null) {
+                    scope.launch { slideAndSkip(next = false, doSkip = viewModel::skipPrevious) }
+                } else {
+                    viewModel.skipPrevious()
+                }
+            }) {
                 Icon(Icons.Outlined.SkipPrevious, contentDescription = "Предыдущий", tint = NamiColors.Paper100)
             }
             IconButton(
@@ -271,7 +291,13 @@ fun NowPlayingScreen(
                         .padding(16.dp),
                 )
             }
-            IconButton(onClick = viewModel::skipNext) {
+            IconButton(onClick = {
+                if (queue.upcoming.isNotEmpty()) {
+                    scope.launch { slideAndSkip(next = true, doSkip = viewModel::skipNext) }
+                } else {
+                    viewModel.skipNext()
+                }
+            }) {
                 Icon(Icons.Outlined.SkipNext, contentDescription = "Следующий", tint = NamiColors.Paper100)
             }
         }

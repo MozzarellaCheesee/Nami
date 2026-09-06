@@ -189,7 +189,7 @@ fun MiniPlayer(
                     track = previous,
                     modifier = Modifier
                         .width(blockWidthDp)
-                        .offset { IntOffset((artworkOffsetX + gapPx - blockWidthPx - gapPx).roundToInt(), 0) },
+                        .offset { IntOffset((artworkOffsetX - blockWidthPx - gapPx).roundToInt(), 0) },
                 )
             }
             MiniPlayerTrackBlock(
