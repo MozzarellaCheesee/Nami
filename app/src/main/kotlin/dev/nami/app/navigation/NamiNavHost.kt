@@ -303,19 +303,21 @@ fun NamiNavHost(
         NamiBottomBar(
             currentRoute = currentRoute,
             onTabSelected = { route ->
-                navController.navigate(route) {
-                    popUpTo(ROUTE_LIBRARY) { saveState = true }
-                    launchSingleTop = true
-                    restoreState = true
-                }
-                // Library tab always jumps back to the Tracks root, closing any open Album/
-                // Artist/Discography/etc. screen (the popUpTo above does that part) and
-                // resetting the Albums/Artists sub-tab -- called directly on the hoisted
-                // libraryViewModel (not via a signal into the nav-entry-scoped instance), so it
-                // always fires regardless of which screen it's pressed from.
                 if (route == ROUTE_LIBRARY) {
+                    // Pop the back stack directly down to Library, however deep the current
+                    // screen is nested (Artist -> Discography, Search -> Artist, etc.) and
+                    // whatever path was used to get there -- more direct than navigate()'s
+                    // popUpTo()/launchSingleTop/restoreState combo, which depends on "library"
+                    // being reachable via the exact args those options expect.
+                    navController.popBackStack(ROUTE_LIBRARY, inclusive = false)
                     libraryViewModel.selectTab(LibraryTab.TRACKS)
                     libraryTabResetSignal++
+                } else {
+                    navController.navigate(route) {
+                        popUpTo(ROUTE_LIBRARY) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
                 }
             },
             modifier = Modifier.navigationBarsPadding(),
