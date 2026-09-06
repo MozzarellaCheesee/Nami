@@ -116,11 +116,28 @@ fun NowPlayingScreen(
         }
     }
 
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .offset { IntOffset(0, dragOffsetY.roundToInt()) },
+    ) {
+        // Ambient background: the current track's own artwork, heavily blurred, dimmed under a
+        // dark scrim for text legibility -- for atmosphere, per Дизайн.md's "тихое" restraint
+        // this stays a backdrop, never competing with the actual artwork/controls on top of it.
+        val backgroundArtworkPath = queue.nowPlaying?.artworkPath
+        if (backgroundArtworkPath != null) {
+            AsyncImage(
+                model = backgroundArtworkPath,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().blur(64.dp),
+            )
+        }
+        Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900.copy(alpha = if (backgroundArtworkPath != null) 0.72f else 1f)))
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .offset { IntOffset(0, dragOffsetY.roundToInt()) }
-            .background(NamiColors.Ink900)
             .statusBarsPadding()
             .navigationBarsPadding()
             .draggable(
@@ -376,6 +393,7 @@ fun NowPlayingScreen(
             NowPlayingPill(icon = Icons.Outlined.DarkMode, onClick = {}, shape = CircleShape, modifier = Modifier.size(48.dp))
             NowPlayingPill(text = "Текст", icon = Icons.Outlined.Subject, onClick = {}, modifier = Modifier.weight(1f))
         }
+    }
     }
 }
 
