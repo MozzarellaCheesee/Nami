@@ -86,6 +86,11 @@ fun LibraryScreen(
     onImportRequested: () -> Unit,
     onImportFolderRequested: () -> Unit,
     importProgress: StateFlow<ImportProgress?>,
+    // Bumped by the bottom nav's Library tab so re-tapping it while already here (or from any
+    // other tab/detail screen) doesn't just switch back to the Tracks tab -- it scrolls that
+    // list back to the top too, actually landing on "the main screen with tracks", not wherever
+    // it was left scrolled to.
+    resetSignal: Int = 0,
     viewModel: LibraryViewModel = hiltViewModel(),
 ) {
     val activeImportProgress by importProgress.collectAsState()
@@ -125,6 +130,9 @@ fun LibraryScreen(
     val trackListState = rememberLazyListState()
     val albumGridState = rememberLazyGridState()
     val artistListState = rememberLazyListState()
+    LaunchedEffect(resetSignal) {
+        if (resetSignal > 0) trackListState.scrollToItem(0)
+    }
     // FABs float over the list instead of reserving permanent empty space at the bottom --
     // hide them while scrolling down so they never sit over content being read, and bring
     // them back on scroll-up or when idle.

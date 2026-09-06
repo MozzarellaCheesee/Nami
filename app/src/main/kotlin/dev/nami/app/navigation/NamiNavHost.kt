@@ -152,6 +152,7 @@ fun NamiNavHost(
                     onImportRequested = onImportRequested,
                     onImportFolderRequested = onImportFolderRequested,
                     importProgress = importProgress,
+                    resetSignal = libraryTabResetSignal,
                     viewModel = libraryViewModel,
                 )
             }
