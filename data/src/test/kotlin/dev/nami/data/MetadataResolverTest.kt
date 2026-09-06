@@ -19,7 +19,8 @@ class MetadataResolverTest {
             override suspend fun findById(id: String) = if (id == "a1") existing else null
             override suspend fun findByName(name: String) = if (name == "Farewell225") existing else null
             override suspend fun insert(artist: ArtistEntity) = error("should not insert when found")
-            override fun pagingSource(): PagingSource<Int, ArtistEntity> = error("unused")
+            override fun pagingSource(): PagingSource<Int, ArtistDao.ArtistWithPhoto> = error("unused")
+            override suspend fun findByIdWithPhoto(id: String): ArtistDao.ArtistWithPhoto? = error("unused")
             override suspend fun allForIndexing(): List<ArtistEntity> = error("unused")
             override suspend fun setPhotoPath(id: String, path: String) = error("unused")
         }
@@ -47,7 +48,8 @@ class MetadataResolverTest {
             override suspend fun findById(id: String): ArtistEntity? = null
             override suspend fun findByName(name: String): ArtistEntity? = null
             override suspend fun insert(artist: ArtistEntity) { inserted = artist }
-            override fun pagingSource(): PagingSource<Int, ArtistEntity> = error("unused")
+            override fun pagingSource(): PagingSource<Int, ArtistDao.ArtistWithPhoto> = error("unused")
+            override suspend fun findByIdWithPhoto(id: String): ArtistDao.ArtistWithPhoto? = error("unused")
             override suspend fun allForIndexing(): List<ArtistEntity> = error("unused")
             override suspend fun setPhotoPath(id: String, path: String) = error("unused")
         }
@@ -75,7 +77,8 @@ class MetadataResolverTest {
             override suspend fun findById(id: String): ArtistEntity? = null
             override suspend fun findByName(name: String): ArtistEntity? = null
             override suspend fun insert(artist: ArtistEntity) = error("should not be called")
-            override fun pagingSource(): PagingSource<Int, ArtistEntity> = error("unused")
+            override fun pagingSource(): PagingSource<Int, ArtistDao.ArtistWithPhoto> = error("unused")
+            override suspend fun findByIdWithPhoto(id: String): ArtistDao.ArtistWithPhoto? = error("unused")
             override suspend fun allForIndexing(): List<ArtistEntity> = error("unused")
             override suspend fun setPhotoPath(id: String, path: String) = error("unused")
         }
@@ -101,7 +104,8 @@ class MetadataResolverTest {
             override suspend fun findById(id: String): ArtistEntity? = null
             override suspend fun findByName(name: String): ArtistEntity? = null
             override suspend fun insert(artist: ArtistEntity) = error("unused")
-            override fun pagingSource(): PagingSource<Int, ArtistEntity> = error("unused")
+            override fun pagingSource(): PagingSource<Int, ArtistDao.ArtistWithPhoto> = error("unused")
+            override suspend fun findByIdWithPhoto(id: String): ArtistDao.ArtistWithPhoto? = error("unused")
             override suspend fun allForIndexing(): List<ArtistEntity> = error("unused")
             override suspend fun setPhotoPath(id: String, path: String) = error("unused")
         }

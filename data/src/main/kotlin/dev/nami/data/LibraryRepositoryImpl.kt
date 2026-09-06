@@ -78,7 +78,7 @@ class LibraryRepositoryImpl @Inject constructor(
     }
 
     override fun artist(id: ArtistId): Flow<Artist?> = flow {
-        emit(artistDao.findById(id.value)?.toDomain())
+        emit(artistDao.findByIdWithPhoto(id.value)?.toDomain())
     }
 
     override fun tracksInAlbum(id: AlbumId): Flow<List<Track>> = flow {

@@ -68,6 +68,15 @@ fun MiniPlayer(
     var blockWidthPx by remember { mutableIntStateOf(0) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
 
+    // This composable never leaves composition when nowPlaying goes null (the early return
+    // below just skips rendering that frame), so drag offsets from a previous dismiss/skip
+    // would otherwise stick around and render the NEXT track's bar already shifted off-screen,
+    // looking "stuck" and unresponsive. Reset whenever the playing track identity changes.
+    androidx.compose.runtime.LaunchedEffect(queue.nowPlaying?.id) {
+        dragOffsetY = 0f
+        artworkOffsetX = 0f
+    }
+
     if (queue.nowPlaying == null) return
 
     Row(

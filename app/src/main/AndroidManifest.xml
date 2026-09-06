@@ -11,7 +11,13 @@
         android:theme="@style/Theme.Nami">
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:enableOnBackInvokedCallback="false">
+            <!-- Predictive back (default-on at targetSdk 35) leaves the outgoing Compose
+                 Navigation destination laid out and touchable underneath the incoming one,
+                 a known class of bug with navigation-compose's AnimatedContent-based NavHost.
+                 Disabled until that's fixed upstream; back falls through to the classic,
+                 immediate-pop dispatcher our screens already assume. -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

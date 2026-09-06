@@ -1,6 +1,8 @@
 package dev.nami.app.navigation
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
@@ -71,6 +73,15 @@ fun NamiNavHost(
             navController = navController,
             startDestination = ROUTE_LIBRARY,
             modifier = Modifier.weight(1f),
+            // Default Navigation-Compose cross-fade leaves the outgoing destination composed
+            // and touchable for the transition's duration, overlapping the incoming one. That
+            // window is where a screen popped by back (e.g. AlbumDetailScreen) can still catch
+            // a tap meant for what's now visually on top (e.g. the Albums grid), firing the
+            // wrong click handler. Instant, no-overlap switches close that window entirely.
+            enterTransition = { EnterTransition.None },
+            exitTransition = { ExitTransition.None },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { ExitTransition.None },
         ) {
             composable(ROUTE_LIBRARY) {
                 LibraryScreen(

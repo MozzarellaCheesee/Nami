@@ -15,14 +15,35 @@ interface ArtistDao {
     @Query("SELECT * FROM artists WHERE name = :name LIMIT 1")
     suspend fun findByName(name: String): ArtistEntity?
 
+    // Falls back to the artist's first album cover when they have no photo of their own --
+    // matches AlbumDao/TrackDao's "computed column via subquery, no migration" pattern.
     @Query(
         """
-        SELECT * FROM artists
+        SELECT artists.id AS id, artists.name AS name, artists.sortName AS sortName,
+               COALESCE(artists.photoPath, (
+                   SELECT albums.artworkPath FROM albums
+                   WHERE albums.artistId = artists.id AND albums.artworkPath IS NOT NULL
+                   ORDER BY albums.title ASC LIMIT 1
+               )) AS photoPath
+        FROM artists
         WHERE EXISTS (SELECT 1 FROM tracks WHERE tracks.artistId = artists.id AND tracks.deletedAt IS NULL)
         ORDER BY sortName ASC
         """,
     )
-    fun pagingSource(): PagingSource<Int, ArtistEntity>
+    fun pagingSource(): PagingSource<Int, ArtistWithPhoto>
+
+    @Query(
+        """
+        SELECT artists.id AS id, artists.name AS name, artists.sortName AS sortName,
+               COALESCE(artists.photoPath, (
+                   SELECT albums.artworkPath FROM albums
+                   WHERE albums.artistId = artists.id AND albums.artworkPath IS NOT NULL
+                   ORDER BY albums.title ASC LIMIT 1
+               )) AS photoPath
+        FROM artists WHERE id = :id
+        """,
+    )
+    suspend fun findByIdWithPhoto(id: String): ArtistWithPhoto?
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(artist: ArtistEntity)
@@ -37,4 +58,6 @@ interface ArtistDao {
         """,
     )
     suspend fun allForIndexing(): List<ArtistEntity>
+
+    data class ArtistWithPhoto(val id: String, val name: String, val sortName: String, val photoPath: String?)
 }
