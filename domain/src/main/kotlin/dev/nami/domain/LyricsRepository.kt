@@ -14,4 +14,9 @@ import kotlinx.coroutines.flow.Flow
 interface LyricsRepository {
     fun lyricsForPath(path: String): Flow<Lyrics?>
     suspend fun saveLyrics(path: String, lyrics: Lyrics)
+
+    /** LRCLIB (lrclib.net) -- free, keyless, exists specifically for synced lyrics lookup by
+     * title/artist/duration. Null on no match, instrumental track, or any network/parse failure;
+     * callers treat that the same as "nothing found" and fall through to manual entry. */
+    suspend fun fetchFromLrcLib(title: String, artistName: String?, durationMs: Long): Lyrics?
 }

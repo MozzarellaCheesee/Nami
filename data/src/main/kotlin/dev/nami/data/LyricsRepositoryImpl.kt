@@ -35,4 +35,9 @@ class LyricsRepositoryImpl @Inject constructor() : LyricsRepository {
             lrcFile(path).writeText(LrcParser.format(lyrics))
         }
     }
+
+    override suspend fun fetchFromLrcLib(title: String, artistName: String?, durationMs: Long): Lyrics? =
+        withContext(Dispatchers.IO) {
+            LrcLibClient.findSyncedLyrics(title, artistName, durationMs)?.let { LrcParser.parse(it) }
+        }
 }

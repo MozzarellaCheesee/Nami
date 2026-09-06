@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
@@ -106,10 +107,20 @@ fun LyricsScreen(
         if (lyrics == null || lyrics.lines.isEmpty()) {
             Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
                 Spacer(modifier = Modifier.height(64.dp))
-                Text(text = "Текста нет", color = NamiColors.Paper70)
+                if (uiState.isFetchingOnline) {
+                    androidx.compose.material3.CircularProgressIndicator(color = NamiColors.Paper70, modifier = Modifier.size(24.dp))
+                    Text(text = "Ищу текст в LRCLIB…", color = NamiColors.Paper70, modifier = Modifier.padding(top = 12.dp))
+                } else {
+                    Text(text = "Текст не найден", color = NamiColors.Paper70)
+                    Text(
+                        text = "Искать ещё раз в сети",
+                        color = NamiColors.Shu,
+                        modifier = Modifier.padding(top = 12.dp).clickable { viewModel.retryOnlineFetch() },
+                    )
+                }
                 Text(
-                    text = "Добавить и синхронизировать",
-                    color = NamiColors.Shu,
+                    text = "Добавить и синхронизировать вручную",
+                    color = NamiColors.Paper70,
                     modifier = Modifier.padding(top = 12.dp).clickable { showEditor = true },
                 )
             }

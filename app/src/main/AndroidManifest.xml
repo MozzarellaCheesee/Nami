@@ -2,6 +2,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Only ever hit for the LRCLIB lookup (План.md's explicitly-allowed opt-in network use),
+         when a track has no local .lrc and no other lyrics source. -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:name=".NamiApplication"
