@@ -64,6 +64,7 @@ class AlbumDetailViewModelTest {
             override suspend fun setArtistPhoto(id: ArtistId, imageUri: String) = error("unused")
             override fun tracksByArtist(id: ArtistId) = throw NotImplementedError()
             override fun albumsByArtist(id: ArtistId) = throw NotImplementedError()
+            override suspend fun incrementPlayCount(id: TrackId) {}
             override suspend fun import(source: ImportSource) = throw NotImplementedError()
             override suspend fun deleteTrack(id: TrackId) = throw NotImplementedError()
             override suspend fun deleteTracks(ids: List<TrackId>) {}

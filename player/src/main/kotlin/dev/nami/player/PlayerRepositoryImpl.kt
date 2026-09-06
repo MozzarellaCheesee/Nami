@@ -10,6 +10,7 @@ import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.MoreExecutors
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.nami.core.model.TrackId
+import dev.nami.domain.LibraryRepository
 import dev.nami.domain.PlayableTrack
 import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerQueue
@@ -28,6 +29,7 @@ import javax.inject.Singleton
 @Singleton
 class PlayerRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val libraryRepository: LibraryRepository,
 ) : PlayerRepository {
 
     private val _state = MutableStateFlow<PlaybackState>(PlaybackState.Idle)
@@ -53,6 +55,10 @@ class PlayerRepositoryImpl @Inject constructor(
     // scrubber/position only advanced in visible jumps instead of smoothly. Player calls must
     // happen on the main thread, hence Dispatchers.Main.
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    // Counted once per track per listen, not per skip -- "listened to" means past 30s or half the
+    // track's length, whichever comes first (skips restarting scoring don't double-count since
+    // this is keyed by mediaId, reset to null only on an actual track change).
+    private var playCountedMediaId: String? = null
 
     init {
         val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
@@ -80,16 +86,24 @@ class PlayerRepositoryImpl @Inject constructor(
     }
 
     private fun publishState(player: Player) {
-        val trackId = player.currentMediaItem?.mediaId
-            ?.takeIf { it.isNotEmpty() }
-            ?.let(::TrackId)
+        val mediaId = player.currentMediaItem?.mediaId?.takeIf { it.isNotEmpty() }
+        val trackId = mediaId?.let(::TrackId)
+        val durationMs = player.duration.coerceAtLeast(0)
+        val positionMs = player.currentPosition
         _state.value = toPlaybackState(
             trackId = trackId,
-            positionMs = player.currentPosition,
-            durationMs = player.duration.coerceAtLeast(0),
+            positionMs = positionMs,
+            durationMs = durationMs,
             playbackState = player.playbackState,
             playWhenReady = player.playWhenReady,
         )
+        if (mediaId != null && trackId != null && mediaId != playCountedMediaId) {
+            val threshold = if (durationMs > 0) minOf(30_000L, durationMs / 2) else 30_000L
+            if (positionMs >= threshold) {
+                playCountedMediaId = mediaId
+                scope.launch { libraryRepository.incrementPlayCount(trackId) }
+            }
+        }
     }
 
     private fun publishQueue(player: Player) {

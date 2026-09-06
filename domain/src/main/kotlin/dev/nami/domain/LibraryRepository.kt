@@ -32,6 +32,9 @@ interface LibraryRepository {
     suspend fun renameArtist(id: ArtistId, name: String)
     suspend fun setArtistPhoto(id: ArtistId, imageUri: String)
     fun tracksByArtist(id: ArtistId): Flow<List<Track>>
+    /** Called once a track has actually been "listened to" (see the player module's threshold),
+     * not on every skip -- live everywhere that reads Track.playCount via a Flow. */
+    suspend fun incrementPlayCount(id: TrackId)
     fun albumsByArtist(id: ArtistId): Flow<List<AlbumSummary>>
     suspend fun import(source: ImportSource): Flow<ImportProgress>
     suspend fun deleteTrack(id: TrackId)

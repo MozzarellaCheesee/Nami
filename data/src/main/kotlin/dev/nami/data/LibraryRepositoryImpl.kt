@@ -124,8 +124,11 @@ class LibraryRepositoryImpl @Inject constructor(
         artworkStore.save(id.value, bytes)?.let { path -> artistDao.updatePhotoPath(id.value, path) }
     }
 
-    override fun tracksByArtist(id: ArtistId): Flow<List<Track>> = flow {
-        emit(trackDao.tracksForArtist(id.value).map { it.toDomain() })
+    override fun tracksByArtist(id: ArtistId): Flow<List<Track>> =
+        trackDao.tracksForArtist(id.value).map { rows -> rows.map { it.toDomain() } }
+
+    override suspend fun incrementPlayCount(id: TrackId) {
+        trackDao.incrementPlayCount(id.value)
     }
 
     override suspend fun deleteTrack(id: TrackId) {

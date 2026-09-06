@@ -97,7 +97,9 @@ interface TrackDao {
         ORDER BY albums.year DESC, albums.title ASC, tracks.discNo ASC, tracks.trackNo ASC
         """,
     )
-    suspend fun tracksForArtist(artistId: String): List<TrackWithArtwork>
+    // Flow, not suspend -- Room auto-reruns this and re-emits whenever the tracks table changes,
+    // so play counts (and anything else) update live on this screen without leaving/reentering.
+    fun tracksForArtist(artistId: String): Flow<List<TrackWithArtwork>>
 
     @Query(
         """
@@ -122,6 +124,9 @@ interface TrackDao {
 
     @Query("UPDATE tracks SET title = :title WHERE id = :id")
     suspend fun updateTitle(id: String, title: String)
+
+    @Query("UPDATE tracks SET playCount = playCount + 1 WHERE id = :id")
+    suspend fun incrementPlayCount(id: String)
 
     // Unconditional -- unlike setArtworkPath (import's "only if null" writer), this is for the
     // user explicitly replacing a track's own (albumless) cover.

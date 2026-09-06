@@ -7,6 +7,7 @@ import dev.nami.core.database.dao.AlbumDao
 import dev.nami.core.database.entity.AlbumEntity
 import dev.nami.core.database.entity.ArtistEntity
 import dev.nami.core.database.entity.TrackEntity
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Before
@@ -118,7 +119,7 @@ class LibraryBrowsingDaoTest {
             ),
         )
 
-        val tracks = db.trackDao().tracksForArtist("a1")
+        val tracks = db.trackDao().tracksForArtist("a1").first()
 
         assertEquals(listOf("t1"), tracks.map { it.track.id })
     }
@@ -135,7 +136,7 @@ class LibraryBrowsingDaoTest {
             ),
         )
 
-        val tracks = db.trackDao().tracksForArtist("a1")
+        val tracks = db.trackDao().tracksForArtist("a1").first()
 
         assertEquals(listOf("t-new", "t-old"), tracks.map { it.track.id })
     }

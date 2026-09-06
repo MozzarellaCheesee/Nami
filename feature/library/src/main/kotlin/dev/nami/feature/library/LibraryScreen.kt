@@ -58,6 +58,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -475,6 +476,11 @@ private fun TrackListContent(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            // The MiniPlayer's background used to be fully opaque, hiding this: the list's own
+            // last row can render a sliver past its own area right where MiniPlayer starts. Now
+            // that background is a semi-transparent blur, that sliver shows through it. Clip the
+            // list's own container so it never draws there in the first place.
+            .clipToBounds()
             .onSizeChanged { boxHeightPx = it.height.toFloat() }
             .pointerInput(tracks.itemCount) {
                 detectDragGesturesAfterLongPress(
