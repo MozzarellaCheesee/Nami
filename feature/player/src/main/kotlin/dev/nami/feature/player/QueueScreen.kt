@@ -372,22 +372,26 @@ private fun QueueRow(
                         modifier = Modifier
                             .padding(start = 8.dp)
                             .size(40.dp)
+                            // Kept live (not frozen at drag start) -- it already reflects the
+                            // handle's actual current position, scroll included, every layout
+                            // pass. Combining it with change.position.y below gives the finger's
+                            // true absolute Y with no separate scroll bookkeeping needed; adding
+                            // a manual scroll-compensation term on top of THIS (as an earlier
+                            // version did) double counted the scroll and threw the position off.
                             .onGloballyPositioned { handleRootY = it.positionInRoot().y }
                             .pointerInput(Unit) {
                                 // A dedicated handle icon, isolated from the row's own swipe/click
                                 // gestures -- no need to wait for a long press before it starts.
                                 detectDragGestures(
-                                    onDragStart = {
+                                    onDragStart = { offset ->
                                         dragging = true
                                         scrollCompensationAtStart = currentScrollCompensationPx
-                                        currentOnDragPositionChange(handleRootY)
+                                        currentOnDragPositionChange(handleRootY + offset.y)
                                     },
                                     onDrag = { change, dragAmount ->
                                         change.consume()
                                         dragOffsetPx += dragAmount.y
-                                        currentOnDragPositionChange(
-                                            handleRootY + dragOffsetPx + (currentScrollCompensationPx - scrollCompensationAtStart),
-                                        )
+                                        currentOnDragPositionChange(handleRootY + change.position.y)
                                     },
                                     onDragEnd = {
                                         dragging = false
