@@ -1,7 +1,9 @@
 package dev.nami.feature.library
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -12,7 +14,10 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -23,11 +28,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.model.AlbumId
+import dev.nami.core.model.ArtistId
 import dev.nami.core.model.Track
 import dev.nami.core.model.TrackId
 import dev.nami.feature.playlists.AddToPlaylistDialog
@@ -38,11 +45,14 @@ fun ArtistDetailScreen(
     onAlbumClick: (AlbumId) -> Unit,
     onPlayTracks: (tracks: List<Track>, artistName: String?, startIndex: Int) -> Unit,
     onAddToQueue: (Track, artistName: String?) -> Unit,
+    onPickPhotoRequested: (ArtistId) -> Unit,
     viewModel: ArtistDetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val artistName = uiState.artist?.name
     var addToPlaylistTrackId by remember { mutableStateOf<TrackId?>(null) }
+    var showArtistMenu by remember { mutableStateOf(false) }
+    var showRenameDialog by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
         PhotoHeader(photoPath = uiState.artist?.photoPath, onBack = onBack) {
@@ -53,14 +63,35 @@ fun ArtistDetailScreen(
                     style = MaterialTheme.typography.headlineSmall,
                 )
                 Spacer(modifier = Modifier.padding(top = 12.dp))
-                if (uiState.tracks.isNotEmpty()) {
-                    IconButton(
-                        onClick = { onPlayTracks(uiState.tracks, artistName, 0) },
-                        modifier = Modifier
-                            .size(64.dp)
-                            .background(NamiColors.Paper100, RoundedCornerShape(20.dp)),
-                    ) {
-                        Icon(Icons.Filled.PlayArrow, contentDescription = "Играть всё", tint = NamiColors.Ink900)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (uiState.tracks.isNotEmpty()) {
+                        IconButton(
+                            onClick = { onPlayTracks(uiState.tracks, artistName, 0) },
+                            modifier = Modifier
+                                .size(64.dp)
+                                .background(NamiColors.Paper100, RoundedCornerShape(20.dp)),
+                        ) {
+                            Icon(Icons.Filled.PlayArrow, contentDescription = "Играть всё", tint = NamiColors.Ink900)
+                        }
+                    }
+                    Spacer(modifier = Modifier.padding(start = 12.dp))
+                    Box {
+                        IconButton(onClick = { showArtistMenu = true }) {
+                            Icon(Icons.Filled.MoreVert, contentDescription = "Действия с артистом", tint = NamiColors.Paper100)
+                        }
+                        DropdownMenu(expanded = showArtistMenu, onDismissRequest = { showArtistMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Переименовать") },
+                                onClick = { showArtistMenu = false; showRenameDialog = true },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Изменить фото") },
+                                onClick = {
+                                    showArtistMenu = false
+                                    uiState.artist?.let { onPickPhotoRequested(it.id) }
+                                },
+                            )
+                        }
                     }
                 }
             }
@@ -88,5 +119,14 @@ fun ArtistDetailScreen(
 
     addToPlaylistTrackId?.let { trackId ->
         AddToPlaylistDialog(trackIds = setOf(trackId), onDismiss = { addToPlaylistTrackId = null })
+    }
+
+    if (showRenameDialog) {
+        RenameDialog(
+            currentName = artistName ?: "",
+            title = "Переименовать артиста",
+            onRename = { newName -> viewModel.renameArtist(newName) },
+            onDismiss = { showRenameDialog = false },
+        )
     }
 }

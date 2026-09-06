@@ -30,6 +30,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import dev.nami.app.SettingsScreen
+import dev.nami.core.model.AlbumId
+import dev.nami.core.model.ArtistId
 import dev.nami.core.model.PlaylistId
 import dev.nami.domain.ImportM3u8Result
 import dev.nami.domain.ImportProgress
@@ -69,6 +71,8 @@ fun NamiNavHost(
     onImportPlaylist: (playlistName: String) -> Unit,
     lastImportResult: StateFlow<ImportM3u8Result?>,
     onImportResultShown: () -> Unit,
+    onPickAlbumCover: (AlbumId) -> Unit,
+    onPickArtistPhoto: (ArtistId) -> Unit,
     navController: NavHostController = rememberNavController(),
 ) {
     // Scoped here (Activity-level ViewModelStoreOwner), not inside a nav destination,
@@ -166,6 +170,8 @@ fun NamiNavHost(
                         showNowPlaying = true
                     },
                     onAddToQueue = { track -> nowPlayingViewModel.addToQueue(track, artistName = null) },
+                    onPickCoverRequested = onPickAlbumCover,
+                    onDeleted = { navController.popBackStack() },
                 )
             }
             composable(
@@ -180,6 +186,7 @@ fun NamiNavHost(
                         showNowPlaying = true
                     },
                     onAddToQueue = { track, artistName -> nowPlayingViewModel.addToQueue(track, artistName) },
+                    onPickPhotoRequested = onPickArtistPhoto,
                 )
             }
             composable(

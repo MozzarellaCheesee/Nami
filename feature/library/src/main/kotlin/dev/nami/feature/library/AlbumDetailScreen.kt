@@ -14,12 +14,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -31,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.model.AlbumId
 import dev.nami.core.model.Track
 import dev.nami.core.model.TrackId
 import dev.nami.feature.playlists.AddToPlaylistDialog
@@ -40,11 +43,16 @@ fun AlbumDetailScreen(
     onBack: () -> Unit,
     onPlayTracks: (tracks: List<Track>, startIndex: Int) -> Unit,
     onAddToQueue: (Track) -> Unit,
+    onPickCoverRequested: (AlbumId) -> Unit,
+    onDeleted: () -> Unit,
     viewModel: AlbumDetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var addToPlaylistTrackId by remember { mutableStateOf<TrackId?>(null) }
     var showAlbumMenu by remember { mutableStateOf(false) }
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var showAddTracksDialog by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
         PhotoHeader(photoPath = uiState.album?.artworkPath, onBack = onBack) {
@@ -82,6 +90,32 @@ fun AlbumDetailScreen(
                                     uiState.tracks.forEach { onAddToQueue(it) }
                                 },
                             )
+                            DropdownMenuItem(
+                                text = { Text("Переименовать") },
+                                onClick = { showAlbumMenu = false; showRenameDialog = true },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Изменить обложку") },
+                                onClick = {
+                                    showAlbumMenu = false
+                                    uiState.album?.let { onPickCoverRequested(it.id) }
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Добавить треки") },
+                                onClick = { showAlbumMenu = false; showAddTracksDialog = true },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(if (uiState.album?.isSingle == true) "Убрать метку \"сингл\"" else "Отметить как сингл") },
+                                onClick = {
+                                    showAlbumMenu = false
+                                    uiState.album?.let { viewModel.setIsSingle(!it.isSingle) }
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Удалить альбом") },
+                                onClick = { showAlbumMenu = false; showDeleteConfirm = true },
+                            )
                         }
                     }
                 }
@@ -94,6 +128,7 @@ fun AlbumDetailScreen(
                     onClick = { onPlayTracks(uiState.tracks, index) },
                     onAddToQueue = { onAddToQueue(track) },
                     onAddToPlaylist = { addToPlaylistTrackId = track.id },
+                    onRemoveFromAlbum = { viewModel.removeTrackFromAlbum(track.id) },
                 )
             }
         }
@@ -101,5 +136,36 @@ fun AlbumDetailScreen(
 
     addToPlaylistTrackId?.let { trackId ->
         AddToPlaylistDialog(trackIds = setOf(trackId), onDismiss = { addToPlaylistTrackId = null })
+    }
+
+    if (showRenameDialog) {
+        RenameDialog(
+            currentName = uiState.album?.title ?: "",
+            title = "Переименовать альбом",
+            onRename = { newTitle -> viewModel.renameAlbum(newTitle) },
+            onDismiss = { showRenameDialog = false },
+        )
+    }
+
+    if (showAddTracksDialog) {
+        uiState.album?.let { album ->
+            AddTracksToAlbumDialog(albumId = album.id, onDismiss = { showAddTracksDialog = false })
+        }
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Удалить альбом?") },
+            text = { Text("Треки альбома переместятся в корзину. Их можно будет восстановить.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteAlbum()
+                    showDeleteConfirm = false
+                    onDeleted()
+                }) { Text("Удалить") }
+            },
+            dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Отмена") } },
+        )
     }
 }

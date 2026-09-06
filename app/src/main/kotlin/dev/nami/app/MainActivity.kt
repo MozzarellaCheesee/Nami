@@ -22,6 +22,7 @@ class MainActivity : ComponentActivity() {
 
     private val libraryViewModel: LibraryViewModel by viewModels()
     private val playlistActionsViewModel: PlaylistActionsViewModel by viewModels()
+    private val metadataActionsViewModel: MetadataActionsViewModel by viewModels()
 
     private val pickFiles = registerForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
@@ -55,6 +56,14 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.OpenDocument(),
     ) { uri -> uri?.let(playlistActionsViewModel::onImportSourcePicked) }
 
+    private val pickAlbumCoverImage = registerForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri -> uri?.let(metadataActionsViewModel::onAlbumCoverPicked) }
+
+    private val pickArtistPhotoImage = registerForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri -> uri?.let(metadataActionsViewModel::onArtistPhotoPicked) }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Transparent system nav bar: content draws edge-to-edge under it (NamiBottomBar already
@@ -85,6 +94,14 @@ class MainActivity : ComponentActivity() {
                     },
                     lastImportResult = playlistActionsViewModel.lastImportResult,
                     onImportResultShown = playlistActionsViewModel::onImportResultShown,
+                    onPickAlbumCover = { albumId ->
+                        metadataActionsViewModel.requestAlbumCoverPick(albumId)
+                        pickAlbumCoverImage.launch(arrayOf("image/*"))
+                    },
+                    onPickArtistPhoto = { artistId ->
+                        metadataActionsViewModel.requestArtistPhotoPick(artistId)
+                        pickArtistPhotoImage.launch(arrayOf("image/*"))
+                    },
                 )
             }
         }

@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class ArtistDetailUiState(
@@ -25,7 +26,7 @@ data class ArtistDetailUiState(
 
 @HiltViewModel
 class ArtistDetailViewModel @Inject constructor(
-    libraryRepository: LibraryRepository,
+    private val libraryRepository: LibraryRepository,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -42,5 +43,9 @@ class ArtistDetailViewModel @Inject constructor(
         ) { artist, albums, tracks -> ArtistDetailUiState(artist, albums, tracks) }
             .onEach { _uiState.value = it }
             .launchIn(viewModelScope)
+    }
+
+    fun renameArtist(name: String) {
+        viewModelScope.launch { libraryRepository.renameArtist(artistId, name) }
     }
 }
