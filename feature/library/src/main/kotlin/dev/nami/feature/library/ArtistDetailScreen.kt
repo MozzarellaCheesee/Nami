@@ -118,41 +118,6 @@ fun ArtistDetailScreen(
             .nestedScroll(headerState.nestedScrollConnection)
             .onGloballyPositioned { rootOffset = it.positionInRoot() },
     ) {
-        // The floating slide: at progress 0 it's the full-width header rectangle (r4, matching
-        // the album-art radius convention) sitting at the very top (0,0); at progress 1 it's a
-        // 40dp circle sitting exactly in the reserved slot below. Both endpoints and every point
-        // between are driven by the same collapseFraction already resizing the header itself.
-        run {
-            val currentWidthPx = lerp(screenWidthPx, avatarSizePx, progress)
-            val currentHeightPx = lerp(headerMaxHeightPx, avatarSizePx, progress)
-            val offsetX = lerp(0f, avatarSlotOffset.x, progress)
-            val offsetY = lerp(0f, avatarSlotOffset.y, progress)
-            val cornerRadiusDp = lerp(4f, with(density) { (minOf(currentWidthPx, currentHeightPx) / 2f).toDp().value }, progress)
-            val slideModifier = Modifier
-                .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
-                .size(with(density) { currentWidthPx.toDp() }, with(density) { currentHeightPx.toDp() })
-                .clip(RoundedCornerShape(cornerRadiusDp.dp))
-            if (effectivePhotoPath != null) {
-                AsyncImage(
-                    model = effectivePhotoPath,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = slideModifier,
-                )
-            } else {
-                // No photo anywhere to fall back to -- still slide/shrink a plain placeholder so
-                // the reserved slot isn't left visually empty.
-                Box(modifier = slideModifier.background(NamiColors.Ink700))
-            }
-        }
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(headerHeightDp)
-                .background(Brush.verticalGradient(0.4f to Color.Transparent, 1f to NamiColors.Ink900)),
-        )
-
         Column(modifier = Modifier.fillMaxSize()) {
             Spacer(modifier = Modifier.fillMaxWidth().height(headerHeightDp))
             Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
@@ -272,6 +237,46 @@ fun ArtistDetailScreen(
                 }
             }
         }
+
+        // The floating slide: at progress 0 it's the full-width header rectangle (r4, matching
+        // the album-art radius convention) sitting at the very top (0,0); at progress 1 it's a
+        // 40dp circle sitting exactly in the reserved slot below. Both endpoints and every point
+        // between are driven by the same collapseFraction already resizing the header itself.
+        // Drawn AFTER the content column (not before) -- that column's own opaque background
+        // would otherwise paint over the image the moment it slides down past the header line,
+        // which is exactly where its landing slot lives.
+        run {
+            val currentWidthPx = lerp(screenWidthPx, avatarSizePx, progress)
+            val currentHeightPx = lerp(headerMaxHeightPx, avatarSizePx, progress)
+            val offsetX = lerp(0f, avatarSlotOffset.x, progress)
+            val offsetY = lerp(0f, avatarSlotOffset.y, progress)
+            val cornerRadiusDp = lerp(4f, with(density) { (minOf(currentWidthPx, currentHeightPx) / 2f).toDp().value }, progress)
+            val slideModifier = Modifier
+                .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
+                .size(with(density) { currentWidthPx.toDp() }, with(density) { currentHeightPx.toDp() })
+                .clip(RoundedCornerShape(cornerRadiusDp.dp))
+            if (effectivePhotoPath != null) {
+                AsyncImage(
+                    model = effectivePhotoPath,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = slideModifier,
+                )
+            } else {
+                // No photo anywhere to fall back to -- still slide/shrink a plain placeholder so
+                // the reserved slot isn't left visually empty.
+                Box(modifier = slideModifier.background(NamiColors.Ink700))
+            }
+        }
+
+        // Gradient fade sits on top of the sliding photo (so it's always fading against the
+        // photo, not against nothing) but below the back button.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(headerHeightDp)
+                .background(Brush.verticalGradient(0.4f to Color.Transparent, 1f to NamiColors.Ink900)),
+        )
 
         IconButton(
             onClick = onBack,
