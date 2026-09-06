@@ -44,20 +44,24 @@ fun PhotoHeader(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     height: Dp = 360.dp,
+    // false when a caller is drawing the photo itself as a floating element sliding into a
+    // different spot (see ArtistDetailScreen's avatar slide) -- the header still needs its
+    // gradient/back button, just not its own copy of the image underneath.
+    renderPhoto: Boolean = true,
     content: @Composable BoxScope.() -> Unit,
 ) {
     // clipToBounds: as the header shrinks (see CollapsingHeaderState), a long title in [content]
     // can measure taller than the current height -- without a clip, that overflow bleeds past
     // the header's edges into the track list below instead of just getting cropped.
     Box(modifier = modifier.fillMaxWidth().height(height).clipToBounds()) {
-        if (photoPath != null) {
+        if (renderPhoto && photoPath != null) {
             AsyncImage(
                 model = photoPath,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxWidth().height(height),
             )
-        } else {
+        } else if (renderPhoto) {
             Box(modifier = Modifier.fillMaxWidth().height(height).background(NamiColors.Ink700))
         }
         Box(
