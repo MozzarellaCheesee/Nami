@@ -6,6 +6,16 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+// versionCode was hardcoded at 1 for every dev build this whole project -- Android's package
+// installer can silently refuse to reinstall an APK whose versionCode isn't strictly higher than
+// what's already on the device (no error shown on many OEMs, it just doesn't update), which means
+// a locally sideloaded test build could be running stale code indefinitely. Derive it from the
+// git commit count instead so every build from a new commit is guaranteed installable over the
+// last one.
+val gitCommitCount = providers.exec {
+    commandLine("git", "rev-list", "--count", "HEAD")
+}.standardOutput.asText.get().trim().toIntOrNull() ?: 1
+
 android {
     namespace = "dev.nami.app"
     compileSdk = 35
@@ -13,7 +23,7 @@ android {
         applicationId = "dev.nami.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
+        versionCode = gitCommitCount
         versionName = "0.1.0"
     }
     buildFeatures { compose = true }
