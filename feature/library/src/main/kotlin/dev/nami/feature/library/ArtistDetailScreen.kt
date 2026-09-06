@@ -66,7 +66,7 @@ import kotlin.math.roundToInt
 private const val TOP_TRACKS_LIMIT = 10
 private const val ALBUMS_COLLAPSED_LIMIT = 6
 private val HEADER_MAX_HEIGHT = 280.dp
-private val HEADER_MIN_HEIGHT = 120.dp
+private val HEADER_MIN_HEIGHT = 56.dp
 private val AVATAR_SIZE = 40.dp
 
 private fun lerp(start: Float, stop: Float, fraction: Float) = start + (stop - start) * fraction
@@ -76,6 +76,7 @@ fun ArtistDetailScreen(
     onBack: () -> Unit,
     onAlbumClick: (AlbumId) -> Unit,
     onShowDiscography: () -> Unit,
+    onShowAllTracks: () -> Unit,
     onPlayTracks: (tracks: List<Track>, artistName: String?, startIndex: Int) -> Unit,
     onAddToQueue: (Track, artistName: String?) -> Unit,
     onPickPhotoRequested: (ArtistId) -> Unit,
@@ -90,6 +91,10 @@ fun ArtistDetailScreen(
 
     val topTracks = remember(uiState.tracks) { uiState.tracks.sortedByDescending { it.playCount }.take(TOP_TRACKS_LIMIT) }
     val visibleAlbums = uiState.albums.take(ALBUMS_COLLAPSED_LIMIT)
+    // The artist entity's own photo can be unset (only backfilled for libraries imported after
+    // that fallback existed) -- fall back to any album cover so the header/avatar isn't just
+    // empty for every artist imported before then.
+    val effectivePhotoPath = uiState.artist?.photoPath ?: uiState.albums.firstOrNull()?.artworkPath
 
     val density = LocalDensity.current
     val headerState = rememberCollapsingHeaderState(maxHeight = HEADER_MAX_HEIGHT, minHeight = HEADER_MIN_HEIGHT)
@@ -117,21 +122,28 @@ fun ArtistDetailScreen(
         // the album-art radius convention) sitting at the very top (0,0); at progress 1 it's a
         // 40dp circle sitting exactly in the reserved slot below. Both endpoints and every point
         // between are driven by the same collapseFraction already resizing the header itself.
-        uiState.artist?.photoPath?.let { photoPath ->
+        run {
             val currentWidthPx = lerp(screenWidthPx, avatarSizePx, progress)
             val currentHeightPx = lerp(headerMaxHeightPx, avatarSizePx, progress)
             val offsetX = lerp(0f, avatarSlotOffset.x, progress)
             val offsetY = lerp(0f, avatarSlotOffset.y, progress)
             val cornerRadiusDp = lerp(4f, with(density) { (minOf(currentWidthPx, currentHeightPx) / 2f).toDp().value }, progress)
-            AsyncImage(
-                model = photoPath,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
-                    .size(with(density) { currentWidthPx.toDp() }, with(density) { currentHeightPx.toDp() })
-                    .clip(RoundedCornerShape(cornerRadiusDp.dp)),
-            )
+            val slideModifier = Modifier
+                .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
+                .size(with(density) { currentWidthPx.toDp() }, with(density) { currentHeightPx.toDp() })
+                .clip(RoundedCornerShape(cornerRadiusDp.dp))
+            if (effectivePhotoPath != null) {
+                AsyncImage(
+                    model = effectivePhotoPath,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = slideModifier,
+                )
+            } else {
+                // No photo anywhere to fall back to -- still slide/shrink a plain placeholder so
+                // the reserved slot isn't left visually empty.
+                Box(modifier = slideModifier.background(NamiColors.Ink700))
+            }
         }
 
         Box(
@@ -165,15 +177,17 @@ fun ArtistDetailScreen(
                                 .onGloballyPositioned { avatarSlotOffset = it.positionInRoot() - rootOffset },
                         )
                         Spacer(modifier = Modifier.padding(start = 12.dp))
-                        // Play/overflow slide in and fade in together with the avatar landing,
-                        // instead of sitting there statically the whole time.
-                        val slideInPx = with(density) { (1f - progress) * 24.dp.toPx() }
+                        // A small shift as the avatar lands, but always fully visible -- an
+                        // alpha tied to collapseFraction previously made these invisible at rest
+                        // (progress 0) until the user scrolled, which meant tapping play required
+                        // scrolling first.
+                        val slideInPx = with(density) { (1f - progress) * 12.dp.toPx() }
                         if (uiState.tracks.isNotEmpty()) {
                             IconButton(
                                 onClick = { onPlayTracks(uiState.tracks, artistName, 0) },
                                 modifier = Modifier
                                     .size(56.dp)
-                                    .graphicsLayer { translationX = slideInPx; alpha = progress }
+                                    .graphicsLayer { translationX = slideInPx }
                                     .background(NamiColors.Paper100, RoundedCornerShape(18.dp)),
                             ) {
                                 Icon(Icons.Filled.PlayArrow, contentDescription = "Играть всё", tint = NamiColors.Ink900)
@@ -182,7 +196,7 @@ fun ArtistDetailScreen(
                         Spacer(modifier = Modifier.padding(start = 8.dp))
                         IconButton(
                             onClick = { showArtistMenu = true },
-                            modifier = Modifier.graphicsLayer { translationX = slideInPx; alpha = progress },
+                            modifier = Modifier.graphicsLayer { translationX = slideInPx },
                         ) {
                             Icon(Icons.Outlined.MoreVert, contentDescription = "Действия с артистом", tint = NamiColors.Paper100)
                         }
@@ -198,6 +212,25 @@ fun ArtistDetailScreen(
                     )
                 }
                 LazyColumn {
+                    if (uiState.tracks.isNotEmpty()) {
+                        item(key = "tracks-header") {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(text = "Треки", color = NamiColors.Paper100, style = MaterialTheme.typography.titleMedium)
+                                if (uiState.tracks.size > TOP_TRACKS_LIMIT) {
+                                    Text(
+                                        text = "Все →",
+                                        color = NamiColors.Paper70,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.clickable(onClick = onShowAllTracks),
+                                    )
+                                }
+                            }
+                        }
+                    }
                     itemsIndexed(topTracks, key = { _, track -> track.id.value }) { index, track ->
                         TrackListItem(
                             track = track,

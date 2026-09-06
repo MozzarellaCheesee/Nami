@@ -160,7 +160,25 @@ fun TrackListItem(
 
 private fun subtitleFor(track: Track): String {
     val duration = formatDuration(track.durationMs)
-    return if (track.artistName != null) "${track.artistName} · $duration" else duration
+    val parts = listOfNotNull(
+        track.artistName,
+        duration,
+        // Only shown once a track has actually been played -- a "0 прослушиваний" badge on
+        // every never-played row would just be noise.
+        if (track.playCount > 0) "${track.playCount} ${playsWord(track.playCount)}" else null,
+    )
+    return parts.joinToString(" · ")
+}
+
+private fun playsWord(count: Int): String {
+    val mod100 = count % 100
+    val mod10 = count % 10
+    return when {
+        mod100 in 11..14 -> "прослушиваний"
+        mod10 == 1 -> "прослушивание"
+        mod10 in 2..4 -> "прослушивания"
+        else -> "прослушиваний"
+    }
 }
 
 private fun formatDuration(durationMs: Long): String {
