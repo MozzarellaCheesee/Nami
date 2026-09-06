@@ -142,34 +142,34 @@ fun ArtistDetailScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         // Empty slot: the real image is the floating element above, drawn on top
-                        // of this reserved space once it slides all the way in.
+                        // of this reserved space once it slides all the way in. Its width grows
+                        // from 0 to AVATAR_SIZE with progress instead of always reserving the
+                        // full 40dp -- reserving it at rest (progress 0, avatar not there yet)
+                        // just left an empty gap in front of the play/overflow buttons for no
+                        // reason. The slot's own top-left position doesn't move as it grows
+                        // (it's the Row's first child), so the landing target stays stable.
                         Spacer(
                             modifier = Modifier
-                                .size(AVATAR_SIZE)
+                                .size(width = with(density) { (avatarSizePx * progress).toDp() }, height = AVATAR_SIZE)
                                 .onGloballyPositioned { avatarSlotOffset = it.positionInRoot() - rootOffset },
                         )
-                        Spacer(modifier = Modifier.padding(start = 12.dp))
-                        // A small shift as the avatar lands, but always fully visible -- an
-                        // alpha tied to collapseFraction previously made these invisible at rest
-                        // (progress 0) until the user scrolled, which meant tapping play required
-                        // scrolling first.
-                        val slideInPx = with(density) { (1f - progress) * 12.dp.toPx() }
+                        Spacer(modifier = Modifier.padding(start = with(density) { (12.dp.toPx() * progress).toDp() }))
+                        // Always fully visible (an alpha tied to collapseFraction previously made
+                        // these invisible at rest until the user scrolled, which meant tapping
+                        // play required scrolling first). They already shift right as the slot
+                        // above grows, no separate translation needed.
                         if (uiState.tracks.isNotEmpty()) {
                             IconButton(
                                 onClick = { onPlayTracks(uiState.tracks, artistName, 0) },
                                 modifier = Modifier
                                     .size(56.dp)
-                                    .graphicsLayer { translationX = slideInPx }
                                     .background(NamiColors.Paper100, RoundedCornerShape(18.dp)),
                             ) {
                                 Icon(Icons.Filled.PlayArrow, contentDescription = "Играть всё", tint = NamiColors.Ink900)
                             }
                         }
                         Spacer(modifier = Modifier.padding(start = 8.dp))
-                        IconButton(
-                            onClick = { showArtistMenu = true },
-                            modifier = Modifier.graphicsLayer { translationX = slideInPx },
-                        ) {
+                        IconButton(onClick = { showArtistMenu = true }) {
                             Icon(Icons.Outlined.MoreVert, contentDescription = "Действия с артистом", tint = NamiColors.Paper100)
                         }
                     }
