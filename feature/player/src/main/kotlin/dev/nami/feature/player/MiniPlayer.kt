@@ -79,6 +79,19 @@ fun MiniPlayer(
 
     if (queue.nowPlaying == null) return
 
+    // The bar's own reserved height shrinks in lockstep with the downward drag (instead of
+    // just visually sliding via offset while the Column keeps reserving a full 60dp slot for
+    // it) so the bottom nav bar rises to close the gap in real time -- no leftover strip of
+    // background color where the bar used to be, and nothing else visible "flying" through it.
+    val fullHeightPx = with(density) { 60.dp.toPx() }
+    val reservedHeightPx = (fullHeightPx - dragOffsetY.coerceAtLeast(0f)).coerceIn(0f, fullHeightPx)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(with(density) { reservedHeightPx.toDp() })
+            .clipToBounds(),
+    ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -180,5 +193,6 @@ fun MiniPlayer(
                 tint = NamiColors.Paper100,
             )
         }
+    }
     }
 }
