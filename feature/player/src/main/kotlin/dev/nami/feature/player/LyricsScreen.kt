@@ -7,6 +7,7 @@ import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -151,21 +152,52 @@ private fun SyncedLyricsList(lyrics: Lyrics, positionMs: Long, onLineClick: (Lon
         }
     }
 
-    LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
-        itemsIndexed(lyrics.lines) { index, line ->
-            val isCurrent = index == currentIndex
-            Text(
-                text = line.text.ifBlank { "…" },
-                color = if (isCurrent) NamiColors.Shu else NamiColors.Paper40,
-                style = if (isCurrent) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium,
-                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onLineClick(line.timeMs) }
-                    .padding(vertical = 10.dp),
-            )
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            contentPadding = PaddingValues(vertical = 220.dp),
+            modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp),
+        ) {
+            itemsIndexed(lyrics.lines) { index, line ->
+                // Distance from the active line, not just "current or not" -- lines fade out the
+                // further they are from what's playing, same falloff as most karaoke-style lyric
+                // views (Apple/YT Music), instead of a flat dim/bright split.
+                val distance = kotlin.math.abs(index - currentIndex)
+                val alpha = when {
+                    distance == 0 -> 1f
+                    distance == 1 -> 0.55f
+                    distance == 2 -> 0.3f
+                    else -> 0.15f
+                }
+                val isCurrent = distance == 0
+                Text(
+                    text = line.text.ifBlank { "…" },
+                    color = (if (isCurrent) NamiColors.Paper100 else NamiColors.Paper100).copy(alpha = alpha),
+                    style = if (isCurrent) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.titleLarge,
+                    fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onLineClick(line.timeMs) }
+                        .padding(vertical = 14.dp),
+                )
+            }
         }
-        item { Spacer(modifier = Modifier.height(300.dp)) }
+        // Edge fade so lines don't just hard-cut at the top/bottom of the list -- the whole
+        // point of the falloff above is a smooth gradient into the background, not a clip.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(140.dp)
+                .align(Alignment.TopCenter)
+                .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(NamiColors.Ink900, androidx.compose.ui.graphics.Color.Transparent))),
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(200.dp)
+                .align(Alignment.BottomCenter)
+                .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(androidx.compose.ui.graphics.Color.Transparent, NamiColors.Ink900))),
+        )
     }
 }
 
