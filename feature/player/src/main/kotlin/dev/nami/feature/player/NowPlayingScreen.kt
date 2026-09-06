@@ -26,10 +26,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
-import androidx.compose.material.icons.outlined.Pause
-import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material.icons.outlined.SkipNext
-import androidx.compose.material.icons.outlined.SkipPrevious
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -191,17 +191,6 @@ fun NowPlayingScreen(
         queue.nowPlaying?.artistName?.let { artistName ->
             Text(text = artistName, color = NamiColors.Paper70)
         }
-        queue.nowPlaying?.format?.let { format ->
-            Text(
-                text = format.uppercase(),
-                color = NamiColors.Ai,
-                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-                modifier = Modifier
-                    .padding(top = 12.dp)
-                    .background(NamiColors.Ai.copy(alpha = 0.14f), RoundedCornerShape(4.dp))
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
-            )
-        }
         val durationMs = playing?.durationMs ?: 0L
         val actualPositionMs = playing?.positionMs ?: 0L
         val actualProgress = if (durationMs > 0) (actualPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
@@ -246,14 +235,14 @@ fun NowPlayingScreen(
                     viewModel.skipPrevious()
                 }
             }) {
-                Icon(Icons.Outlined.SkipPrevious, contentDescription = "Предыдущий", tint = NamiColors.Paper100)
+                Icon(Icons.Rounded.SkipPrevious, contentDescription = "Предыдущий", tint = NamiColors.Paper100)
             }
             IconButton(
                 onClick = viewModel::toggle,
                 modifier = Modifier.size(64.dp),
             ) {
                 Icon(
-                    imageVector = if (playing?.isPlaying == true) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
+                    imageVector = if (playing?.isPlaying == true) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                     contentDescription = "Играть/пауза",
                     tint = NamiColors.Ink900,
                     modifier = Modifier
@@ -269,8 +258,21 @@ fun NowPlayingScreen(
                     viewModel.skipNext()
                 }
             }) {
-                Icon(Icons.Outlined.SkipNext, contentDescription = "Следующий", tint = NamiColors.Paper100)
+                Icon(Icons.Rounded.SkipNext, contentDescription = "Следующий", tint = NamiColors.Paper100)
             }
+        }
+        // Format badge sits below the transport controls per Дизайн.md §4.3 (mockup order:
+        // controls, then format badge row, then the pill row) -- was above the scrubber before.
+        queue.nowPlaying?.format?.let { format ->
+            Text(
+                text = format.uppercase(),
+                color = NamiColors.Ai,
+                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                modifier = Modifier
+                    .padding(top = 20.dp)
+                    .background(NamiColors.Ai.copy(alpha = 0.14f), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            )
         }
         androidx.compose.material3.TextButton(
             onClick = onQueueClick,
