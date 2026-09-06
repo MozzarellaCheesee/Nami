@@ -75,8 +75,12 @@ class PlayerRepositoryImpl @Inject constructor(
                     },
                 )
                 scope.launch {
+                    // 500ms was the original interval -- fine for a scrubber, but the lyrics
+                    // screen's karaoke word-sweep visibly stepped/lagged behind the vocal at that
+                    // rate (up to half a second of staleness). 100ms keeps the same cheap polling
+                    // approach (no need for a smoothed/interpolated clock) while looking smooth.
                     while (true) {
-                        delay(500)
+                        delay(100)
                         controller?.takeIf { it.isPlaying }?.let(::publishState)
                     }
                 }

@@ -177,8 +177,17 @@ fun QueueScreen(
     // instead of the button doing an instant cut while only the swipe gesture animated.
     fun dismiss() {
         scope.launch {
-            animate(dragOffsetY, screenHeightPx) { value, _ -> dragOffsetY = value }
-            onBack()
+            // finally, not a plain call after animate() -- if this coroutine's job gets
+            // cancelled mid-animation (composable disposed/recomposed for any reason before the
+            // slide finishes), the bare sequential version above never reached onBack() at all,
+            // leaving showQueue stuck true: the screen sits fully slid off-screen (dragOffsetY
+            // already huge) but the flag never flips, so tapping the queue button again is a
+            // no-op and it silently never reopens.
+            try {
+                animate(dragOffsetY, screenHeightPx) { value, _ -> dragOffsetY = value }
+            } finally {
+                onBack()
+            }
         }
     }
 

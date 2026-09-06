@@ -58,6 +58,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -114,13 +115,40 @@ fun LyricsScreen(
     var wordSelectMode by remember { mutableStateOf(false) }
     var showToolsMenu by remember { mutableStateOf(false) }
     var showPreciseSyncConfirm by remember { mutableStateOf(false) }
+    val isPlaying = (playbackState as? dev.nami.domain.PlaybackState.Playing)?.isPlaying == true
+    // The karaoke sweep needs frame-smooth position, not just "however often the player was
+    // last polled" (100ms polling still visibly stepped). Interpolate between polls using real
+    // elapsed time instead of polling faster -- every poll re-anchors this to the authoritative
+    // value (so drift/seeks/pauses never accumulate), and each frame in between just adds
+    // wall-clock time on top, which is free.
+    var smoothPositionMs by remember { mutableStateOf(uiState.positionMs) }
+    LaunchedEffect(uiState.positionMs, isPlaying) {
+        val anchorPos = uiState.positionMs
+        val anchorTime = android.os.SystemClock.elapsedRealtime()
+        smoothPositionMs = anchorPos
+        if (isPlaying) {
+            while (true) {
+                withFrameMillis { }
+                smoothPositionMs = anchorPos + (android.os.SystemClock.elapsedRealtime() - anchorTime)
+            }
+        }
+    }
     val scope = rememberCoroutineScope()
     // Shared by the drag gesture and the back button -- both need the same "slide fully off,
     // THEN flip the state" sequence instead of an instant cut.
     fun dismiss() {
         scope.launch {
-            animate(dragOffsetY, screenHeightPx) { value, _ -> dragOffsetY = value }
-            onBack()
+            // finally, not a plain call after animate() -- if this coroutine's job gets
+            // cancelled mid-animation (composable disposed/recomposed for any reason before the
+            // slide finishes), the bare sequential version above never reached onBack() at all,
+            // leaving showLyrics stuck true: the screen sits fully slid off-screen (dragOffsetY
+            // already huge) but the flag never flips, so tapping the lyrics button again is a
+            // no-op and it silently never reopens.
+            try {
+                animate(dragOffsetY, screenHeightPx) { value, _ -> dragOffsetY = value }
+            } finally {
+                onBack()
+            }
         }
     }
 
@@ -204,7 +232,7 @@ fun LyricsScreen(
                     showFurigana = uiState.showFurigana,
                     romaji = uiState.romaji.takeIf { uiState.showRomaji },
                     wordTimings = uiState.wordTimings,
-                    positionMs = uiState.positionMs,
+                    positionMs = smoothPositionMs,
                     onLineClick = { viewModel.seekTo(it) },
                     tokenizeLine = { viewModel.tokenizeLine(it) },
                     wordSelectMode = wordSelectMode,
@@ -214,7 +242,7 @@ fun LyricsScreen(
         }
 
         LyricsTransportBar(
-            isPlaying = (playbackState as? dev.nami.domain.PlaybackState.Playing)?.isPlaying == true,
+            isPlaying = isPlaying,
             onToggle = nowPlayingViewModel::toggle,
             onSkipPrevious = nowPlayingViewModel::skipPrevious,
             onSkipNext = nowPlayingViewModel::skipNext,

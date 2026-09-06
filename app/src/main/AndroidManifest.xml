@@ -8,9 +8,9 @@
 
     <application
         android:name=".NamiApplication"
-        android:label="NAMI"
-        android:icon="@mipmap/ic_launcher"
-        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="Nami"
+        android:icon="@drawable/ic_launcher_wave"
+        android:roundIcon="@drawable/ic_launcher_wave"
         android:theme="@style/Theme.Nami">
         <activity
             android:name=".MainActivity"
@@ -34,8 +34,8 @@
             android:targetActivity=".MainActivity"
             android:enabled="true"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher"
-            android:roundIcon="@mipmap/ic_launcher_round">
+            android:icon="@drawable/ic_launcher_wave"
+            android:roundIcon="@drawable/ic_launcher_wave">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
