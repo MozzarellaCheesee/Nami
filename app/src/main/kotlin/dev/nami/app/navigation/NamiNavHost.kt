@@ -58,7 +58,6 @@ private const val ROUTE_LIBRARY = "library"
 private const val ROUTE_SEARCH = "search"
 private const val ROUTE_PLAYLISTS = "playlists"
 private const val ROUTE_SETTINGS = "settings"
-private const val ROUTE_QUEUE = "queue"
 private const val ROUTE_ALBUM_DETAIL = "album/{albumId}"
 private const val ROUTE_ARTIST_DETAIL = "artist/{artistId}"
 private const val ROUTE_ARTIST_DISCOGRAPHY = "artist/{artistId}/discography"
@@ -105,6 +104,10 @@ fun NamiNavHost(
     // visual, and system back is wired by hand via BackHandler instead of the nav graph.
     var showNowPlaying by remember { mutableStateOf(false) }
     BackHandler(enabled = showNowPlaying) { showNowPlaying = false }
+    var showQueue by remember { mutableStateOf(false) }
+    // Registered after showNowPlaying's, so it takes priority (last-mounted BackHandler wins)
+    // while both are showing -- back should close Queue first, not skip straight past it.
+    BackHandler(enabled = showQueue) { showQueue = false }
 
     // Tapping the system media notification/status-bar chip bumps this from MainActivity --
     // skip the initial value (0) so it only reacts to an actual tap, not first composition.
@@ -186,9 +189,6 @@ fun NamiNavHost(
             }
             composable(ROUTE_TRASH) {
                 TrashScreen(onBack = { navController.popBackStack() })
-            }
-            composable(ROUTE_QUEUE) {
-                QueueScreen(onBack = { navController.popBackStack() }, viewModel = nowPlayingViewModel)
             }
             composable(
                 ROUTE_ALBUM_DETAIL,
@@ -335,9 +335,21 @@ fun NamiNavHost(
     ) {
         NowPlayingScreen(
             onCollapse = { showNowPlaying = false },
-            onQueueClick = { navController.navigate(ROUTE_QUEUE) },
+            onQueueClick = { showQueue = true },
             viewModel = nowPlayingViewModel,
         )
+    }
+
+    // Also plain state, not a nav destination -- was previously pushed onto the same NavHost as
+    // Library/etc, which rendered it BEHIND NowPlayingScreen's overlay (drawn later, on top) since
+    // that overlay isn't part of the nav graph either. Stacking this AnimatedVisibility after
+    // NowPlaying's puts it on top for real.
+    AnimatedVisibility(
+        visible = showQueue,
+        enter = slideInVertically(initialOffsetY = { fullHeight -> fullHeight }),
+        exit = ExitTransition.None,
+    ) {
+        QueueScreen(onBack = { showQueue = false }, viewModel = nowPlayingViewModel)
     }
     }
 }

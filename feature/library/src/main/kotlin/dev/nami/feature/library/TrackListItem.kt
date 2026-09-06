@@ -58,6 +58,7 @@ fun TrackListItem(
     onDelete: (() -> Unit)? = null,
     onRename: (() -> Unit)? = null,
     onRemoveFromAlbum: (() -> Unit)? = null,
+    onRemoveFromArtist: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
     selectionMode: Boolean = false,
     isSelected: Boolean = false,
@@ -138,7 +139,7 @@ fun TrackListItem(
         }
         if (selectionMode) {
             Checkbox(checked = isSelected, onCheckedChange = null)
-        } else if (onAddToPlaylist != null || onAddToQueue != null || onDelete != null || onRename != null || onRemoveFromAlbum != null) {
+        } else if (onAddToPlaylist != null || onAddToQueue != null || onDelete != null || onRename != null || onRemoveFromAlbum != null || onRemoveFromArtist != null) {
             IconButton(onClick = { showMenu = true }) {
                 Icon(Icons.Outlined.MoreVert, contentDescription = "Ещё", tint = NamiColors.Paper40)
             }
@@ -150,6 +151,7 @@ fun TrackListItem(
                         onAddToQueue?.let { ContextAction("В очередь", Icons.Outlined.PlaylistAdd, it) },
                         onRename?.let { ContextAction("Переименовать", Icons.Outlined.Edit, it) },
                         onRemoveFromAlbum?.let { ContextAction("Убрать из альбома", Icons.Outlined.Delete, it) },
+                        onRemoveFromArtist?.let { ContextAction("Убрать у артиста", Icons.Outlined.Delete, it) },
                         onDelete?.let { ContextAction("Удалить", Icons.Outlined.Delete, it) },
                     ),
                 )

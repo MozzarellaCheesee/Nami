@@ -115,6 +115,14 @@ class LibraryRepositoryImpl @Inject constructor(
         trackDao.setAlbumId(trackId.value, null)
     }
 
+    override suspend fun addTrackToArtist(trackId: TrackId, artistId: ArtistId) {
+        trackDao.setArtistId(trackId.value, artistId.value)
+    }
+
+    override suspend fun removeTrackFromArtist(trackId: TrackId) {
+        trackDao.setArtistId(trackId.value, null)
+    }
+
     override suspend fun renameArtist(id: ArtistId, name: String) {
         artistDao.updateName(id.value, name)
     }

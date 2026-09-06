@@ -8,6 +8,7 @@ import dev.nami.core.model.AlbumSummary
 import dev.nami.core.model.Artist
 import dev.nami.core.model.ArtistId
 import dev.nami.core.model.Track
+import dev.nami.core.model.TrackId
 import dev.nami.domain.LibraryRepository
 import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerRepository
@@ -57,5 +58,9 @@ class ArtistDetailViewModel @Inject constructor(
 
     fun renameArtist(name: String) {
         viewModelScope.launch { libraryRepository.renameArtist(artistId, name) }
+    }
+
+    fun removeTrackFromArtist(trackId: TrackId) {
+        viewModelScope.launch { libraryRepository.removeTrackFromArtist(trackId) }
     }
 }

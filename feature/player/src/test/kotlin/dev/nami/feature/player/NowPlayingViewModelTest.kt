@@ -90,6 +90,8 @@ class NowPlayingViewModelTest {
         override suspend fun setAlbumIsSingle(id: dev.nami.core.model.AlbumId, isSingle: Boolean) = error("unused")
         override suspend fun addTrackToAlbum(trackId: TrackId, albumId: dev.nami.core.model.AlbumId) = error("unused")
         override suspend fun removeTrackFromAlbum(trackId: TrackId) = error("unused")
+        override suspend fun addTrackToArtist(trackId: TrackId, artistId: dev.nami.core.model.ArtistId) = error("unused")
+        override suspend fun removeTrackFromArtist(trackId: TrackId) = error("unused")
         override suspend fun renameArtist(id: dev.nami.core.model.ArtistId, name: String) = error("unused")
         override suspend fun setArtistPhoto(id: dev.nami.core.model.ArtistId, imageUri: String) = error("unused")
     }

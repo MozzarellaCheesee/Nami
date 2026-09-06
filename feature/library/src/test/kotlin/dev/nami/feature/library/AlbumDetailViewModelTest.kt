@@ -60,6 +60,8 @@ class AlbumDetailViewModelTest {
             override suspend fun setAlbumIsSingle(id: AlbumId, isSingle: Boolean) = error("unused")
             override suspend fun addTrackToAlbum(trackId: TrackId, albumId: AlbumId) = error("unused")
             override suspend fun removeTrackFromAlbum(trackId: TrackId) = error("unused")
+            override suspend fun addTrackToArtist(trackId: TrackId, artistId: ArtistId) = error("unused")
+            override suspend fun removeTrackFromArtist(trackId: TrackId) = error("unused")
             override suspend fun renameArtist(id: ArtistId, name: String) = error("unused")
             override suspend fun setArtistPhoto(id: ArtistId, imageUri: String) = error("unused")
             override fun tracksByArtist(id: ArtistId) = throw NotImplementedError()

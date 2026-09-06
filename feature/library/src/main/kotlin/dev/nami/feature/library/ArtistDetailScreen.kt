@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -88,6 +89,7 @@ fun ArtistDetailScreen(
     var addToPlaylistTrackId by remember { mutableStateOf<TrackId?>(null) }
     var showArtistMenu by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
+    var showAddTracksDialog by remember { mutableStateOf(false) }
 
     val topTracks = remember(uiState.tracks) { uiState.tracks.sortedByDescending { it.playCount }.take(TOP_TRACKS_LIMIT) }
     val visibleAlbums = uiState.albums.take(ALBUMS_COLLAPSED_LIMIT)
@@ -180,8 +182,14 @@ fun ArtistDetailScreen(
                         actions = listOf(
                             ContextAction("Переименовать", Icons.Outlined.Edit) { showRenameDialog = true },
                             ContextAction("Изменить фото", Icons.Outlined.Image) { uiState.artist?.let { onPickPhotoRequested(it.id) } },
+                            ContextAction("Добавить треки", Icons.Outlined.LibraryAdd) { showAddTracksDialog = true },
                         ),
                     )
+                }
+                if (showAddTracksDialog) {
+                    uiState.artist?.let { artist ->
+                        AddTracksToArtistDialog(artistId = artist.id, onDismiss = { showAddTracksDialog = false })
+                    }
                 }
                 LazyColumn(state = listState) {
                     if (uiState.tracks.isNotEmpty()) {
@@ -209,6 +217,7 @@ fun ArtistDetailScreen(
                             onClick = { onPlayTracks(topTracks, artistName, index) },
                             onAddToQueue = { onAddToQueue(track, artistName) },
                             onAddToPlaylist = { addToPlaylistTrackId = track.id },
+                            onRemoveFromArtist = { viewModel.removeTrackFromArtist(track.id) },
                             isCurrentTrack = track.id == nowPlaying?.trackId,
                             isPlaying = track.id == nowPlaying?.trackId && nowPlaying?.isPlaying == true,
                         )

@@ -10,13 +10,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.DragHandle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
@@ -32,15 +36,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil3.compose.AsyncImage
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.domain.QueueItem
 import dev.nami.domain.QueueOrigin
 
-private val QUEUE_ROW_HEIGHT = 56.dp
+private val QUEUE_ROW_HEIGHT = 64.dp
+private val ARTWORK_SIZE = 44.dp
 
 @Composable
 fun QueueScreen(
@@ -52,16 +58,17 @@ fun QueueScreen(
     val context = queue.upcoming.filter { it.origin == QueueOrigin.CONTEXT }
     val contextStartIndex = manual.size
 
-    Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink800)) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(12.dp)) {
+    Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
             IconButton(onClick = onBack) {
                 Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
             }
-            Text(text = "Очередь", color = NamiColors.Paper100)
+            Text(text = "Очередь", color = NamiColors.Paper100, style = MaterialTheme.typography.titleLarge)
         }
         queue.nowPlaying?.let { current ->
-            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
-                Text(text = current.title, color = NamiColors.Shu)
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
+                Text(text = "Сейчас играет", color = NamiColors.Paper40, style = MaterialTheme.typography.labelSmall)
+                Text(text = current.title, color = NamiColors.Shu, maxLines = 1)
             }
         }
         LazyColumn(modifier = Modifier.fillMaxWidth()) {
@@ -113,6 +120,31 @@ fun QueueScreen(
 }
 
 @Composable
+private fun QueueTrackInfo(item: QueueItem, modifier: Modifier = Modifier) {
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        val artworkModifier = Modifier
+            .size(ARTWORK_SIZE)
+            .background(NamiColors.Ink700, RoundedCornerShape(4.dp))
+        if (item.track.artworkPath != null) {
+            AsyncImage(
+                model = item.track.artworkPath,
+                contentDescription = item.track.title,
+                contentScale = ContentScale.Crop,
+                modifier = artworkModifier,
+            )
+        } else {
+            Box(modifier = artworkModifier)
+        }
+        Column(modifier = Modifier.padding(start = 12.dp).weight(1f)) {
+            Text(text = item.track.title, color = NamiColors.Paper100, maxLines = 1)
+            item.track.artistName?.let { artistName ->
+                Text(text = artistName, color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+            }
+        }
+    }
+}
+
+@Composable
 private fun ManualQueueRow(item: QueueItem, onDragBy: (Int) -> Unit, onRemove: () -> Unit) {
     val currentOnDragBy by rememberUpdatedState(onDragBy)
     val density = LocalDensity.current
@@ -127,9 +159,11 @@ private fun ManualQueueRow(item: QueueItem, onDragBy: (Int) -> Unit, onRemove: (
             .padding(horizontal = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        QueueTrackInfo(item = item, modifier = Modifier.weight(1f))
         Box(
             modifier = Modifier
-                .padding(end = 12.dp)
+                .padding(start = 8.dp)
+                .size(40.dp)
                 .pointerInput(Unit) {
                     detectDragGesturesAfterLongPress(
                         onDrag = { change, dragAmount ->
@@ -144,10 +178,10 @@ private fun ManualQueueRow(item: QueueItem, onDragBy: (Int) -> Unit, onRemove: (
                         onDragCancel = { dragOffsetPx = 0f },
                     )
                 },
+            contentAlignment = Alignment.Center,
         ) {
-            Text(text = "≡", color = NamiColors.Paper40)
+            Icon(Icons.Outlined.DragHandle, contentDescription = "Перетащить", tint = NamiColors.Paper40)
         }
-        Text(text = item.track.title, color = NamiColors.Paper100, modifier = Modifier.weight(1f))
         IconButton(onClick = onRemove) {
             Icon(Icons.Outlined.Close, contentDescription = "Удалить", tint = NamiColors.Paper70)
         }
@@ -169,17 +203,31 @@ private fun ContextQueueRow(item: QueueItem, onRemove: () -> Unit) {
     )
     SwipeToDismissBox(
         state = dismissState,
-        backgroundContent = { Box(modifier = Modifier.fillMaxSize().background(NamiColors.Kin)) },
+        backgroundContent = {
+            // Only shown while actually swiping toward removal -- progress-scaled icon so the
+            // gesture reads as "this is about to remove the track", not just a flat color wash.
+            Box(
+                modifier = Modifier.fillMaxSize().background(NamiColors.Kin),
+                contentAlignment = Alignment.CenterEnd,
+            ) {
+                Icon(
+                    Icons.Outlined.Close,
+                    contentDescription = "Убрать из очереди",
+                    tint = NamiColors.Ink900,
+                    modifier = Modifier.padding(end = 24.dp).size(28.dp),
+                )
+            }
+        },
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(QUEUE_ROW_HEIGHT)
-                .background(NamiColors.Ink800)
+                .background(NamiColors.Ink900)
                 .padding(horizontal = 20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(text = item.track.title, color = NamiColors.Paper100)
+            QueueTrackInfo(item = item)
         }
     }
 }

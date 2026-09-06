@@ -58,6 +58,7 @@ fun ArtistAllTracksScreen(
                     onClick = { onPlayTracks(allTracks, artistName, index) },
                     onAddToQueue = { onAddToQueue(track, artistName) },
                     onAddToPlaylist = { addToPlaylistTrackId = track.id },
+                    onRemoveFromArtist = { viewModel.removeTrackFromArtist(track.id) },
                     isCurrentTrack = track.id == nowPlaying?.trackId,
                     isPlaying = track.id == nowPlaying?.trackId && nowPlaying?.isPlaying == true,
                 )

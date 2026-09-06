@@ -29,6 +29,8 @@ interface LibraryRepository {
     suspend fun setAlbumIsSingle(id: AlbumId, isSingle: Boolean)
     suspend fun addTrackToAlbum(trackId: TrackId, albumId: AlbumId)
     suspend fun removeTrackFromAlbum(trackId: TrackId)
+    suspend fun addTrackToArtist(trackId: TrackId, artistId: ArtistId)
+    suspend fun removeTrackFromArtist(trackId: TrackId)
     suspend fun renameArtist(id: ArtistId, name: String)
     suspend fun setArtistPhoto(id: ArtistId, imageUri: String)
     fun tracksByArtist(id: ArtistId): Flow<List<Track>>

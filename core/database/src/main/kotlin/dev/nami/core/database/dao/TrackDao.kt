@@ -137,6 +137,10 @@ interface TrackDao {
     @Query("UPDATE tracks SET albumId = :albumId WHERE id = :id")
     suspend fun setAlbumId(id: String, albumId: String?)
 
+    // null detaches the track from any artist (used by "remove from artist").
+    @Query("UPDATE tracks SET artistId = :artistId WHERE id = :id")
+    suspend fun setArtistId(id: String, artistId: String?)
+
     @Query("SELECT * FROM tracks WHERE deletedAt IS NOT NULL ORDER BY deletedAt DESC")
     fun trashedTracksFlow(): Flow<List<TrackEntity>>
 
