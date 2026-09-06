@@ -22,10 +22,84 @@
                  a known class of bug with navigation-compose's AnimatedContent-based NavHost.
                  Disabled until that's fixed upstream; back falls through to the classic,
                  immediate-pop dispatcher our screens already assume. -->
+        </activity>
+
+        <!-- Icon picker (Settings): each alias targets the same MainActivity, just with its own
+             launcher icon, exactly one enabled at a time (toggled at runtime via
+             PackageManager.setComponentEnabledSetting); only the enabled one carries the
+             LAUNCHER intent filter's effect. MainActivity itself has none, so exactly one icon
+             ever shows up on the home screen/app drawer, never zero or two. -->
+        <activity-alias
+            android:name=".IconWave"
+            android:targetActivity=".MainActivity"
+            android:enabled="true"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconKanji"
+            android:targetActivity=".MainActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@drawable/ic_launcher_kanji"
+            android:roundIcon="@drawable/ic_launcher_kanji">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconMinimalWhite"
+            android:targetActivity=".MainActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@drawable/ic_launcher_minimal_white"
+            android:roundIcon="@drawable/ic_launcher_minimal_white">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconMinimalBlack"
+            android:targetActivity=".MainActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@drawable/ic_launcher_minimal_black"
+            android:roundIcon="@drawable/ic_launcher_minimal_black">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconMinimalRed"
+            android:targetActivity=".MainActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@drawable/ic_launcher_minimal_red"
+            android:roundIcon="@drawable/ic_launcher_minimal_red">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconBlack"
+            android:targetActivity=".MainActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@drawable/ic_launcher_black"
+            android:roundIcon="@drawable/ic_launcher_black">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
     </application>
 </manifest>

@@ -13,6 +13,8 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -76,7 +78,13 @@ class WhisperAlignerImpl @Inject constructor(
                 }
             }
             try {
-                uniffi.whisper_align.alignWords(modelFile.absolutePath, pcm.toList(), language)
+                // Raw little-endian bytes, not pcm.toList() -- List<Float> forces uniffi's
+                // generated binding to box every sample as a java.lang.Float one at a time,
+                // which OOMs a stock heap for a full track's worth of 16kHz samples.
+                val pcmBytes = ByteBuffer.allocate(pcm.size * 4).order(ByteOrder.LITTLE_ENDIAN)
+                    .apply { asFloatBuffer().put(pcm) }
+                    .array()
+                uniffi.whisper_align.alignWords(modelFile.absolutePath, pcmBytes, language)
                     .map { WordTiming(it.word, it.startMs, it.endMs) }
                     .takeIf { it.isNotEmpty() }
             } catch (e: Exception) {

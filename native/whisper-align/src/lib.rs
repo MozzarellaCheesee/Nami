@@ -20,14 +20,22 @@ pub fn get_align_progress() -> i32 {
     PROGRESS.load(Ordering::Relaxed)
 }
 
-/// Runs whisper.cpp with word-level (token) timestamps over `pcm` -- 16kHz mono f32 samples,
-/// caller decodes/resamples the track beforehand (whisper.cpp only accepts this exact format).
+/// Runs whisper.cpp with word-level (token) timestamps over `pcm_bytes` -- 16kHz mono f32 samples
+/// as raw little-endian bytes, caller decodes/resamples the track beforehand (whisper.cpp only
+/// accepts this exact format). Bytes, not `Vec<f32>`: uniffi's generated Kotlin binding for a
+/// float sequence boxes every single element into a `java.lang.Float` object one at a time --
+/// for a full track (millions of samples) that's millions of heap allocations, enough to OOM a
+/// stock 256MB app heap outright. A byte buffer crosses the FFI as one bulk copy instead.
 /// The known lyrics text isn't fed in here: whisper transcribes fresh and we return its own
 /// words with their timestamps; matching those back onto the LRC's already-known line text
 /// happens on the Kotlin side, since that's where the LRC data lives.
 #[uniffi::export]
-pub fn align_words(model_path: String, pcm: Vec<f32>, language: Option<String>) -> Vec<WordTiming> {
+pub fn align_words(model_path: String, pcm_bytes: Vec<u8>, language: Option<String>) -> Vec<WordTiming> {
     PROGRESS.store(0, Ordering::Relaxed);
+    let pcm: Vec<f32> = pcm_bytes
+        .chunks_exact(4)
+        .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+        .collect();
     let result = imp::align_words(model_path, pcm, language);
     PROGRESS.store(100, Ordering::Relaxed);
     result
