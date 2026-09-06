@@ -45,7 +45,7 @@ fun NamiBottomBar(currentRoute: String?, onTabSelected: (String) -> Unit, modifi
             .background(NamiColors.Ink900)
             .then(modifier)
             .fillMaxWidth()
-            .height(48.dp),
+            .height(56.dp),
         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
     ) {
         TABS.forEach { tab ->
@@ -56,9 +56,10 @@ fun NamiBottomBar(currentRoute: String?, onTabSelected: (String) -> Unit, modifi
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                    .clickable { onTabSelected(tab.route) },
+                    .clickable { onTabSelected(tab.route) }
+                    .padding(top = 10.dp),
                 horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
+                verticalArrangement = Arrangement.Top,
             ) {
                 Icon(tab.icon, contentDescription = tab.label, tint = iconTint, modifier = Modifier.size(24.dp))
                 Text(text = tab.label, color = labelColor, fontSize = 10.sp)

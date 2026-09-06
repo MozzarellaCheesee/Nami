@@ -320,7 +320,7 @@ fun NamiNavHost(
                     }
                 }
             },
-            modifier = Modifier,
+            modifier = Modifier.navigationBarsPadding(),
         )
     }
 
