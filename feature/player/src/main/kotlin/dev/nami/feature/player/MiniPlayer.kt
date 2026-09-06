@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
@@ -93,11 +94,29 @@ fun MiniPlayer(
             .height(with(density) { reservedHeightPx.toDp() })
             .clipToBounds(),
     ) {
+    Box(modifier = Modifier.fillMaxWidth().height(60.dp).clipToBounds()) {
+        // Same ambient-blur idea as Now Playing, scaled down: the current track's own artwork,
+        // blurred and dimmed, instead of a flat Ink800 bar.
+        val backgroundArtworkPath = queue.nowPlaying?.artworkPath
+        if (backgroundArtworkPath != null) {
+            AsyncImage(
+                model = backgroundArtworkPath,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxWidth().height(60.dp).blur(24.dp),
+            )
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(60.dp)
+                .background(NamiColors.Ink800.copy(alpha = if (backgroundArtworkPath != null) 0.72f else 1f)),
+        )
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(60.dp)
-            .background(NamiColors.Ink800)
             .offset { IntOffset(0, dragOffsetY.coerceAtLeast(0f).roundToInt()) }
             .clickable(onClick = onExpand)
             .draggable(
