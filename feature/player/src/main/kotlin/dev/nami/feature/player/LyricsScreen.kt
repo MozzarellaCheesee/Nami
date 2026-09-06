@@ -34,6 +34,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.SkipNext
@@ -68,6 +69,12 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 private const val DISMISS_THRESHOLD_DP = 120
+// A gap this long between two lines is an instrumental break, not just normal breathing room
+// between sung lines -- past LINE_DURATION_ASSUMPTION_MS into it, nothing is "currently playing"
+// even though the last line's timestamp has technically passed, so it shouldn't stay lit as if
+// the vocalist were still on it.
+private const val GAP_MS = 5000L
+private const val LINE_DURATION_ASSUMPTION_MS = 2500L
 
 /** Three of План.md's four "18. Экран лирики" modes (furigana, romaji triplet, karaoke word
  * highlight) and its dictionary/Anki/LRCLIB pieces aren't here -- this is the load-bearing first
@@ -198,24 +205,51 @@ private fun SyncedLyricsList(lyrics: Lyrics, positionMs: Long, onLineClick: (Lon
     // -1 (not coerced to 0) before the first line's own timestamp -- vocals commonly start well
     // into the track, and clamping to 0 was lighting up line one as "currently playing" the whole
     // silent intro.
-    val currentIndex = if (positionMs < lyrics.lines.firstOrNull()?.timeMs ?: 0L) {
+    val rawIndex = if (positionMs < (lyrics.lines.firstOrNull()?.timeMs ?: 0L)) {
         -1
     } else {
         lyrics.lines.indexOfLast { it.timeMs <= positionMs }
     }
+    // Instrumental gap: the next line is far enough away, and enough time has passed since the
+    // current one started, that nobody is actually singing right now -- don't keep the last line
+    // lit as "active" through it.
+    val nextLine = lyrics.lines.getOrNull(rawIndex + 1)
+    val currentLine = lyrics.lines.getOrNull(rawIndex)
+    val inGap = currentLine != null && nextLine != null &&
+        (nextLine.timeMs - currentLine.timeMs) > GAP_MS &&
+        positionMs > currentLine.timeMs + LINE_DURATION_ASSUMPTION_MS
+    val currentIndex = if (inGap) -1 else rawIndex
     var lastCentered by remember { mutableIntStateOf(-1) }
-    LaunchedEffect(currentIndex) {
-        if (currentIndex != lastCentered) {
-            lastCentered = currentIndex
+    // Scrolls by the raw (gap-inclusive) index -- during an instrumental break there's no active
+    // line to highlight, but the list should still be sitting at the last line that played, not
+    // jump back to the top because the highlight temporarily went to -1.
+    LaunchedEffect(rawIndex) {
+        if (rawIndex != lastCentered) {
+            lastCentered = rawIndex
             scope.launch {
                 listState.animateScrollToItem(
-                    index = (currentIndex - 2).coerceAtLeast(0),
+                    index = (rawIndex - 2).coerceAtLeast(0),
                 )
             }
         }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
+        // Nothing is "active" right now (before the first line, or an instrumental gap) -- a
+        // quiet note icon instead of leaving the last line looking like it's still being sung.
+        androidx.compose.animation.AnimatedVisibility(
+            visible = currentIndex == -1,
+            enter = androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.fadeOut(),
+            modifier = Modifier.align(Alignment.Center),
+        ) {
+            Icon(
+                Icons.Outlined.MusicNote,
+                contentDescription = null,
+                tint = NamiColors.Paper40,
+                modifier = Modifier.size(28.dp),
+            )
+        }
         LazyColumn(
             state = listState,
             contentPadding = PaddingValues(top = 120.dp, bottom = 160.dp),
@@ -251,21 +285,33 @@ private fun SyncedLyricsList(lyrics: Lyrics, positionMs: Long, onLineClick: (Lon
                 )
             }
         }
-        // Edge fade so lines don't just hard-cut at the top/bottom of the list -- the whole
-        // point of the falloff above is a smooth gradient into the background, not a clip.
+        // Edge fade so lines don't just hard-cut at the top/bottom of the list -- was solid
+        // opaque Ink900 fading to transparent, which read as a flat grey patch stacked right on
+        // top of the ambient blurred backdrop showing everywhere else (right where it meets the
+        // header/transport bar, the two spots this was most obvious). Same alpha as the scrim
+        // over the rest of the screen instead of full opacity, so it's the same background, only
+        // built up a little for text legibility, not a visibly different patch.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(140.dp)
                 .align(Alignment.TopCenter)
-                .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(NamiColors.Ink900, androidx.compose.ui.graphics.Color.Transparent))),
+                .background(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        listOf(NamiColors.Ink900.copy(alpha = 0.72f), androidx.compose.ui.graphics.Color.Transparent),
+                    ),
+                ),
         )
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(200.dp)
                 .align(Alignment.BottomCenter)
-                .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(androidx.compose.ui.graphics.Color.Transparent, NamiColors.Ink900))),
+                .background(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        listOf(androidx.compose.ui.graphics.Color.Transparent, NamiColors.Ink900.copy(alpha = 0.72f)),
+                    ),
+                ),
         )
     }
 }
