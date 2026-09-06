@@ -58,6 +58,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -70,6 +71,7 @@ import androidx.paging.compose.itemKey
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.model.AlbumId
 import dev.nami.core.model.AlbumSummary
+import dev.nami.core.model.Artist
 import dev.nami.core.model.ArtistId
 import dev.nami.core.model.Track
 import dev.nami.core.model.TrackId
@@ -97,6 +99,7 @@ fun LibraryScreen(
     val activeImportProgress by importProgress.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
     val recentAlbums by viewModel.recentAlbums.collectAsState()
+    val featuredArtists by viewModel.featuredArtists.collectAsState()
     val nowPlaying by viewModel.nowPlaying.collectAsState()
     val tracks = viewModel.tracks.collectAsLazyPagingItems()
     var addToPlaylistTrackId by remember { mutableStateOf<TrackId?>(null) }
@@ -175,9 +178,12 @@ fun LibraryScreen(
                         selectionMode = selectionMode,
                         selectedTrackIds = uiState.selectedTrackIds,
                         recentAlbums = recentAlbums,
+                        featuredArtists = featuredArtists,
                         onTrackClick = onTrackClick,
                         onAlbumClick = onAlbumClick,
                         onShowAllAlbums = { viewModel.selectTab(LibraryTab.ALBUMS) },
+                        onArtistClick = onArtistClick,
+                        onShowAllArtists = { viewModel.selectTab(LibraryTab.ARTISTS) },
                         onAddToPlaylist = { trackId -> addToPlaylistTrackId = trackId },
                         onAddToQueueTrack = { track -> viewModel.addToQueue(track) },
                         onDelete = { trackId -> viewModel.deleteTrack(trackId) },
@@ -406,6 +412,7 @@ private fun LazyGridState.isScrollingDown(): Boolean {
 }
 
 private const val DISCOGRAPHY_HEADER_KEY = "discography-header"
+private const val ARTISTS_PREVIEW_HEADER_KEY = "artists-preview-header"
 private const val AUTO_SCROLL_EDGE_DP = 64
 private const val AUTO_SCROLL_MAX_PX_PER_TICK = 20f
 
@@ -416,9 +423,12 @@ private fun TrackListContent(
     selectionMode: Boolean,
     selectedTrackIds: Set<TrackId>,
     recentAlbums: List<AlbumSummary>,
+    featuredArtists: List<Artist>,
     onTrackClick: (TrackId) -> Unit,
     onAlbumClick: (AlbumId) -> Unit,
     onShowAllAlbums: () -> Unit,
+    onArtistClick: (ArtistId) -> Unit,
+    onShowAllArtists: () -> Unit,
     onAddToPlaylist: (TrackId) -> Unit,
     onAddToQueueTrack: (Track) -> Unit,
     onDelete: (TrackId) -> Unit,
@@ -451,7 +461,7 @@ private fun TrackListContent(
         listState.layoutInfo.visibleItemsInfo.firstOrNull { y >= it.offset && y < it.offset + it.size }
             ?.key
             ?.let { it as? String }
-            ?.takeIf { it != DISCOGRAPHY_HEADER_KEY }
+            ?.takeIf { it != DISCOGRAPHY_HEADER_KEY && it != ARTISTS_PREVIEW_HEADER_KEY }
             ?.let(::TrackId)
 
     fun updateDragSelection() {
@@ -520,6 +530,11 @@ private fun TrackListContent(
                     DiscographySection(albums = recentAlbums, onAlbumClick = onAlbumClick, onShowAllAlbums = onShowAllAlbums)
                 }
             }
+            if (featuredArtists.isNotEmpty()) {
+                item(key = ARTISTS_PREVIEW_HEADER_KEY) {
+                    ArtistsPreviewSection(artists = featuredArtists, onArtistClick = onArtistClick, onShowAllArtists = onShowAllArtists)
+                }
+            }
             items(count = tracks.itemCount, key = tracks.itemKey { it.id.value }) { index ->
                 tracks[index]?.let { track ->
                     TrackListItem(
@@ -578,6 +593,62 @@ private fun DiscographySection(
         ) {
             items(albums, key = { it.id.value }) { album ->
                 AlbumGridItem(album = album, onClick = { onAlbumClick(album.id) }, modifier = Modifier.width(156.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ArtistsPreviewSection(
+    artists: List<Artist>,
+    onArtistClick: (ArtistId) -> Unit,
+    onShowAllArtists: () -> Unit,
+) {
+    Column(modifier = Modifier.padding(bottom = 12.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(text = "Артисты", color = NamiColors.Paper100, style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = "Всё →",
+                color = NamiColors.Paper70,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.clickable(onClick = onShowAllArtists),
+            )
+        }
+        androidx.compose.foundation.lazy.LazyRow(
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            items(artists, key = { it.id.value }) { artist ->
+                Column(
+                    modifier = Modifier.width(76.dp).clickable { onArtistClick(artist.id) },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    val photoModifier = Modifier
+                        .size(72.dp)
+                        .background(NamiColors.Ink700, androidx.compose.foundation.shape.CircleShape)
+                    if (artist.photoPath != null) {
+                        coil3.compose.AsyncImage(
+                            model = artist.photoPath,
+                            contentDescription = artist.name,
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                            modifier = photoModifier.clip(androidx.compose.foundation.shape.CircleShape),
+                        )
+                    } else {
+                        Box(modifier = photoModifier)
+                    }
+                    Text(
+                        text = artist.name,
+                        color = NamiColors.Paper100,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
             }
         }
     }

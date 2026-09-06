@@ -49,6 +49,7 @@ class AlbumDetailViewModelTest {
             override fun track(id: TrackId) = throw NotImplementedError()
             override fun albums() = throw NotImplementedError()
             override fun recentAlbums(limit: Int) = flowOf(emptyList<AlbumSummary>())
+            override fun featuredArtists(limit: Int) = flowOf(emptyList<dev.nami.core.model.Artist>())
             override fun artists() = throw NotImplementedError()
             override fun album(id: AlbumId) = flowOf(album)
             override fun artist(id: ArtistId) = throw NotImplementedError()

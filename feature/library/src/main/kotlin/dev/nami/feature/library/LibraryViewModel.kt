@@ -66,6 +66,9 @@ class LibraryViewModel @Inject constructor(
     val recentAlbums: StateFlow<List<AlbumSummary>> = libraryRepository.recentAlbums(limit = 10)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val featuredArtists: StateFlow<List<Artist>> = libraryRepository.featuredArtists(limit = 10)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val nowPlaying: StateFlow<NowPlayingRow?> = playerRepository.state
         .map { state -> (state as? PlaybackState.Playing)?.let { NowPlayingRow(it.trackId, it.isPlaying) } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)

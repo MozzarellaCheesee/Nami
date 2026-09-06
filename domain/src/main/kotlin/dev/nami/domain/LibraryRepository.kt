@@ -19,6 +19,8 @@ interface LibraryRepository {
     /** Live -- reflects renames, cover/artist changes and album/track add-or-remove without the
      * Library screen needing to be reopened -- most recent [limit] albums, for the discography block. */
     fun recentAlbums(limit: Int): Flow<List<AlbumSummary>>
+    /** Same shape as [recentAlbums] but for the Tracks tab's "Артисты" preview row. */
+    fun featuredArtists(limit: Int): Flow<List<Artist>>
     fun artists(): Flow<PagingData<Artist>>
     fun album(id: AlbumId): Flow<Album?>
     fun artist(id: ArtistId): Flow<Artist?>

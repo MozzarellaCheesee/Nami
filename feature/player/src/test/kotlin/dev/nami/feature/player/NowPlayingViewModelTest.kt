@@ -75,6 +75,7 @@ class NowPlayingViewModelTest {
         override fun track(id: TrackId) = flowOf(trackFixture("t1", "/data/music/real-file.flac"))
         override fun albums() = throw NotImplementedError()
         override fun recentAlbums(limit: Int) = flowOf(emptyList<AlbumSummary>())
+        override fun featuredArtists(limit: Int) = flowOf(emptyList<dev.nami.core.model.Artist>())
         override fun artists() = throw NotImplementedError()
         override fun album(id: dev.nami.core.model.AlbumId) = throw NotImplementedError()
         override fun artist(id: dev.nami.core.model.ArtistId) = throw NotImplementedError()

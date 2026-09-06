@@ -6,6 +6,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import dev.nami.core.database.entity.ArtistEntity
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ArtistDao {
@@ -31,6 +32,25 @@ interface ArtistDao {
         """,
     )
     fun pagingSource(): PagingSource<Int, ArtistWithPhoto>
+
+    // Same shape as AlbumDao.observeRecentAlbums (also just an ORDER BY, not a real "recently
+    // added" timestamp) -- a short preview row on the Tracks tab overview, "Всё" opens the full
+    // Artists tab which is this same query without the LIMIT.
+    @Query(
+        """
+        SELECT artists.id AS id, artists.name AS name, artists.sortName AS sortName,
+               COALESCE(artists.photoPath, (
+                   SELECT albums.artworkPath FROM albums
+                   WHERE albums.artistId = artists.id AND albums.artworkPath IS NOT NULL
+                   ORDER BY albums.title ASC LIMIT 1
+               )) AS photoPath
+        FROM artists
+        WHERE EXISTS (SELECT 1 FROM tracks WHERE tracks.artistId = artists.id AND tracks.deletedAt IS NULL)
+        ORDER BY sortName DESC
+        LIMIT :limit
+        """,
+    )
+    fun observeFeaturedArtists(limit: Int): Flow<List<ArtistWithPhoto>>
 
     @Query(
         """
