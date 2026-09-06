@@ -12,11 +12,15 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.PlaylistAdd
+import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -34,6 +38,8 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import dev.nami.core.designsystem.ContextAction
+import dev.nami.core.designsystem.ContextActionSheet
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.model.AlbumId
 import dev.nami.core.model.Track
@@ -94,48 +100,27 @@ fun AlbumDetailScreen(
                         }
                     }
                     Spacer(modifier = Modifier.padding(start = 12.dp))
-                    Box {
-                        IconButton(onClick = { showAlbumMenu = true }) {
-                            Icon(Icons.Outlined.MoreVert, contentDescription = "Действия с альбомом", tint = NamiColors.Paper100)
-                        }
-                        DropdownMenu(expanded = showAlbumMenu, onDismissRequest = { showAlbumMenu = false }) {
-                            DropdownMenuItem(
-                                text = { Text("Добавить в очередь") },
-                                onClick = {
-                                    showAlbumMenu = false
-                                    uiState.tracks.forEach { onAddToQueue(it) }
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Переименовать") },
-                                onClick = { showAlbumMenu = false; showRenameDialog = true },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Изменить обложку") },
-                                onClick = {
-                                    showAlbumMenu = false
-                                    uiState.album?.let { onPickCoverRequested(it.id) }
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Добавить треки") },
-                                onClick = { showAlbumMenu = false; showAddTracksDialog = true },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(if (uiState.album?.isSingle == true) "Убрать метку \"сингл\"" else "Отметить как сингл") },
-                                onClick = {
-                                    showAlbumMenu = false
-                                    uiState.album?.let { viewModel.setIsSingle(!it.isSingle) }
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Удалить альбом") },
-                                onClick = { showAlbumMenu = false; showDeleteConfirm = true },
-                            )
-                        }
+                    IconButton(onClick = { showAlbumMenu = true }) {
+                        Icon(Icons.Outlined.MoreVert, contentDescription = "Действия с альбомом", tint = NamiColors.Paper100)
                     }
                 }
             }
+        }
+        if (showAlbumMenu) {
+            ContextActionSheet(
+                onDismiss = { showAlbumMenu = false },
+                actions = listOf(
+                    ContextAction("Добавить в очередь", Icons.Outlined.PlaylistAdd) { uiState.tracks.forEach { onAddToQueue(it) } },
+                    ContextAction("Переименовать", Icons.Outlined.Edit) { showRenameDialog = true },
+                    ContextAction("Изменить обложку", Icons.Outlined.Image) { uiState.album?.let { onPickCoverRequested(it.id) } },
+                    ContextAction("Добавить треки", Icons.Outlined.LibraryAdd) { showAddTracksDialog = true },
+                    ContextAction(
+                        if (uiState.album?.isSingle == true) "Убрать метку \"сингл\"" else "Отметить как сингл",
+                        Icons.Outlined.Star,
+                    ) { uiState.album?.let { viewModel.setIsSingle(!it.isSingle) } },
+                    ContextAction("Удалить альбом", Icons.Outlined.Delete) { showDeleteConfirm = true },
+                ),
+            )
         }
         LazyColumn {
             itemsIndexed(uiState.tracks, key = { _, track -> track.id.value }) { index, track ->

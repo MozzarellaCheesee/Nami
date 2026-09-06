@@ -43,9 +43,7 @@ import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.blur
@@ -74,6 +72,8 @@ import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
 import coil3.imageLoader
 import coil3.request.ImageRequest
+import dev.nami.core.designsystem.ContextAction
+import dev.nami.core.designsystem.ContextActionSheet
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.designsystem.fullBlockClickable
 import dev.nami.domain.PlaybackState
@@ -434,40 +434,6 @@ private fun TransportBlock(
             },
             modifier = Modifier.fillMaxSize().padding(size / 4),
         )
-    }
-}
-
-data class ContextAction(val label: String, val icon: ImageVector, val onClick: () -> Unit)
-
-/**
- * Slide-up sheet for a "..." menu, replacing a plain [androidx.compose.material3.DropdownMenu] --
- * per the pattern requested app-wide, each target type (track/album/playlist/artist) supplies its
- * own [actions] list. This is the first call site wired to it; extending every other overflow
- * menu in the app (library rows, album/artist detail, playlist rows) to this same sheet is a
- * separate, larger follow-up.
- */
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-@Composable
-fun ContextActionSheet(onDismiss: () -> Unit, actions: List<ContextAction>) {
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
-        Column(modifier = Modifier.padding(bottom = 20.dp)) {
-            actions.forEach { action ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onDismiss(); action.onClick() }
-                        .padding(horizontal = 20.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(action.icon, contentDescription = null, tint = NamiColors.Paper100)
-                    Text(
-                        text = action.label,
-                        color = NamiColors.Paper100,
-                        modifier = Modifier.padding(start = 20.dp),
-                    )
-                }
-            }
-        }
     }
 }
 

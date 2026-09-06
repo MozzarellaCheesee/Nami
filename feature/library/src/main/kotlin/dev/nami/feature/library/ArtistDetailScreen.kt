@@ -14,10 +14,10 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -34,6 +34,8 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import dev.nami.core.designsystem.ContextAction
+import dev.nami.core.designsystem.ContextActionSheet
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.model.AlbumId
 import dev.nami.core.model.ArtistId
@@ -91,26 +93,20 @@ fun ArtistDetailScreen(
                         }
                     }
                     Spacer(modifier = Modifier.padding(start = 12.dp))
-                    Box {
-                        IconButton(onClick = { showArtistMenu = true }) {
-                            Icon(Icons.Outlined.MoreVert, contentDescription = "Действия с артистом", tint = NamiColors.Paper100)
-                        }
-                        DropdownMenu(expanded = showArtistMenu, onDismissRequest = { showArtistMenu = false }) {
-                            DropdownMenuItem(
-                                text = { Text("Переименовать") },
-                                onClick = { showArtistMenu = false; showRenameDialog = true },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Изменить фото") },
-                                onClick = {
-                                    showArtistMenu = false
-                                    uiState.artist?.let { onPickPhotoRequested(it.id) }
-                                },
-                            )
-                        }
+                    IconButton(onClick = { showArtistMenu = true }) {
+                        Icon(Icons.Outlined.MoreVert, contentDescription = "Действия с артистом", tint = NamiColors.Paper100)
                     }
                 }
             }
+        }
+        if (showArtistMenu) {
+            ContextActionSheet(
+                onDismiss = { showArtistMenu = false },
+                actions = listOf(
+                    ContextAction("Переименовать", Icons.Outlined.Edit) { showRenameDialog = true },
+                    ContextAction("Изменить фото", Icons.Outlined.Image) { uiState.artist?.let { onPickPhotoRequested(it.id) } },
+                ),
+            )
         }
         LazyRow(modifier = Modifier.padding(horizontal = 12.dp)) {
             itemsIndexed(uiState.albums, key = { _, album -> album.id.value }) { _, album ->

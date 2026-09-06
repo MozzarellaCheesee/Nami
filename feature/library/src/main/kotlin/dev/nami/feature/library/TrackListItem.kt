@@ -28,8 +28,6 @@ import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PlaylistAdd
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -45,6 +43,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import dev.nami.core.designsystem.ContextAction
+import dev.nami.core.designsystem.ContextActionSheet
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.model.Track
 
@@ -139,47 +139,20 @@ fun TrackListItem(
         if (selectionMode) {
             Checkbox(checked = isSelected, onCheckedChange = null)
         } else if (onAddToPlaylist != null || onAddToQueue != null || onDelete != null || onRename != null || onRemoveFromAlbum != null) {
-            Box {
-                IconButton(onClick = { showMenu = true }) {
-                    Icon(Icons.Outlined.MoreVert, contentDescription = "Ещё", tint = NamiColors.Paper40)
-                }
-                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                    onAddToPlaylist?.let { action ->
-                        DropdownMenuItem(
-                            text = { Text("В плейлист") },
-                            leadingIcon = { Icon(Icons.Outlined.LibraryAdd, contentDescription = null) },
-                            onClick = { showMenu = false; action() },
-                        )
-                    }
-                    onAddToQueue?.let { action ->
-                        DropdownMenuItem(
-                            text = { Text("В очередь") },
-                            leadingIcon = { Icon(Icons.Outlined.PlaylistAdd, contentDescription = null) },
-                            onClick = { showMenu = false; action() },
-                        )
-                    }
-                    onRename?.let { action ->
-                        DropdownMenuItem(
-                            text = { Text("Переименовать") },
-                            leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
-                            onClick = { showMenu = false; action() },
-                        )
-                    }
-                    onRemoveFromAlbum?.let { action ->
-                        DropdownMenuItem(
-                            text = { Text("Убрать из альбома") },
-                            leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null) },
-                            onClick = { showMenu = false; action() },
-                        )
-                    }
-                    onDelete?.let { action ->
-                        DropdownMenuItem(
-                            text = { Text("Удалить") },
-                            leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null) },
-                            onClick = { showMenu = false; action() },
-                        )
-                    }
-                }
+            IconButton(onClick = { showMenu = true }) {
+                Icon(Icons.Outlined.MoreVert, contentDescription = "Ещё", tint = NamiColors.Paper40)
+            }
+            if (showMenu) {
+                ContextActionSheet(
+                    onDismiss = { showMenu = false },
+                    actions = listOfNotNull(
+                        onAddToPlaylist?.let { ContextAction("В плейлист", Icons.Outlined.LibraryAdd, it) },
+                        onAddToQueue?.let { ContextAction("В очередь", Icons.Outlined.PlaylistAdd, it) },
+                        onRename?.let { ContextAction("Переименовать", Icons.Outlined.Edit, it) },
+                        onRemoveFromAlbum?.let { ContextAction("Убрать из альбома", Icons.Outlined.Delete, it) },
+                        onDelete?.let { ContextAction("Удалить", Icons.Outlined.Delete, it) },
+                    ),
+                )
             }
         }
     }
