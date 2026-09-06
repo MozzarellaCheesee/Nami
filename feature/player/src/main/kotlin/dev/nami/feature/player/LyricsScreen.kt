@@ -184,7 +184,13 @@ fun LyricsScreen(
             ),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
-            IconButton(onClick = { dismiss() }) {
+            // Straight to onBack(), not dismiss() -- dismiss()'s manual slide-then-flip coroutine
+            // was a source of "the screen stays open forever after this" reports (its own
+            // animate() apparently doesn't always run to completion), and the outer
+            // AnimatedVisibility in NamiNavHost already animates the same slide-down on its own
+            // exit transition. No coroutine to get stuck in means there's nothing left to get
+            // stuck on.
+            IconButton(onClick = { onBack() }) {
                 Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
             }
             Text(

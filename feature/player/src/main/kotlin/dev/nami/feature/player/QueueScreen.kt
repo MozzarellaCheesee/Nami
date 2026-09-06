@@ -224,7 +224,9 @@ fun QueueScreen(
             ),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
-            IconButton(onClick = { dismiss() }) {
+            // Straight to onBack(), not dismiss() -- see LyricsScreen's identical header button
+            // for why (dismiss()'s slide-then-flip coroutine could leave the screen stuck open).
+            IconButton(onClick = { onBack() }) {
                 Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
             }
             Text(text = "Очередь", color = NamiColors.Paper100, style = MaterialTheme.typography.titleLarge)
