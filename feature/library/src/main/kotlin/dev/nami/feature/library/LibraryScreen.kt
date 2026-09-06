@@ -356,10 +356,14 @@ private fun TrackListContent(
         return
     }
 
-    // Drag-to-select: after the first long-press toggles a row (via TrackListItem's own
-    // onLongClick, unchanged below), keeping the finger down and dragging over other rows
-    // extends the selection to the range between that anchor row and the finger's row --
-    // the standard gallery-app pattern. Auto-scrolls when the finger nears the top/bottom edge.
+    // Drag-to-select, driven entirely from this parent Box (not from TrackListItem's own
+    // long-press): a long-press with no further movement selects just that row; keeping the
+    // finger down and dragging over other rows extends the selection to the range between the
+    // anchor row and the finger's row. This has to be the ONLY long-press detector in the
+    // touched region -- if TrackListItem also registered its own onLongClick, both detectors
+    // would race for the same long-press on the same pointer stream and this one would starve
+    // (Compose delivers pointer events to the child first, which consumes them detecting its
+    // own long-press, leaving nothing for the parent to see). Auto-scrolls near the edges.
     var dragAnchorId by remember { mutableStateOf<TrackId?>(null) }
     var dragging by remember { mutableStateOf(false) }
     var dragPointerY by remember { mutableFloatStateOf(0f) }
@@ -408,31 +412,26 @@ private fun TrackListContent(
         modifier = Modifier
             .fillMaxSize()
             .onSizeChanged { boxHeightPx = it.height.toFloat() }
-            .then(
-                if (selectionMode) {
-                    Modifier.pointerInput(selectionMode, tracks.itemCount) {
-                        detectDragGesturesAfterLongPress(
-                            onDragStart = { offset ->
-                                trackIdAt(offset.y)?.let { id ->
-                                    dragAnchorId = id
-                                    dragging = true
-                                }
-                            },
-                            onDrag = { change, _ ->
-                                if (dragAnchorId != null) {
-                                    change.consume()
-                                    dragPointerY = change.position.y
-                                    updateDragSelection()
-                                }
-                            },
-                            onDragEnd = { dragging = false; dragAnchorId = null },
-                            onDragCancel = { dragging = false; dragAnchorId = null },
-                        )
-                    }
-                } else {
-                    Modifier
-                },
-            ),
+            .pointerInput(tracks.itemCount) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { offset ->
+                        trackIdAt(offset.y)?.let { id ->
+                            dragAnchorId = id
+                            dragging = true
+                            onSetSelectionState.value(setOf(id))
+                        }
+                    },
+                    onDrag = { change, _ ->
+                        if (dragAnchorId != null) {
+                            change.consume()
+                            dragPointerY = change.position.y
+                            updateDragSelection()
+                        }
+                    },
+                    onDragEnd = { dragging = false; dragAnchorId = null },
+                    onDragCancel = { dragging = false; dragAnchorId = null },
+                )
+            },
     ) {
         LazyColumn(state = listState) {
             if (recentAlbums.isNotEmpty()) {
@@ -447,7 +446,6 @@ private fun TrackListContent(
                         onClick = {
                             if (selectionMode) onToggleSelection(track.id) else onTrackClick(track.id)
                         },
-                        onLongClick = { onToggleSelection(track.id) },
                         selectionMode = selectionMode,
                         isSelected = track.id in selectedTrackIds,
                         onAddToPlaylist = if (selectionMode) null else { { onAddToPlaylist(track.id) } },

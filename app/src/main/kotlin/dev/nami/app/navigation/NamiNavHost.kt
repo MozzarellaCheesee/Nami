@@ -6,6 +6,7 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import dev.nami.core.designsystem.NamiColors
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -67,7 +69,7 @@ fun NamiNavHost(
     val nowPlayingViewModel: NowPlayingViewModel = hiltViewModel()
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
     Column(modifier = Modifier.statusBarsPadding()) {
         NavHost(
             navController = navController,
