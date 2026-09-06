@@ -49,6 +49,7 @@ fun ArtistDetailScreen(
     viewModel: ArtistDetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val nowPlaying by viewModel.nowPlaying.collectAsState()
     val artistName = uiState.artist?.name
     var addToPlaylistTrackId by remember { mutableStateOf<TrackId?>(null) }
     var showArtistMenu by remember { mutableStateOf(false) }
@@ -112,6 +113,8 @@ fun ArtistDetailScreen(
                     onClick = { onPlayTracks(uiState.tracks, artistName, index) },
                     onAddToQueue = { onAddToQueue(track, artistName) },
                     onAddToPlaylist = { addToPlaylistTrackId = track.id },
+                    isCurrentTrack = track.id == nowPlaying?.trackId,
+                    isPlaying = track.id == nowPlaying?.trackId && nowPlaying?.isPlaying == true,
                 )
             }
         }

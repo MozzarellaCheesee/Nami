@@ -48,6 +48,7 @@ fun AlbumDetailScreen(
     viewModel: AlbumDetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val nowPlaying by viewModel.nowPlaying.collectAsState()
     var addToPlaylistTrackId by remember { mutableStateOf<TrackId?>(null) }
     var showAlbumMenu by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
@@ -129,6 +130,8 @@ fun AlbumDetailScreen(
                     onAddToQueue = { onAddToQueue(track) },
                     onAddToPlaylist = { addToPlaylistTrackId = track.id },
                     onRemoveFromAlbum = { viewModel.removeTrackFromAlbum(track.id) },
+                    isCurrentTrack = track.id == nowPlaying?.trackId,
+                    isPlaying = track.id == nowPlaying?.trackId && nowPlaying?.isPlaying == true,
                 )
             }
         }

@@ -91,6 +91,7 @@ fun LibraryScreen(
     val activeImportProgress by importProgress.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
     val recentAlbums by viewModel.recentAlbums.collectAsState()
+    val nowPlaying by viewModel.nowPlaying.collectAsState()
     val tracks = viewModel.tracks.collectAsLazyPagingItems()
     var addToPlaylistTrackId by remember { mutableStateOf<TrackId?>(null) }
     var showAddSelectedToPlaylist by remember { mutableStateOf(false) }
@@ -173,6 +174,7 @@ fun LibraryScreen(
                         onToggleSelection = { trackId -> viewModel.toggleTrackSelection(trackId) },
                         onSetSelection = { ids -> viewModel.setSelectedTracks(ids) },
                         onRenameTrack = { track -> renameTrack = track },
+                        nowPlaying = nowPlaying,
                     )
                     LibraryTab.ALBUMS -> AlbumGridContent(
                         viewModel = viewModel,
@@ -398,6 +400,7 @@ private fun TrackListContent(
     onToggleSelection: (TrackId) -> Unit,
     onSetSelection: (Set<TrackId>) -> Unit,
     onRenameTrack: (Track) -> Unit,
+    nowPlaying: NowPlayingRow?,
 ) {
     if (tracks.itemCount == 0) {
         EmptyLibraryMessage()
@@ -506,6 +509,8 @@ private fun TrackListContent(
                         onAddToPlaylist = if (selectionMode) null else { { onAddToPlaylist(track.id) } },
                         onDelete = if (selectionMode) null else { { onDelete(track.id) } },
                         onRename = if (selectionMode) null else { { onRenameTrack(track) } },
+                        isCurrentTrack = track.id == nowPlaying?.trackId,
+                        isPlaying = track.id == nowPlaying?.trackId && nowPlaying.isPlaying,
                     )
                 }
             }
