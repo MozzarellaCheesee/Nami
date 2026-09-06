@@ -18,8 +18,10 @@ interface WhisperAligner {
     /** Downloads ggml-small.bin (multilingual) to app-private storage. [onProgress] is 0f..1f. */
     suspend fun downloadModel(onProgress: (Float) -> Unit): Boolean
 
-    /** Decodes [audioPath] to 16kHz mono PCM and runs whisper.cpp over it. Null on any failure
-     * (missing model, decode error, unsupported ABI) -- caller falls back to the existing
-     * interpolated karaoke sweep, same as when LRCLIB has no word-level data at all. */
-    suspend fun alignWords(audioPath: String, language: String?): List<WordTiming>?
+    /** Decodes [audioPath] to 16kHz mono PCM and runs whisper.cpp over it -- a full track on a
+     * phone CPU genuinely takes minutes, [onProgress] (0f..1f) is whisper.cpp's own decode
+     * progress so the UI doesn't look hung. Null on any failure (missing model, decode error,
+     * unsupported ABI) -- caller falls back to the existing interpolated karaoke sweep, same as
+     * when LRCLIB has no word-level data at all. */
+    suspend fun alignWords(audioPath: String, language: String?, onProgress: (Float) -> Unit = {}): List<WordTiming>?
 }

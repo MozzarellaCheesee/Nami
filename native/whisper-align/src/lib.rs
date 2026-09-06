@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicI32, Ordering};
+
 uniffi::setup_scaffolding!();
 
 #[derive(uniffi::Record)]
@@ -7,6 +9,17 @@ pub struct WordTiming {
     pub end_ms: i64,
 }
 
+// 0..100, updated from whisper.cpp's own progress callback -- a full-track inference on a
+// phone CPU genuinely takes minutes, this is what the "half circle" progress bar polls so it
+// doesn't look hung. One global slot is fine: only one alignment ever runs at a time (the
+// Kotlin side gates re-entrancy in WhisperAlignerImpl before calling this).
+static PROGRESS: AtomicI32 = AtomicI32::new(0);
+
+#[uniffi::export]
+pub fn get_align_progress() -> i32 {
+    PROGRESS.load(Ordering::Relaxed)
+}
+
 /// Runs whisper.cpp with word-level (token) timestamps over `pcm` -- 16kHz mono f32 samples,
 /// caller decodes/resamples the track beforehand (whisper.cpp only accepts this exact format).
 /// The known lyrics text isn't fed in here: whisper transcribes fresh and we return its own
@@ -14,12 +27,16 @@ pub struct WordTiming {
 /// happens on the Kotlin side, since that's where the LRC data lives.
 #[uniffi::export]
 pub fn align_words(model_path: String, pcm: Vec<f32>, language: Option<String>) -> Vec<WordTiming> {
-    imp::align_words(model_path, pcm, language)
+    PROGRESS.store(0, Ordering::Relaxed);
+    let result = imp::align_words(model_path, pcm, language);
+    PROGRESS.store(100, Ordering::Relaxed);
+    result
 }
 
 #[cfg(target_os = "android")]
 mod imp {
-    use super::WordTiming;
+    use super::{WordTiming, PROGRESS};
+    use std::sync::atomic::Ordering;
     use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
     pub fn align_words(model_path: String, pcm: Vec<f32>, language: Option<String>) -> Vec<WordTiming> {
@@ -38,6 +55,12 @@ mod imp {
         params.set_print_special(false);
         params.set_print_realtime(false);
         params.set_print_timestamps(false);
+        // Use every core -- this is a one-shot, user-triggered, foreground-only pass, not a
+        // background job competing for CPU, so there's no reason to leave cores idle.
+        params.set_n_threads(std::thread::available_parallelism().map(|n| n.get() as i32).unwrap_or(4));
+        params.set_progress_callback_safe(|progress: i32| {
+            PROGRESS.store(progress, Ordering::Relaxed);
+        });
         if let Some(lang) = language.as_deref() {
             params.set_language(Some(lang));
         }

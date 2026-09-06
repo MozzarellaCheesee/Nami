@@ -327,7 +327,9 @@ class LyricsViewModel @Inject constructor(
                     if (!downloaded) return@launch
                 }
                 _preciseSyncProgress.value = 0.5f
-                val words = whisperAligner.alignWords(tl.path, language = "ja") ?: return@launch
+                val words = whisperAligner.alignWords(tl.path, language = "ja") { progress ->
+                    _preciseSyncProgress.value = 0.5f + progress * 0.5f
+                } ?: return@launch
                 val perLine = WordTimingMatcher.match(tl.lyrics, words)
                 lyricsRepository.saveWordTimings(tl.path, perLine)
                 reloadSignal.value++

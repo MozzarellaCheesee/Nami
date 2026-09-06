@@ -6,6 +6,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.nami.core.model.WordTiming
 import dev.nami.domain.WhisperAligner
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.HttpURLConnection
@@ -59,10 +62,19 @@ class WhisperAlignerImpl @Inject constructor(
         }
     }
 
-    override suspend fun alignWords(audioPath: String, language: String?): List<WordTiming>? =
+    override suspend fun alignWords(audioPath: String, language: String?, onProgress: (Float) -> Unit): List<WordTiming>? =
         withContext(Dispatchers.Default) {
             if (!isSupported() || !isModelDownloaded()) return@withContext null
             val pcm = AudioPcmDecoder.decodeTo16kMono(audioPath) ?: return@withContext null
+            // whisper.cpp's own progress lives in a global (single-alignment-at-a-time) counter
+            // on the Rust side -- poll it from a side coroutine while the blocking JNI call runs,
+            // a full track on a phone CPU takes minutes and the UI would otherwise look hung.
+            val pollJob = launch {
+                while (isActive) {
+                    onProgress(uniffi.whisper_align.getAlignProgress() / 100f)
+                    delay(400)
+                }
+            }
             try {
                 uniffi.whisper_align.alignWords(modelFile.absolutePath, pcm.toList(), language)
                     .map { WordTiming(it.word, it.startMs, it.endMs) }
@@ -70,6 +82,8 @@ class WhisperAlignerImpl @Inject constructor(
             } catch (e: Exception) {
                 // Rust panics surface here as exceptions from the generated JNI layer.
                 null
+            } finally {
+                pollJob.cancel()
             }
         }
 }
