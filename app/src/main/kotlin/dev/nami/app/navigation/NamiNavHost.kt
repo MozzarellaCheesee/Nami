@@ -39,6 +39,7 @@ import dev.nami.domain.ImportM3u8Result
 import dev.nami.domain.ImportProgress
 import dev.nami.feature.library.AlbumDetailScreen
 import dev.nami.feature.library.ArtistDetailScreen
+import dev.nami.feature.library.ArtistDiscographyScreen
 import dev.nami.feature.library.LibraryScreen
 import dev.nami.feature.library.LibraryTab
 import dev.nami.feature.library.LibraryViewModel
@@ -59,6 +60,7 @@ private const val ROUTE_SETTINGS = "settings"
 private const val ROUTE_QUEUE = "queue"
 private const val ROUTE_ALBUM_DETAIL = "album/{albumId}"
 private const val ROUTE_ARTIST_DETAIL = "artist/{artistId}"
+private const val ROUTE_ARTIST_DISCOGRAPHY = "artist/{artistId}/discography"
 private const val ROUTE_PLAYLIST_DETAIL = "playlist/{playlistId}"
 private const val ROUTE_TRASH = "trash"
 
@@ -205,7 +207,28 @@ fun NamiNavHost(
                 ROUTE_ARTIST_DETAIL,
                 arguments = listOf(navArgument("artistId") { type = NavType.StringType }),
             ) {
+                val artistId = ArtistId(it.arguments?.getString("artistId").orEmpty())
                 ArtistDetailScreen(
+                    onBack = { navController.popBackStack() },
+                    onAlbumClick = { albumId -> navController.navigate("album/${albumId.value}") },
+                    onShowDiscography = { navController.navigate("artist/${artistId.value}/discography") },
+                    onPlayTracks = { tracks, artistName, startIndex ->
+                        if (queue.nowPlaying?.id == tracks.getOrNull(startIndex)?.id) {
+                            showNowPlaying = true
+                        } else {
+                            nowPlayingViewModel.playTracks(tracks, artistName, startIndex)
+                            if (autoOpenPlayer) showNowPlaying = true
+                        }
+                    },
+                    onAddToQueue = { track, artistName -> nowPlayingViewModel.addToQueue(track, artistName) },
+                    onPickPhotoRequested = onPickArtistPhoto,
+                )
+            }
+            composable(
+                ROUTE_ARTIST_DISCOGRAPHY,
+                arguments = listOf(navArgument("artistId") { type = NavType.StringType }),
+            ) {
+                ArtistDiscographyScreen(
                     onBack = { navController.popBackStack() },
                     onAlbumClick = { albumId -> navController.navigate("album/${albumId.value}") },
                     onPlayTracks = { tracks, artistName, startIndex ->
@@ -217,7 +240,6 @@ fun NamiNavHost(
                         }
                     },
                     onAddToQueue = { track, artistName -> nowPlayingViewModel.addToQueue(track, artistName) },
-                    onPickPhotoRequested = onPickArtistPhoto,
                 )
             }
             composable(

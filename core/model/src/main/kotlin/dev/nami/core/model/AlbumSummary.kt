@@ -5,4 +5,6 @@ data class AlbumSummary(
     val title: String,
     val artistName: String?,
     val artworkPath: String?,
+    val year: Int? = null,
+    val isSingle: Boolean = false,
 )

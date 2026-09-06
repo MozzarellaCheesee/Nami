@@ -141,7 +141,14 @@ class LibraryRepositoryImpl @Inject constructor(
     override fun albumsByArtist(id: ArtistId): Flow<List<AlbumSummary>> = flow {
         emit(
             albumDao.albumsByArtist(id.value).map {
-                AlbumSummary(id = AlbumId(it.id), title = it.title, artistName = null, artworkPath = it.artworkPath)
+                AlbumSummary(
+                    id = AlbumId(it.id),
+                    title = it.title,
+                    artistName = null,
+                    artworkPath = it.artworkPath,
+                    year = it.year,
+                    isSingle = it.isSingle,
+                )
             },
         )
     }
