@@ -87,7 +87,7 @@ fun MiniPlayer(
     var hasSeenFirstSignal by remember { mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(externalTrackChangeSignal) {
         if (hasSeenFirstSignal) {
-            val exitDistance = blockWidthPx.toFloat() + skipThresholdPx
+            val exitDistance = blockWidthPx.toFloat()
             animate(artworkOffsetX, -exitDistance) { value, _ -> artworkOffsetX = value }
             artworkOffsetX = exitDistance
             animate(artworkOffsetX, 0f) { value, _ -> artworkOffsetX = value }
@@ -142,7 +142,10 @@ fun MiniPlayer(
                 orientation = Orientation.Horizontal,
                 state = rememberDraggableState { delta -> artworkOffsetX += delta },
                 onDragStopped = {
-                    val exitDistance = blockWidthPx.toFloat() + skipThresholdPx
+                    // Just the block's own width -- adding skipThresholdPx on top (as before)
+                    // made the old and new track pass each other with a big empty gap between
+                    // them off-screen instead of handing off closely.
+                    val exitDistance = blockWidthPx.toFloat()
                     when {
                         artworkOffsetX < -skipThresholdPx -> {
                             animate(artworkOffsetX, -exitDistance) { value, _ -> artworkOffsetX = value }

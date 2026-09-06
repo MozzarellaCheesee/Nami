@@ -130,7 +130,10 @@ fun NowPlayingScreen(
                 orientation = Orientation.Horizontal,
                 state = rememberDraggableState { delta -> artworkOffsetX += delta },
                 onDragStopped = {
-                    val exitDistance = artworkWidthPx.toFloat() + skipThresholdPx
+                    // Just the artwork's own width -- adding skipThresholdPx on top (as before)
+                    // made the old and new cover pass each other with a big empty gap between
+                    // them off-screen instead of handing off closely.
+                    val exitDistance = artworkWidthPx.toFloat()
                     when {
                         artworkOffsetX < -skipThresholdPx -> {
                             animate(artworkOffsetX, -exitDistance) { value, _ -> artworkOffsetX = value }
