@@ -7,6 +7,7 @@ import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import dev.nami.core.model.TrackId
@@ -63,6 +64,12 @@ class PlaybackService : MediaSessionService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         mediaSession = MediaSession.Builder(this, player).setSessionActivity(sessionActivity).build()
+
+        // Without this, Media3 falls back to its own bundled default (a generic circle-with-play
+        // -triangle icon) for the small icon shown in the status bar and the media notification.
+        val notificationProvider = DefaultMediaNotificationProvider.Builder(this).build()
+        notificationProvider.setSmallIcon(R.drawable.ic_notification)
+        setMediaNotificationProvider(notificationProvider)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession =

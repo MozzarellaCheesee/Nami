@@ -40,6 +40,7 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Translate
+import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.SkipNext
@@ -105,6 +106,10 @@ fun LyricsScreen(
     var dragOffsetY by remember { mutableStateOf(0f) }
     var showEditor by remember { mutableStateOf(false) }
     var showVocabulary by remember { mutableStateOf(false) }
+    // Off by default: tapping a line just seeks to it, same as everywhere else in the app --
+    // dictionary lookup only kicks in once this is switched on, so casually tapping through the
+    // lyrics to seek around doesn't keep popping up word definitions.
+    var wordSelectMode by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     // Shared by the drag gesture and the back button -- both need the same "slide fully off,
     // THEN flip the state" sequence instead of an instant cut.
@@ -167,6 +172,13 @@ fun LyricsScreen(
                         Icons.Outlined.MenuBook,
                         contentDescription = "Мой словарик",
                         tint = NamiColors.Paper70,
+                    )
+                }
+                IconButton(onClick = { wordSelectMode = !wordSelectMode }) {
+                    Icon(
+                        Icons.Outlined.TouchApp,
+                        contentDescription = "Выбор слова для словаря",
+                        tint = if (wordSelectMode) NamiColors.Shu else NamiColors.Paper70,
                     )
                 }
             }
@@ -254,6 +266,7 @@ fun LyricsScreen(
                     positionMs = uiState.positionMs,
                     onLineClick = { viewModel.seekTo(it) },
                     tokenizeLine = { viewModel.tokenizeLine(it) },
+                    wordSelectMode = wordSelectMode,
                     onWordTap = { token, contextLine -> viewModel.lookupWord(token, contextLine) },
                 )
             }
@@ -349,6 +362,7 @@ private fun SyncedLyricsList(
     positionMs: Long,
     onLineClick: (Long) -> Unit,
     tokenizeLine: suspend (String) -> List<dev.nami.core.model.WordToken>,
+    wordSelectMode: Boolean,
     onWordTap: (dev.nami.core.model.WordToken, String) -> Unit,
 ) {
     val listState = rememberLazyListState()
@@ -462,10 +476,12 @@ private fun SyncedLyricsList(
                         karaokeProgress = if (isCurrent) karaokeProgress else null,
                         fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
                         tokenizeLine = tokenizeLine,
+                        // Off: words aren't individually clickable at all, so the line's own
+                        // clickable (seek) is the only thing that can react to the tap -- no
+                        // separate onLineClick call needed here in that case, unlike when word
+                        // selection is on and the word's own clickable would otherwise eat it.
+                        wordSelectMode = wordSelectMode,
                         onWordTap = { token ->
-                            // The word's own clickable sits inside the line's clickable and
-                            // consumes the tap first -- without also calling onLineClick here,
-                            // tapping any word silently stopped the line from seeking too.
                             onLineClick(line.timeMs)
                             onWordTap(token, line.text)
                         },
@@ -503,6 +519,7 @@ private fun TappableLine(
     karaokeProgress: Float?,
     fontWeight: FontWeight,
     tokenizeLine: suspend (String) -> List<dev.nami.core.model.WordToken>,
+    wordSelectMode: Boolean,
     onWordTap: (dev.nami.core.model.WordToken) -> Unit,
 ) {
     val tokens by androidx.compose.runtime.produceState(initialValue = emptyList<dev.nami.core.model.WordToken>(), line) {
@@ -522,7 +539,10 @@ private fun TappableLine(
             cumulative = tokenEnd
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.clickable { onWordTap(token) },
+                // Off: no clickable on the word at all -- letting the tap fall through to the
+                // line's own clickable (seek) instead of eating it for a dictionary popup nobody
+                // asked for right now.
+                modifier = if (wordSelectMode) Modifier.clickable { onWordTap(token) } else Modifier,
             ) {
                 if (showFurigana) {
                     Text(text = if (token.hasKanji) token.readingHiragana else "", color = color, fontSize = 11.sp)
