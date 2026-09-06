@@ -261,7 +261,10 @@ fun NowPlayingScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(40.dp, Alignment.CenterHorizontally),
+            // SpaceEvenly instead of Center: the play button (64dp) is much bigger than
+            // prev/next (48dp default touch target), so a plain Center bunched them together
+            // off to one side instead of spread evenly across the row.
+            horizontalArrangement = Arrangement.SpaceEvenly,
             // Center: prev/next (48dp) and play (64dp) differ in height -- Row defaults to
             // top-aligning children, which floated the smaller buttons above the play button's
             // vertical center instead of level with it.
