@@ -26,6 +26,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -65,9 +69,11 @@ private const val DISMISS_THRESHOLD_DP = 120
 @Composable
 fun LyricsScreen(
     onBack: () -> Unit,
+    nowPlayingViewModel: NowPlayingViewModel,
     viewModel: LyricsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val playbackState by nowPlayingViewModel.playbackState.collectAsState()
     val density = LocalDensity.current
     val dismissThresholdPx = with(density) { DISMISS_THRESHOLD_DP.dp.toPx() }
     val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
@@ -105,7 +111,7 @@ fun LyricsScreen(
 
         val lyrics = uiState.lyrics
         if (lyrics == null || lyrics.lines.isEmpty()) {
-            Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(modifier = Modifier.fillMaxWidth().weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                 Spacer(modifier = Modifier.height(64.dp))
                 if (uiState.isFetchingOnline) {
                     androidx.compose.material3.CircularProgressIndicator(color = NamiColors.Paper70, modifier = Modifier.size(24.dp))
@@ -125,8 +131,17 @@ fun LyricsScreen(
                 )
             }
         } else {
-            SyncedLyricsList(lyrics = lyrics, positionMs = uiState.positionMs, onLineClick = { viewModel.seekTo(it) })
+            Box(modifier = Modifier.weight(1f)) {
+                SyncedLyricsList(lyrics = lyrics, positionMs = uiState.positionMs, onLineClick = { viewModel.seekTo(it) })
+            }
         }
+
+        LyricsTransportBar(
+            isPlaying = (playbackState as? dev.nami.domain.PlaybackState.Playing)?.isPlaying == true,
+            onToggle = nowPlayingViewModel::toggle,
+            onSkipPrevious = nowPlayingViewModel::skipPrevious,
+            onSkipNext = nowPlayingViewModel::skipNext,
+        )
     }
 
     if (showEditor) {
@@ -146,11 +161,11 @@ fun LyricsScreen(
 private fun SyncedLyricsList(lyrics: Lyrics, positionMs: Long, onLineClick: (Long) -> Unit) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    val currentIndex by remember(lyrics) {
-        derivedStateOf {
-            lyrics.lines.indexOfLast { it.timeMs <= positionMs }.coerceAtLeast(0)
-        }
-    }
+    // Plain recomputation, not derivedStateOf -- derivedStateOf's lambda was captured once (by
+    // remember(lyrics), which only re-runs when the LYRICS change) and kept reading whatever
+    // `positionMs` happened to be at that first composition forever after, so the highlighted
+    // line and autoscroll never advanced. This recomposes with `positionMs` normally instead.
+    val currentIndex = lyrics.lines.indexOfLast { it.timeMs <= positionMs }.coerceAtLeast(0)
     var lastCentered by remember { mutableIntStateOf(-1) }
     LaunchedEffect(currentIndex) {
         if (currentIndex != lastCentered) {
@@ -166,7 +181,7 @@ private fun SyncedLyricsList(lyrics: Lyrics, positionMs: Long, onLineClick: (Lon
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
-            contentPadding = PaddingValues(vertical = 220.dp),
+            contentPadding = PaddingValues(top = 120.dp, bottom = 160.dp),
             modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp),
         ) {
             itemsIndexed(lyrics.lines) { index, line ->
@@ -209,6 +224,50 @@ private fun SyncedLyricsList(lyrics: Lyrics, positionMs: Long, onLineClick: (Lon
                 .align(Alignment.BottomCenter)
                 .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(androidx.compose.ui.graphics.Color.Transparent, NamiColors.Ink900))),
         )
+    }
+}
+
+@Composable
+private fun LyricsTransportBar(
+    isPlaying: Boolean,
+    onToggle: () -> Unit,
+    onSkipPrevious: () -> Unit,
+    onSkipNext: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 32.dp, vertical = 20.dp),
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onSkipPrevious, modifier = Modifier.size(48.dp)) {
+            Icon(
+                Icons.Rounded.SkipPrevious,
+                contentDescription = "Предыдущий трек",
+                tint = NamiColors.Paper100,
+                modifier = Modifier.size(32.dp),
+            )
+        }
+        IconButton(
+            onClick = onToggle,
+            modifier = Modifier.size(64.dp).background(NamiColors.Paper100, androidx.compose.foundation.shape.CircleShape),
+        ) {
+            Icon(
+                imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                contentDescription = if (isPlaying) "Пауза" else "Играть",
+                tint = NamiColors.Ink900,
+                modifier = Modifier.size(32.dp),
+            )
+        }
+        IconButton(onClick = onSkipNext, modifier = Modifier.size(48.dp)) {
+            Icon(
+                Icons.Rounded.SkipNext,
+                contentDescription = "Следующий трек",
+                tint = NamiColors.Paper100,
+                modifier = Modifier.size(32.dp),
+            )
+        }
     }
 }
 

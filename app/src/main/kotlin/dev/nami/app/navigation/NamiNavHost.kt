@@ -361,7 +361,7 @@ fun NamiNavHost(
         enter = slideInVertically(initialOffsetY = { fullHeight -> fullHeight }),
         exit = ExitTransition.None,
     ) {
-        LyricsScreen(onBack = { showLyrics = false })
+        LyricsScreen(onBack = { showLyrics = false }, nowPlayingViewModel = nowPlayingViewModel)
     }
     }
 }
