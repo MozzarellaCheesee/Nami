@@ -173,92 +173,6 @@ fun LyricsScreen(
             }
         }
 
-        // Anchored under the "..." button, not inline in the row -- a narrow, heavily-rounded
-        // pill that slides out sideways instead of the row of icons permanently crowding (and,
-        // at one point, wrapping) the header.
-        androidx.compose.animation.AnimatedVisibility(
-            visible = showToolsMenu,
-            enter = androidx.compose.animation.expandHorizontally(expandFrom = Alignment.End) + androidx.compose.animation.fadeIn(),
-            exit = androidx.compose.animation.shrinkHorizontally(shrinkTowards = Alignment.End) + androidx.compose.animation.fadeOut(),
-            modifier = Modifier.align(Alignment.End).padding(end = 4.dp),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .background(NamiColors.Ink700, androidx.compose.foundation.shape.RoundedCornerShape(28.dp))
-                    .padding(horizontal = 6.dp, vertical = 4.dp),
-            ) {
-                IconButton(onClick = { viewModel.toggleFurigana() }) {
-                    Text(
-                        "振",
-                        color = if (uiState.showFurigana) NamiColors.Shu else NamiColors.Paper70,
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                }
-                IconButton(onClick = { showVocabulary = true }) {
-                    Icon(Icons.Outlined.MenuBook, contentDescription = "Мой словарик", tint = NamiColors.Paper70)
-                }
-                IconButton(onClick = { wordSelectMode = !wordSelectMode }) {
-                    Icon(
-                        Icons.Outlined.TouchApp,
-                        contentDescription = "Выбор слова для словаря",
-                        tint = if (wordSelectMode) NamiColors.Shu else NamiColors.Paper70,
-                    )
-                }
-                if (uiState.isGeneratingRomaji) {
-                    androidx.compose.material3.CircularProgressIndicator(
-                        color = NamiColors.Paper70,
-                        strokeWidth = 2.dp,
-                        modifier = Modifier.padding(horizontal = 8.dp).size(20.dp),
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(androidx.compose.foundation.shape.CircleShape)
-                            .combinedClickable(
-                                onClick = { viewModel.toggleRomaji() },
-                                onLongClick = { viewModel.forceRegenerateRomaji() },
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            "R",
-                            color = if (uiState.showRomaji) NamiColors.Shu else NamiColors.Paper70,
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                    }
-                }
-                if (uiState.isTranslating) {
-                    androidx.compose.material3.CircularProgressIndicator(
-                        color = NamiColors.Paper70,
-                        strokeWidth = 2.dp,
-                        modifier = Modifier.padding(horizontal = 8.dp).size(20.dp),
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(androidx.compose.foundation.shape.CircleShape)
-                            .combinedClickable(
-                                onClick = { viewModel.toggleTranslation() },
-                                onLongClick = { viewModel.forceRetranslate() },
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            Icons.Outlined.Translate,
-                            contentDescription = "Перевод (долгое нажатие -- пересчитать заново)",
-                            tint = if (uiState.showTranslation) NamiColors.Shu else NamiColors.Paper70,
-                        )
-                    }
-                }
-                IconButton(onClick = { showEditor = true }) {
-                    Icon(Icons.Outlined.Edit, contentDescription = "Синхронизировать вручную", tint = NamiColors.Paper70)
-                }
-            }
-        }
-
         val lyrics = uiState.lyrics
         if (lyrics == null || lyrics.lines.isEmpty()) {
             Column(modifier = Modifier.fillMaxWidth().weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -302,6 +216,95 @@ fun LyricsScreen(
             onSkipPrevious = nowPlayingViewModel::skipPrevious,
             onSkipNext = nowPlayingViewModel::skipNext,
         )
+    }
+
+    // Overlay, not part of the Column above -- sits on top of the lyrics list instead of
+    // pushing it down when it slides out. Anchored under the "..." button (header row height
+    // plus statusbar inset), icons stacked vertically per Ф user request.
+    androidx.compose.animation.AnimatedVisibility(
+        visible = showToolsMenu,
+        enter = androidx.compose.animation.expandVertically(expandFrom = Alignment.Top) + androidx.compose.animation.fadeIn(),
+        exit = androidx.compose.animation.shrinkVertically(shrinkTowards = Alignment.Top) + androidx.compose.animation.fadeOut(),
+        modifier = Modifier
+            .align(Alignment.TopEnd)
+            .statusBarsPadding()
+            .padding(top = 56.dp, end = 4.dp),
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .background(NamiColors.Ink700, androidx.compose.foundation.shape.RoundedCornerShape(28.dp))
+                .padding(horizontal = 4.dp, vertical = 6.dp),
+        ) {
+            IconButton(onClick = { viewModel.toggleFurigana() }) {
+                Text(
+                    "振",
+                    color = if (uiState.showFurigana) NamiColors.Shu else NamiColors.Paper70,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            }
+            IconButton(onClick = { showVocabulary = true }) {
+                Icon(Icons.Outlined.MenuBook, contentDescription = "Мой словарик", tint = NamiColors.Paper70)
+            }
+            IconButton(onClick = { wordSelectMode = !wordSelectMode }) {
+                Icon(
+                    Icons.Outlined.TouchApp,
+                    contentDescription = "Выбор слова для словаря",
+                    tint = if (wordSelectMode) NamiColors.Shu else NamiColors.Paper70,
+                )
+            }
+            if (uiState.isGeneratingRomaji) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    color = NamiColors.Paper70,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.padding(vertical = 8.dp).size(20.dp),
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .combinedClickable(
+                            onClick = { viewModel.toggleRomaji() },
+                            onLongClick = { viewModel.forceRegenerateRomaji() },
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "R",
+                        color = if (uiState.showRomaji) NamiColors.Shu else NamiColors.Paper70,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                }
+            }
+            if (uiState.isTranslating) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    color = NamiColors.Paper70,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.padding(vertical = 8.dp).size(20.dp),
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .combinedClickable(
+                            onClick = { viewModel.toggleTranslation() },
+                            onLongClick = { viewModel.forceRetranslate() },
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Outlined.Translate,
+                        contentDescription = "Перевод (долгое нажатие -- пересчитать заново)",
+                        tint = if (uiState.showTranslation) NamiColors.Shu else NamiColors.Paper70,
+                    )
+                }
+            }
+            IconButton(onClick = { showEditor = true }) {
+                Icon(Icons.Outlined.Edit, contentDescription = "Синхронизировать вручную", tint = NamiColors.Paper70)
+            }
+        }
     }
     }
 
