@@ -40,6 +40,8 @@ fun WaveformScrubber(
     progress: Float,
     onSeek: (Float) -> Unit,
     modifier: Modifier = Modifier,
+    onProgressPreview: (Float) -> Unit = {},
+    onPreviewEnd: () -> Unit = {},
 ) {
     val heights = remember(seedKey) { barHeights(seedKey) }
     var dragProgress by remember(seedKey) { mutableStateOf<Float?>(null) }
@@ -56,16 +58,26 @@ fun WaveformScrubber(
             }
             .pointerInput(seedKey) {
                 detectDragGestures(
-                    onDragStart = { offset -> dragProgress = (offset.x / size.width).coerceIn(0f, 1f) },
+                    onDragStart = { offset ->
+                        val fraction = (offset.x / size.width).coerceIn(0f, 1f)
+                        dragProgress = fraction
+                        onProgressPreview(fraction)
+                    },
                     onDrag = { change, _ ->
                         change.consume()
-                        dragProgress = (change.position.x / size.width).coerceIn(0f, 1f)
+                        val fraction = (change.position.x / size.width).coerceIn(0f, 1f)
+                        dragProgress = fraction
+                        onProgressPreview(fraction)
                     },
                     onDragEnd = {
                         dragProgress?.let(onSeek)
                         dragProgress = null
+                        onPreviewEnd()
                     },
-                    onDragCancel = { dragProgress = null },
+                    onDragCancel = {
+                        dragProgress = null
+                        onPreviewEnd()
+                    },
                 )
             },
     ) {

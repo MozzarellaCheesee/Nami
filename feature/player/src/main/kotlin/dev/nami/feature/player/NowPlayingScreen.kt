@@ -34,6 +34,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -176,12 +177,19 @@ fun NowPlayingScreen(
             )
         }
         val durationMs = playing?.durationMs ?: 0L
-        val positionMs = playing?.positionMs ?: 0L
-        val progress = if (durationMs > 0) (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
+        val actualPositionMs = playing?.positionMs ?: 0L
+        val actualProgress = if (durationMs > 0) (actualPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
+        // While dragging, the time label below should track the finger, not real playback
+        // position (which only jumps once the drag ends and seek() actually fires).
+        var previewProgress by remember { mutableStateOf<Float?>(null) }
+        val progress = previewProgress ?: actualProgress
+        val positionMs = (progress * durationMs).toLong()
         WaveformScrubber(
             seedKey = queue.nowPlaying?.id?.value ?: "",
-            progress = progress,
+            progress = actualProgress,
             onSeek = { fraction -> viewModel.seek((fraction * durationMs).toLong()) },
+            onProgressPreview = { fraction -> previewProgress = fraction },
+            onPreviewEnd = { previewProgress = null },
             modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
         )
         Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
