@@ -91,6 +91,7 @@ class NowPlayingViewModelTest {
         override suspend fun renameAlbum(id: dev.nami.core.model.AlbumId, title: String) = error("unused")
         override suspend fun setAlbumCover(id: dev.nami.core.model.AlbumId, imageUri: String) = error("unused")
         override suspend fun setAlbumIsSingle(id: dev.nami.core.model.AlbumId, isSingle: Boolean) = error("unused")
+            override suspend fun setAlbumYear(id: AlbumId, year: Int?) = error("unused")
         override suspend fun setAlbumArtist(id: AlbumId, artistId: ArtistId?) = error("unused")
             override fun albumArtists(id: AlbumId) = flowOf(emptyList<dev.nami.core.model.Artist>())
             override suspend fun addAlbumArtist(id: AlbumId, artistId: ArtistId) = error("unused")

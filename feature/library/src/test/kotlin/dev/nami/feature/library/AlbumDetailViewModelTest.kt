@@ -59,6 +59,7 @@ class AlbumDetailViewModelTest {
             override suspend fun createAlbum(title: String, artistId: ArtistId?): AlbumId = error("unused")
             override suspend fun setAlbumCover(id: AlbumId, imageUri: String) = error("unused")
             override suspend fun setAlbumIsSingle(id: AlbumId, isSingle: Boolean) = error("unused")
+            override suspend fun setAlbumYear(id: AlbumId, year: Int?) = error("unused")
             override suspend fun setAlbumArtist(id: AlbumId, artistId: ArtistId?) = error("unused")
             override fun albumArtists(id: AlbumId) = flowOf(emptyList<dev.nami.core.model.Artist>())
             override suspend fun addAlbumArtist(id: AlbumId, artistId: ArtistId) = error("unused")

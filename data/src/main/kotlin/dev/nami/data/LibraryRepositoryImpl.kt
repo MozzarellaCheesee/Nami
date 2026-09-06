@@ -122,6 +122,10 @@ class LibraryRepositoryImpl @Inject constructor(
         albumDao.setIsSingle(id.value, isSingle)
     }
 
+    override suspend fun setAlbumYear(id: AlbumId, year: Int?) {
+        albumDao.setYear(id.value, year)
+    }
+
     override suspend fun setAlbumArtist(id: AlbumId, artistId: ArtistId?) {
         // The single-artist picker replaces the whole credit list with just this one artist --
         // addAlbumArtist/removeAlbumArtist below are the ones that add to/trim an existing list.

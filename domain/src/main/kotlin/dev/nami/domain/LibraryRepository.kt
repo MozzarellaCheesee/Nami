@@ -30,6 +30,7 @@ interface LibraryRepository {
     suspend fun renameAlbum(id: AlbumId, title: String)
     suspend fun setAlbumCover(id: AlbumId, imageUri: String)
     suspend fun setAlbumIsSingle(id: AlbumId, isSingle: Boolean)
+    suspend fun setAlbumYear(id: AlbumId, year: Int?)
     /** Replaces the album's whole artist-credit list with just this one artist (or clears it). */
     suspend fun setAlbumArtist(id: AlbumId, artistId: ArtistId?)
     /** Every artist credited on the album -- can be more than one (compilations, splits, features). */

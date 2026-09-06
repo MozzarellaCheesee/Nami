@@ -67,6 +67,10 @@ class AlbumDetailViewModel @Inject constructor(
         viewModelScope.launch { libraryRepository.setAlbumIsSingle(albumId, isSingle) }
     }
 
+    fun setYear(year: Int?) {
+        viewModelScope.launch { libraryRepository.setAlbumYear(albumId, year) }
+    }
+
     fun setArtist(artistId: ArtistId?) {
         viewModelScope.launch { libraryRepository.setAlbumArtist(albumId, artistId) }
     }

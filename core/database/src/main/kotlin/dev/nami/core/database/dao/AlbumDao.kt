@@ -68,6 +68,9 @@ interface AlbumDao {
     @Query("UPDATE albums SET isSingle = :isSingle WHERE id = :id")
     suspend fun setIsSingle(id: String, isSingle: Boolean)
 
+    @Query("UPDATE albums SET year = :year WHERE id = :id")
+    suspend fun setYear(id: String, year: Int?)
+
     // Replaces the "primary" artist column AND resets album_artists to just that one artist --
     // this is the single-artist picker (AlbumDetailScreen's "Изменить артиста"), distinct from
     // addArtist/removeArtist below which manage the multi-artist credit list without touching it.

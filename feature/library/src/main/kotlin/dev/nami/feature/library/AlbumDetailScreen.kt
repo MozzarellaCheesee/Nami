@@ -90,6 +90,7 @@ fun AlbumDetailScreen(
     var showAddTracksDialog by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showPickArtistDialog by remember { mutableStateOf(false) }
+    var showEditYearDialog by remember { mutableStateOf(false) }
 
     val density = LocalDensity.current
     val headerState = rememberCollapsingHeaderState(maxHeight = HEADER_MAX_HEIGHT, minHeight = HEADER_MIN_HEIGHT)
@@ -169,6 +170,7 @@ fun AlbumDetailScreen(
                         actions = listOf(
                             ContextAction("Добавить в очередь", Icons.Outlined.PlaylistAdd) { uiState.tracks.forEach { onAddToQueue(it) } },
                             ContextAction("Переименовать", Icons.Outlined.Edit) { showRenameDialog = true },
+                            ContextAction("Год выпуска", Icons.Outlined.Edit) { showEditYearDialog = true },
                             ContextAction("Изменить обложку", Icons.Outlined.Image) { uiState.album?.let { onPickCoverRequested(it.id) } },
                             ContextAction("Добавить треки", Icons.Outlined.LibraryAdd) { showAddTracksDialog = true },
                             ContextAction("Артисты", Icons.Outlined.Person) { showPickArtistDialog = true },
@@ -256,6 +258,14 @@ fun AlbumDetailScreen(
         uiState.album?.let { album ->
             AddTracksToAlbumDialog(albumId = album.id, onDismiss = { showAddTracksDialog = false })
         }
+    }
+
+    if (showEditYearDialog) {
+        EditYearDialog(
+            currentYear = uiState.album?.year,
+            onSave = { year -> viewModel.setYear(year) },
+            onDismiss = { showEditYearDialog = false },
+        )
     }
 
     if (showPickArtistDialog) {
