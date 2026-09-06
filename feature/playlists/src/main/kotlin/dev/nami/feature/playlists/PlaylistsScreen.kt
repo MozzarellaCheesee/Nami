@@ -10,7 +10,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material3.AlertDialog
+import dev.nami.core.designsystem.NamiAlertDialog
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -121,7 +121,7 @@ fun PlaylistsScreen(
 @Composable
 private fun NamePromptDialog(title: String, onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
     var text by remember { mutableStateOf("") }
-    AlertDialog(
+    NamiAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(text = title) },
         text = { OutlinedTextField(value = text, onValueChange = { text = it }, singleLine = true) },

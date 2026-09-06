@@ -14,7 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Restore
-import androidx.compose.material3.AlertDialog
+import dev.nami.core.designsystem.NamiAlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -91,7 +91,7 @@ fun TrashScreen(onBack: () -> Unit, viewModel: TrashViewModel = hiltViewModel())
     }
 
     if (showClearAllConfirm) {
-        AlertDialog(
+        NamiAlertDialog(
             onDismissRequest = { showClearAllConfirm = false },
             title = { Text("Очистить корзину?") },
             text = { Text("Все треки и плейлисты будут удалены навсегда. Это действие необратимо.") },
@@ -177,7 +177,7 @@ private fun TrashedPlaylistRow(trashed: TrashedPlaylist, onRestore: () -> Unit, 
 
 @Composable
 private fun DeleteForeverDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
+    NamiAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Удалить навсегда?") },
         text = { Text("Это действие необратимо.") },

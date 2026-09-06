@@ -26,7 +26,7 @@ import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PlaylistAdd
 import androidx.compose.material.icons.outlined.Star
-import androidx.compose.material3.AlertDialog
+import dev.nami.core.designsystem.NamiAlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -256,7 +256,7 @@ fun AlbumDetailScreen(
     }
 
     if (showDeleteConfirm) {
-        AlertDialog(
+        NamiAlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text("Удалить альбом?") },
             text = { Text("Треки альбома переместятся в корзину. Их можно будет восстановить.") },

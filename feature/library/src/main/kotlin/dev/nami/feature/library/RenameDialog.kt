@@ -1,7 +1,6 @@
 package dev.nami.feature.library
 
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -11,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import dev.nami.core.designsystem.NamiAlertDialog
 
 @Composable
 fun RenameDialog(
@@ -20,7 +20,7 @@ fun RenameDialog(
     onDismiss: () -> Unit,
 ) {
     var name by remember { mutableStateOf(currentName) }
-    AlertDialog(
+    NamiAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {

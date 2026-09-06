@@ -19,7 +19,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material3.AlertDialog
+import dev.nami.core.designsystem.NamiAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -117,7 +117,7 @@ fun PlaylistDetailScreen(
 
     if (showRenameDialog) {
         var text by remember { mutableStateOf(uiState.playlist?.name ?: "") }
-        AlertDialog(
+        NamiAlertDialog(
             onDismissRequest = { showRenameDialog = false },
             title = { Text("Переименовать плейлист") },
             text = { OutlinedTextField(value = text, onValueChange = { text = it }, singleLine = true) },
@@ -132,7 +132,7 @@ fun PlaylistDetailScreen(
     }
 
     if (showDeleteDialog) {
-        AlertDialog(
+        NamiAlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             title = { Text("Удалить плейлист?") },
             text = { Text("Треки останутся в библиотеке. Плейлист будет в корзине 30 дней.") },
