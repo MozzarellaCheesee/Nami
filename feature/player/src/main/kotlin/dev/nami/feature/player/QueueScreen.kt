@@ -10,6 +10,7 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
@@ -40,16 +42,16 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
@@ -65,11 +67,12 @@ import dev.nami.domain.QueueOrigin
 private val QUEUE_ROW_HEIGHT = 64.dp
 private val ARTWORK_SIZE = 44.dp
 private const val DISMISS_THRESHOLD_DP = 120
+private const val AUTOSCROLL_EDGE_DP = 72
+private const val AUTOSCROLL_SPEED_PX_PER_FRAME = 18f
 
-// Wrapping each item with its position in the ORIGINAL (source-of-truth) list gives every slot
-// a key that's stable and unique even when the same track appears twice in the queue -- no need
-// to special-case duplicate track ids. originalIndex is also exactly what moveQueueItem needs to
-// commit a drag: "the item that started at originalIndex is now at this position".
+// Wrapping each item with its position in the ORIGINAL (source-of-truth) list gives every slot a
+// key that's stable and unique even when the same track appears twice in the queue -- no need to
+// special-case duplicate track ids. originalIndex is also exactly what moveQueueItem needs.
 private data class SlotItem(val item: QueueItem, val originalIndex: Int)
 
 private fun toSlots(items: List<QueueItem>) = items.mapIndexed { index, item -> SlotItem(item, index) }
@@ -83,24 +86,37 @@ fun QueueScreen(
     val manual = queue.upcoming.filter { it.origin == QueueOrigin.MANUAL }
     val context = queue.upcoming.filter { it.origin == QueueOrigin.CONTEXT }
     val contextStartIndex = manual.size
-
-    // Reordering is purely local while a drag is in progress -- moveQueueItem goes through
-    // ExoPlayer, which doesn't update `queue` synchronously, so firing it on every threshold
-    // crossed during the drag left the displayed list lagging behind the assumed state (visible
-    // as a gap/drift between the row and the finger). Local list state updates instantly instead;
-    // the real move is committed once, when the drag ends.
-    var manualOrder by remember(manual) { mutableStateOf(toSlots(manual)) }
-    var contextOrder by remember(context) { mutableStateOf(toSlots(context)) }
+    val manualSlots = remember(manual) { toSlots(manual) }
+    val contextSlots = remember(context) { toSlots(context) }
 
     val density = LocalDensity.current
     val dismissThresholdPx = with(density) { DISMISS_THRESHOLD_DP.dp.toPx() }
     val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
     var dragOffsetY by remember { mutableStateOf(0f) }
-    // The row actively being drag-reordered skips animateItem() -- its position is already
-    // driven live by the local reorder above, and its own placement animation would fight the
-    // graphicsLayer offset correction, causing a visible jump/lag under the finger.
-    var draggingManualKey by remember { mutableStateOf<Int?>(null) }
-    var draggingContextKey by remember { mutableStateOf<Int?>(null) }
+
+    val listState = rememberLazyListState()
+    // List's own bounds in root coordinates -- compared against the dragged row's live finger
+    // position to decide when to autoscroll. Captured once on layout, doesn't change during drag.
+    var listTop by remember { mutableStateOf(0f) }
+    var listBottom by remember { mutableStateOf(0f) }
+    val edgePx = with(density) { AUTOSCROLL_EDGE_DP.dp.toPx() }
+    // Non-null while a row's drag handle is held -- the absolute (root) Y the finger is
+    // currently at. Drives the autoscroll loop below; null stops it.
+    var dragPointerY by remember { mutableStateOf<Float?>(null) }
+
+    LaunchedEffect(dragPointerY, listTop, listBottom) {
+        val pointerY = dragPointerY ?: return@LaunchedEffect
+        val delta = when {
+            pointerY < listTop + edgePx -> -AUTOSCROLL_SPEED_PX_PER_FRAME
+            pointerY > listBottom - edgePx -> AUTOSCROLL_SPEED_PX_PER_FRAME
+            else -> 0f
+        }
+        if (delta == 0f) return@LaunchedEffect
+        while (true) {
+            listState.scrollBy(delta)
+            delay(16)
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -135,7 +151,15 @@ fun QueueScreen(
                 Text(text = current.title, color = NamiColors.Shu, maxLines = 1)
             }
         }
-        LazyColumn(modifier = Modifier.fillMaxWidth()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .onGloballyPositioned { coords ->
+                    listTop = coords.positionInRoot().y
+                    listBottom = listTop + coords.size.height
+                },
+        ) {
             if (manual.isEmpty() && context.isEmpty()) {
                 item {
                     Text(
@@ -153,26 +177,17 @@ fun QueueScreen(
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                     )
                 }
-                itemsIndexed(manualOrder, key = { _, slot -> slot.originalIndex }) { index, slot ->
+                itemsIndexed(manualSlots, key = { _, slot -> slot.originalIndex }) { index, slot ->
                     QueueRow(
                         item = slot.item,
-                        onDragBy = { relativeMove ->
-                            val target = (index + relativeMove).coerceIn(0, manualOrder.lastIndex)
-                            if (target != index) {
-                                manualOrder = manualOrder.toMutableList().apply { add(target, removeAt(index)) }
-                            }
+                        rowHeight = QUEUE_ROW_HEIGHT,
+                        onDragTo = { relativeMove ->
+                            val target = (index + relativeMove).coerceIn(0, manualSlots.lastIndex)
+                            if (target != index) viewModel.moveQueueItem(index, target)
                         },
-                        onDraggingChange = { isDragging ->
-                            if (isDragging) {
-                                draggingManualKey = slot.originalIndex
-                            } else {
-                                draggingManualKey = null
-                                val finalIndex = manualOrder.indexOfFirst { it.originalIndex == slot.originalIndex }
-                                if (finalIndex != slot.originalIndex) viewModel.moveQueueItem(slot.originalIndex, finalIndex)
-                            }
-                        },
+                        onDragPositionChange = { rootY -> dragPointerY = rootY },
                         onRemove = { viewModel.removeQueueItem(index) },
-                        modifier = if (draggingManualKey == slot.originalIndex) Modifier else Modifier.animateItem(),
+                        modifier = Modifier.animateItem(),
                     )
                 }
             }
@@ -184,28 +199,19 @@ fun QueueScreen(
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                     )
                 }
-                itemsIndexed(contextOrder, key = { _, slot -> slot.originalIndex }) { index, slot ->
+                itemsIndexed(contextSlots, key = { _, slot -> slot.originalIndex }) { index, slot ->
                     QueueRow(
                         item = slot.item,
-                        onDragBy = { relativeMove ->
-                            val target = (index + relativeMove).coerceIn(0, contextOrder.lastIndex)
+                        rowHeight = QUEUE_ROW_HEIGHT,
+                        onDragTo = { relativeMove ->
+                            val target = (index + relativeMove).coerceIn(0, contextSlots.lastIndex)
                             if (target != index) {
-                                contextOrder = contextOrder.toMutableList().apply { add(target, removeAt(index)) }
+                                viewModel.moveQueueItem(contextStartIndex + index, contextStartIndex + target)
                             }
                         },
-                        onDraggingChange = { isDragging ->
-                            if (isDragging) {
-                                draggingContextKey = slot.originalIndex
-                            } else {
-                                draggingContextKey = null
-                                val finalIndex = contextOrder.indexOfFirst { it.originalIndex == slot.originalIndex }
-                                if (finalIndex != slot.originalIndex) {
-                                    viewModel.moveQueueItem(contextStartIndex + slot.originalIndex, contextStartIndex + finalIndex)
-                                }
-                            }
-                        },
+                        onDragPositionChange = { rootY -> dragPointerY = rootY },
                         onRemove = { viewModel.removeQueueItem(contextStartIndex + index) },
-                        modifier = if (draggingContextKey == slot.originalIndex) Modifier else Modifier.animateItem(),
+                        modifier = Modifier.animateItem(),
                     )
                 }
             }
@@ -239,27 +245,28 @@ private fun QueueTrackInfo(item: QueueItem, modifier: Modifier = Modifier) {
 }
 
 // One row style for both sections -- manually-queued and context (album/playlist) tracks are
-// both reorderable and removable the same way. Drag the handle to reorder live (within its own
-// section), swipe left to remove -- no separate delete button, swipe is the only way out.
+// both reorderable and removable the same way. Drag the handle: the row is pinned to the finger
+// 1:1 (no live snapping/reordering of the list while dragging), on release the total move is
+// rounded to whole rows and committed once -- swipe left to remove, no separate delete button.
 @Composable
 private fun QueueRow(
     item: QueueItem,
-    onDragBy: (Int) -> Unit,
-    onDraggingChange: (Boolean) -> Unit,
+    rowHeight: androidx.compose.ui.unit.Dp,
+    onDragTo: (Int) -> Unit,
+    onDragPositionChange: (Float?) -> Unit,
     onRemove: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val currentOnDragBy by rememberUpdatedState(onDragBy)
-    val currentOnDraggingChange by rememberUpdatedState(onDraggingChange)
+    val currentOnDragTo by rememberUpdatedState(onDragTo)
+    val currentOnDragPositionChange by rememberUpdatedState(onDragPositionChange)
     val density = LocalDensity.current
-    val scope = rememberCoroutineScope()
-    // dragOffsetPx follows the finger exactly (visual only). firedOffsetPx tracks how much of
-    // that has already been converted into list moves, so a move never resets/snaps the visual
-    // offset -- it just keeps sliding smoothly under the finger.
+    val rowHeightPx = with(density) { rowHeight.toPx() }
     var dragOffsetPx by remember { mutableStateOf(0f) }
-    var firedOffsetPx by remember { mutableStateOf(0f) }
     var dragging by remember { mutableStateOf(false) }
-    val moveUnitPx = with(density) { (QUEUE_ROW_HEIGHT / 2).toPx() }
+    // Root position of the drag handle at the moment the gesture starts -- combined with the
+    // raw accumulated drag delta, gives the finger's absolute Y for the autoscroll check without
+    // needing continuous re-measurement while the row's own translationY is animating.
+    var handleRootY by remember { mutableStateOf(0f) }
     var removed by remember { mutableStateOf(false) }
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
@@ -278,28 +285,21 @@ private fun QueueRow(
         modifier = modifier,
     ) {
         // The vertical drag offset/zIndex live OUTSIDE SwipeToDismissBox entirely -- applying
-        // them to content inside the swipe box was letting its dismiss background (the yellow
-        // "Kin" wash) show through/get triggered by a purely vertical drag. Keeping the two
-        // gestures on separate layers means dragging up/down never touches swipe state.
+        // them to content inside the swipe box let its dismiss background (the yellow "Kin"
+        // wash) get triggered by a purely vertical drag. Keeping the two gestures on separate
+        // layers means dragging up/down never touches swipe state.
         Box(
             modifier = Modifier
-                // Each fired move actually shifts this row's slot in the list by one row height
-                // (via the reorder + animateItem on the other rows), so the leftover visual
-                // offset needed is only what hasn't been "spent" on a move yet -- using the raw
-                // finger delta here was double-counting the shift, drifting the row far from
-                // the finger with every move fired.
-                .graphicsLayer { translationY = dragOffsetPx - firedOffsetPx }
+                .graphicsLayer { translationY = dragOffsetPx }
                 .zIndex(if (dragging) 1f else 0f),
         ) {
             SwipeToDismissBox(
                 state = dismissState,
                 // Only left (EndToStart, toward removal) is a real gesture here -- without this,
-                // swiping right still drags the row (StartToEnd is enabled by default) with nothing
-                // behind it and no action tied to it, which just looks like a stray, meaningless drag.
+                // swiping right still drags the row (StartToEnd is enabled by default) with
+                // nothing behind it and no action tied to it.
                 enableDismissFromStartToEnd = false,
                 backgroundContent = {
-                    // Only shown while actually swiping toward removal -- an icon so the gesture
-                    // reads as "this is about to remove the track", not just a flat color wash.
                     Box(
                         modifier = Modifier.fillMaxSize().background(NamiColors.Kin),
                         contentAlignment = Alignment.CenterEnd,
@@ -316,7 +316,7 @@ private fun QueueRow(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(QUEUE_ROW_HEIGHT)
+                        .height(rowHeight)
                         .background(if (dragging) NamiColors.Ink700 else NamiColors.Ink900)
                         .padding(horizontal = 20.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -326,48 +326,35 @@ private fun QueueRow(
                         modifier = Modifier
                             .padding(start = 8.dp)
                             .size(40.dp)
+                            .onGloballyPositioned { handleRootY = it.positionInRoot().y }
                             .pointerInput(Unit) {
                                 // A dedicated handle icon, isolated from the row's own swipe/click
                                 // gestures -- no need to wait for a long press before it starts.
                                 detectDragGestures(
                                     onDragStart = {
                                         dragging = true
-                                        currentOnDraggingChange(true)
+                                        currentOnDragPositionChange(handleRootY)
                                     },
                                     onDrag = { change, dragAmount ->
                                         change.consume()
                                         dragOffsetPx += dragAmount.y
-                                        // Fire moves live, as the drag crosses each half-row
-                                        // threshold, instead of only computing one jump on
-                                        // release -- this is what makes other rows actually
-                                        // shift out of the way while the drag is in progress.
-                                        // The visual offset (dragOffsetPx) is never touched here,
-                                        // only how much of it has been "spent" on moves so far --
-                                        // the row keeps tracking the finger 1:1.
-                                        while (dragOffsetPx - firedOffsetPx >= moveUnitPx) {
-                                            firedOffsetPx += moveUnitPx
-                                            currentOnDragBy(1)
-                                        }
-                                        while (dragOffsetPx - firedOffsetPx <= -moveUnitPx) {
-                                            firedOffsetPx -= moveUnitPx
-                                            currentOnDragBy(-1)
-                                        }
+                                        currentOnDragPositionChange(handleRootY + dragOffsetPx)
                                     },
                                     onDragEnd = {
                                         dragging = false
-                                        currentOnDraggingChange(false)
-                                        // Collapse to just the unspent residual (display value is
-                                        // unchanged by this), then animate that down to 0.
-                                        dragOffsetPx -= firedOffsetPx
-                                        firedOffsetPx = 0f
-                                        scope.launch { animate(dragOffsetPx, 0f) { value, _ -> dragOffsetPx = value } }
+                                        currentOnDragPositionChange(null)
+                                        val moveBy = (dragOffsetPx / rowHeightPx).roundToInt()
+                                        // Snap straight to 0 -- the list reorder (below) lands this
+                                        // row's slot exactly where the offset currently puts it, so
+                                        // LazyColumn's own item-placement animation carries it the
+                                        // rest of the way with nothing left to fight it.
+                                        dragOffsetPx = 0f
+                                        if (moveBy != 0) currentOnDragTo(moveBy)
                                     },
                                     onDragCancel = {
                                         dragging = false
-                                        currentOnDraggingChange(false)
-                                        dragOffsetPx -= firedOffsetPx
-                                        firedOffsetPx = 0f
-                                        scope.launch { animate(dragOffsetPx, 0f) { value, _ -> dragOffsetPx = value } }
+                                        currentOnDragPositionChange(null)
+                                        dragOffsetPx = 0f
                                     },
                                 )
                             },
