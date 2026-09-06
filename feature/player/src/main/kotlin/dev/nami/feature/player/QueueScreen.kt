@@ -52,6 +52,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import kotlin.math.roundToInt
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil3.compose.AsyncImage
@@ -208,17 +209,16 @@ private fun QueueTrackInfo(item: QueueItem, modifier: Modifier = Modifier) {
 }
 
 // One row style for both sections -- manually-queued and context (album/playlist) tracks are
-// both reorderable and removable the same way. Drag the handle to reorder (within its own
-// section -- moving a context track past the end of the context list, or a manual one past the
-// start of its own, isn't attempted here), swipe left to remove.
+// both reorderable and removable the same way. Drag the handle to reorder live (within its own
+// section), swipe left to remove -- no separate delete button, swipe is the only way out.
 @Composable
 private fun QueueRow(item: QueueItem, onDragBy: (Int) -> Unit, onRemove: () -> Unit, modifier: Modifier = Modifier) {
     val currentOnDragBy by rememberUpdatedState(onDragBy)
     val density = LocalDensity.current
+    // Accumulates raw drag distance; every time it crosses half a row, fire one live move and
+    // give back that much so the row keeps tracking the finger without snapping.
     var dragOffsetPx by remember { mutableStateOf(0f) }
     var dragging by remember { mutableStateOf(false) }
-    // Half a row, not a full one -- a full-row drag distance to register even a single-position
-    // move read as "nothing is happening" for most of the gesture.
     val moveUnitPx = with(density) { (QUEUE_ROW_HEIGHT / 2).toPx() }
     var removed by remember { mutableStateOf(false) }
     val dismissState = rememberSwipeToDismissBoxState(
@@ -237,72 +237,88 @@ private fun QueueRow(item: QueueItem, onDragBy: (Int) -> Unit, onRemove: () -> U
         exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut(),
         modifier = modifier,
     ) {
-        SwipeToDismissBox(
-            state = dismissState,
-            // Only left (EndToStart, toward removal) is a real gesture here -- without this,
-            // swiping right still drags the row (StartToEnd is enabled by default) with nothing
-            // behind it and no action tied to it, which just looks like a stray, meaningless drag.
-            enableDismissFromStartToEnd = false,
-            backgroundContent = {
-                // Only shown while actually swiping toward removal -- an icon so the gesture
-                // reads as "this is about to remove the track", not just a flat color wash.
-                Box(
-                    modifier = Modifier.fillMaxSize().background(NamiColors.Kin),
-                    contentAlignment = Alignment.CenterEnd,
-                ) {
-                    Icon(
-                        Icons.Outlined.Close,
-                        contentDescription = "Убрать из очереди",
-                        tint = NamiColors.Ink900,
-                        modifier = Modifier.padding(end = 24.dp).size(28.dp),
-                    )
-                }
-            },
+        // The vertical drag offset/zIndex live OUTSIDE SwipeToDismissBox entirely -- applying
+        // them to content inside the swipe box was letting its dismiss background (the yellow
+        // "Kin" wash) show through/get triggered by a purely vertical drag. Keeping the two
+        // gestures on separate layers means dragging up/down never touches swipe state.
+        Box(
+            modifier = Modifier
+                .graphicsLayer { translationY = dragOffsetPx }
+                .zIndex(if (dragging) 1f else 0f),
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(QUEUE_ROW_HEIGHT)
-                    .graphicsLayer { translationY = dragOffsetPx }
-                    .background(if (dragging) NamiColors.Ink700 else NamiColors.Ink900)
-                    .padding(horizontal = 20.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            SwipeToDismissBox(
+                state = dismissState,
+                // Only left (EndToStart, toward removal) is a real gesture here -- without this,
+                // swiping right still drags the row (StartToEnd is enabled by default) with nothing
+                // behind it and no action tied to it, which just looks like a stray, meaningless drag.
+                enableDismissFromStartToEnd = false,
+                backgroundContent = {
+                    // Only shown while actually swiping toward removal -- an icon so the gesture
+                    // reads as "this is about to remove the track", not just a flat color wash.
+                    Box(
+                        modifier = Modifier.fillMaxSize().background(NamiColors.Kin),
+                        contentAlignment = Alignment.CenterEnd,
+                    ) {
+                        Icon(
+                            Icons.Outlined.Close,
+                            contentDescription = "Убрать из очереди",
+                            tint = NamiColors.Ink900,
+                            modifier = Modifier.padding(end = 24.dp).size(28.dp),
+                        )
+                    }
+                },
             ) {
-                QueueTrackInfo(item = item, modifier = Modifier.weight(1f))
-                Box(
+                Row(
                     modifier = Modifier
-                        .padding(start = 8.dp)
-                        .size(40.dp)
-                        .pointerInput(Unit) {
-                            detectDragGesturesAfterLongPress(
-                                onDragStart = { dragging = true },
-                                onDrag = { change, dragAmount ->
-                                    change.consume()
-                                    dragOffsetPx += dragAmount.y
-                                },
-                                onDragEnd = {
-                                    val moveBy = (dragOffsetPx / moveUnitPx).toInt()
-                                    dragOffsetPx = 0f
-                                    dragging = false
-                                    if (moveBy != 0) currentOnDragBy(moveBy)
-                                },
-                                onDragCancel = {
-                                    dragOffsetPx = 0f
-                                    dragging = false
-                                },
-                            )
-                        },
-                    contentAlignment = Alignment.Center,
+                        .fillMaxWidth()
+                        .height(QUEUE_ROW_HEIGHT)
+                        .background(if (dragging) NamiColors.Ink700 else NamiColors.Ink900)
+                        .padding(horizontal = 20.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(
-                        Icons.Outlined.DragHandle,
-                        contentDescription = "Перетащить, чтобы изменить порядок",
-                        tint = NamiColors.Paper70,
-                        modifier = Modifier.size(28.dp),
-                    )
-                }
-                IconButton(onClick = { removed = true }) {
-                    Icon(Icons.Outlined.Close, contentDescription = "Удалить", tint = NamiColors.Paper70)
+                    QueueTrackInfo(item = item, modifier = Modifier.weight(1f))
+                    Box(
+                        modifier = Modifier
+                            .padding(start = 8.dp)
+                            .size(40.dp)
+                            .pointerInput(Unit) {
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = { dragging = true },
+                                    onDrag = { change, dragAmount ->
+                                        change.consume()
+                                        dragOffsetPx += dragAmount.y
+                                        // Fire moves live, as the drag crosses each half-row
+                                        // threshold, instead of only computing one jump on
+                                        // release -- this is what makes other rows actually
+                                        // shift out of the way while the drag is in progress.
+                                        while (dragOffsetPx >= moveUnitPx) {
+                                            dragOffsetPx -= moveUnitPx
+                                            currentOnDragBy(1)
+                                        }
+                                        while (dragOffsetPx <= -moveUnitPx) {
+                                            dragOffsetPx += moveUnitPx
+                                            currentOnDragBy(-1)
+                                        }
+                                    },
+                                    onDragEnd = {
+                                        dragOffsetPx = 0f
+                                        dragging = false
+                                    },
+                                    onDragCancel = {
+                                        dragOffsetPx = 0f
+                                        dragging = false
+                                    },
+                                )
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Outlined.DragHandle,
+                            contentDescription = "Перетащить, чтобы изменить порядок",
+                            tint = NamiColors.Paper70,
+                            modifier = Modifier.size(28.dp),
+                        )
+                    }
                 }
             }
         }
