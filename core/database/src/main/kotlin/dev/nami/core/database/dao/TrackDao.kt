@@ -55,6 +55,18 @@ interface TrackDao {
     @Query("SELECT * FROM tracks WHERE path = :path AND deletedAt IS NULL LIMIT 1")
     suspend fun findByPath(path: String): TrackEntity?
 
+    // "IS" (not "=") so NULL artistId/albumId compare equal to NULL -- most tracks with no
+    // tag-resolved artist/album still shouldn't get re-imported as a "new" duplicate.
+    @Query(
+        """
+        SELECT * FROM tracks
+        WHERE title = :title AND artistId IS :artistId AND albumId IS :albumId
+        AND durationMs = :durationMs AND deletedAt IS NULL
+        LIMIT 1
+        """,
+    )
+    suspend fun findDuplicate(title: String, artistId: String?, albumId: String?, durationMs: Long): TrackEntity?
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAll(tracks: List<TrackEntity>)
 

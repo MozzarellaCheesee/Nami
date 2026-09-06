@@ -185,11 +185,21 @@ class LibraryRepositoryImpl @Inject constructor(
             destination.outputStream().use { output -> input.copyTo(output) }
         } ?: return null
 
-        if (trackDao.findByPath(destination.path) != null) return null
-
         val tags = nativeBridge.readTags(destination.path)
         val artistId = metadataResolver.resolveArtist(tags?.artist ?: tags?.albumArtist ?: fallbackArtist)
         val albumId = metadataResolver.resolveAlbum(tags?.album ?: fallbackAlbum, artistId, tags?.year)
+        val fallbackTitle = (queryDisplayName(resolver, uri) ?: uri.lastPathSegment ?: "unknown")
+            .substringBeforeLast('.')
+        val title = tags?.title?.takeIf { it.isNotBlank() } ?: fallbackTitle
+        val durationMs = tags?.durationMs?.takeIf { it > 0 } ?: readDurationMs(destination.path)
+
+        // Same title/artist/album/duration as an already-imported track -- treat the freshly
+        // copied file as a duplicate of it and discard the copy instead of indexing it again.
+        if (trackDao.findDuplicate(title, artistId, albumId, durationMs) != null) {
+            destination.delete()
+            return null
+        }
+
         val trackId = UUID.randomUUID().toString()
         val artwork = tags?.artwork
         var trackArtworkPath: String? = null
@@ -203,19 +213,16 @@ class LibraryRepositoryImpl @Inject constructor(
             }
         }
 
-        val fallbackTitle = (queryDisplayName(resolver, uri) ?: uri.lastPathSegment ?: "unknown")
-            .substringBeforeLast('.')
-
         trackDao.insertAll(
             listOf(
                 TrackEntity(
                     id = trackId,
-                    title = tags?.title?.takeIf { it.isNotBlank() } ?: fallbackTitle,
+                    title = title,
                     artistId = artistId,
                     albumId = albumId,
                     trackNo = tags?.trackNo,
                     discNo = tags?.discNo,
-                    durationMs = tags?.durationMs?.takeIf { it > 0 } ?: readDurationMs(destination.path),
+                    durationMs = durationMs,
                     path = destination.path,
                     format = extension,
                     sizeBytes = destination.length(),
