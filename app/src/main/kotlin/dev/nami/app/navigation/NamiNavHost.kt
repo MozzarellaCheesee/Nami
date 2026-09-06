@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import dev.nami.core.designsystem.NamiColors
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
@@ -95,7 +96,10 @@ fun NamiNavHost(
         NavHost(
             navController = navController,
             startDestination = ROUTE_LIBRARY,
-            modifier = Modifier.weight(1f),
+            // clipToBounds: a list's last row can render partially past its own weighted area
+            // right where MiniPlayer starts (the boundary in a Column doesn't clip children by
+            // default), showing a sliver of it squeezed between the list and the bar below.
+            modifier = Modifier.weight(1f).clipToBounds(),
             // Default Navigation-Compose cross-fade leaves the outgoing destination composed
             // and touchable for the transition's duration, overlapping the incoming one. That
             // window is where a screen popped by back (e.g. AlbumDetailScreen) can still catch
