@@ -74,12 +74,22 @@ private const val DISMISS_THRESHOLD_DP = 120
 private const val AUTOSCROLL_EDGE_DP = 72
 private const val AUTOSCROLL_SPEED_PX_PER_FRAME = 18f
 
-// Wrapping each item with its position in the ORIGINAL (source-of-truth) list gives every slot a
-// key that's stable and unique even when the same track appears twice in the queue -- no need to
-// special-case duplicate track ids. originalIndex is also exactly what moveQueueItem needs.
-private data class SlotItem(val item: QueueItem, val originalIndex: Int)
-
-private fun toSlots(items: List<QueueItem>) = items.mapIndexed { index, item -> SlotItem(item, index) }
+// The same track can legitimately appear more than once in the queue (added to queue twice,
+// present in an album AND queued manually, etc.) -- keying purely by track id then crashes
+// LazyColumn with "Key ... was already used" the moment that happens. Only duplicates get a
+// disambiguating suffix, so the common (no-duplicate) case keeps a fully stable key -- unlike an
+// index-based key, this one stays the same across a reorder (it doesn't depend on position), which
+// is what lets animateItem() recognize "this is the same item, now elsewhere" and animate the move
+// instead of treating it as unrelated content appearing at an old slot.
+private fun dedupedKeys(items: List<QueueItem>, prefix: String): List<String> {
+    val seen = mutableMapOf<String, Int>()
+    return items.map { item ->
+        val id = item.track.id.value
+        val occurrence = seen.getOrDefault(id, 0)
+        seen[id] = occurrence + 1
+        if (occurrence == 0) "$prefix-$id" else "$prefix-$id-$occurrence"
+    }
+}
 
 @Composable
 fun QueueScreen(
@@ -90,8 +100,8 @@ fun QueueScreen(
     val manual = queue.upcoming.filter { it.origin == QueueOrigin.MANUAL }
     val context = queue.upcoming.filter { it.origin == QueueOrigin.CONTEXT }
     val contextStartIndex = manual.size
-    val manualSlots = remember(manual) { toSlots(manual) }
-    val contextSlots = remember(context) { toSlots(context) }
+    val manualKeys = remember(manual) { dedupedKeys(manual, "manual") }
+    val contextKeys = remember(context) { dedupedKeys(context, "context") }
 
     val density = LocalDensity.current
     val dismissThresholdPx = with(density) { DISMISS_THRESHOLD_DP.dp.toPx() }
@@ -110,6 +120,11 @@ fun QueueScreen(
     // constantly and could leave a scroll loop running past release. A single job, cancelled and
     // replaced on every update (including the final "stop" on release), is deterministic.
     var autoscrollJob by remember { mutableStateOf<Job?>(null) }
+    // Every px the list scrolls while a row is being dragged has to be added back into that row's
+    // visual offset -- otherwise the row's own layout slot moves with the scrolled content while
+    // its graphicsLayer offset stays fixed to the (now stale) finger delta, and the two fight:
+    // the row visibly detaches from the finger the moment autoscroll kicks in.
+    var scrollCompensationPx by remember { mutableStateOf(0f) }
     fun updateAutoscroll(pointerY: Float?) {
         autoscrollJob?.cancel()
         autoscrollJob = null
@@ -122,7 +137,8 @@ fun QueueScreen(
         if (delta == 0f) return
         autoscrollJob = scope.launch {
             while (isActive) {
-                listState.scrollBy(delta)
+                val scrolled = listState.scrollBy(delta)
+                scrollCompensationPx += scrolled
                 delay(16)
             }
         }
@@ -187,12 +203,13 @@ fun QueueScreen(
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                     )
                 }
-                itemsIndexed(manualSlots, key = { _, slot -> slot.originalIndex }) { index, slot ->
+                itemsIndexed(manual, key = { index, _ -> manualKeys[index] }) { index, item ->
                     QueueRow(
-                        item = slot.item,
+                        item = item,
                         rowHeight = QUEUE_ROW_HEIGHT,
+                        scrollCompensationPx = scrollCompensationPx,
                         onDragTo = { relativeMove ->
-                            val target = (index + relativeMove).coerceIn(0, manualSlots.lastIndex)
+                            val target = (index + relativeMove).coerceIn(0, manual.lastIndex)
                             if (target != index) viewModel.moveQueueItem(index, target)
                         },
                         onDragPositionChange = { rootY -> updateAutoscroll(rootY) },
@@ -209,12 +226,13 @@ fun QueueScreen(
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                     )
                 }
-                itemsIndexed(contextSlots, key = { _, slot -> slot.originalIndex }) { index, slot ->
+                itemsIndexed(context, key = { index, _ -> contextKeys[index] }) { index, item ->
                     QueueRow(
-                        item = slot.item,
+                        item = item,
                         rowHeight = QUEUE_ROW_HEIGHT,
+                        scrollCompensationPx = scrollCompensationPx,
                         onDragTo = { relativeMove ->
-                            val target = (index + relativeMove).coerceIn(0, contextSlots.lastIndex)
+                            val target = (index + relativeMove).coerceIn(0, context.lastIndex)
                             if (target != index) {
                                 viewModel.moveQueueItem(contextStartIndex + index, contextStartIndex + target)
                             }
@@ -262,6 +280,7 @@ private fun QueueTrackInfo(item: QueueItem, modifier: Modifier = Modifier) {
 private fun QueueRow(
     item: QueueItem,
     rowHeight: androidx.compose.ui.unit.Dp,
+    scrollCompensationPx: Float,
     onDragTo: (Int) -> Unit,
     onDragPositionChange: (Float?) -> Unit,
     onRemove: () -> Unit,
@@ -269,10 +288,14 @@ private fun QueueRow(
 ) {
     val currentOnDragTo by rememberUpdatedState(onDragTo)
     val currentOnDragPositionChange by rememberUpdatedState(onDragPositionChange)
+    val currentScrollCompensationPx by rememberUpdatedState(scrollCompensationPx)
     val density = LocalDensity.current
     val rowHeightPx = with(density) { rowHeight.toPx() }
     var dragOffsetPx by remember { mutableStateOf(0f) }
     var dragging by remember { mutableStateOf(false) }
+    // scrollCompensationPx at the moment THIS drag started -- only scrolling that happens during
+    // this drag should be folded into its offset.
+    var scrollCompensationAtStart by remember { mutableStateOf(0f) }
     // Root position of the drag handle at the moment the gesture starts -- combined with the
     // raw accumulated drag delta, gives the finger's absolute Y for the autoscroll check without
     // needing continuous re-measurement while the row's own translationY is animating.
@@ -303,7 +326,9 @@ private fun QueueRow(
         // triggered by a purely vertical drag. Keeping the two gestures on separate layers means
         // dragging up/down never touches swipe state.
         Box(
-            modifier = Modifier.graphicsLayer { translationY = dragOffsetPx },
+            modifier = Modifier.graphicsLayer {
+                translationY = dragOffsetPx + (currentScrollCompensationPx - scrollCompensationAtStart)
+            },
         ) {
             SwipeToDismissBox(
                 state = dismissState,
@@ -345,28 +370,37 @@ private fun QueueRow(
                                 detectDragGestures(
                                     onDragStart = {
                                         dragging = true
+                                        scrollCompensationAtStart = currentScrollCompensationPx
                                         currentOnDragPositionChange(handleRootY)
                                     },
                                     onDrag = { change, dragAmount ->
                                         change.consume()
                                         dragOffsetPx += dragAmount.y
-                                        currentOnDragPositionChange(handleRootY + dragOffsetPx)
+                                        currentOnDragPositionChange(
+                                            handleRootY + dragOffsetPx + (currentScrollCompensationPx - scrollCompensationAtStart),
+                                        )
                                     },
                                     onDragEnd = {
                                         dragging = false
                                         currentOnDragPositionChange(null)
-                                        val moveBy = (dragOffsetPx / rowHeightPx).roundToInt()
+                                        // Total displacement relative to the list content: raw
+                                        // finger movement plus whatever the list itself scrolled
+                                        // underneath the row while autoscrolling near an edge.
+                                        val totalOffset = dragOffsetPx + (currentScrollCompensationPx - scrollCompensationAtStart)
+                                        val moveBy = (totalOffset / rowHeightPx).roundToInt()
                                         // Snap straight to 0 -- the list reorder (below) lands this
                                         // row's slot exactly where the offset currently puts it, so
                                         // LazyColumn's own item-placement animation carries it the
                                         // rest of the way with nothing left to fight it.
                                         dragOffsetPx = 0f
+                                        scrollCompensationAtStart = currentScrollCompensationPx
                                         if (moveBy != 0) currentOnDragTo(moveBy)
                                     },
                                     onDragCancel = {
                                         dragging = false
                                         currentOnDragPositionChange(null)
                                         dragOffsetPx = 0f
+                                        scrollCompensationAtStart = currentScrollCompensationPx
                                     },
                                 )
                             },
