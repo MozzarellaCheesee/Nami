@@ -98,6 +98,13 @@ fun ArtistDetailScreen(
 
     val density = LocalDensity.current
     val headerState = rememberCollapsingHeaderState(maxHeight = HEADER_MAX_HEIGHT, minHeight = HEADER_MIN_HEIGHT)
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    // Only two resting states -- fully expanded or fully collapsed. Without this, releasing
+    // mid-scroll left the header (and the sliding avatar/photo, whose size/shape/position are all
+    // driven by collapseFraction) stuck halfway, looking like a torn, half-morphed image.
+    androidx.compose.runtime.LaunchedEffect(listState.isScrollInProgress) {
+        if (!listState.isScrollInProgress) headerState.snapToNearestEdge()
+    }
 
     // Layering (bottom to top) is what makes this work: the floating photo first, the header's
     // fade gradient on top of it (so the fade is always visible against the photo, not against
@@ -176,7 +183,7 @@ fun ArtistDetailScreen(
                         ),
                     )
                 }
-                LazyColumn {
+                LazyColumn(state = listState) {
                     if (uiState.tracks.isNotEmpty()) {
                         item(key = "tracks-header") {
                             Row(

@@ -105,6 +105,16 @@ class CollapsingHeaderState(maxHeightPx: Float, private val minHeightPx: Float) 
     val collapseFraction: Float
         get() = ((maxHeightPx - heightPx) / (maxHeightPx - minHeightPx)).coerceIn(0f, 1f)
 
+    /** Only two resting states exist -- fully expanded or fully collapsed -- so a gesture that
+     * ends mid-transition (a small scroll then release, not a full swipe) doesn't leave the
+     * header (and anything animated off its collapseFraction, like a sliding avatar) stuck
+     * halfway. Call once the driving scroll's gesture ends (e.g. LazyListState.isScrollInProgress
+     * going false). */
+    suspend fun snapToNearestEdge() {
+        val target = if (collapseFraction > 0.5f) minHeightPx else maxHeightPx
+        androidx.compose.animation.core.animate(heightPx, target) { value, _ -> heightPx = value }
+    }
+
     val nestedScrollConnection = object : NestedScrollConnection {
         override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
             if (available.y < 0 && heightPx > minHeightPx) {
