@@ -462,7 +462,13 @@ private fun SyncedLyricsList(
                         karaokeProgress = if (isCurrent) karaokeProgress else null,
                         fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
                         tokenizeLine = tokenizeLine,
-                        onWordTap = { token -> onWordTap(token, line.text) },
+                        onWordTap = { token ->
+                            // The word's own clickable sits inside the line's clickable and
+                            // consumes the tap first -- without also calling onLineClick here,
+                            // tapping any word silently stopped the line from seeking too.
+                            onLineClick(line.timeMs)
+                            onWordTap(token, line.text)
+                        },
                     )
                     translation?.getOrNull(index)?.let { translatedText ->
                         Text(
