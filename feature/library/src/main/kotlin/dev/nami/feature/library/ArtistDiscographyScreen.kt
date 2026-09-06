@@ -192,7 +192,7 @@ private fun AlbumDiscographyBlock(
             TrackListItem(
                 track = track,
                 onClick = { onTrackClick(index) },
-                onAddToQueue = { onAddToQueue(track) },
+                onAddToQueue = if (nowPlayingTrackId != null) { { onAddToQueue(track) } } else null,
                 onAddToPlaylist = { onAddToPlaylist(track.id) },
                 isCurrentTrack = track.id == nowPlayingTrackId,
                 isPlaying = track.id == nowPlayingTrackId && isPlayingNow,

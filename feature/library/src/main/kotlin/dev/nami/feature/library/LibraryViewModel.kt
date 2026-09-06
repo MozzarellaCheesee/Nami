@@ -82,6 +82,21 @@ class LibraryViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(selectedTab = tab)
     }
 
+    fun addToQueue(track: Track) {
+        viewModelScope.launch {
+            playerRepository.addToQueue(
+                dev.nami.domain.PlayableTrack(
+                    id = track.id,
+                    title = track.title,
+                    artistName = track.artistName,
+                    path = track.path,
+                    artworkPath = track.albumArtworkPath,
+                    format = track.format,
+                ),
+            )
+        }
+    }
+
     fun importFiles(uris: List<String>) {
         viewModelScope.launch {
             try {

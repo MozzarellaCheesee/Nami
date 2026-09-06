@@ -215,7 +215,7 @@ fun ArtistDetailScreen(
                         TrackListItem(
                             track = track,
                             onClick = { onPlayTracks(topTracks, artistName, index) },
-                            onAddToQueue = { onAddToQueue(track, artistName) },
+                            onAddToQueue = if (nowPlaying != null) { { onAddToQueue(track, artistName) } } else null,
                             onAddToPlaylist = { addToPlaylistTrackId = track.id },
                             onRemoveFromArtist = { viewModel.removeTrackFromArtist(track.id) },
                             isCurrentTrack = track.id == nowPlaying?.trackId,

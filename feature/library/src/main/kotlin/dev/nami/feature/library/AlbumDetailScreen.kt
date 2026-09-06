@@ -182,7 +182,7 @@ fun AlbumDetailScreen(
                         TrackListItem(
                             track = track,
                             onClick = { onPlayTracks(uiState.tracks, index) },
-                            onAddToQueue = { onAddToQueue(track) },
+                            onAddToQueue = if (nowPlaying != null) { { onAddToQueue(track) } } else null,
                             onAddToPlaylist = { addToPlaylistTrackId = track.id },
                             onRemoveFromAlbum = { viewModel.removeTrackFromAlbum(track.id) },
                             isCurrentTrack = track.id == nowPlaying?.trackId,

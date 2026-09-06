@@ -179,6 +179,7 @@ fun LibraryScreen(
                         onAlbumClick = onAlbumClick,
                         onShowAllAlbums = { viewModel.selectTab(LibraryTab.ALBUMS) },
                         onAddToPlaylist = { trackId -> addToPlaylistTrackId = trackId },
+                        onAddToQueueTrack = { track -> viewModel.addToQueue(track) },
                         onDelete = { trackId -> viewModel.deleteTrack(trackId) },
                         onToggleSelection = { trackId -> viewModel.toggleTrackSelection(trackId) },
                         onSetSelection = { ids -> viewModel.setSelectedTracks(ids) },
@@ -410,6 +411,7 @@ private fun TrackListContent(
     onAlbumClick: (AlbumId) -> Unit,
     onShowAllAlbums: () -> Unit,
     onAddToPlaylist: (TrackId) -> Unit,
+    onAddToQueueTrack: (Track) -> Unit,
     onDelete: (TrackId) -> Unit,
     onToggleSelection: (TrackId) -> Unit,
     onSetSelection: (Set<TrackId>) -> Unit,
@@ -526,6 +528,10 @@ private fun TrackListContent(
                         selectionMode = selectionMode,
                         isSelected = track.id in selectedTrackIds,
                         onAddToPlaylist = if (selectionMode) null else { { onAddToPlaylist(track.id) } },
+                        // Only shown while something's actually playing -- queueing behind
+                        // nothing playing doesn't map to anything meaningful for the user to
+                        // picture happening.
+                        onAddToQueue = if (selectionMode || nowPlaying == null) null else { { onAddToQueueTrack(track) } },
                         onDelete = if (selectionMode) null else { { onDelete(track.id) } },
                         onRename = if (selectionMode) null else { { onRenameTrack(track) } },
                         isCurrentTrack = track.id == nowPlaying?.trackId,

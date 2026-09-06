@@ -63,6 +63,21 @@ private val QUEUE_ROW_HEIGHT = 64.dp
 private val ARTWORK_SIZE = 44.dp
 private const val DISMISS_THRESHOLD_DP = 120
 
+// The same track can legitimately appear more than once in the queue (added to queue twice,
+// present in an album AND queued manually, etc.) -- PlayerRepositoryImpl's own known limitation
+// note says as much. Keying LazyColumn purely by track id then crashes with "Key ... was already
+// used" the moment that happens. Only duplicates get a disambiguating suffix, so the common
+// (no-duplicate) case keeps a fully stable key for animateItem()/reorder tracking.
+private fun dedupedKeys(items: List<QueueItem>, prefix: String): List<String> {
+    val seen = mutableMapOf<String, Int>()
+    return items.map { item ->
+        val id = item.track.id.value
+        val occurrence = seen.getOrDefault(id, 0)
+        seen[id] = occurrence + 1
+        if (occurrence == 0) "$prefix-$id" else "$prefix-$id-$occurrence"
+    }
+}
+
 @Composable
 fun QueueScreen(
     onBack: () -> Unit,
@@ -72,6 +87,8 @@ fun QueueScreen(
     val manual = queue.upcoming.filter { it.origin == QueueOrigin.MANUAL }
     val context = queue.upcoming.filter { it.origin == QueueOrigin.CONTEXT }
     val contextStartIndex = manual.size
+    val manualKeys = remember(manual) { dedupedKeys(manual, "manual") }
+    val contextKeys = remember(context) { dedupedKeys(context, "context") }
 
     val density = LocalDensity.current
     val dismissThresholdPx = with(density) { DISMISS_THRESHOLD_DP.dp.toPx() }
@@ -129,7 +146,7 @@ fun QueueScreen(
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                     )
                 }
-                itemsIndexed(manual, key = { _, item -> "manual-${item.track.id.value}" }) { index, item ->
+                itemsIndexed(manual, key = { index, _ -> manualKeys[index] }) { index, item ->
                     QueueRow(
                         item = item,
                         onDragBy = { relativeMove ->
@@ -149,7 +166,7 @@ fun QueueScreen(
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                     )
                 }
-                itemsIndexed(context, key = { _, item -> "context-${item.track.id.value}" }) { index, item ->
+                itemsIndexed(context, key = { index, _ -> contextKeys[index] }) { index, item ->
                     QueueRow(
                         item = item,
                         onDragBy = { relativeMove ->
