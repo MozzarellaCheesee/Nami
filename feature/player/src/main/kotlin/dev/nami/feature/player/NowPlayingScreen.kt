@@ -131,46 +131,55 @@ fun NowPlayingScreen(
         val pagerState = rememberPagerState(initialPage = 1) { 3 }
         LaunchedEffectSettlePage(pagerState, queue.previousTrack != null, queue.upcoming.isNotEmpty(), viewModel)
 
-        HorizontalPager(
-            state = pagerState,
-            pageSpacing = 16.dp,
-            beyondViewportPageCount = 1,
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .padding(vertical = 24.dp)
-                .clipToBounds(),
-        ) { page ->
-            val track = when (page) {
-                0 -> queue.previousTrack
-                2 -> queue.upcoming.firstOrNull()?.track
-                else -> queue.nowPlaying
-            }
-            val accentColor = rememberArtworkAccentColor(track?.artworkPath)
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                // Soft accent glow behind the artwork, per Дизайн.md's "мягкое свечение цветом
-                // акцента" -- Compose has no CSS box-shadow, so a blurred radial gradient sitting
-                // behind the artwork approximates it (Modifier.blur needs API 31+; on older
-                // devices it degrades to an unblurred soft-edged gradient, still reading as a
-                // glow). Color is that page's own dominant/vibrant tone (via Palette), falling
-                // back to --shu while loading or if extraction fails.
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.radialGradient(
-                                colors = listOf(accentColor.copy(alpha = 0.55f), accentColor.copy(alpha = 0f)),
-                            ),
-                        )
-                        .blur(32.dp),
-                )
-                NowPlayingArtwork(
-                    artworkPath = track?.artworkPath,
-                    contentDescription = track?.title,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(NamiColors.Ink700, RoundedCornerShape(4.dp)),
-                )
+        // Peek: pages are narrower than the pager itself (contentPadding), so the previous/next
+        // cover's edge shows at rest, not just once you start dragging. The pager's own height is
+        // set to the resulting (smaller) page width, not the full container width, so each page
+        // is still a perfect square instead of a square-container's worth of height stuffed into
+        // a narrower page.
+        val peekDp = 28.dp
+        androidx.compose.foundation.layout.BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp)) {
+            val pageWidth = maxWidth - peekDp * 2
+            HorizontalPager(
+                state = pagerState,
+                pageSpacing = 16.dp,
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = peekDp),
+                beyondViewportPageCount = 1,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(pageWidth)
+                    .clipToBounds(),
+            ) { page ->
+                val track = when (page) {
+                    0 -> queue.previousTrack
+                    2 -> queue.upcoming.firstOrNull()?.track
+                    else -> queue.nowPlaying
+                }
+                val accentColor = rememberArtworkAccentColor(track?.artworkPath)
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                    // Soft accent glow behind the artwork, per Дизайн.md's "мягкое свечение
+                    // цветом акцента" -- Compose has no CSS box-shadow, so a blurred radial
+                    // gradient sitting behind the artwork approximates it (Modifier.blur needs
+                    // API 31+; on older devices it degrades to an unblurred soft-edged gradient,
+                    // still reading as a glow). Color is that page's own dominant/vibrant tone
+                    // (via Palette), falling back to --shu while loading or if extraction fails.
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.radialGradient(
+                                    colors = listOf(accentColor.copy(alpha = 0.55f), accentColor.copy(alpha = 0f)),
+                                ),
+                            )
+                            .blur(32.dp),
+                    )
+                    NowPlayingArtwork(
+                        artworkPath = track?.artworkPath,
+                        contentDescription = track?.title,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(NamiColors.Ink700, RoundedCornerShape(4.dp)),
+                    )
+                }
             }
         }
         Text(
