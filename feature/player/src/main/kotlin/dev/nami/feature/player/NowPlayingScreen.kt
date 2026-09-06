@@ -32,6 +32,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -129,6 +130,7 @@ fun NowPlayingScreen(
                 .aspectRatio(1f)
                 .padding(vertical = 24.dp)
                 .onSizeChanged { artworkWidthPx = it.width }
+                .clipToBounds()
                 .draggable(
                     orientation = Orientation.Horizontal,
                     state = rememberDraggableState { delta -> artworkOffsetX += delta },
@@ -148,7 +150,7 @@ fun NowPlayingScreen(
                             }
                             artworkOffsetX > skipThresholdPx && queue.previousTrack != null -> {
                                 animate(artworkOffsetX, exitDistance, animationSpec = spec) { value, _ -> artworkOffsetX = value }
-                                viewModel.skipPrevious()
+                                viewModel.skipToPreviousTrack()
                                 artworkOffsetX = 0f
                             }
                             else -> animate(artworkOffsetX, 0f, animationSpec = spec) { value, _ -> artworkOffsetX = value }

@@ -76,6 +76,7 @@ class AlbumDetailViewModelTest {
             override suspend fun seek(ms: Long) {}
             override suspend fun skipNext() {}
             override suspend fun skipPrevious() {}
+            override suspend fun skipToPreviousTrack() {}
             override suspend fun addToQueue(track: PlayableTrack) {}
             override suspend fun moveQueueItem(fromIndex: Int, toIndex: Int) {}
             override suspend fun removeQueueItem(index: Int) {}

@@ -87,6 +87,11 @@ class NowPlayingViewModel @Inject constructor(
         viewModelScope.launch { playerRepository.skipPrevious() }
     }
 
+    /** For swipe gestures -- see [PlayerRepository.skipToPreviousTrack]. */
+    fun skipToPreviousTrack() {
+        viewModelScope.launch { playerRepository.skipToPreviousTrack() }
+    }
+
     fun moveQueueItem(fromIndex: Int, toIndex: Int) {
         viewModelScope.launch { playerRepository.moveQueueItem(fromIndex, toIndex) }
     }

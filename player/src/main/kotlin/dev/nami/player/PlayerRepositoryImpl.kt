@@ -136,6 +136,10 @@ class PlayerRepositoryImpl @Inject constructor(
         controller?.seekToPrevious()
     }
 
+    override suspend fun skipToPreviousTrack() {
+        controller?.seekToPreviousMediaItem()
+    }
+
     override suspend fun stop() {
         originByMediaId.clear()
         controller?.apply {

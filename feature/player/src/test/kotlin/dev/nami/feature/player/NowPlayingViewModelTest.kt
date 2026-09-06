@@ -53,6 +53,7 @@ class NowPlayingViewModelTest {
         override suspend fun seek(ms: Long) {}
         override suspend fun skipNext() {}
         override suspend fun skipPrevious() {}
+        override suspend fun skipToPreviousTrack() {}
         override suspend fun addToQueue(track: PlayableTrack) {
             addedTrack = track
         }

@@ -162,7 +162,7 @@ fun MiniPlayer(
                         }
                         artworkOffsetX > skipThresholdPx && queue.previousTrack != null -> {
                             animate(artworkOffsetX, exitDistance, animationSpec = spec) { value, _ -> artworkOffsetX = value }
-                            viewModel.skipPrevious()
+                            viewModel.skipToPreviousTrack()
                             artworkOffsetX = 0f
                         }
                         else -> animate(artworkOffsetX, 0f, animationSpec = spec) { value, _ -> artworkOffsetX = value }

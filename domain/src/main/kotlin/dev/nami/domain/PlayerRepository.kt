@@ -47,7 +47,14 @@ interface PlayerRepository {
     suspend fun toggle()
     suspend fun seek(ms: Long)
     suspend fun skipNext()
+    /** Threshold-based: restarts the current track if it's already played past a few seconds,
+     * only moving to the actual previous track on a second call. Matches standard media-player
+     * "prev button" behavior. */
     suspend fun skipPrevious()
+    /** Always moves to the actual previous track, ignoring playback position -- for swipe
+     * gestures, where the elapsed-time restart of [skipPrevious] reads as "swiped but nothing
+     * happened" since the first swipe just replays the current track. */
+    suspend fun skipToPreviousTrack()
     /** Stops playback entirely and clears the queue (nowPlaying becomes null). */
     suspend fun stop()
     suspend fun addToQueue(track: PlayableTrack)
