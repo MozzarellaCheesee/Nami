@@ -212,7 +212,9 @@ class PlayerRepositoryImpl @Inject constructor(
         val player = controller ?: return
         val upcoming = _queue.value.upcoming
         if (fromIndex !in upcoming.indices || toIndex !in upcoming.indices) return
-        if (upcoming[fromIndex].origin != QueueOrigin.MANUAL || upcoming[toIndex].origin != QueueOrigin.MANUAL) return
+        // No origin restriction -- both manually-queued and context (album/playlist) tracks can
+        // be reordered; ExoPlayer's timeline doesn't care which is which, and there's no reason
+        // a user can't rearrange what's coming up from an album same as anything else.
         val base = player.currentMediaItemIndex + 1
         player.moveMediaItem(base + fromIndex, base + toIndex)
     }
