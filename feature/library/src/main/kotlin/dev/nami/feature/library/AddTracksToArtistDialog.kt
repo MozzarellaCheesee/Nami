@@ -1,9 +1,6 @@
 package dev.nami.feature.library
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
@@ -16,7 +13,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemKey
 import dev.nami.core.designsystem.NamiAlertDialog
-import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.model.ArtistId
 
 /** Existing library tracks only -- adding a brand new (not-yet-imported) file to a specific
@@ -34,18 +30,12 @@ fun AddTracksToArtistDialog(
         onDismissRequest = onDismiss,
         title = { Text("Добавить треки артисту") },
         text = {
-            LazyColumn(modifier = Modifier.height(400.dp)) {
+            LazyColumn(modifier = Modifier.height(420.dp)) {
                 items(count = tracks.itemCount, key = tracks.itemKey { it.id.value }) { index ->
-                    tracks[index]?.let { track ->
-                        Text(
-                            text = track.title,
-                            color = NamiColors.Paper100,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { viewModel.addTrack(track.id, artistId) }
-                                .padding(vertical = 12.dp),
-                        )
-                    }
+                    val track = tracks[index] ?: return@items
+                    // Already this artist's track -- adding it again would be a no-op.
+                    if (track.artistId == artistId) return@items
+                    TrackListItem(track = track, onClick = { viewModel.addTrack(track.id, artistId) })
                 }
             }
         },

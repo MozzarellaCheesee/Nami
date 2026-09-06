@@ -24,6 +24,8 @@ interface LibraryRepository {
     fun tracksInAlbum(id: AlbumId): Flow<List<Track>>
     suspend fun renameTrack(id: TrackId, title: String)
     suspend fun setTrackCover(id: TrackId, imageUri: String)
+    /** New empty album, no tracks yet -- caller adds tracks to it afterwards via [addTrackToAlbum]. */
+    suspend fun createAlbum(title: String, artistId: ArtistId?): AlbumId
     suspend fun renameAlbum(id: AlbumId, title: String)
     suspend fun setAlbumCover(id: AlbumId, imageUri: String)
     suspend fun setAlbumIsSingle(id: AlbumId, isSingle: Boolean)

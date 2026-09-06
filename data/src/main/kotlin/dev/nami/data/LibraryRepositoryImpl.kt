@@ -94,6 +94,20 @@ class LibraryRepositoryImpl @Inject constructor(
         artworkStore.save(id.value, bytes)?.let { path -> trackDao.updateArtworkPath(id.value, path) }
     }
 
+    override suspend fun createAlbum(title: String, artistId: ArtistId?): AlbumId {
+        val id = java.util.UUID.randomUUID().toString()
+        albumDao.insert(
+            dev.nami.core.database.entity.AlbumEntity(
+                id = id,
+                title = title,
+                artistId = artistId?.value,
+                year = null,
+                artworkPath = null,
+            ),
+        )
+        return AlbumId(id)
+    }
+
     override suspend fun renameAlbum(id: AlbumId, title: String) {
         albumDao.updateTitle(id.value, title)
     }

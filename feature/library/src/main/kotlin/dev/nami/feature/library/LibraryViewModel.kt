@@ -200,6 +200,16 @@ class LibraryViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(selectedAlbumIds = emptySet())
     }
 
+    /** New empty album, then hands its id back so the caller can navigate straight to its detail
+     * screen -- that screen already does everything a "create album" flow needs (rename, cover,
+     * single/album toggle, add/remove tracks), so there's no separate composer screen. */
+    fun createAlbum(onCreated: (AlbumId) -> Unit) {
+        viewModelScope.launch {
+            val id = libraryRepository.createAlbum(title = "Новый альбом", artistId = null)
+            onCreated(id)
+        }
+    }
+
     fun deleteSelectedAlbums() {
         val ids = _uiState.value.selectedAlbumIds
         if (ids.isEmpty()) return

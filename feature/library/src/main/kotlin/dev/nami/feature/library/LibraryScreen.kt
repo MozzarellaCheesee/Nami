@@ -212,6 +212,15 @@ fun LibraryScreen(
                         activeImportProgress?.let { progress ->
                             ImportProgressBadge(progress = progress, modifier = Modifier.padding(bottom = 12.dp))
                         }
+                        if (uiState.selectedTab == LibraryTab.ALBUMS) {
+                            FloatingActionButton(
+                                onClick = { viewModel.createAlbum(onCreated = onAlbumClick) },
+                                modifier = Modifier.size(36.dp).padding(bottom = 12.dp),
+                                shape = RoundedCornerShape(14.dp),
+                            ) {
+                                Icon(Icons.Outlined.LibraryAdd, contentDescription = "Создать альбом", modifier = Modifier.size(18.dp))
+                            }
+                        }
                         FloatingActionButton(
                             onClick = onImportFolderRequested,
                             modifier = Modifier.size(36.dp),
