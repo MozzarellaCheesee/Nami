@@ -75,6 +75,7 @@ import coil3.compose.LocalPlatformContext
 import coil3.imageLoader
 import coil3.request.ImageRequest
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.fullBlockClickable
 import dev.nami.domain.PlaybackState
 import kotlin.math.roundToInt
 
@@ -146,10 +147,16 @@ fun NowPlayingScreen(
             .padding(20.dp),
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            IconButton(onClick = ::collapseAnimated) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.size(40.dp).fullBlockClickable(shape = CircleShape, onClick = ::collapseAnimated),
+            ) {
                 Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = "Свернуть", tint = NamiColors.Paper100)
             }
-            IconButton(onClick = { showOverflowMenu = true }) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.size(40.dp).fullBlockClickable(shape = CircleShape) { showOverflowMenu = true },
+            ) {
                 Icon(Icons.Outlined.MoreVert, contentDescription = "Ещё", tint = NamiColors.Paper100)
             }
         }
@@ -239,7 +246,10 @@ fun NowPlayingScreen(
                 modifier = Modifier.weight(1f).basicMarquee(iterations = Int.MAX_VALUE),
             )
             // Stub, see isFavorite's declaration above -- not persisted anywhere yet.
-            IconButton(onClick = { isFavorite = !isFavorite }, modifier = Modifier.size(32.dp)) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.size(32.dp).fullBlockClickable(shape = CircleShape) { isFavorite = !isFavorite },
+            ) {
                 Icon(
                     imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                     contentDescription = if (isFavorite) "Убрать из избранного" else "В избранное",
@@ -376,16 +386,18 @@ private fun NowPlayingPill(
     modifier: Modifier = Modifier,
     text: String? = null,
     icon: ImageVector? = null,
-    // Sharp-ish rectangle by default (r4, not the fully-rounded r22 pill from before); night
-    // mode passes CircleShape to stand apart as its own small round button.
-    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(4.dp),
+    // Rectangle, but noticeably rounded (not the near-sharp r4 this started at); night mode
+    // passes CircleShape to stand apart as its own small round button.
+    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(14.dp),
 ) {
-    androidx.compose.material3.TextButton(
-        onClick = onClick,
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
+    Row(
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .height(36.dp)
-            .background(NamiColors.Ink800, shape),
+            .background(NamiColors.Ink800, shape)
+            .fullBlockClickable(shape = shape, onClick = onClick)
+            .padding(horizontal = 8.dp),
     ) {
         icon?.let {
             Icon(it, contentDescription = text, tint = NamiColors.Paper70, modifier = Modifier.size(18.dp))
@@ -404,7 +416,14 @@ private fun TransportBlock(
     filled: Boolean = false,
     active: Boolean = false,
 ) {
-    IconButton(onClick = onClick, modifier = Modifier.size(size)) {
+    val shape = RoundedCornerShape(size / 3.5f)
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(size)
+            .background(color = if (filled) NamiColors.Paper100 else NamiColors.Ink800, shape = shape)
+            .fullBlockClickable(shape = shape, onClick = onClick),
+    ) {
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
@@ -413,13 +432,7 @@ private fun TransportBlock(
                 active -> NamiColors.Shu
                 else -> NamiColors.Paper100
             },
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    color = if (filled) NamiColors.Paper100 else NamiColors.Ink800,
-                    shape = RoundedCornerShape(size / 3.5f),
-                )
-                .padding(size / 4),
+            modifier = Modifier.fillMaxSize().padding(size / 4),
         )
     }
 }

@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.fullBlockClickable
 import dev.nami.domain.PlaybackState
 import dev.nami.domain.QueueTrack
 import kotlin.math.roundToInt
@@ -138,7 +139,12 @@ fun MiniPlayer(
             }
             MiniPlayerTrackBlock(track = track)
         }
-        IconButton(onClick = viewModel::toggle) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(48.dp)
+                .fullBlockClickable(shape = androidx.compose.foundation.shape.CircleShape, onClick = viewModel::toggle),
+        ) {
             Icon(
                 imageVector = if (playing?.isPlaying == true) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                 contentDescription = if (playing?.isPlaying == true) "Пауза" else "Играть",
