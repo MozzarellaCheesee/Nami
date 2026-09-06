@@ -6,11 +6,17 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import dev.nami.core.database.entity.AlbumEntity
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface AlbumDao {
     @Query("SELECT * FROM albums WHERE id = :id")
     suspend fun findById(id: String): AlbumEntity?
+
+    // Room auto-invalidates this on any write to `albums` (rename, cover, isSingle, artist) --
+    // AlbumDetailScreen needs this to actually see its own edits without leaving and re-entering.
+    @Query("SELECT * FROM albums WHERE id = :id")
+    fun observeById(id: String): Flow<AlbumEntity?>
 
     @Query("SELECT * FROM albums WHERE title = :title AND artistId = :artistId LIMIT 1")
     suspend fun findByTitleAndArtist(title: String, artistId: String?): AlbumEntity?
@@ -62,6 +68,20 @@ interface AlbumDao {
 
     @Query("UPDATE albums SET isSingle = :isSingle WHERE id = :id")
     suspend fun setIsSingle(id: String, isSingle: Boolean)
+
+    @Query("UPDATE albums SET artistId = :artistId WHERE id = :id")
+    suspend fun setArtistId(id: String, artistId: String?)
+
+    @Query(
+        """
+        SELECT albums.id AS id, albums.title AS title, artists.name AS artistName, albums.artworkPath AS artworkPath
+        FROM albums LEFT JOIN artists ON albums.artistId = artists.id
+        WHERE EXISTS (SELECT 1 FROM tracks WHERE tracks.albumId = albums.id AND tracks.deletedAt IS NULL)
+        ORDER BY albums.title DESC
+        LIMIT :limit
+        """,
+    )
+    fun observeRecentAlbums(limit: Int): Flow<List<AlbumListRow>>
 
     @Query(
         """

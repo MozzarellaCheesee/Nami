@@ -86,6 +86,21 @@ interface TrackDao {
     )
     suspend fun tracksForAlbum(albumId: String): List<TrackWithArtwork>
 
+    // Reactive twin of tracksForAlbum -- AlbumDetailScreen needs to see add/remove/rename live,
+    // same reasoning as tracksForArtist's Flow version.
+    @Query(
+        """
+        SELECT tracks.*, COALESCE(albums.artworkPath, tracks.artworkPath) AS albumArtworkPath,
+               artists.name AS artistName
+        FROM tracks
+        LEFT JOIN albums ON tracks.albumId = albums.id
+        LEFT JOIN artists ON tracks.artistId = artists.id
+        WHERE tracks.albumId = :albumId AND tracks.deletedAt IS NULL
+        ORDER BY tracks.discNo ASC, tracks.trackNo ASC
+        """,
+    )
+    fun observeTracksForAlbum(albumId: String): Flow<List<TrackWithArtwork>>
+
     @Query(
         """
         SELECT tracks.*, COALESCE(albums.artworkPath, tracks.artworkPath) AS albumArtworkPath,

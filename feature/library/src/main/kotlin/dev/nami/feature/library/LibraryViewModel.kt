@@ -61,22 +61,14 @@ class LibraryViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(LibraryUiState())
     val uiState: StateFlow<LibraryUiState> = _uiState.asStateFlow()
 
-    private val _recentAlbums = MutableStateFlow<List<AlbumSummary>>(emptyList())
-    val recentAlbums: StateFlow<List<AlbumSummary>> = _recentAlbums.asStateFlow()
+    // Live -- any rename/cover/artist/track change to any album updates this without needing a
+    // manual refresh call (recentAlbums() is now a Room-backed Flow, not a one-shot snapshot).
+    val recentAlbums: StateFlow<List<AlbumSummary>> = libraryRepository.recentAlbums(limit = 10)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val nowPlaying: StateFlow<NowPlayingRow?> = playerRepository.state
         .map { state -> (state as? PlaybackState.Playing)?.let { NowPlayingRow(it.trackId, it.isPlaying) } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
-
-    init {
-        refreshRecentAlbums()
-    }
-
-    private fun refreshRecentAlbums() {
-        viewModelScope.launch {
-            _recentAlbums.value = libraryRepository.recentAlbums(limit = 10)
-        }
-    }
 
     fun selectTab(tab: LibraryTab) {
         _uiState.value = _uiState.value.copy(selectedTab = tab)
@@ -110,7 +102,6 @@ class LibraryViewModel @Inject constructor(
                 // Swallow so viewModelScope survives and rebuildIndex still runs below.
             } finally {
                 searchRepository.rebuildIndex()
-                refreshRecentAlbums()
                 _uiState.value = _uiState.value.copy(importProgress = null)
             }
         }
@@ -129,7 +120,6 @@ class LibraryViewModel @Inject constructor(
                 // Swallow so viewModelScope survives and rebuildIndex still runs below.
             } finally {
                 searchRepository.rebuildIndex()
-                refreshRecentAlbums()
                 _uiState.value = _uiState.value.copy(importProgress = null)
             }
         }
@@ -167,7 +157,6 @@ class LibraryViewModel @Inject constructor(
             libraryRepository.deleteTracks(ids.toList())
             playerRepository.removeTracks(ids)
             _uiState.value = _uiState.value.copy(lastDeletedTrackIds = ids)
-            refreshRecentAlbums()
         }
     }
 
@@ -177,7 +166,6 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch {
             ids.forEach { trashRepository.restoreTrack(it) }
             _uiState.value = _uiState.value.copy(lastDeletedTrackIds = emptySet())
-            refreshRecentAlbums()
         }
     }
 
@@ -218,7 +206,6 @@ class LibraryViewModel @Inject constructor(
                 val trackIds = libraryRepository.tracksInAlbum(albumId).first().map { it.id }
                 libraryRepository.deleteTracks(trackIds)
             }
-            refreshRecentAlbums()
             clearAlbumSelection()
         }
     }

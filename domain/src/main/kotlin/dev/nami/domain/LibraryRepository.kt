@@ -16,8 +16,9 @@ interface LibraryRepository {
     suspend fun allTracksOrdered(): List<Track>
     fun track(id: TrackId): Flow<Track?>
     fun albums(): Flow<PagingData<AlbumSummary>>
-    /** Snapshot of the most recent [limit] albums, for the Library screen's discography block. */
-    suspend fun recentAlbums(limit: Int): List<AlbumSummary>
+    /** Live -- reflects renames, cover/artist changes and album/track add-or-remove without the
+     * Library screen needing to be reopened -- most recent [limit] albums, for the discography block. */
+    fun recentAlbums(limit: Int): Flow<List<AlbumSummary>>
     fun artists(): Flow<PagingData<Artist>>
     fun album(id: AlbumId): Flow<Album?>
     fun artist(id: ArtistId): Flow<Artist?>
@@ -29,6 +30,7 @@ interface LibraryRepository {
     suspend fun renameAlbum(id: AlbumId, title: String)
     suspend fun setAlbumCover(id: AlbumId, imageUri: String)
     suspend fun setAlbumIsSingle(id: AlbumId, isSingle: Boolean)
+    suspend fun setAlbumArtist(id: AlbumId, artistId: ArtistId?)
     suspend fun addTrackToAlbum(trackId: TrackId, albumId: AlbumId)
     suspend fun removeTrackFromAlbum(trackId: TrackId)
     suspend fun addTrackToArtist(trackId: TrackId, artistId: ArtistId)

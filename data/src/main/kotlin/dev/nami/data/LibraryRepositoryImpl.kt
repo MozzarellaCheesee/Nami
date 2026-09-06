@@ -65,25 +65,23 @@ class LibraryRepositoryImpl @Inject constructor(
             .flow
             .map { pagingData -> pagingData.pagingMap { it.toDomain() } }
 
-    override suspend fun recentAlbums(limit: Int): List<AlbumSummary> =
-        albumDao.recentAlbums(limit).map { it.toDomain() }
+    override fun recentAlbums(limit: Int): Flow<List<AlbumSummary>> =
+        albumDao.observeRecentAlbums(limit).map { rows -> rows.map { it.toDomain() } }
 
     override fun artists(): Flow<PagingData<Artist>> =
         Pager(PagingConfig(pageSize = 50)) { artistDao.pagingSource() }
             .flow
             .map { pagingData -> pagingData.pagingMap { it.toDomain() } }
 
-    override fun album(id: AlbumId): Flow<Album?> = flow {
-        emit(albumDao.findById(id.value)?.toDomain())
-    }
+    override fun album(id: AlbumId): Flow<Album?> =
+        albumDao.observeById(id.value).map { it?.toDomain() }
 
     override fun artist(id: ArtistId): Flow<Artist?> = flow {
         emit(artistDao.findByIdWithPhoto(id.value)?.toDomain())
     }
 
-    override fun tracksInAlbum(id: AlbumId): Flow<List<Track>> = flow {
-        emit(trackDao.tracksForAlbum(id.value).map { it.toDomain() })
-    }
+    override fun tracksInAlbum(id: AlbumId): Flow<List<Track>> =
+        trackDao.observeTracksForAlbum(id.value).map { rows -> rows.map { it.toDomain() } }
 
     override suspend fun renameTrack(id: TrackId, title: String) {
         trackDao.updateTitle(id.value, title)
@@ -119,6 +117,10 @@ class LibraryRepositoryImpl @Inject constructor(
 
     override suspend fun setAlbumIsSingle(id: AlbumId, isSingle: Boolean) {
         albumDao.setIsSingle(id.value, isSingle)
+    }
+
+    override suspend fun setAlbumArtist(id: AlbumId, artistId: ArtistId?) {
+        albumDao.setArtistId(id.value, artistId?.value)
     }
 
     override suspend fun addTrackToAlbum(trackId: TrackId, albumId: AlbumId) {

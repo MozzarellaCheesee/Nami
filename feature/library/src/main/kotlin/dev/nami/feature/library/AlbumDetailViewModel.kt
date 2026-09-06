@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.nami.core.model.Album
 import dev.nami.core.model.AlbumId
+import dev.nami.core.model.ArtistId
 import dev.nami.core.model.Track
 import dev.nami.core.model.TrackId
 import dev.nami.domain.LibraryRepository
@@ -56,6 +57,10 @@ class AlbumDetailViewModel @Inject constructor(
 
     fun setIsSingle(isSingle: Boolean) {
         viewModelScope.launch { libraryRepository.setAlbumIsSingle(albumId, isSingle) }
+    }
+
+    fun setArtist(artistId: ArtistId?) {
+        viewModelScope.launch { libraryRepository.setAlbumArtist(albumId, artistId) }
     }
 
     fun removeTrackFromAlbum(trackId: TrackId) {

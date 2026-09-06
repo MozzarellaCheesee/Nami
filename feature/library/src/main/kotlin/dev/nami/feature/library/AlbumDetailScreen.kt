@@ -25,6 +25,7 @@ import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PlaylistAdd
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Star
 import dev.nami.core.designsystem.NamiAlertDialog
 import androidx.compose.material3.Icon
@@ -88,6 +89,7 @@ fun AlbumDetailScreen(
     var showRenameDialog by remember { mutableStateOf(false) }
     var showAddTracksDialog by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showPickArtistDialog by remember { mutableStateOf(false) }
 
     val density = LocalDensity.current
     val headerState = rememberCollapsingHeaderState(maxHeight = HEADER_MAX_HEIGHT, minHeight = HEADER_MIN_HEIGHT)
@@ -169,6 +171,7 @@ fun AlbumDetailScreen(
                             ContextAction("Переименовать", Icons.Outlined.Edit) { showRenameDialog = true },
                             ContextAction("Изменить обложку", Icons.Outlined.Image) { uiState.album?.let { onPickCoverRequested(it.id) } },
                             ContextAction("Добавить треки", Icons.Outlined.LibraryAdd) { showAddTracksDialog = true },
+                            ContextAction("Изменить артиста", Icons.Outlined.Person) { showPickArtistDialog = true },
                             ContextAction(
                                 if (uiState.album?.isSingle == true) "Убрать метку \"сингл\"" else "Отметить как сингл",
                                 Icons.Outlined.Star,
@@ -253,6 +256,16 @@ fun AlbumDetailScreen(
         uiState.album?.let { album ->
             AddTracksToAlbumDialog(albumId = album.id, onDismiss = { showAddTracksDialog = false })
         }
+    }
+
+    if (showPickArtistDialog) {
+        PickArtistDialog(
+            onPick = { artistId ->
+                viewModel.setArtist(artistId)
+                showPickArtistDialog = false
+            },
+            onDismiss = { showPickArtistDialog = false },
+        )
     }
 
     if (showDeleteConfirm) {

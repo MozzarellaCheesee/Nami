@@ -1,6 +1,8 @@
 package dev.nami.feature.player
 
+import dev.nami.core.model.AlbumId
 import dev.nami.core.model.AlbumSummary
+import dev.nami.core.model.ArtistId
 import dev.nami.core.model.Track
 import dev.nami.core.model.TrackId
 import dev.nami.domain.ImportSource
@@ -72,7 +74,7 @@ class NowPlayingViewModelTest {
             override suspend fun allTracksOrdered(): List<Track> = emptyList()
         override fun track(id: TrackId) = flowOf(trackFixture("t1", "/data/music/real-file.flac"))
         override fun albums() = throw NotImplementedError()
-        override suspend fun recentAlbums(limit: Int): List<AlbumSummary> = emptyList()
+        override fun recentAlbums(limit: Int) = flowOf(emptyList<AlbumSummary>())
         override fun artists() = throw NotImplementedError()
         override fun album(id: dev.nami.core.model.AlbumId) = throw NotImplementedError()
         override fun artist(id: dev.nami.core.model.ArtistId) = throw NotImplementedError()
@@ -85,9 +87,11 @@ class NowPlayingViewModelTest {
         override suspend fun deleteTracks(ids: List<TrackId>) {}
         override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
         override suspend fun setTrackCover(id: TrackId, imageUri: String) = error("unused")
+        override suspend fun createAlbum(title: String, artistId: ArtistId?): AlbumId = error("unused")
         override suspend fun renameAlbum(id: dev.nami.core.model.AlbumId, title: String) = error("unused")
         override suspend fun setAlbumCover(id: dev.nami.core.model.AlbumId, imageUri: String) = error("unused")
         override suspend fun setAlbumIsSingle(id: dev.nami.core.model.AlbumId, isSingle: Boolean) = error("unused")
+        override suspend fun setAlbumArtist(id: AlbumId, artistId: ArtistId?) = error("unused")
         override suspend fun addTrackToAlbum(trackId: TrackId, albumId: dev.nami.core.model.AlbumId) = error("unused")
         override suspend fun removeTrackFromAlbum(trackId: TrackId) = error("unused")
         override suspend fun addTrackToArtist(trackId: TrackId, artistId: dev.nami.core.model.ArtistId) = error("unused")
