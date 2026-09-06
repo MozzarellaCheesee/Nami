@@ -22,10 +22,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.outlined.Pause
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.SkipNext
+import androidx.compose.material.icons.outlined.SkipPrevious
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -232,14 +232,14 @@ fun NowPlayingScreen(
             horizontalArrangement = Arrangement.Center,
         ) {
             IconButton(onClick = viewModel::skipPrevious) {
-                Icon(Icons.Filled.SkipPrevious, contentDescription = "Предыдущий", tint = NamiColors.Paper100)
+                Icon(Icons.Outlined.SkipPrevious, contentDescription = "Предыдущий", tint = NamiColors.Paper100)
             }
             IconButton(
                 onClick = viewModel::toggle,
                 modifier = Modifier.size(64.dp),
             ) {
                 Icon(
-                    imageVector = if (playing?.isPlaying == true) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    imageVector = if (playing?.isPlaying == true) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
                     contentDescription = "Играть/пауза",
                     tint = NamiColors.Ink900,
                     modifier = Modifier
@@ -249,7 +249,7 @@ fun NowPlayingScreen(
                 )
             }
             IconButton(onClick = viewModel::skipNext) {
-                Icon(Icons.Filled.SkipNext, contentDescription = "Следующий", tint = NamiColors.Paper100)
+                Icon(Icons.Outlined.SkipNext, contentDescription = "Следующий", tint = NamiColors.Paper100)
             }
         }
         androidx.compose.material3.TextButton(

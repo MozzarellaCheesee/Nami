@@ -22,8 +22,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import coil3.compose.AsyncImage
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.outlined.Pause
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -206,7 +206,7 @@ fun MiniPlayer(
         }
         IconButton(onClick = viewModel::toggle) {
             Icon(
-                imageVector = if (playing?.isPlaying == true) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                imageVector = if (playing?.isPlaying == true) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
                 contentDescription = if (playing?.isPlaying == true) "Пауза" else "Играть",
                 tint = NamiColors.Paper100,
             )
