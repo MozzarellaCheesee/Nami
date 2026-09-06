@@ -2,6 +2,8 @@ package dev.nami.player
 
 import android.app.PendingIntent
 import android.content.Intent
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
@@ -33,7 +35,18 @@ class PlaybackService : MediaSessionService() {
             )
             .setBackBuffer(/* backBufferDurationMs = */ 60_000, /* retainBackBufferFromKeyframe = */ true)
             .build()
-        player = ExoPlayer.Builder(this).setLoadControl(loadControl).build()
+        // Automatic audio-focus handling: pauses when another app starts playing audio/video
+        // (transient or permanent focus loss), and resumes on its own once that app stops --
+        // but only if playback was still going when focus was lost (a manual pause beforehand
+        // stays paused, ExoPlayer tracks this itself).
+        val audioAttributes = AudioAttributes.Builder()
+            .setUsage(C.USAGE_MEDIA)
+            .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+            .build()
+        player = ExoPlayer.Builder(this)
+            .setLoadControl(loadControl)
+            .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ true)
+            .build()
         // Without a session activity, the system media notification/status-bar chip has nothing
         // to launch on tap. EXTRA_OPEN_PLAYER tells MainActivity to open Now Playing directly
         // instead of just the last screen the user left.
