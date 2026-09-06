@@ -28,12 +28,12 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Done
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.LibraryAdd
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Done
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -204,13 +204,18 @@ fun LibraryScreen(
                         }
                         FloatingActionButton(
                             onClick = onImportFolderRequested,
-                            modifier = Modifier.size(40.dp),
+                            modifier = Modifier.size(36.dp),
+                            shape = RoundedCornerShape(14.dp),
                         ) {
-                            Icon(Icons.Filled.Folder, contentDescription = "Импортировать папку")
+                            Icon(Icons.Outlined.Folder, contentDescription = "Импортировать папку", modifier = Modifier.size(18.dp))
                         }
                         androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(12.dp))
-                        FloatingActionButton(onClick = onImportRequested) {
-                            Icon(Icons.Filled.Add, contentDescription = "Импортировать файлы")
+                        FloatingActionButton(
+                            onClick = onImportRequested,
+                            modifier = Modifier.size(44.dp),
+                            shape = RoundedCornerShape(16.dp),
+                        ) {
+                            Icon(Icons.Outlined.Add, contentDescription = "Импортировать файлы", modifier = Modifier.size(20.dp))
                         }
                     }
                 }
@@ -273,7 +278,7 @@ private fun SelectionTopBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconButton(onClick = onCancel) {
-            Icon(Icons.Filled.Close, contentDescription = "Отменить выбор", tint = NamiColors.Paper100)
+            Icon(Icons.Outlined.Close, contentDescription = "Отменить выбор", tint = NamiColors.Paper100)
         }
         Text(
             text = "Выбрано: $selectedCount",
@@ -282,13 +287,13 @@ private fun SelectionTopBar(
             modifier = Modifier.weight(1f).padding(start = 8.dp),
         )
         IconButton(onClick = onSelectAll) {
-            Icon(Icons.Filled.Done, contentDescription = "Выбрать все", tint = NamiColors.Paper70)
+            Icon(Icons.Outlined.Done, contentDescription = "Выбрать все", tint = NamiColors.Paper70)
         }
         IconButton(onClick = onAddToPlaylist) {
-            Icon(Icons.Filled.LibraryAdd, contentDescription = "В плейлист", tint = NamiColors.Paper70)
+            Icon(Icons.Outlined.LibraryAdd, contentDescription = "В плейлист", tint = NamiColors.Paper70)
         }
         IconButton(onClick = onDelete) {
-            Icon(Icons.Filled.Delete, contentDescription = "Удалить", tint = NamiColors.Paper70)
+            Icon(Icons.Outlined.Delete, contentDescription = "Удалить", tint = NamiColors.Paper70)
         }
     }
 }
@@ -300,7 +305,7 @@ private fun AlbumSelectionTopBar(selectedCount: Int, onCancel: () -> Unit, onDel
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconButton(onClick = onCancel) {
-            Icon(Icons.Filled.Close, contentDescription = "Отменить выбор", tint = NamiColors.Paper100)
+            Icon(Icons.Outlined.Close, contentDescription = "Отменить выбор", tint = NamiColors.Paper100)
         }
         Text(
             text = "Выбрано: $selectedCount",
@@ -309,7 +314,7 @@ private fun AlbumSelectionTopBar(selectedCount: Int, onCancel: () -> Unit, onDel
             modifier = Modifier.weight(1f).padding(start = 8.dp),
         )
         IconButton(onClick = onDelete) {
-            Icon(Icons.Filled.Delete, contentDescription = "Удалить", tint = NamiColors.Paper70)
+            Icon(Icons.Outlined.Delete, contentDescription = "Удалить", tint = NamiColors.Paper70)
         }
     }
 }

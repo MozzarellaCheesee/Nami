@@ -22,11 +22,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.LibraryAdd
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.PlaylistAdd
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.LibraryAdd
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.PlaylistAdd
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -85,7 +85,7 @@ fun TrackListItem(
                     modifier = Modifier
                         .width(2.dp)
                         .height(32.dp)
-                        .background(NamiColors.Shu),
+                        .background(NamiColors.Shu, RoundedCornerShape(1.dp)),
                 )
                 Spacer(modifier = Modifier.width(14.dp))
             }
@@ -141,41 +141,41 @@ fun TrackListItem(
         } else if (onAddToPlaylist != null || onAddToQueue != null || onDelete != null || onRename != null || onRemoveFromAlbum != null) {
             Box {
                 IconButton(onClick = { showMenu = true }) {
-                    Icon(Icons.Filled.MoreVert, contentDescription = "Ещё", tint = NamiColors.Paper40)
+                    Icon(Icons.Outlined.MoreVert, contentDescription = "Ещё", tint = NamiColors.Paper40)
                 }
                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                     onAddToPlaylist?.let { action ->
                         DropdownMenuItem(
                             text = { Text("В плейлист") },
-                            leadingIcon = { Icon(Icons.Filled.LibraryAdd, contentDescription = null) },
+                            leadingIcon = { Icon(Icons.Outlined.LibraryAdd, contentDescription = null) },
                             onClick = { showMenu = false; action() },
                         )
                     }
                     onAddToQueue?.let { action ->
                         DropdownMenuItem(
                             text = { Text("В очередь") },
-                            leadingIcon = { Icon(Icons.Filled.PlaylistAdd, contentDescription = null) },
+                            leadingIcon = { Icon(Icons.Outlined.PlaylistAdd, contentDescription = null) },
                             onClick = { showMenu = false; action() },
                         )
                     }
                     onRename?.let { action ->
                         DropdownMenuItem(
                             text = { Text("Переименовать") },
-                            leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
+                            leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
                             onClick = { showMenu = false; action() },
                         )
                     }
                     onRemoveFromAlbum?.let { action ->
                         DropdownMenuItem(
                             text = { Text("Убрать из альбома") },
-                            leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) },
+                            leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null) },
                             onClick = { showMenu = false; action() },
                         )
                     }
                     onDelete?.let { action ->
                         DropdownMenuItem(
                             text = { Text("Удалить") },
-                            leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) },
+                            leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null) },
                             onClick = { showMenu = false; action() },
                         )
                     }

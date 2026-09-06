@@ -13,12 +13,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -58,16 +58,16 @@ fun PlaylistDetailScreen(
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) {
-                Icon(Icons.Filled.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
+                Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
             }
             IconButton(onClick = { onPickCoverRequested(viewModel.playlistId) }) {
-                Icon(Icons.Filled.Image, contentDescription = "Обложка", tint = NamiColors.Paper70)
+                Icon(Icons.Outlined.Image, contentDescription = "Обложка", tint = NamiColors.Paper70)
             }
             IconButton(onClick = { onExportRequested(viewModel.playlistId) }) {
-                Icon(Icons.Filled.Share, contentDescription = "Экспорт в .m3u8", tint = NamiColors.Paper70)
+                Icon(Icons.Outlined.Share, contentDescription = "Экспорт в .m3u8", tint = NamiColors.Paper70)
             }
             IconButton(onClick = { showDeleteDialog = true }) {
-                Icon(Icons.Filled.Delete, contentDescription = "Удалить плейлист", tint = NamiColors.Paper70)
+                Icon(Icons.Outlined.Delete, contentDescription = "Удалить плейлист", tint = NamiColors.Paper70)
             }
         }
         if (uiState.playlist?.coverPath != null) {
@@ -99,7 +99,7 @@ fun PlaylistDetailScreen(
             )
             if (uiState.tracks.isNotEmpty()) {
                 Button(onClick = { onPlayTracks(uiState.tracks, 0) }) {
-                    Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                    Icon(Icons.Outlined.PlayArrow, contentDescription = null)
                     Text(text = "Играть")
                 }
             }
@@ -159,7 +159,7 @@ private fun PlaylistTrackRow(track: Track, onClick: () -> Unit, onRemove: () -> 
     ) {
         Text(text = track.title, color = NamiColors.Paper100, modifier = Modifier.weight(1f))
         IconButton(onClick = onRemove) {
-            Icon(Icons.Filled.Close, contentDescription = "Убрать из плейлиста", tint = NamiColors.Paper70)
+            Icon(Icons.Outlined.Close, contentDescription = "Убрать из плейлиста", tint = NamiColors.Paper70)
         }
     }
 }

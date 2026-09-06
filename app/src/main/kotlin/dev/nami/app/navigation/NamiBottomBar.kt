@@ -11,10 +11,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.LibraryMusic
-import androidx.compose.material.icons.filled.QueueMusic
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.LibraryMusic
+import androidx.compose.material.icons.outlined.QueueMusic
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,10 +27,10 @@ import dev.nami.core.designsystem.NamiColors
 private data class BottomTab(val route: String, val label: String, val icon: ImageVector)
 
 private val TABS = listOf(
-    BottomTab("library", "Библиотека", Icons.Filled.LibraryMusic),
-    BottomTab("search", "Поиск", Icons.Filled.Search),
-    BottomTab("playlists", "Плейлисты", Icons.Filled.QueueMusic),
-    BottomTab("settings", "Настройки", Icons.Filled.Settings),
+    BottomTab("library", "Библиотека", Icons.Outlined.LibraryMusic),
+    BottomTab("search", "Поиск", Icons.Outlined.Search),
+    BottomTab("playlists", "Плейлисты", Icons.Outlined.QueueMusic),
+    BottomTab("settings", "Настройки", Icons.Outlined.Settings),
 )
 
 @Composable

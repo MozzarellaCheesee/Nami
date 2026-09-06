@@ -21,7 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
@@ -117,7 +117,7 @@ fun NowPlayingScreen(
             .padding(20.dp),
     ) {
         IconButton(onClick = ::collapseAnimated) {
-            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Свернуть", tint = NamiColors.Paper100)
+            Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = "Свернуть", tint = NamiColors.Paper100)
         }
         val artworkModifier = Modifier
             .padding(vertical = 24.dp)

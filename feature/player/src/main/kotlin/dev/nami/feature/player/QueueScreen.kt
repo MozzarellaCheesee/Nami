@@ -13,8 +13,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.SwipeToDismissBox
@@ -55,7 +55,7 @@ fun QueueScreen(
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink800)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(12.dp)) {
             IconButton(onClick = onBack) {
-                Icon(Icons.Filled.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
+                Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
             }
             Text(text = "Очередь", color = NamiColors.Paper100)
         }
@@ -149,7 +149,7 @@ private fun ManualQueueRow(item: QueueItem, onDragBy: (Int) -> Unit, onRemove: (
         }
         Text(text = item.track.title, color = NamiColors.Paper100, modifier = Modifier.weight(1f))
         IconButton(onClick = onRemove) {
-            Icon(Icons.Filled.Close, contentDescription = "Удалить", tint = NamiColors.Paper70)
+            Icon(Icons.Outlined.Close, contentDescription = "Удалить", tint = NamiColors.Paper70)
         }
     }
 }

@@ -11,9 +11,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -45,7 +45,7 @@ fun TrashScreen(onBack: () -> Unit, viewModel: TrashViewModel = hiltViewModel())
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) {
-                Icon(Icons.Filled.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
+                Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
             }
             Text(
                 text = "Корзина",
@@ -137,10 +137,10 @@ private fun TrashedTrackRow(trashed: TrashedTrack, onRestore: () -> Unit, onDele
             )
         }
         IconButton(onClick = onRestore) {
-            Icon(Icons.Filled.Restore, contentDescription = "Восстановить", tint = NamiColors.Paper70)
+            Icon(Icons.Outlined.Restore, contentDescription = "Восстановить", tint = NamiColors.Paper70)
         }
         IconButton(onClick = { showConfirm = true }) {
-            Icon(Icons.Filled.Delete, contentDescription = "Удалить навсегда", tint = NamiColors.Paper70)
+            Icon(Icons.Outlined.Delete, contentDescription = "Удалить навсегда", tint = NamiColors.Paper70)
         }
     }
     if (showConfirm) {
@@ -164,10 +164,10 @@ private fun TrashedPlaylistRow(trashed: TrashedPlaylist, onRestore: () -> Unit, 
             )
         }
         IconButton(onClick = onRestore) {
-            Icon(Icons.Filled.Restore, contentDescription = "Восстановить", tint = NamiColors.Paper70)
+            Icon(Icons.Outlined.Restore, contentDescription = "Восстановить", tint = NamiColors.Paper70)
         }
         IconButton(onClick = { showConfirm = true }) {
-            Icon(Icons.Filled.Delete, contentDescription = "Удалить навсегда", tint = NamiColors.Paper70)
+            Icon(Icons.Outlined.Delete, contentDescription = "Удалить навсегда", tint = NamiColors.Paper70)
         }
     }
     if (showConfirm) {

@@ -9,7 +9,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -90,7 +90,7 @@ fun PlaylistsScreen(
             onClick = { showCreateDialog = true },
             modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
         ) {
-            Icon(Icons.Filled.Add, contentDescription = "Новый плейлист")
+            Icon(Icons.Outlined.Add, contentDescription = "Новый плейлист")
         }
     }
     }

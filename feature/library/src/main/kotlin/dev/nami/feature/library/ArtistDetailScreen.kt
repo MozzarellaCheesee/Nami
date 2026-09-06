@@ -14,7 +14,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -78,7 +78,7 @@ fun ArtistDetailScreen(
                     Spacer(modifier = Modifier.padding(start = 12.dp))
                     Box {
                         IconButton(onClick = { showArtistMenu = true }) {
-                            Icon(Icons.Filled.MoreVert, contentDescription = "Действия с артистом", tint = NamiColors.Paper100)
+                            Icon(Icons.Outlined.MoreVert, contentDescription = "Действия с артистом", tint = NamiColors.Paper100)
                         }
                         DropdownMenu(expanded = showArtistMenu, onDismissRequest = { showArtistMenu = false }) {
                             DropdownMenuItem(
