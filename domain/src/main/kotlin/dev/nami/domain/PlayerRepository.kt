@@ -44,6 +44,8 @@ interface PlayerRepository {
     suspend fun seek(ms: Long)
     suspend fun skipNext()
     suspend fun skipPrevious()
+    /** Stops playback entirely and clears the queue (nowPlaying becomes null). */
+    suspend fun stop()
     suspend fun addToQueue(track: PlayableTrack)
     suspend fun moveQueueItem(fromIndex: Int, toIndex: Int)
     suspend fun removeQueueItem(index: Int)

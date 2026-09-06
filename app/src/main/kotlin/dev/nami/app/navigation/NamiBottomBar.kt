@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.LibraryMusic
@@ -49,7 +50,8 @@ fun NamiBottomBar(currentRoute: String?, onTabSelected: (String) -> Unit, modifi
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                    .clickable { onTabSelected(tab.route) },
+                    .clickable { onTabSelected(tab.route) }
+                    .padding(top = 6.dp),
                 horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {

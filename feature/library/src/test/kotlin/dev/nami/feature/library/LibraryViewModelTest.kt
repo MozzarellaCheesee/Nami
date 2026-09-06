@@ -76,10 +76,11 @@ class LibraryViewModelTest {
         override suspend fun moveQueueItem(fromIndex: Int, toIndex: Int) {}
         override suspend fun removeQueueItem(index: Int) {}
         override suspend fun removeTracks(ids: Set<TrackId>) { removedTracks = ids }
+        override suspend fun stop() {}
     }
 
     @Test
-    fun `importing emits progress then reaches total`() = runTest {
+    fun `importing clears progress once finished`() = runTest {
         val fakeRepo = object : LibraryRepository {
             override fun tracks(): Flow<PagingData<Track>> = flowOf(PagingData.empty())
             override suspend fun allTracksOrdered(): List<Track> = emptyList()
@@ -101,11 +102,11 @@ class LibraryViewModelTest {
 
         viewModel.importFiles(listOf("content://fake/1", "content://fake/2"))
 
-        assertEquals(ImportProgress(2, 2), viewModel.uiState.value.importProgress)
+        assertEquals(null, viewModel.uiState.value.importProgress)
     }
 
     @Test
-    fun `importFolder emits progress then reaches total`() = runTest {
+    fun `importFolder clears progress once finished`() = runTest {
         val fakeRepo = object : LibraryRepository {
             override fun tracks() = flowOf(PagingData.empty<Track>())
             override suspend fun allTracksOrdered(): List<Track> = emptyList()
@@ -129,7 +130,7 @@ class LibraryViewModelTest {
 
         viewModel.importFolder("content://tree/fake")
 
-        assertEquals(ImportProgress(3, 3), viewModel.uiState.value.importProgress)
+        assertEquals(null, viewModel.uiState.value.importProgress)
     }
 
     @Test

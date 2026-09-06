@@ -9,6 +9,7 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -23,7 +24,6 @@ import coil3.compose.AsyncImage
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -36,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -47,6 +48,7 @@ import kotlin.math.roundToInt
 private const val SKIP_THRESHOLD_DP = 80
 private const val ARTWORK_SIZE_DP = 40
 private const val EXPAND_THRESHOLD_DP = 24
+private const val DISMISS_THRESHOLD_DP = 40
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -60,6 +62,8 @@ fun MiniPlayer(
     val density = LocalDensity.current
     val skipThresholdPx = with(density) { SKIP_THRESHOLD_DP.dp.toPx() }
     val expandThresholdPx = with(density) { EXPAND_THRESHOLD_DP.dp.toPx() }
+    val dismissThresholdPx = with(density) { DISMISS_THRESHOLD_DP.dp.toPx() }
+    val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
     var artworkOffsetX by remember { mutableFloatStateOf(0f) }
     var blockWidthPx by remember { mutableIntStateOf(0) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
@@ -71,15 +75,27 @@ fun MiniPlayer(
             .fillMaxWidth()
             .height(60.dp)
             .background(NamiColors.Ink800)
+            .offset { IntOffset(0, dragOffsetY.coerceAtLeast(0f).roundToInt()) }
             .clickable(onClick = onExpand)
             .draggable(
                 orientation = Orientation.Vertical,
                 state = rememberDraggableState { delta -> dragOffsetY += delta },
                 onDragStopped = { velocity ->
-                    if (dragOffsetY < -expandThresholdPx || velocity < -2000f) {
-                        onExpand()
+                    when {
+                        dragOffsetY < -expandThresholdPx || velocity < -2000f -> {
+                            dragOffsetY = 0f
+                            onExpand()
+                        }
+                        dragOffsetY > dismissThresholdPx || velocity > 2000f -> {
+                            // Slide fully off-screen (finger-tracked while dragging, via the
+                            // offset above) before stopping playback -- stopping clears
+                            // queue.nowPlaying, which makes this composable disappear, so the
+                            // stop has to happen only once it's already off the visible area.
+                            animate(dragOffsetY, screenHeightPx) { value, _ -> dragOffsetY = value }
+                            viewModel.stop()
+                        }
+                        else -> animate(dragOffsetY, 0f) { value, _ -> dragOffsetY = value }
                     }
-                    dragOffsetY = 0f
                 },
             )
             .draggable(
@@ -131,15 +147,22 @@ fun MiniPlayer(
             } else {
                 Box(modifier = artworkModifier)
             }
-            Text(
-                text = queue.nowPlaying?.title ?: "Ничего не играет",
-                color = NamiColors.Paper100,
-                maxLines = 1,
-                modifier = Modifier
-                    .padding(start = 12.dp)
-                    .weight(1f)
-                    .basicMarquee(),
-            )
+            Column(modifier = Modifier.padding(start = 12.dp).weight(1f)) {
+                Text(
+                    text = queue.nowPlaying?.title ?: "Ничего не играет",
+                    color = NamiColors.Paper100,
+                    maxLines = 1,
+                    modifier = Modifier.fillMaxWidth().basicMarquee(),
+                )
+                queue.nowPlaying?.artistName?.let { artistName ->
+                    Text(
+                        text = artistName,
+                        color = NamiColors.Paper70,
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                    )
+                }
+            }
         }
         IconButton(onClick = viewModel::toggle) {
             Icon(
@@ -147,9 +170,6 @@ fun MiniPlayer(
                 contentDescription = if (playing?.isPlaying == true) "Пауза" else "Играть",
                 tint = NamiColors.Paper100,
             )
-        }
-        IconButton(onClick = viewModel::skipNext) {
-            Icon(Icons.Filled.SkipNext, contentDescription = "Следующий", tint = NamiColors.Paper100)
         }
     }
 }

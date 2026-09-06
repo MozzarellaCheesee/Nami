@@ -131,6 +131,14 @@ class PlayerRepositoryImpl @Inject constructor(
         controller?.seekToPrevious()
     }
 
+    override suspend fun stop() {
+        originByMediaId.clear()
+        controller?.apply {
+            stop()
+            clearMediaItems()
+        }
+    }
+
     override suspend fun addToQueue(track: PlayableTrack) {
         val player = controller ?: return
         originByMediaId[track.id.value] = QueueOrigin.MANUAL

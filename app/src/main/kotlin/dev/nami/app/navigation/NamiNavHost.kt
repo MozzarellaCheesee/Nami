@@ -163,10 +163,21 @@ fun NamiNavHost(
         NamiBottomBar(
             currentRoute = currentRoute,
             onTabSelected = { route ->
-                navController.navigate(route) {
-                    popUpTo(ROUTE_LIBRARY) { saveState = true }
-                    launchSingleTop = true
-                    restoreState = true
+                if (route == ROUTE_LIBRARY) {
+                    // Library tab always jumps back to the Tracks root, closing any open
+                    // Album/Artist detail screen and resetting the Albums/Artists sub-tab --
+                    // a fresh instance (no saveState/restoreState) is the simplest way to get
+                    // both a clean back stack and LibraryViewModel's default TRACKS tab.
+                    navController.navigate(route) {
+                        popUpTo(ROUTE_LIBRARY) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                } else {
+                    navController.navigate(route) {
+                        popUpTo(ROUTE_LIBRARY) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
                 }
             },
             modifier = Modifier.navigationBarsPadding(),

@@ -63,6 +63,10 @@ class NowPlayingViewModel @Inject constructor(
         viewModelScope.launch { playerRepository.seek(ms) }
     }
 
+    fun stop() {
+        viewModelScope.launch { playerRepository.stop() }
+    }
+
     fun skipNext() {
         viewModelScope.launch { playerRepository.skipNext() }
     }

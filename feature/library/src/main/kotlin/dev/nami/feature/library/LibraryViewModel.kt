@@ -83,6 +83,7 @@ class LibraryViewModel @Inject constructor(
             } finally {
                 searchRepository.rebuildIndex()
                 refreshRecentAlbums()
+                _uiState.value = _uiState.value.copy(importProgress = null)
             }
         }
     }
@@ -101,6 +102,7 @@ class LibraryViewModel @Inject constructor(
             } finally {
                 searchRepository.rebuildIndex()
                 refreshRecentAlbums()
+                _uiState.value = _uiState.value.copy(importProgress = null)
             }
         }
     }
