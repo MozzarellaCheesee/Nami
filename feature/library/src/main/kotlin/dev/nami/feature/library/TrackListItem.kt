@@ -6,10 +6,12 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
@@ -51,6 +53,8 @@ fun TrackListItem(
     onLongClick: (() -> Unit)? = null,
     selectionMode: Boolean = false,
     isSelected: Boolean = false,
+    isCurrentTrack: Boolean = false,
+    isPlaying: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     var showMenu by remember { mutableStateOf(false) }
@@ -63,6 +67,15 @@ fun TrackListItem(
             .padding(horizontal = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (isCurrentTrack) {
+            Box(
+                modifier = Modifier
+                    .width(2.dp)
+                    .height(32.dp)
+                    .background(NamiColors.Shu),
+            )
+            Spacer(modifier = Modifier.width(14.dp))
+        }
         if (track.albumArtworkPath != null) {
             AsyncImage(
                 model = track.albumArtworkPath,
@@ -82,17 +95,21 @@ fun TrackListItem(
         Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
             Text(
                 text = track.title,
-                color = NamiColors.Paper100,
+                color = if (isCurrentTrack) NamiColors.Shu else NamiColors.Paper100,
                 style = MaterialTheme.typography.bodyLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                text = subtitleFor(track),
-                color = NamiColors.Paper70,
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 1,
-            )
+            if (isCurrentTrack) {
+                MiniPlayingIndicator(isPlaying = isPlaying, modifier = Modifier.padding(top = 4.dp))
+            } else {
+                Text(
+                    text = subtitleFor(track),
+                    color = NamiColors.Paper70,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                )
+            }
         }
         if (selectionMode) {
             Checkbox(checked = isSelected, onCheckedChange = null)
