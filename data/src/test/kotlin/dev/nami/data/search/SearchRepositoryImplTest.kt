@@ -94,7 +94,7 @@ class SearchRepositoryImplTest {
         override suspend fun findById(id: String): ArtistEntity? = error("unused")
         override suspend fun findByName(name: String): ArtistEntity? = error("unused")
         override fun pagingSource(): PagingSource<Int, ArtistDao.ArtistWithPhoto> = error("unused")
-        override suspend fun findByIdWithPhoto(id: String): ArtistDao.ArtistWithPhoto? = error("unused")
+        override suspend fun findByIdWithPhoto(id: String): ArtistDao.ArtistWithPhoto? = null
         override suspend fun insert(artist: ArtistEntity) = error("unused")
         override suspend fun allForIndexing(): List<ArtistEntity> = rows
         override suspend fun setPhotoPath(id: String, path: String) = error("unused")
@@ -173,7 +173,7 @@ class SearchRepositoryImplTest {
         assertEquals(3, results.size)
         assertEquals(SearchResult.TrackResult(dev.nami.core.model.TrackId("t1"), "Window View", "Farewell225", null), results[0])
         assertEquals(SearchResult.AlbumResult(dev.nami.core.model.AlbumId("al1"), "Doujin Compilation", "Farewell225", null), results[1])
-        assertEquals(SearchResult.ArtistResult(dev.nami.core.model.ArtistId("a1"), "Farewell225"), results[2])
+        assertEquals(SearchResult.ArtistResult(dev.nami.core.model.ArtistId("a1"), "Farewell225", null), results[2])
     }
 
     @Test

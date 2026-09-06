@@ -5,7 +5,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,13 +15,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Search
@@ -50,6 +57,12 @@ import dev.nami.core.model.TrackId
 import dev.nami.domain.SearchResult
 import dev.nami.feature.playlists.AddToPlaylistDialog
 
+private const val TRACKS_PREVIEW = 4
+private const val ALBUMS_PREVIEW = 6
+private const val ARTISTS_PREVIEW = 4
+
+private enum class SearchSection { TRACKS, ALBUMS, ARTISTS }
+
 @Composable
 fun SearchScreen(
     onTrackClick: (TrackId) -> Unit,
@@ -59,6 +72,7 @@ fun SearchScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var addToPlaylistTrackId by remember { mutableStateOf<TrackId?>(null) }
+    var expandedSection by remember { mutableStateOf<SearchSection?>(null) }
 
     val tracks = uiState.results.filterIsInstance<SearchResult.TrackResult>()
     val albums = uiState.results.filterIsInstance<SearchResult.AlbumResult>()
@@ -86,7 +100,7 @@ fun SearchScreen(
 
         if (uiState.query.isBlank()) {
             if (uiState.recentQueries.isNotEmpty()) {
-                SectionLabel("Недавнее")
+                SectionHeader("Недавнее")
                 LazyRow(
                     contentPadding = PaddingValuesHorizontal20,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -114,8 +128,13 @@ fun SearchScreen(
         } else {
             LazyColumn {
                 if (tracks.isNotEmpty()) {
-                    item { SectionLabel("Треки") }
-                    items(tracks, key = { "track-${it.id.value}" }) { track ->
+                    item {
+                        SectionHeader(
+                            title = "Треки",
+                            onMoreClick = { expandedSection = SearchSection.TRACKS }.takeIf { tracks.size > TRACKS_PREVIEW },
+                        )
+                    }
+                    items(tracks.take(TRACKS_PREVIEW), key = { "track-${it.id.value}" }) { track ->
                         TrackResultRow(
                             track = track,
                             onClick = { onTrackClick(track.id) },
@@ -124,25 +143,35 @@ fun SearchScreen(
                     }
                 }
                 if (albums.isNotEmpty()) {
-                    item { SectionLabel("Альбомы") }
+                    item {
+                        SectionHeader(
+                            title = "Альбомы",
+                            onMoreClick = { expandedSection = SearchSection.ALBUMS }.takeIf { albums.size > ALBUMS_PREVIEW },
+                        )
+                    }
                     item {
                         LazyRow(
                             contentPadding = PaddingValuesHorizontal20,
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            items(albums, key = { "album-${it.id.value}" }) { album ->
+                            items(albums.take(ALBUMS_PREVIEW), key = { "album-${it.id.value}" }) { album ->
                                 AlbumResultCard(album = album, onClick = { onAlbumClick(album.id) })
                             }
                         }
                     }
                 }
                 if (artists.isNotEmpty()) {
-                    item { SectionLabel("Артисты") }
-                    items(artists, key = { "artist-${it.id.value}" }) { artist ->
+                    item {
+                        SectionHeader(
+                            title = "Артисты",
+                            onMoreClick = { expandedSection = SearchSection.ARTISTS }.takeIf { artists.size > ARTISTS_PREVIEW },
+                        )
+                    }
+                    items(artists.take(ARTISTS_PREVIEW), key = { "artist-${it.id.value}" }) { artist ->
                         ArtistResultRow(artist = artist, onClick = { onArtistClick(artist.id) })
                     }
                 }
-                item { androidx.compose.foundation.layout.Spacer(Modifier.height(24.dp)) }
+                item { Spacer(Modifier.height(24.dp)) }
             }
         }
     }
@@ -150,18 +179,102 @@ fun SearchScreen(
     addToPlaylistTrackId?.let { trackId ->
         AddToPlaylistDialog(trackIds = setOf(trackId), onDismiss = { addToPlaylistTrackId = null })
     }
+
+    expandedSection?.let { section ->
+        ExpandedSectionScreen(
+            section = section,
+            tracks = tracks,
+            albums = albums,
+            artists = artists,
+            onBack = { expandedSection = null },
+            onTrackClick = onTrackClick,
+            onAlbumClick = onAlbumClick,
+            onArtistClick = onArtistClick,
+            onAddToPlaylist = { addToPlaylistTrackId = it },
+        )
+    }
 }
 
-private val PaddingValuesHorizontal20 = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp)
+/** "Больше" opens this instead of a separate nav destination -- it's the exact same result data
+ * already in memory, just without the preview cap, so there's nothing to navigate to/load. */
+@Composable
+private fun ExpandedSectionScreen(
+    section: SearchSection,
+    tracks: List<SearchResult.TrackResult>,
+    albums: List<SearchResult.AlbumResult>,
+    artists: List<SearchResult.ArtistResult>,
+    onBack: () -> Unit,
+    onTrackClick: (TrackId) -> Unit,
+    onAlbumClick: (AlbumId) -> Unit,
+    onArtistClick: (ArtistId) -> Unit,
+    onAddToPlaylist: (TrackId) -> Unit,
+) {
+    Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
+        Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
+                }
+                Text(
+                    text = when (section) {
+                        SearchSection.TRACKS -> "Треки"
+                        SearchSection.ALBUMS -> "Альбомы"
+                        SearchSection.ARTISTS -> "Артисты"
+                    },
+                    color = NamiColors.Paper100,
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+            }
+            when (section) {
+                SearchSection.TRACKS -> LazyColumn {
+                    items(tracks, key = { it.id.value }) { track ->
+                        TrackResultRow(track = track, onClick = { onTrackClick(track.id) }, onAddToPlaylist = { onAddToPlaylist(track.id) })
+                    }
+                }
+                SearchSection.ALBUMS -> LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 140.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    gridItems(albums, key = { it.id.value }) { album ->
+                        AlbumResultCard(album = album, onClick = { onAlbumClick(album.id) })
+                    }
+                }
+                SearchSection.ARTISTS -> LazyColumn {
+                    items(artists, key = { it.id.value }) { artist ->
+                        ArtistResultRow(artist = artist, onClick = { onArtistClick(artist.id) })
+                    }
+                }
+            }
+        }
+    }
+}
+
+private val PaddingValuesHorizontal20 = PaddingValues(horizontal = 20.dp)
 
 @Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text = text,
-        color = NamiColors.Paper40,
-        style = MaterialTheme.typography.labelMedium,
-        modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 8.dp),
-    )
+private fun SectionHeader(title: String, onMoreClick: (() -> Unit)? = null) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 16.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = title,
+            color = NamiColors.Paper40,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.weight(1f),
+        )
+        if (onMoreClick != null) {
+            Text(
+                text = "Больше",
+                color = NamiColors.Shu,
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.clickable(onClick = onMoreClick).padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+        }
+    }
 }
 
 @Composable
@@ -229,7 +342,11 @@ private fun ArtistResultRow(artist: SearchResult.ArtistResult, onClick: () -> Un
             modifier = Modifier.size(44.dp).clip(CircleShape).background(NamiColors.Ink700),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Outlined.Person, contentDescription = null, tint = NamiColors.Paper40)
+            if (artist.photoPath != null) {
+                AsyncImage(model = artist.photoPath, contentDescription = null, modifier = Modifier.fillMaxSize().clip(CircleShape))
+            } else {
+                Icon(Icons.Outlined.Person, contentDescription = null, tint = NamiColors.Paper40)
+            }
         }
         Text(
             text = artist.name,

@@ -67,6 +67,6 @@ class SearchRepositoryImpl @Inject constructor(
             SearchResult.TrackResult(TrackId(itemId), title, subtitle, track?.albumArtworkPath ?: track?.track?.artworkPath)
         }
         "album" -> SearchResult.AlbumResult(AlbumId(itemId), title, subtitle, albumDao.findById(itemId)?.artworkPath)
-        else -> SearchResult.ArtistResult(ArtistId(itemId), title)
+        else -> SearchResult.ArtistResult(ArtistId(itemId), title, artistDao.findByIdWithPhoto(itemId)?.photoPath)
     }
 }
