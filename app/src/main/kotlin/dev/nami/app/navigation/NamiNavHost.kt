@@ -86,6 +86,13 @@ fun NamiNavHost(
     // so MiniPlayer and NowPlayingScreen share the same instance and stay in sync.
     val nowPlayingViewModel: NowPlayingViewModel = hiltViewModel()
     val queue by nowPlayingViewModel.queue.collectAsState()
+    // Also hoisted here rather than scoped to the ROUTE_LIBRARY nav entry -- the bottom nav's
+    // Library tab needs to call selectTab(TRACKS) directly and reliably from any screen (Album/
+    // Artist detail, Discography, another tab entirely). The previous approach signaled a
+    // LaunchedEffect keyed off an int bump, scoped inside the ROUTE_LIBRARY composable -- reset
+    // only actually resets if that effect happens to remount and re-observe the new key at the
+    // right time, which turned out not to hold up from every screen it needed to.
+    val libraryViewModel: LibraryViewModel = hiltViewModel()
     val settingsViewModel: SettingsViewModel = hiltViewModel()
     val autoOpenPlayer by settingsViewModel.autoOpenPlayer.collectAsState()
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
@@ -133,11 +140,7 @@ fun NamiNavHost(
             popEnterTransition = { EnterTransition.None },
             popExitTransition = { ExitTransition.None },
         ) {
-            composable(ROUTE_LIBRARY) { entry ->
-                val libraryViewModel: LibraryViewModel = hiltViewModel(entry)
-                LaunchedEffect(libraryTabResetSignal) {
-                    if (libraryTabResetSignal > 0) libraryViewModel.selectTab(LibraryTab.TRACKS)
-                }
+            composable(ROUTE_LIBRARY) {
                 LibraryScreen(
                     onTrackClick = { trackId ->
                         if (queue.nowPlaying?.id == trackId) {
@@ -305,11 +308,15 @@ fun NamiNavHost(
                     launchSingleTop = true
                     restoreState = true
                 }
-                // Library tab always jumps back to the Tracks root, closing any open
-                // Album/Artist detail screen (the popUpTo above already does that) and
-                // resetting the Albums/Artists sub-tab -- via the signal, not a fresh
-                // ViewModel/Paging instance, so the list doesn't flash empty on the way.
-                if (route == ROUTE_LIBRARY) libraryTabResetSignal++
+                // Library tab always jumps back to the Tracks root, closing any open Album/
+                // Artist/Discography/etc. screen (the popUpTo above does that part) and
+                // resetting the Albums/Artists sub-tab -- called directly on the hoisted
+                // libraryViewModel (not via a signal into the nav-entry-scoped instance), so it
+                // always fires regardless of which screen it's pressed from.
+                if (route == ROUTE_LIBRARY) {
+                    libraryViewModel.selectTab(LibraryTab.TRACKS)
+                    libraryTabResetSignal++
+                }
             },
             modifier = Modifier.navigationBarsPadding(),
         )
