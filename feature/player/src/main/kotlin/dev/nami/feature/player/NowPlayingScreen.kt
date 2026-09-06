@@ -29,6 +29,9 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -146,15 +149,33 @@ fun NowPlayingScreen(
                 },
             )
 
-        if (queue.nowPlaying?.artworkPath != null) {
-            AsyncImage(
-                model = queue.nowPlaying?.artworkPath,
-                contentDescription = queue.nowPlaying?.title,
-                contentScale = ContentScale.Crop,
-                modifier = artworkModifier,
+        Box(contentAlignment = Alignment.Center) {
+            // Soft accent glow behind the artwork, per Дизайн.md's "мягкое свечение цветом
+            // акцента" -- Compose has no CSS box-shadow, so a blurred radial gradient sitting
+            // behind the artwork approximates it (Modifier.blur needs API 31+; on older devices
+            // it degrades to an unblurred soft-edged gradient, still reading as a glow).
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .padding(vertical = 24.dp)
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(NamiColors.Shu.copy(alpha = 0.35f), NamiColors.Shu.copy(alpha = 0f)),
+                        ),
+                    )
+                    .blur(32.dp),
             )
-        } else {
-            Box(modifier = artworkModifier)
+            if (queue.nowPlaying?.artworkPath != null) {
+                AsyncImage(
+                    model = queue.nowPlaying?.artworkPath,
+                    contentDescription = queue.nowPlaying?.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = artworkModifier,
+                )
+            } else {
+                Box(modifier = artworkModifier)
+            }
         }
         Text(
             text = queue.nowPlaying?.title ?: "Ничего не играет",
