@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -33,6 +35,8 @@ import dev.nami.domain.ImportProgress
 import dev.nami.feature.library.AlbumDetailScreen
 import dev.nami.feature.library.ArtistDetailScreen
 import dev.nami.feature.library.LibraryScreen
+import dev.nami.feature.library.LibraryTab
+import dev.nami.feature.library.LibraryViewModel
 import dev.nami.feature.player.MiniPlayer
 import dev.nami.feature.player.NowPlayingScreen
 import dev.nami.feature.player.NowPlayingViewModel
@@ -80,6 +84,12 @@ fun NamiNavHost(
     var showNowPlaying by remember { mutableStateOf(false) }
     BackHandler(enabled = showNowPlaying) { showNowPlaying = false }
 
+    // Bumped each time the Library tab is tapped, to reset its sub-tab to Tracks without
+    // recreating LibraryViewModel/its Paging flows -- an earlier fix used a fresh nav entry
+    // (popUpTo inclusive) for that reset, which briefly flashed an empty list + import banner
+    // while Paging reloaded from scratch every time.
+    var libraryTabResetSignal by remember { mutableIntStateOf(0) }
+
     Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
     Column(modifier = Modifier.statusBarsPadding()) {
         NavHost(
@@ -96,7 +106,11 @@ fun NamiNavHost(
             popEnterTransition = { EnterTransition.None },
             popExitTransition = { ExitTransition.None },
         ) {
-            composable(ROUTE_LIBRARY) {
+            composable(ROUTE_LIBRARY) { entry ->
+                val libraryViewModel: LibraryViewModel = hiltViewModel(entry)
+                LaunchedEffect(libraryTabResetSignal) {
+                    if (libraryTabResetSignal > 0) libraryViewModel.selectTab(LibraryTab.TRACKS)
+                }
                 LibraryScreen(
                     onTrackClick = { trackId ->
                         nowPlayingViewModel.playFromLibrary(trackId)
@@ -107,6 +121,7 @@ fun NamiNavHost(
                     onImportRequested = onImportRequested,
                     onImportFolderRequested = onImportFolderRequested,
                     importProgress = importProgress,
+                    viewModel = libraryViewModel,
                 )
             }
             composable(ROUTE_SEARCH) {
@@ -179,26 +194,26 @@ fun NamiNavHost(
                 )
             }
         }
-        MiniPlayer(onExpand = { showNowPlaying = true }, viewModel = nowPlayingViewModel)
+        // Hidden for the entire time Now Playing is open, including its swipe-down-to-dismiss
+        // drag/animation -- otherwise, as that screen slides down, it progressively uncovers
+        // this static bar underneath frame by frame, reading as the mini player itself "flying"
+        // up into view through a shrinking gap. It only needs to exist once Now Playing is gone.
+        if (!showNowPlaying) {
+            MiniPlayer(onExpand = { showNowPlaying = true }, viewModel = nowPlayingViewModel)
+        }
         NamiBottomBar(
             currentRoute = currentRoute,
             onTabSelected = { route ->
-                if (route == ROUTE_LIBRARY) {
-                    // Library tab always jumps back to the Tracks root, closing any open
-                    // Album/Artist detail screen and resetting the Albums/Artists sub-tab --
-                    // a fresh instance (no saveState/restoreState) is the simplest way to get
-                    // both a clean back stack and LibraryViewModel's default TRACKS tab.
-                    navController.navigate(route) {
-                        popUpTo(ROUTE_LIBRARY) { inclusive = true }
-                        launchSingleTop = true
-                    }
-                } else {
-                    navController.navigate(route) {
-                        popUpTo(ROUTE_LIBRARY) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
+                navController.navigate(route) {
+                    popUpTo(ROUTE_LIBRARY) { saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
                 }
+                // Library tab always jumps back to the Tracks root, closing any open
+                // Album/Artist detail screen (the popUpTo above already does that) and
+                // resetting the Albums/Artists sub-tab -- via the signal, not a fresh
+                // ViewModel/Paging instance, so the list doesn't flash empty on the way.
+                if (route == ROUTE_LIBRARY) libraryTabResetSignal++
             },
             modifier = Modifier.navigationBarsPadding(),
         )
