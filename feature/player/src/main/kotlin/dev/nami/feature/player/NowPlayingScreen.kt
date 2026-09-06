@@ -5,6 +5,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -25,22 +26,27 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.QueueMusic
+import androidx.compose.material.icons.outlined.Repeat
+import androidx.compose.material.icons.outlined.Shuffle
 import androidx.compose.material.icons.outlined.Subject
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
@@ -95,6 +101,10 @@ fun NowPlayingScreen(
     // persist across tracks/sessions. Resets whenever the playing track changes.
     var isFavorite by remember { mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(queue.nowPlaying?.id) { isFavorite = false }
+    // Stubs -- ExoPlayer supports real shuffle/repeat, but wiring actual queue-reordering and
+    // playback-loop behavior is out of scope here; this is just the visual toggle per the mockup.
+    var isShuffleOn by remember { mutableStateOf(false) }
+    var isRepeatOn by remember { mutableStateOf(false) }
 
     // Shared by the swipe gesture and the chevron button so both dismiss paths always finish
     // the slide-down themselves before popping -- see the comment on the swipe branch below.
@@ -139,18 +149,25 @@ fun NowPlayingScreen(
             IconButton(onClick = ::collapseAnimated) {
                 Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = "Свернуть", tint = NamiColors.Paper100)
             }
-            Box {
-                IconButton(onClick = { showOverflowMenu = true }) {
-                    Icon(Icons.Outlined.MoreVert, contentDescription = "Ещё", tint = NamiColors.Paper100)
-                }
-                // Stub: no queue-source/playlist-origin data is plumbed through yet (see
-                // Дизайн.md §4.3's "Из плейлиста ..." label, also skipped for the same reason),
-                // so this menu has nothing real to act on beyond dismissing itself.
-                DropdownMenu(expanded = showOverflowMenu, onDismissRequest = { showOverflowMenu = false }) {
-                    DropdownMenuItem(text = { Text("Аудиотракт") }, onClick = { showOverflowMenu = false })
-                    DropdownMenuItem(text = { Text("Таймер сна") }, onClick = { showOverflowMenu = false })
-                }
+            IconButton(onClick = { showOverflowMenu = true }) {
+                Icon(Icons.Outlined.MoreVert, contentDescription = "Ещё", tint = NamiColors.Paper100)
             }
+        }
+        // Slide-up sheet instead of a dropdown -- this is the pattern requested for every
+        // "..." menu app-wide (track/album/playlist/artist, each with its own action set).
+        // This is the first one wired; the rest (library track rows, album/artist detail
+        // overflow, playlist rows) are a separate follow-up, not done in this pass.
+        if (showOverflowMenu) {
+            // Stub actions: no queue-source/playlist-origin data is plumbed through yet (see
+            // Дизайн.md §4.3's "Из плейлиста ..." label, also skipped for the same reason), and
+            // no audio-chain/sleep-timer screens exist yet either.
+            ContextActionSheet(
+                onDismiss = { showOverflowMenu = false },
+                actions = listOf(
+                    ContextAction("Аудиотракт", Icons.Outlined.QueueMusic) {},
+                    ContextAction("Таймер сна", Icons.Outlined.DarkMode) {},
+                ),
+            )
         }
         // Pushes everything below (artwork, title, controls, pills) down to the bottom of the
         // screen instead of leaving a big empty gap under the pill row -- only the top row stays
@@ -261,54 +278,63 @@ fun NowPlayingScreen(
                 style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
             )
         }
+        // Five rounded-square blocks, shrinking away from the center: play (72) > prev/next (56)
+        // > shuffle/repeat (44). Shuffle/repeat are visual-only stubs (see isShuffleOn/isRepeatOn
+        // above) -- ExoPlayer supports both for real, but wiring actual queue reshuffling and
+        // loop behavior is a separate task.
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 16.dp),
-            // SpaceEvenly instead of Center: the play button (64dp) is much bigger than
-            // prev/next (48dp default touch target), so a plain Center bunched them together
-            // off to one side instead of spread evenly across the row.
+            modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
-            // Center: prev/next (48dp) and play (64dp) differ in height -- Row defaults to
-            // top-aligning children, which floated the smaller buttons above the play button's
-            // vertical center instead of level with it.
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = {
-                // A previous track to show -> animate the pager, same as a swipe (forces the
-                // actual previous track). Nothing to show -> fall back to the button's own
-                // restart-if-elapsed semantics with no animation (nothing to slide to).
-                if (queue.previousTrack != null) {
-                    scope.launch { pagerState.animateScrollToPage(0) }
-                } else {
-                    viewModel.skipPrevious()
-                }
-            }) {
-                Icon(Icons.Rounded.SkipPrevious, contentDescription = "Предыдущий", tint = NamiColors.Paper100)
-            }
-            IconButton(
+            TransportBlock(
+                icon = Icons.Outlined.Shuffle,
+                size = 44.dp,
+                active = isShuffleOn,
+                contentDescription = "Перемешать",
+                onClick = { isShuffleOn = !isShuffleOn },
+            )
+            TransportBlock(
+                icon = Icons.Rounded.SkipPrevious,
+                size = 56.dp,
+                contentDescription = "Предыдущий",
+                onClick = {
+                    // A previous track to show -> animate the pager, same as a swipe (forces the
+                    // actual previous track). Nothing to show -> fall back to the button's own
+                    // restart-if-elapsed semantics with no animation (nothing to slide to).
+                    if (queue.previousTrack != null) {
+                        scope.launch { pagerState.animateScrollToPage(0) }
+                    } else {
+                        viewModel.skipPrevious()
+                    }
+                },
+            )
+            TransportBlock(
+                icon = if (playing?.isPlaying == true) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                size = 72.dp,
+                filled = true,
+                contentDescription = "Играть/пауза",
                 onClick = viewModel::toggle,
-                modifier = Modifier.size(64.dp),
-            ) {
-                Icon(
-                    imageVector = if (playing?.isPlaying == true) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                    contentDescription = "Играть/пауза",
-                    tint = NamiColors.Ink900,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(NamiColors.Paper100, RoundedCornerShape(20.dp))
-                        .padding(16.dp),
-                )
-            }
-            IconButton(onClick = {
-                if (queue.upcoming.isNotEmpty()) {
-                    scope.launch { pagerState.animateScrollToPage(2) }
-                } else {
-                    viewModel.skipNext()
-                }
-            }) {
-                Icon(Icons.Rounded.SkipNext, contentDescription = "Следующий", tint = NamiColors.Paper100)
-            }
+            )
+            TransportBlock(
+                icon = Icons.Rounded.SkipNext,
+                size = 56.dp,
+                contentDescription = "Следующий",
+                onClick = {
+                    if (queue.upcoming.isNotEmpty()) {
+                        scope.launch { pagerState.animateScrollToPage(2) }
+                    } else {
+                        viewModel.skipNext()
+                    }
+                },
+            )
+            TransportBlock(
+                icon = Icons.Outlined.Repeat,
+                size = 44.dp,
+                active = isRepeatOn,
+                contentDescription = "Зациклить",
+                onClick = { isRepeatOn = !isRepeatOn },
+            )
         }
         // Format badge sits below the transport controls per Дизайн.md §4.3 (mockup order:
         // controls, then format badge row, then the pill row) -- was above the scrubber before.
@@ -318,20 +344,27 @@ fun NowPlayingScreen(
                 color = NamiColors.Ai,
                 style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
                 modifier = Modifier
-                    .padding(top = 32.dp)
+                    .padding(top = 40.dp)
                     .background(NamiColors.Ai.copy(alpha = 0.14f), RoundedCornerShape(4.dp))
                     .padding(horizontal = 6.dp, vertical = 2.dp),
             )
         }
         // Bottom pill row per Дизайн.md §4.3: Очередь (real), night mode + lyrics ("Текст") are
         // stubs -- neither an AMOLED/night toggle nor a lyrics screen exists yet, so these are
-        // present per the mockup but currently no-ops.
+        // present per the mockup but currently no-ops. Очередь/Текст are rectangular with sharp
+        // corners (r4); night mode is its own small circle, set apart from the other two.
         Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 40.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            NowPlayingPill(text = "Очередь", onClick = onQueueClick, modifier = Modifier.weight(1f))
-            NowPlayingPill(icon = Icons.Outlined.DarkMode, onClick = {}, modifier = Modifier.weight(1f))
+            NowPlayingPill(
+                text = "Очередь",
+                icon = Icons.Outlined.QueueMusic,
+                onClick = onQueueClick,
+                modifier = Modifier.weight(1f),
+            )
+            NowPlayingPill(icon = Icons.Outlined.DarkMode, onClick = {}, shape = CircleShape, modifier = Modifier.size(36.dp))
             NowPlayingPill(text = "Текст", icon = Icons.Outlined.Subject, onClick = {}, modifier = Modifier.weight(1f))
         }
     }
@@ -342,19 +375,86 @@ private fun NowPlayingPill(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     text: String? = null,
-    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    icon: ImageVector? = null,
+    // Sharp-ish rectangle by default (r4, not the fully-rounded r22 pill from before); night
+    // mode passes CircleShape to stand apart as its own small round button.
+    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(4.dp),
 ) {
     androidx.compose.material3.TextButton(
         onClick = onClick,
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
         modifier = modifier
-            .height(44.dp)
-            .background(NamiColors.Ink800, RoundedCornerShape(22.dp)),
+            .height(36.dp)
+            .background(NamiColors.Ink800, shape),
     ) {
         icon?.let {
-            Icon(it, contentDescription = text, tint = NamiColors.Paper70, modifier = Modifier.size(20.dp))
+            Icon(it, contentDescription = text, tint = NamiColors.Paper70, modifier = Modifier.size(18.dp))
             if (text != null) androidx.compose.foundation.layout.Spacer(modifier = Modifier.padding(start = 4.dp))
         }
         text?.let { Text(text = it, color = NamiColors.Paper70) }
+    }
+}
+
+@Composable
+private fun TransportBlock(
+    icon: ImageVector,
+    size: androidx.compose.ui.unit.Dp,
+    contentDescription: String,
+    onClick: () -> Unit,
+    filled: Boolean = false,
+    active: Boolean = false,
+) {
+    IconButton(onClick = onClick, modifier = Modifier.size(size)) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = when {
+                filled -> NamiColors.Ink900
+                active -> NamiColors.Shu
+                else -> NamiColors.Paper100
+            },
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    color = if (filled) NamiColors.Paper100 else NamiColors.Ink800,
+                    shape = RoundedCornerShape(size / 3.5f),
+                )
+                .padding(size / 4),
+        )
+    }
+}
+
+data class ContextAction(val label: String, val icon: ImageVector, val onClick: () -> Unit)
+
+/**
+ * Slide-up sheet for a "..." menu, replacing a plain [androidx.compose.material3.DropdownMenu] --
+ * per the pattern requested app-wide, each target type (track/album/playlist/artist) supplies its
+ * own [actions] list. This is the first call site wired to it; extending every other overflow
+ * menu in the app (library rows, album/artist detail, playlist rows) to this same sheet is a
+ * separate, larger follow-up.
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun ContextActionSheet(onDismiss: () -> Unit, actions: List<ContextAction>) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
+        Column(modifier = Modifier.padding(bottom = 20.dp)) {
+            actions.forEach { action ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onDismiss(); action.onClick() }
+                        .padding(horizontal = 20.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(action.icon, contentDescription = null, tint = NamiColors.Paper100)
+                    Text(
+                        text = action.label,
+                        color = NamiColors.Paper100,
+                        modifier = Modifier.padding(start = 20.dp),
+                    )
+                }
+            }
+        }
     }
 }
 
