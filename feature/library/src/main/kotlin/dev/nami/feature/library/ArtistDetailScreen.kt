@@ -26,6 +26,7 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Shuffle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -79,6 +80,7 @@ fun ArtistDetailScreen(
     onShowDiscography: () -> Unit,
     onShowAllTracks: () -> Unit,
     onPlayTracks: (tracks: List<Track>, artistName: String?, startIndex: Int) -> Unit,
+    onShuffleTracks: (tracks: List<Track>, artistName: String?) -> Unit,
     onAddToQueue: (Track, artistName: String?) -> Unit,
     onPickPhotoRequested: (ArtistId) -> Unit,
     viewModel: ArtistDetailViewModel = hiltViewModel(),
@@ -159,12 +161,22 @@ fun ArtistDetailScreen(
                                     .padding(start = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                if (uiState.tracks.isNotEmpty()) {
+                                // Plays/shuffles topTracks -- the list actually rendered below --
+                                // not the raw uiState.tracks (unsorted, all of them): that used to
+                                // start playback at a track other than whatever the user was
+                                // looking at, since the visible rows are sorted by play count.
+                                if (topTracks.isNotEmpty()) {
                                     IconButton(
-                                        onClick = { onPlayTracks(uiState.tracks, artistName, 0) },
+                                        onClick = { onPlayTracks(topTracks, artistName, 0) },
                                         modifier = Modifier.size(36.dp).background(NamiColors.Paper100, RoundedCornerShape(12.dp)),
                                     ) {
                                         Icon(Icons.Filled.PlayArrow, contentDescription = "Играть всё", tint = NamiColors.Ink900, modifier = Modifier.size(18.dp))
+                                    }
+                                    IconButton(
+                                        onClick = { onShuffleTracks(topTracks, artistName) },
+                                        modifier = Modifier.padding(start = 4.dp),
+                                    ) {
+                                        Icon(Icons.Outlined.Shuffle, contentDescription = "Перемешать", tint = NamiColors.Paper100)
                                     }
                                 }
                                 IconButton(onClick = { showArtistMenu = true }, modifier = Modifier.padding(start = 4.dp)) {
@@ -335,14 +347,23 @@ fun ArtistDetailScreen(
                     modifier = Modifier.graphicsLayer { alpha = (1f - progress / 0.6f).coerceIn(0f, 1f) }.padding(bottom = 64.dp, end = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (uiState.tracks.isNotEmpty()) {
+                    // Same topTracks fix as the inline row above -- plays/shuffles what's actually
+                    // shown, not the raw unsorted uiState.tracks.
+                    if (topTracks.isNotEmpty()) {
                         IconButton(
-                            onClick = { onPlayTracks(uiState.tracks, artistName, 0) },
+                            onClick = { onPlayTracks(topTracks, artistName, 0) },
                             modifier = Modifier
                                 .size(56.dp)
                                 .background(NamiColors.Paper100, RoundedCornerShape(18.dp)),
                         ) {
                             Icon(Icons.Filled.PlayArrow, contentDescription = "Играть всё", tint = NamiColors.Ink900)
+                        }
+                        Spacer(modifier = Modifier.padding(start = 8.dp))
+                        IconButton(
+                            onClick = { onShuffleTracks(topTracks, artistName) },
+                            modifier = Modifier.background(NamiColors.Ink900.copy(alpha = 0.4f), androidx.compose.foundation.shape.CircleShape),
+                        ) {
+                            Icon(Icons.Outlined.Shuffle, contentDescription = "Перемешать", tint = NamiColors.Paper100)
                         }
                     }
                     Spacer(modifier = Modifier.padding(start = 8.dp))

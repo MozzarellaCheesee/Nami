@@ -68,6 +68,7 @@ class LibraryViewModelTest {
         override val state: StateFlow<PlaybackState> = MutableStateFlow(PlaybackState.Idle)
         override val queue: StateFlow<PlayerQueue> = MutableStateFlow(PlayerQueue.EMPTY)
             override val autoAdvanceSignal: StateFlow<Int> = MutableStateFlow(0)
+            override val shuffleEnabled: StateFlow<Boolean> = MutableStateFlow(false)
         override suspend fun play(tracks: List<PlayableTrack>, startIndex: Int, startMs: Long) {}
         override suspend fun toggle() {}
         override suspend fun seek(ms: Long) {}
@@ -78,6 +79,7 @@ class LibraryViewModelTest {
         override suspend fun moveQueueItem(fromIndex: Int, toIndex: Int) {}
         override suspend fun removeQueueItem(index: Int) {}
         override suspend fun removeTracks(ids: Set<TrackId>) { removedTracks = ids }
+        override suspend fun setShuffleEnabled(enabled: Boolean) {}
         override suspend fun stop() {}
     }
 

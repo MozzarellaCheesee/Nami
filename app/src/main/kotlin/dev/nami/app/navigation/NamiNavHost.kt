@@ -239,6 +239,10 @@ fun NamiNavHost(
                             if (autoOpenPlayer) showNowPlaying = true
                         }
                     },
+                    onShuffleTracks = { tracks ->
+                        nowPlayingViewModel.playTracksShuffled(tracks, artistName = null)
+                        if (autoOpenPlayer) showNowPlaying = true
+                    },
                     onAddToQueue = { track -> nowPlayingViewModel.addToQueue(track, artistName = null) },
                     onPickCoverRequested = onPickAlbumCover,
                     onDeleted = { navController.popBackStack() },
@@ -261,6 +265,10 @@ fun NamiNavHost(
                             nowPlayingViewModel.playTracks(tracks, artistName, startIndex)
                             if (autoOpenPlayer) showNowPlaying = true
                         }
+                    },
+                    onShuffleTracks = { tracks, artistName ->
+                        nowPlayingViewModel.playTracksShuffled(tracks, artistName)
+                        if (autoOpenPlayer) showNowPlaying = true
                     },
                     onAddToQueue = { track, artistName -> nowPlayingViewModel.addToQueue(track, artistName) },
                     onPickPhotoRequested = onPickArtistPhoto,

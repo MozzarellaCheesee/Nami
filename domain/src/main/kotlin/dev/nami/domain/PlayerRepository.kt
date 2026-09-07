@@ -48,6 +48,10 @@ interface PlayerRepository {
      * itself. Lets Now Playing/MiniPlayer play the same slide transition for a natural track
      * change instead of the cover just silently jumping to the next one. */
     val autoAdvanceSignal: StateFlow<Int>
+    /** Whether the current queue (from the currently-playing item forward) is in a shuffled
+     * order right now -- real, not a UI stub: [setShuffleEnabled] actually reorders the live
+     * playback queue and can restore the exact pre-shuffle order. */
+    val shuffleEnabled: StateFlow<Boolean>
     suspend fun play(tracks: List<PlayableTrack>, startIndex: Int, startMs: Long = 0)
     suspend fun toggle()
     suspend fun seek(ms: Long)
@@ -67,4 +71,9 @@ interface PlayerRepository {
     suspend fun removeQueueItem(index: Int)
     /** Removes any currently playing/queued item whose id is in [ids] (e.g. after a library delete). */
     suspend fun removeTracks(ids: Set<TrackId>)
+    /** Reorders the live queue in place -- true shuffles everything after (and not) the currently
+     * playing item, keeping that item where it is; false restores the exact order the queue had
+     * the moment it was last shuffled. A no-op if [enabled] already matches the current state, or
+     * if false is requested with nothing to restore (shuffle was never turned on this queue). */
+    suspend fun setShuffleEnabled(enabled: Boolean)
 }

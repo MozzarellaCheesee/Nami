@@ -26,6 +26,7 @@ import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PlaylistAdd
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Shuffle
 import androidx.compose.material.icons.outlined.Star
 import dev.nami.core.designsystem.NamiAlertDialog
 import androidx.compose.material3.Icon
@@ -77,6 +78,7 @@ private fun lerp(start: Float, stop: Float, fraction: Float) = start + (stop - s
 fun AlbumDetailScreen(
     onBack: () -> Unit,
     onPlayTracks: (tracks: List<Track>, startIndex: Int) -> Unit,
+    onShuffleTracks: (tracks: List<Track>) -> Unit,
     onAddToQueue: (Track) -> Unit,
     onPickCoverRequested: (AlbumId) -> Unit,
     onDeleted: () -> Unit,
@@ -168,6 +170,12 @@ fun AlbumDetailScreen(
                                         modifier = Modifier.size(36.dp).background(NamiColors.Paper100, RoundedCornerShape(12.dp)),
                                     ) {
                                         Icon(Icons.Filled.PlayArrow, contentDescription = "Играть альбом", tint = NamiColors.Ink900, modifier = Modifier.size(18.dp))
+                                    }
+                                    IconButton(
+                                        onClick = { onShuffleTracks(uiState.tracks) },
+                                        modifier = Modifier.padding(start = 4.dp),
+                                    ) {
+                                        Icon(Icons.Outlined.Shuffle, contentDescription = "Перемешать", tint = NamiColors.Paper100)
                                     }
                                 }
                                 IconButton(onClick = { showAlbumMenu = true }, modifier = Modifier.padding(start = 4.dp)) {
@@ -293,6 +301,13 @@ fun AlbumDetailScreen(
                                     .background(NamiColors.Paper100, RoundedCornerShape(18.dp)),
                             ) {
                                 Icon(Icons.Filled.PlayArrow, contentDescription = "Играть альбом", tint = NamiColors.Ink900)
+                            }
+                            Spacer(modifier = Modifier.padding(start = 8.dp))
+                            IconButton(
+                                onClick = { onShuffleTracks(uiState.tracks) },
+                                modifier = Modifier.background(NamiColors.Ink900.copy(alpha = 0.4f), androidx.compose.foundation.shape.CircleShape),
+                            ) {
+                                Icon(Icons.Outlined.Shuffle, contentDescription = "Перемешать", tint = NamiColors.Paper100)
                             }
                         }
                         Spacer(modifier = Modifier.padding(start = 8.dp))

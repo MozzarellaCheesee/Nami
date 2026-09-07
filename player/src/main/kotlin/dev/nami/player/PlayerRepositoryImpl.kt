@@ -41,6 +41,13 @@ class PlayerRepositoryImpl @Inject constructor(
     private val _autoAdvanceSignal = MutableStateFlow(0)
     override val autoAdvanceSignal: StateFlow<Int> = _autoAdvanceSignal
 
+    private val _shuffleEnabled = MutableStateFlow(false)
+    override val shuffleEnabled: StateFlow<Boolean> = _shuffleEnabled
+    // Snapshot of the queue's MediaItems in their pre-shuffle order, taken the moment shuffle
+    // turns on -- what setShuffleEnabled(false) restores. Null whenever shuffle is off (nothing
+    // to restore) or after play() starts a fresh context.
+    private var preShuffleOrder: MutableList<MediaItem>? = null
+
     private var controller: MediaController? = null
     // Known limitation: keyed by mediaId, not by queue position — if the same track
     // appears twice in the queue (e.g. added manually while already present from
@@ -180,6 +187,10 @@ class PlayerRepositoryImpl @Inject constructor(
     override suspend fun play(tracks: List<PlayableTrack>, startIndex: Int, startMs: Long) {
         originByMediaId.clear()
         trackInfoByMediaId.clear()
+        // A fresh context starts unshuffled -- there is no "pre-shuffle order" left to restore
+        // from a previous queue, and leaving the flag on would silently mislabel the new queue.
+        _shuffleEnabled.value = false
+        preShuffleOrder = null
         tracks.forEach { trackInfoByMediaId[it.id.value] = it.toMediaItemInfo() }
         val items = tracks.map { it.toMediaItem() }
         controller?.apply {
@@ -212,6 +223,8 @@ class PlayerRepositoryImpl @Inject constructor(
     override suspend fun stop() {
         originByMediaId.clear()
         trackInfoByMediaId.clear()
+        _shuffleEnabled.value = false
+        preShuffleOrder = null
         controller?.apply {
             stop()
             clearMediaItems()
@@ -242,6 +255,10 @@ class PlayerRepositoryImpl @Inject constructor(
         trackInfoByMediaId[track.id.value] = track.toMediaItemInfo()
         val wasEmpty = player.mediaItemCount == 0
         player.addMediaItem(insertIndex, track.toMediaItem())
+        // Keep the pre-shuffle snapshot in sync -- otherwise a track added WHILE shuffled would
+        // silently vanish the moment shuffle is turned back off, since it never existed in the
+        // order being restored.
+        preShuffleOrder?.add(track.toMediaItem())
         if (wasEmpty) {
             player.prepare()
             player.play()
@@ -267,6 +284,7 @@ class PlayerRepositoryImpl @Inject constructor(
         val mediaId = upcoming[index].track.id.value
         player.removeMediaItem(base + index)
         originByMediaId.remove(mediaId)
+        preShuffleOrder?.removeAll { it.mediaId == mediaId }
     }
 
     override suspend fun removeTracks(ids: Set<TrackId>) {
@@ -282,5 +300,29 @@ class PlayerRepositoryImpl @Inject constructor(
                 originByMediaId.remove(mediaId)
             }
         }
+    }
+
+    override suspend fun setShuffleEnabled(enabled: Boolean) {
+        if (enabled == _shuffleEnabled.value) return
+        val player = controller ?: return
+        val currentItem = player.currentMediaItem ?: return
+        val currentPosition = player.currentPosition
+        if (enabled) {
+            // Real reorder of the actual queue, not ExoPlayer's own shuffleModeEnabled/shuffle-
+            // order machinery -- that reorders PLAYBACK order while leaving getMediaItemAt(i)'s
+            // linear index order untouched, which would desync it from how publishQueue() (and
+            // everything downstream: MiniPlayer/NowPlaying's previous/upcoming) reads the queue.
+            // Physically reordering the items keeps that whole pipeline correct for free.
+            val snapshot = (0 until player.mediaItemCount).mapTo(mutableListOf()) { player.getMediaItemAt(it) }
+            preShuffleOrder = snapshot
+            val rest = snapshot.filterNot { it.mediaId == currentItem.mediaId }.shuffled()
+            player.setMediaItems(listOf(currentItem) + rest, 0, currentPosition)
+        } else {
+            val original = preShuffleOrder ?: return
+            val restoreIndex = original.indexOfFirst { it.mediaId == currentItem.mediaId }.coerceAtLeast(0)
+            player.setMediaItems(original, restoreIndex, currentPosition)
+            preShuffleOrder = null
+        }
+        _shuffleEnabled.value = enabled
     }
 }

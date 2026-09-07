@@ -46,6 +46,7 @@ class NowPlayingViewModel @Inject constructor(
     val playbackState: StateFlow<PlaybackState> = playerRepository.state
     val queue: StateFlow<PlayerQueue> = playerRepository.queue
     val autoAdvanceSignal: StateFlow<Int> = playerRepository.autoAdvanceSignal
+    val shuffleEnabled: StateFlow<Boolean> = playerRepository.shuffleEnabled
 
     /** Full Track for the "Аудиотракт"-style file details (bitrate/size/etc.) shown near the
      * format badge -- QueueTrack only carries what the mini/full player needs for display, not
@@ -141,6 +142,23 @@ class NowPlayingViewModel @Inject constructor(
             playerRepository.play(tracks.map { it.toPlayableTrack(artistName) }, startIndex = startIndex)
             _externalTrackChangeSignal.value++
         }
+    }
+
+    /** "Перемешать" from Album/Artist -- starts the given tracks as a fresh queue, then
+     * immediately shuffles it (see [PlayerRepository.setShuffleEnabled]) rather than shuffling
+     * [tracks] here and starting at index 0: going through the real toggle means the player's own
+     * shuffle button can un-shuffle back to this exact starting order afterwards, same as if the
+     * user had tapped Play and then shuffle by hand. */
+    fun playTracksShuffled(tracks: List<Track>, artistName: String?) {
+        viewModelScope.launch {
+            playerRepository.play(tracks.map { it.toPlayableTrack(artistName) }, startIndex = 0)
+            playerRepository.setShuffleEnabled(true)
+            _externalTrackChangeSignal.value++
+        }
+    }
+
+    fun toggleShuffle() {
+        viewModelScope.launch { playerRepository.setShuffleEnabled(!playerRepository.shuffleEnabled.value) }
     }
 
     fun addToQueue(track: Track, artistName: String?) {

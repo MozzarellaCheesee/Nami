@@ -44,6 +44,7 @@ class NowPlayingViewModelTest {
         override val state: StateFlow<PlaybackState> = MutableStateFlow(PlaybackState.Idle)
         override val queue: StateFlow<PlayerQueue> = MutableStateFlow(PlayerQueue.EMPTY)
             override val autoAdvanceSignal: StateFlow<Int> = MutableStateFlow(0)
+            override val shuffleEnabled: StateFlow<Boolean> = MutableStateFlow(false)
         var playedTracks: List<PlayableTrack>? = null
         var addedTrack: PlayableTrack? = null
         var movedFromTo: Pair<Int, Int>? = null
@@ -67,6 +68,7 @@ class NowPlayingViewModelTest {
             removedIndex = index
         }
         override suspend fun removeTracks(ids: Set<TrackId>) {}
+        override suspend fun setShuffleEnabled(enabled: Boolean) {}
         override suspend fun stop() {}
     }
 

@@ -106,9 +106,10 @@ fun NowPlayingScreen(
     // persist across tracks/sessions. Resets whenever the playing track changes.
     var isFavorite by remember { mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(queue.nowPlaying?.id) { isFavorite = false }
-    // Stubs -- ExoPlayer supports real shuffle/repeat, but wiring actual queue-reordering and
-    // playback-loop behavior is out of scope here; this is just the visual toggle per the mockup.
-    var isShuffleOn by remember { mutableStateOf(false) }
+    // Real, not a stub: viewModel.shuffleEnabled reflects the live queue's actual order (see
+    // PlayerRepository.setShuffleEnabled) -- toggling this really reorders/restores the queue.
+    val shuffleEnabled by viewModel.shuffleEnabled.collectAsState()
+    // Repeat stays a visual-only stub -- no playback-loop behavior wired yet, out of scope here.
     var isRepeatOn by remember { mutableStateOf(false) }
 
     // Shared by the swipe gesture and the chevron button so both dismiss paths always finish
@@ -321,9 +322,8 @@ fun NowPlayingScreen(
             )
         }
         // Five rounded-square blocks, shrinking away from the center: play (72) > prev/next (56)
-        // > shuffle/repeat (44). Shuffle/repeat are visual-only stubs (see isShuffleOn/isRepeatOn
-        // above) -- ExoPlayer supports both for real, but wiring actual queue reshuffling and
-        // loop behavior is a separate task.
+        // > shuffle/repeat (44). Shuffle is real (see shuffleEnabled above); repeat is still a
+        // visual-only stub -- no loop behavior wired yet, a separate task.
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
@@ -332,9 +332,9 @@ fun NowPlayingScreen(
             TransportBlock(
                 icon = Icons.Outlined.Shuffle,
                 size = 44.dp,
-                active = isShuffleOn,
+                active = shuffleEnabled,
                 contentDescription = "Перемешать",
-                onClick = { isShuffleOn = !isShuffleOn },
+                onClick = { viewModel.toggleShuffle() },
             )
             TransportBlock(
                 icon = Icons.Rounded.SkipPrevious,
