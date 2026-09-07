@@ -306,7 +306,6 @@ class PlayerRepositoryImpl @Inject constructor(
         if (enabled == _shuffleEnabled.value) return
         val player = controller ?: return
         val currentItem = player.currentMediaItem ?: return
-        val currentPosition = player.currentPosition
         if (enabled) {
             // Real reorder of the actual queue, not ExoPlayer's own shuffleModeEnabled/shuffle-
             // order machinery -- that reorders PLAYBACK order while leaving getMediaItemAt(i)'s
@@ -316,13 +315,30 @@ class PlayerRepositoryImpl @Inject constructor(
             val snapshot = (0 until player.mediaItemCount).mapTo(mutableListOf()) { player.getMediaItemAt(it) }
             preShuffleOrder = snapshot
             val rest = snapshot.filterNot { it.mediaId == currentItem.mediaId }.shuffled()
-            player.setMediaItems(listOf(currentItem) + rest, 0, currentPosition)
+            reorderTo(player, listOf(currentItem) + rest)
         } else {
             val original = preShuffleOrder ?: return
-            val restoreIndex = original.indexOfFirst { it.mediaId == currentItem.mediaId }.coerceAtLeast(0)
-            player.setMediaItems(original, restoreIndex, currentPosition)
+            reorderTo(player, original)
             preShuffleOrder = null
         }
         _shuffleEnabled.value = enabled
+    }
+
+    /** Rearranges the live queue to [target] order using ONLY [Player.moveMediaItem] -- never
+     * setMediaItems/remove+add, which replace the whole playlist (even an "unchanged" current
+     * item) and made ExoPlayer briefly re-buffer/re-seek it: an audible stutter, and the scrubber
+     * visibly snapping to 0 before jumping back to the real position. moveMediaItem is documented
+     * as a pure Timeline-metadata operation -- including for the currently playing item -- so
+     * this never touches decode/playback state or calls seekTo at all; position and playback
+     * continue completely uninterrupted through the whole reorder. */
+    private fun reorderTo(player: Player, target: List<MediaItem>) {
+        val current = (0 until player.mediaItemCount).mapTo(mutableListOf()) { player.getMediaItemAt(it) }
+        for (i in target.indices) {
+            val targetId = target[i].mediaId
+            if (i < current.size && current[i].mediaId == targetId) continue
+            val j = (i until current.size).firstOrNull { current[it].mediaId == targetId } ?: continue
+            player.moveMediaItem(j, i)
+            current.add(i, current.removeAt(j))
+        }
     }
 }
