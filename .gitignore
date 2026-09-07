@@ -1,3 +1,4 @@
+# Gradle / Android build output
 .gradle/
 build/
 *.iml
@@ -8,6 +9,13 @@ captures/
 .externalNativeBuild/
 .cxx/
 *.apk
+*.aab
+
+# Rust
 native/target/
 core/native/src/main/jniLibs/
 core/native/build/
+
+# Local tooling state -- machine-specific, not part of the project
+.claude/
+.superpowers/
