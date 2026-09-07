@@ -778,25 +778,38 @@ private fun SyncedLyricsList(
                         itemNextLine == null -> 1f
                         else -> ((positionMs - line.timeMs).toFloat() / (itemNextLine.timeMs - line.timeMs).toFloat()).coerceIn(0f, 1f)
                     }
-                    TappableLine(
-                        line = line.text,
-                        showFurigana = showFurigana,
-                        color = NamiColors.Paper100.copy(alpha = alpha),
-                        sungColor = NamiColors.Shu.copy(alpha = alpha),
-                        karaokeProgress = if (isCurrent && karaokeEnabled) karaokeProgress else null,
-                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
-                        fontFamily = fontFamily,
-                        tokenizeLine = tokenizeLine,
-                        // Off: words aren't individually clickable at all, so the line's own
-                        // clickable (seek) is the only thing that can react to the tap -- no
-                        // separate onLineClick call needed here in that case, unlike when word
-                        // selection is on and the word's own clickable would otherwise eat it.
-                        wordSelectMode = wordSelectMode,
-                        onWordTap = { token ->
-                            onLineClick(line.timeMs)
-                            onWordTap(token, line.text)
-                        },
-                    )
+                    // Some .lrc files use a literal "..." line to mark a no-vocals stretch
+                    // (instrumental break, intro) instead of just leaving a timing gap -- same
+                    // "nothing is being sung" meaning as the gap-detected note icon above, so it
+                    // gets the same icon instead of rendering three dots as if they were lyrics.
+                    if (line.text.trim().let { it == "..." || it == "…" }) {
+                        Icon(
+                            Icons.Outlined.MusicNote,
+                            contentDescription = null,
+                            tint = NamiColors.Paper100.copy(alpha = alpha),
+                            modifier = Modifier.size(28.dp).padding(vertical = 4.dp),
+                        )
+                    } else {
+                        TappableLine(
+                            line = line.text,
+                            showFurigana = showFurigana,
+                            color = NamiColors.Paper100.copy(alpha = alpha),
+                            sungColor = NamiColors.Shu.copy(alpha = alpha),
+                            karaokeProgress = if (isCurrent && karaokeEnabled) karaokeProgress else null,
+                            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                            fontFamily = fontFamily,
+                            tokenizeLine = tokenizeLine,
+                            // Off: words aren't individually clickable at all, so the line's own
+                            // clickable (seek) is the only thing that can react to the tap -- no
+                            // separate onLineClick call needed here in that case, unlike when word
+                            // selection is on and the word's own clickable would otherwise eat it.
+                            wordSelectMode = wordSelectMode,
+                            onWordTap = { token ->
+                                onLineClick(line.timeMs)
+                                onWordTap(token, line.text)
+                            },
+                        )
+                    }
                     translation?.getOrNull(index)?.let { translatedText ->
                         val revealed = !studyModeEnabled || revealedTranslations[index] == true
                         Text(
