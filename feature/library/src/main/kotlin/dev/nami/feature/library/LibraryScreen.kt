@@ -32,8 +32,10 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Done
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.LibraryAdd
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -68,6 +70,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemKey
+import dev.nami.core.designsystem.ContextAction
+import dev.nami.core.designsystem.ContextActionSheet
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.designsystem.RenameDialog
 import dev.nami.core.model.AlbumId
@@ -162,6 +166,7 @@ fun LibraryScreen(
                         },
                         onDelete = viewModel::deleteSelectedTracks,
                         onAddToPlaylist = { showAddSelectedToPlaylist = true },
+                        onLikeSelected = viewModel::likeSelectedTracks,
                     )
                 } else if (albumSelectionMode) {
                     AlbumSelectionTopBar(
@@ -299,7 +304,9 @@ private fun SelectionTopBar(
     onSelectAll: () -> Unit,
     onDelete: () -> Unit,
     onAddToPlaylist: () -> Unit,
+    onLikeSelected: () -> Unit,
 ) {
+    var showMenu by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -316,12 +323,19 @@ private fun SelectionTopBar(
         IconButton(onClick = onSelectAll) {
             Icon(Icons.Outlined.Done, contentDescription = "Выбрать все", tint = NamiColors.Paper70)
         }
-        IconButton(onClick = onAddToPlaylist) {
-            Icon(Icons.Outlined.LibraryAdd, contentDescription = "В плейлист", tint = NamiColors.Paper70)
+        IconButton(onClick = { showMenu = true }) {
+            Icon(Icons.Outlined.MoreVert, contentDescription = "Действия", tint = NamiColors.Paper70)
         }
-        IconButton(onClick = onDelete) {
-            Icon(Icons.Outlined.Delete, contentDescription = "Удалить", tint = NamiColors.Paper70)
-        }
+    }
+    if (showMenu) {
+        ContextActionSheet(
+            onDismiss = { showMenu = false },
+            actions = listOf(
+                ContextAction("В плейлист", Icons.Outlined.LibraryAdd, onAddToPlaylist),
+                ContextAction("Отметить любимым", Icons.Outlined.FavoriteBorder, onLikeSelected),
+                ContextAction("Удалить", Icons.Outlined.Delete, onDelete),
+            ),
+        )
     }
 }
 

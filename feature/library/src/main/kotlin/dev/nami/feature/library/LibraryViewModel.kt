@@ -55,6 +55,12 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch { playlistRepository.likeTrack(trackId) }
     }
 
+    fun likeSelectedTracks() {
+        val ids = uiState.value.selectedTrackIds
+        viewModelScope.launch { ids.forEach { playlistRepository.likeTrack(it) } }
+        clearSelection()
+    }
+
     val tracks: Flow<PagingData<Track>> =
         libraryRepository.tracks().cachedIn(viewModelScope)
 
