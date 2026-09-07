@@ -1,10 +1,21 @@
 package dev.nami.feature.search
 
+import dev.nami.core.model.AlbumId
+import dev.nami.core.model.AlbumSummary
+import dev.nami.core.model.Album
+import dev.nami.core.model.Artist
+import dev.nami.core.model.ArtistId
+import dev.nami.core.model.Track
 import dev.nami.core.model.TrackId
+import dev.nami.domain.ImportProgress
+import dev.nami.domain.ImportSource
+import dev.nami.domain.LibraryRepository
 import dev.nami.domain.SearchRepository
 import dev.nami.domain.SearchResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -19,6 +30,45 @@ import kotlin.test.assertTrue
 class SearchViewModelTest {
     private val dispatcher = StandardTestDispatcher()
 
+    // Only recentAlbums/featuredArtists are ever read by SearchViewModel -- everything else here
+    // errors loudly if a test path ever ends up calling it, instead of silently returning junk.
+    private val fakeLibraryRepository = object : LibraryRepository {
+        override fun tracks() = error("unused")
+        override suspend fun allTracksOrdered(): List<Track> = error("unused")
+        override fun track(id: TrackId) = error("unused")
+        override fun albums() = error("unused")
+        override fun recentAlbums(limit: Int): Flow<List<AlbumSummary>> = flowOf(emptyList())
+        override fun featuredArtists(limit: Int): Flow<List<Artist>> = flowOf(emptyList())
+        override fun artists() = error("unused")
+        override fun album(id: AlbumId): Flow<Album?> = error("unused")
+        override fun artist(id: ArtistId): Flow<Artist?> = error("unused")
+        override fun tracksInAlbum(id: AlbumId): Flow<List<Track>> = error("unused")
+        override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
+        override suspend fun setTrackCover(id: TrackId, imageUri: String) = error("unused")
+        override suspend fun createAlbum(title: String, artistId: ArtistId?): AlbumId = error("unused")
+        override suspend fun renameAlbum(id: AlbumId, title: String) = error("unused")
+        override suspend fun setAlbumCover(id: AlbumId, imageUri: String) = error("unused")
+        override suspend fun setAlbumIsSingle(id: AlbumId, isSingle: Boolean) = error("unused")
+        override suspend fun setAlbumYear(id: AlbumId, year: Int?) = error("unused")
+        override suspend fun setAlbumArtist(id: AlbumId, artistId: ArtistId?) = error("unused")
+        override fun albumArtists(id: AlbumId): Flow<List<Artist>> = error("unused")
+        override suspend fun addAlbumArtist(id: AlbumId, artistId: ArtistId) = error("unused")
+        override suspend fun removeAlbumArtist(id: AlbumId, artistId: ArtistId) = error("unused")
+        override suspend fun addTrackToAlbum(trackId: TrackId, albumId: AlbumId) = error("unused")
+        override suspend fun removeTrackFromAlbum(trackId: TrackId) = error("unused")
+        override suspend fun addTrackToArtist(trackId: TrackId, artistId: ArtistId) = error("unused")
+        override suspend fun removeTrackFromArtist(trackId: TrackId) = error("unused")
+        override suspend fun renameArtist(id: ArtistId, name: String) = error("unused")
+        override suspend fun setArtistPhoto(id: ArtistId, imageUri: String) = error("unused")
+        override fun tracksByArtist(id: ArtistId): Flow<List<Track>> = error("unused")
+        override suspend fun incrementPlayCount(id: TrackId) = error("unused")
+        override suspend fun setTrackReplayGain(id: TrackId, gainDb: Float) = error("unused")
+        override fun albumsByArtist(id: ArtistId): Flow<List<AlbumSummary>> = error("unused")
+        override suspend fun import(source: ImportSource): Flow<ImportProgress> = error("unused")
+        override suspend fun deleteTrack(id: TrackId) = error("unused")
+        override suspend fun deleteTracks(ids: List<TrackId>) = error("unused")
+    }
+
     @Before
     fun setUp() = Dispatchers.setMain(dispatcher)
 
@@ -32,7 +82,7 @@ class SearchViewModelTest {
                 listOf(SearchResult.TrackResult(TrackId("t1"), "Window View", "Farewell225", null))
             override suspend fun rebuildIndex() {}
         }
-        val viewModel = SearchViewModel(fakeRepo)
+        val viewModel = SearchViewModel(fakeRepo, fakeLibraryRepository)
 
         viewModel.onQueryChange("window")
         dispatcher.scheduler.advanceUntilIdle()
@@ -51,7 +101,7 @@ class SearchViewModelTest {
             }
             override suspend fun rebuildIndex() {}
         }
-        val viewModel = SearchViewModel(fakeRepo)
+        val viewModel = SearchViewModel(fakeRepo, fakeLibraryRepository)
 
         viewModel.onQueryChange("")
         dispatcher.scheduler.advanceUntilIdle()

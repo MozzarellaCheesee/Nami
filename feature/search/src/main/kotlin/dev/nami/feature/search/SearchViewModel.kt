@@ -3,17 +3,22 @@ package dev.nami.feature.search
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.nami.core.model.AlbumSummary
+import dev.nami.core.model.Artist
+import dev.nami.domain.LibraryRepository
 import dev.nami.domain.SearchRepository
 import dev.nami.domain.SearchResult
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
 data class SearchUiState(
@@ -26,10 +31,18 @@ data class SearchUiState(
 @HiltViewModel
 class SearchViewModel @Inject constructor(
     private val searchRepository: SearchRepository,
+    libraryRepository: LibraryRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SearchUiState())
     val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
+
+    // Shown while the query is blank, so the screen isn't just an empty prompt -- same data the
+    // Library tab already previews (recentAlbums/featuredArtists), just browsable from Search too.
+    val browseAlbums: StateFlow<List<AlbumSummary>> =
+        libraryRepository.recentAlbums(12).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val browseArtists: StateFlow<List<Artist>> =
+        libraryRepository.featuredArtists(12).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val queryFlow = MutableStateFlow("")
 

@@ -32,12 +32,11 @@ import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -48,7 +47,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.style.TextOverflow
@@ -96,51 +95,79 @@ fun SearchScreen(
     val albums = uiState.results.filterIsInstance<SearchResult.AlbumResult>()
     val artists = uiState.results.filterIsInstance<SearchResult.ArtistResult>()
 
+    val browseAlbums by viewModel.browseAlbums.collectAsState()
+    val browseArtists by viewModel.browseArtists.collectAsState()
+
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900).imePadding()) {
-        TextField(
+        CompactSearchField(
             value = uiState.query,
             onValueChange = viewModel::onQueryChange,
-            placeholder = { Text("Поиск треков, альбомов, исполнителей", color = NamiColors.Paper40) },
-            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null, tint = NamiColors.Paper70) },
-            singleLine = true,
-            shape = RoundedCornerShape(16.dp),
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = NamiColors.Ink800,
-                unfocusedContainerColor = NamiColors.Ink800,
-                focusedTextColor = NamiColors.Paper100,
-                unfocusedTextColor = NamiColors.Paper100,
-                focusedIndicatorColor = NamiColors.Shu,
-                unfocusedIndicatorColor = Color.Transparent,
-                cursorColor = NamiColors.Shu,
-            ),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
         )
 
         if (uiState.query.isBlank()) {
-            if (uiState.recentQueries.isNotEmpty()) {
-                SectionHeader("Недавнее")
-                LazyRow(
-                    contentPadding = PaddingValuesHorizontal20,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(uiState.recentQueries) { query ->
-                        Text(
-                            text = query,
-                            color = NamiColors.Paper100,
-                            style = MaterialTheme.typography.labelLarge,
-                            modifier = Modifier
-                                .background(NamiColors.Ink800, RoundedCornerShape(20.dp))
-                                .clickable { viewModel.onRecentQueryClick(query) }
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
+            LazyColumn(state = resultsListState) {
+                if (uiState.recentQueries.isNotEmpty()) {
+                    item { SectionHeader("Недавнее") }
+                    item {
+                        LazyRow(
+                            contentPadding = PaddingValuesHorizontal20,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            items(uiState.recentQueries) { query ->
+                                Text(
+                                    text = query,
+                                    color = NamiColors.Paper100,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    modifier = Modifier
+                                        .background(NamiColors.Ink800, RoundedCornerShape(20.dp))
+                                        .clickable { viewModel.onRecentQueryClick(query) }
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+                // Same recentAlbums/featuredArtists data the Library tab already previews with --
+                // browsable straight from Search instead of an empty "start typing" prompt.
+                if (browseAlbums.isNotEmpty()) {
+                    item { SectionHeader("Альбомы") }
+                    item {
+                        LazyRow(
+                            contentPadding = PaddingValuesHorizontal20,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            items(browseAlbums, key = { "browse-album-${it.id.value}" }) { album ->
+                                AlbumCard(
+                                    title = album.title,
+                                    subtitle = album.artistName,
+                                    artworkPath = album.artworkPath,
+                                    onClick = { unfocusSearchField(); onAlbumClick(album.id) },
+                                )
+                            }
+                        }
+                    }
+                }
+                if (browseArtists.isNotEmpty()) {
+                    item { SectionHeader("Артисты") }
+                    items(browseArtists, key = { "browse-artist-${it.id.value}" }) { artist ->
+                        ArtistRow(
+                            name = artist.name,
+                            photoPath = artist.photoPath,
+                            onClick = { unfocusSearchField(); onArtistClick(artist.id) },
                         )
                     }
                 }
-            }
-            Box(modifier = Modifier.fillMaxSize().padding(bottom = 80.dp), contentAlignment = Alignment.Center) {
-                Text(text = "Начните вводить, чтобы искать", color = NamiColors.Paper40)
+                if (uiState.recentQueries.isEmpty() && browseAlbums.isEmpty() && browseArtists.isEmpty()) {
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().padding(top = 80.dp), contentAlignment = Alignment.Center) {
+                            Text(text = "Начните вводить, чтобы искать", color = NamiColors.Paper40)
+                        }
+                    }
+                }
             }
         } else if (uiState.results.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize().padding(bottom = 80.dp), contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(text = "Ничего не нашлось", color = NamiColors.Paper40)
             }
         } else {
@@ -325,23 +352,28 @@ private fun TrackResultRow(track: SearchResult.TrackResult, onClick: () -> Unit,
 
 @Composable
 private fun AlbumResultCard(album: SearchResult.AlbumResult, onClick: () -> Unit) {
+    AlbumCard(title = album.title, subtitle = album.artistName, artworkPath = album.artworkPath, onClick = onClick)
+}
+
+@Composable
+private fun AlbumCard(title: String, subtitle: String?, artworkPath: String?, onClick: () -> Unit) {
     Column(modifier = Modifier.width(140.dp).clickable(onClick = onClick)) {
         Box(
             modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(8.dp)).background(NamiColors.Ink700),
         ) {
-            if (album.artworkPath != null) {
-                AsyncImage(model = album.artworkPath, contentDescription = null, modifier = Modifier.fillMaxSize())
+            if (artworkPath != null) {
+                AsyncImage(model = artworkPath, contentDescription = null, modifier = Modifier.fillMaxSize())
             }
         }
         Text(
-            text = album.title,
+            text = title,
             color = NamiColors.Paper100,
             style = MaterialTheme.typography.bodyMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 6.dp),
         )
-        album.artistName?.let { name ->
+        subtitle?.let { name ->
             Text(text = name, color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
@@ -349,6 +381,11 @@ private fun AlbumResultCard(album: SearchResult.AlbumResult, onClick: () -> Unit
 
 @Composable
 private fun ArtistResultRow(artist: SearchResult.ArtistResult, onClick: () -> Unit) {
+    ArtistRow(name = artist.name, photoPath = artist.photoPath, onClick = onClick)
+}
+
+@Composable
+private fun ArtistRow(name: String, photoPath: String?, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -360,17 +397,45 @@ private fun ArtistResultRow(artist: SearchResult.ArtistResult, onClick: () -> Un
             modifier = Modifier.size(44.dp).clip(CircleShape).background(NamiColors.Ink700),
             contentAlignment = Alignment.Center,
         ) {
-            if (artist.photoPath != null) {
-                AsyncImage(model = artist.photoPath, contentDescription = null, modifier = Modifier.fillMaxSize().clip(CircleShape))
+            if (photoPath != null) {
+                AsyncImage(model = photoPath, contentDescription = null, modifier = Modifier.fillMaxSize().clip(CircleShape))
             } else {
                 Icon(Icons.Outlined.Person, contentDescription = null, tint = NamiColors.Paper40)
             }
         }
         Text(
-            text = artist.name,
+            text = name,
             color = NamiColors.Paper100,
             style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.padding(start = 14.dp),
         )
+    }
+}
+
+/** Material3's TextField enforces a ~56dp min touch target no matter how padding is tweaked --
+ * a plain BasicTextField in a fixed-height row is the only way to actually get a compact bar. */
+@Composable
+private fun CompactSearchField(value: String, onValueChange: (String) -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .height(44.dp)
+            .background(NamiColors.Ink800, RoundedCornerShape(14.dp))
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Outlined.Search, contentDescription = null, tint = NamiColors.Paper70, modifier = Modifier.size(20.dp))
+        Box(modifier = Modifier.weight(1f).padding(start = 10.dp)) {
+            if (value.isEmpty()) {
+                Text("Поиск треков, альбомов, исполнителей", color = NamiColors.Paper40, style = MaterialTheme.typography.bodyMedium)
+            }
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = NamiColors.Paper100),
+                cursorBrush = SolidColor(NamiColors.Shu),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
