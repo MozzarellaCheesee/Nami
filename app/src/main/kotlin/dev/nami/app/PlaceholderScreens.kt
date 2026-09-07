@@ -52,6 +52,7 @@ fun SettingsScreen(onTrashClick: () -> Unit, viewModel: SettingsViewModel = hilt
     val karaokeEnabled by viewModel.karaokeEnabled.collectAsState()
     val context = LocalContext.current
     var selectedIcon by remember { mutableStateOf(IconPicker.current(context)) }
+    var pendingIcon by remember { mutableStateOf<LauncherIcon?>(null) }
 
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
         Text(
@@ -73,10 +74,7 @@ fun SettingsScreen(onTrashClick: () -> Unit, viewModel: SettingsViewModel = hilt
                     IconChoice(
                         icon = icon,
                         selected = icon == selectedIcon,
-                        onClick = {
-                            IconPicker.select(context, icon)
-                            selectedIcon = icon
-                        },
+                        onClick = { if (icon != selectedIcon) pendingIcon = icon },
                     )
                 }
             }
@@ -113,6 +111,35 @@ fun SettingsScreen(onTrashClick: () -> Unit, viewModel: SettingsViewModel = hilt
                 onClick = onTrashClick,
             )
         }
+    }
+
+    pendingIcon?.let { icon ->
+        dev.nami.core.designsystem.NamiAlertDialog(
+            onDismissRequest = { pendingIcon = null },
+            title = { Text("Сменить иконку?", color = NamiColors.Paper100) },
+            text = {
+                Text(
+                    "Значок на рабочем столе может слететь в общий список приложений -- так " +
+                        "устроена система, это не баг. Некоторые лаунчеры обновляют иконку только " +
+                        "после своего перезапуска. Во время воспроизведения лучше не менять.",
+                    color = NamiColors.Paper70,
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        IconPicker.select(context, icon)
+                        selectedIcon = icon
+                        pendingIcon = null
+                    },
+                ) { Text("Сменить", color = NamiColors.Shu) }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { pendingIcon = null }) {
+                    Text("Отмена", color = NamiColors.Paper70)
+                }
+            },
+        )
     }
 }
 

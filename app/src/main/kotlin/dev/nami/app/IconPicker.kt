@@ -36,17 +36,36 @@ object IconPicker {
      *
      * Enable the new one BEFORE disabling the old one (never a moment with zero enabled aliases,
      * which some launchers read as "app uninstalled" and drop the icon from the home screen
-     * entirely until a manual re-add). No DONT_KILL_APP on the final disable: several OEM
-     * launchers (Samsung's One UI included) cache the resolved icon per-process and only
-     * requery it when the app's process actually restarts -- killing it here is what makes the
-     * change visible without the user having to remove and re-add the home screen icon by hand. */
+     * entirely until a manual re-add). Always DONT_KILL_APP -- killing the process to force a
+     * launcher's icon cache to refresh also kills playback (MediaSessionService dies with it),
+     * which is worse than a stale icon until the launcher notices on its own or the user
+     * force-stops/re-adds the shortcut by hand. */
     fun select(context: Context, icon: LauncherIcon) {
         val pm = context.packageManager
         pm.setComponentEnabledSetting(componentName(context, icon), PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
-        LauncherIcon.entries.filter { it != icon }.forEachIndexed { index, candidate ->
-            val isLast = index == LauncherIcon.entries.size - 2
-            val flag = if (isLast) 0 else PackageManager.DONT_KILL_APP
-            pm.setComponentEnabledSetting(componentName(context, candidate), PackageManager.COMPONENT_ENABLED_STATE_DISABLED, flag)
+        LauncherIcon.entries.filter { it != icon }.forEach { candidate ->
+            pm.setComponentEnabledSetting(componentName(context, candidate), PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
+        }
+    }
+
+    /** Self-heal for "every alias somehow ended up disabled" (should never happen given [select]
+     * always enables one before disabling the rest, but a crash mid-toggle or a manifest change
+     * across an app update could still leave it in that state) -- with zero aliases enabled the
+     * app has no launcher icon at all, silently vanishing from the home screen/app drawer.
+     * Call once at process startup. */
+    fun ensureValidState(context: Context) {
+        val pm = context.packageManager
+        val anyEnabled = LauncherIcon.entries.any { icon ->
+            pm.getComponentEnabledSetting(componentName(context, icon)) == PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+        }
+        // WAVE relies on the manifest's own enabled="true" default until first explicitly
+        // toggled -- that's DEFAULT, not ENABLED, and is the normal, healthy state on a fresh
+        // install, not something to "fix". Only WAVE explicitly disabled with nothing else
+        // enabled is the actual broken state this guards against.
+        val waveExplicitlyDisabled = pm.getComponentEnabledSetting(componentName(context, LauncherIcon.WAVE)) ==
+            PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+        if (!anyEnabled && waveExplicitlyDisabled) {
+            select(context, LauncherIcon.WAVE)
         }
     }
 }

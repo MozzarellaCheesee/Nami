@@ -92,6 +92,11 @@ class MainActivity : ComponentActivity() {
         // buttons overlay directly on the app's own dark background instead of a separate solid
         // system-drawn bar.
         enableEdgeToEdge(navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
+        // Guards against the app silently vanishing from the launcher if every icon alias ever
+        // somehow ended up disabled at once (shouldn't happen -- IconPicker.select always
+        // enables one before disabling the rest -- but a crash mid-toggle or a manifest change
+        // across an update could still leave it in that state).
+        IconPicker.ensureValidState(this)
         if (intent.getBooleanExtra(EXTRA_OPEN_PLAYER, false)) openPlayerSignal.value++
         val importProgress = libraryViewModel.uiState
             .map { it.importProgress }
