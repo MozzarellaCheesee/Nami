@@ -327,10 +327,11 @@ fun ArtistDetailScreen(
                     modifier = Modifier
                         .offset { IntOffset(0, rootOffset.y.roundToInt()) }
                         .size(with(density) { screenWidthPx.toDp() }, with(density) { (headerState.heightPx + rootOffset.y).toDp() }),
-                    contentAlignment = Alignment.BottomEnd,
+                    // TopEnd, not BottomEnd -- see AlbumDetailScreen's identical fix.
+                    contentAlignment = Alignment.TopEnd,
                 ) {
                 Row(
-                    modifier = Modifier.graphicsLayer { alpha = (1f - progress / 0.6f).coerceIn(0f, 1f) }.padding(12.dp),
+                    modifier = Modifier.graphicsLayer { alpha = (1f - progress / 0.6f).coerceIn(0f, 1f) }.padding(top = 56.dp, end = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (uiState.tracks.isNotEmpty()) {

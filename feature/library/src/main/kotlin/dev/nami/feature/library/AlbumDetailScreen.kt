@@ -271,10 +271,14 @@ fun AlbumDetailScreen(
                     modifier = Modifier
                         .offset { IntOffset(0, rootOffset.y.roundToInt()) }
                         .size(with(density) { screenWidthPx.toDp() }, with(density) { (headerState.heightPx + rootOffset.y).toDp() }),
-                    contentAlignment = Alignment.BottomEnd,
+                    // TopEnd, not BottomEnd -- the box's bottom edge sits right where the title
+                    // starts (see the comment above), so bottom-aligned buttons ended up reading
+                    // as "sitting on the title" even though technically still inside the cover.
+                    // Pushed below the back button's own row (56dp) so they don't collide there.
+                    contentAlignment = Alignment.TopEnd,
                 ) {
                     Row(
-                        modifier = Modifier.graphicsLayer { alpha = (1f - progress / 0.6f).coerceIn(0f, 1f) }.padding(12.dp),
+                        modifier = Modifier.graphicsLayer { alpha = (1f - progress / 0.6f).coerceIn(0f, 1f) }.padding(top = 56.dp, end = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (uiState.tracks.isNotEmpty()) {
