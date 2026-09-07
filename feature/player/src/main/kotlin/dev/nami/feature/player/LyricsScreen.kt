@@ -255,14 +255,24 @@ fun LyricsScreen(
                 Spacer(modifier = Modifier.height(64.dp))
                 if (uiState.isFetchingOnline) {
                     androidx.compose.material3.CircularProgressIndicator(color = NamiColors.Paper70, modifier = Modifier.size(24.dp))
-                    Text(text = "Ищу текст в сети (LRCLIB, STANDS4)…", color = NamiColors.Paper70, modifier = Modifier.padding(top = 12.dp))
+                    Text(text = "Ищу текст…", color = NamiColors.Paper70, modifier = Modifier.padding(top = 12.dp))
                 } else {
                     Text(text = "Текст не найден", color = NamiColors.Paper70)
                     Text(
-                        text = "Искать ещё раз в сети",
+                        text = "Искать ещё раз в LRCLIB",
                         color = NamiColors.Shu,
                         modifier = Modifier.padding(top = 12.dp).clickable { viewModel.retryOnlineFetch() },
                     )
+                    // STANDS4 is never tried automatically -- it burns the user's own daily quota,
+                    // see LyricsUiState.stands4Configured's doc. No key configured -> no button at
+                    // all, instead of one that would just silently miss every time.
+                    if (uiState.stands4Configured) {
+                        Text(
+                            text = "Искать в STANDS4",
+                            color = NamiColors.Shu,
+                            modifier = Modifier.padding(top = 8.dp).clickable { viewModel.searchStands4() },
+                        )
+                    }
                 }
                 // STANDS4's terms require crediting them wherever their lyrics data is used --
                 // shown here (the one place this app actually queries them) rather than tracking
@@ -672,7 +682,16 @@ private fun SyncedLyricsList(
         lastCentered = rawIndex
         val targetIndex = rawIndex.coerceAtLeast(0)
         scope.launch {
-            listState.animateScrollToItem(index = targetIndex)
+            // Two animations back to back (scroll-to-item, THEN a correction) is exactly the
+            // "jumps too far, then slides back to center" the visible glitch this used to cause --
+            // animateScrollToItem's own resting spot for a variable-height row rarely lands on
+            // center, so the correction always fired, always as a second, separately-eased motion.
+            // Normal line-to-line advance keeps the target already on screen (it's the very next
+            // row), so measure first and do ONE smooth animateScrollBy covering the whole distance.
+            // Only a genuine off-screen jump (track change, seek) needs an instant snap first.
+            if (listState.layoutInfo.visibleItemsInfo.none { it.index == targetIndex }) {
+                listState.scrollToItem(index = targetIndex)
+            }
             val info = listState.layoutInfo
             val item = info.visibleItemsInfo.firstOrNull { it.index == targetIndex } ?: return@launch
             val viewportCenter = (info.viewportStartOffset + info.viewportEndOffset) / 2

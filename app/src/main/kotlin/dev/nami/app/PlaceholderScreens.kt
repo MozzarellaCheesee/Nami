@@ -310,7 +310,7 @@ fun SettingsLyricsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hilt
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                 Text(
-                    text = "Используется только если LRCLIB не нашёл текст. Бесплатный лимит -- 100 запросов в день.",
+                    text = "Используется только если LRCLIB не нашёл текст. Бесплатный лимит: 100 запросов в день.",
                     color = NamiColors.Paper40,
                     style = MaterialTheme.typography.bodySmall,
                 )

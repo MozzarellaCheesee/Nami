@@ -22,14 +22,17 @@ interface LyricsRepository {
      * (nothing saved) if it parsed to zero lines (wrong format, or truly empty). */
     suspend fun importLyricsFile(path: String, rawText: String): Boolean
 
-    /** LRCLIB (lrclib.net) first -- free, keyless, exists specifically for synced lyrics lookup by
-     * title/artist/duration. If (and only if) that has nothing, falls through to STANDS4's Lyrics
-     * API (keyed, 100 requests/day free tier) as a second source -- STANDS4 only has plain text,
-     * no timestamps, so its lines get evenly spaced across [durationMs] as an approximation (real
-     * per-line sync, not just "the text exists"). Null when neither source has anything, or on any
-     * network/parse failure; callers treat that the same as "nothing found" and fall through to
-     * manual entry. */
+    /** LRCLIB (lrclib.net) -- free, keyless, exists specifically for synced lyrics lookup by
+     * title/artist/duration. Tried automatically as soon as a track with no local .lrc starts
+     * playing. Null on a miss or any network/parse failure. */
     suspend fun fetchFromLrcLib(title: String, artistName: String?, durationMs: Long): Lyrics?
+
+    /** STANDS4's Lyrics API (keyed, 100 requests/day free tier) -- deliberately NOT tried
+     * automatically (unlike LRCLIB): it counts against the user's own daily quota, so it's a
+     * button the user presses after LRCLIB has already come up empty, not a silent fallback that
+     * burns quota on every miss. Only has plain text, no timestamps -- its lines get evenly spaced
+     * across [durationMs] as an approximation (real per-line sync, not just "the text exists"). */
+    suspend fun fetchFromStands4(title: String, artistName: String?, durationMs: Long): Lyrics?
 
     /** Cached translation, one line per original lyric line, same order -- a sibling file next to
      * the .lrc so it survives restarts and never needs re-translating once done. */

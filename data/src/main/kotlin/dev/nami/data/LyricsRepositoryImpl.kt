@@ -52,25 +52,25 @@ class LyricsRepositoryImpl @Inject constructor(
     override suspend fun fetchFromLrcLib(title: String, artistName: String?, durationMs: Long): Lyrics? =
         withContext(Dispatchers.IO) {
             LrcLibClient.findSyncedLyrics(title, artistName, durationMs)?.let { LrcParser.parse(it) }
-                ?: fetchFromStands4(title, artistName, durationMs)
         }
 
-    private fun fetchFromStands4(title: String, artistName: String?, durationMs: Long): Lyrics? {
+    override suspend fun fetchFromStands4(title: String, artistName: String?, durationMs: Long): Lyrics? {
         val uid = settingsRepository.stands4Uid.value
         val token = settingsRepository.stands4Token.value
         if (uid.isBlank() || token.isBlank()) return null
         if (settingsRepository.stands4RequestsToday.value >= SettingsRepository.STANDS4_DAILY_LIMIT) return null
         // Counts the attempt regardless of hit/miss -- STANDS4 bills the request either way.
         settingsRepository.recordStands4Request()
-        return Stands4Client.findPlainLyrics(title, artistName, uid, token)
-            ?.let { plainLyricsToApproxSynced(it, durationMs) }
+        return withContext(Dispatchers.IO) {
+            Stands4Client.findPlainLyrics(title, artistName, uid, token)?.let { plainLyricsToApproxSynced(it, durationMs) }
+        }
     }
 
     /** STANDS4 has no per-line timestamps -- spreads non-blank lines evenly across [durationMs]
      * (or 3s/line if the duration isn't known) so the existing synced-lyrics screen still has
      * something to highlight/autoscroll to, instead of needing a whole separate "plain lyrics"
      * rendering path just for this one fallback source. Approximate, not real sync -- documented
-     * on [dev.nami.domain.LyricsRepository.fetchFromLrcLib]. */
+     * on [dev.nami.domain.LyricsRepository.fetchFromStands4]. */
     private fun plainLyricsToApproxSynced(rawText: String, durationMs: Long): Lyrics? {
         val textLines = rawText.lines().map { it.trim() }.filter { it.isNotEmpty() }
         if (textLines.isEmpty()) return null

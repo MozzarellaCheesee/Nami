@@ -54,6 +54,7 @@ class LibraryRepositoryImplTest {
         override suspend fun saveRomaji(path: String, lines: List<String>) = error("unused")
         override suspend fun generateRomaji(lines: List<String>) = error("unused")
         override suspend fun fetchFromLrcLib(title: String, artistName: String?, durationMs: Long) = error("unused")
+        override suspend fun fetchFromStands4(title: String, artistName: String?, durationMs: Long) = error("unused")
         override suspend fun tokenizeLine(line: String) = error("unused")
         override fun wordTimingsForPath(path: String) = error("unused")
         override suspend fun saveWordTimings(path: String, perLine: List<List<dev.nami.core.model.WordTiming>>) = error("unused")

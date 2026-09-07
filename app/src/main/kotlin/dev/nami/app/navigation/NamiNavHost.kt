@@ -113,6 +113,7 @@ fun NamiNavHost(
     // only actually resets if that effect happens to remount and re-observe the new key at the
     // right time, which turned out not to hold up from every screen it needed to.
     val libraryViewModel: LibraryViewModel = hiltViewModel()
+    val searchViewModel: dev.nami.feature.search.SearchViewModel = hiltViewModel()
     val settingsViewModel: SettingsViewModel = hiltViewModel()
     val autoOpenPlayer by settingsViewModel.autoOpenPlayer.collectAsState()
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
@@ -205,6 +206,7 @@ fun NamiNavHost(
                     },
                     onAlbumClick = { albumId -> navController.navigate("album/${albumId.value}") },
                     onArtistClick = { artistId -> navController.navigate("artist/${artistId.value}") },
+                    viewModel = searchViewModel,
                 )
                 }
             }
@@ -436,6 +438,13 @@ fun NamiNavHost(
                     libraryViewModel.selectTab(LibraryTab.TRACKS)
                     libraryTabResetSignal++
                 } else {
+                    // popUpTo(ROUTE_LIBRARY) already collapses whatever's nested under this tab
+                    // (playlist detail, a settings sub-screen, an artist reached from Search) back
+                    // to its own root -- Плейлисты/Настройки need nothing more than that. Search
+                    // additionally has live typed-query state that isn't part of the nav stack at
+                    // all (searchViewModel is hoisted, survives regardless of restoreState), so a
+                    // second tap on an already-empty root wouldn't otherwise clear it.
+                    if (route == ROUTE_SEARCH) searchViewModel.onQueryChange("")
                     navController.navigate(route) {
                         popUpTo(ROUTE_LIBRARY) { saveState = true }
                         launchSingleTop = true

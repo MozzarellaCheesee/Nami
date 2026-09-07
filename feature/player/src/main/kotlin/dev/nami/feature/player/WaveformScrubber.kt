@@ -86,9 +86,17 @@ fun WaveformScrubber(
         animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Reverse),
         label = "waveform-loading-pulse-alpha",
     )
-    val crossfade = remember(seedKey) { Animatable(0f) }
+    // Starts at 1f (not 0f) when the real waveform is already there on the very first composition
+    // for this track (cache hit -- the common case after NowPlayingViewModel's synchronous disk-
+    // cache read) -- otherwise every track switch replayed the "still loading" crossfade even
+    // though nothing was ever actually loading, animating a shape that was correct from frame one.
+    val crossfade = remember(seedKey) { Animatable(if (isReal) 1f else 0f) }
     LaunchedEffect(seedKey, isReal) {
-        if (isReal) crossfade.animateTo(1f, animationSpec = tween(500)) else crossfade.snapTo(0f)
+        if (isReal) {
+            if (crossfade.value != 1f) crossfade.animateTo(1f, animationSpec = tween(500))
+        } else {
+            crossfade.snapTo(0f)
+        }
     }
     val heights = if (isReal) {
         placeholder.indices.map { i -> placeholder[i] + (realHeights!![i] - placeholder[i]) * crossfade.value }

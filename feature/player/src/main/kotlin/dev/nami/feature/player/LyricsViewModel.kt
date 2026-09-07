@@ -62,6 +62,10 @@ data class LyricsUiState(
     val karaokeEnabled: Boolean = false,
     val studyModeEnabled: Boolean = false,
     val lyricsFontPath: String? = null,
+    /** STANDS4 is deliberately not tried automatically (it burns the user's own daily quota) --
+     * the "Искать в STANDS4" button only shows once a key is actually configured, no point
+     * offering a button that always misses. */
+    val stands4Configured: Boolean = false,
 )
 
 @HiltViewModel
@@ -132,6 +136,7 @@ class LyricsViewModel @Inject constructor(
         trackAndLyrics, _positionMs, _isFetchingOnline, _showTranslation, _isTranslating,
         _showFurigana, _showRomaji, _isGeneratingRomaji, _wordLookup, _isPreciseSyncing, _preciseSyncProgress,
         settingsRepository.karaokeEnabled, settingsRepository.studyModeEnabled, settingsRepository.lyricsFontPath,
+        combine(settingsRepository.stands4Uid, settingsRepository.stands4Token) { uid, token -> uid.isNotBlank() && token.isNotBlank() },
     ) { values ->
         val tl = values[0] as TrackAndLyrics?
         val pos = values[1] as Long
@@ -148,6 +153,7 @@ class LyricsViewModel @Inject constructor(
         val karaokeEnabled = values[11] as Boolean
         val studyModeEnabled = values[12] as Boolean
         val lyricsFontPath = values[13] as String?
+        val stands4Configured = values[14] as Boolean
         LyricsUiState(
             trackId = tl?.trackId,
             trackPath = tl?.path,
@@ -170,6 +176,7 @@ class LyricsViewModel @Inject constructor(
             karaokeEnabled = karaokeEnabled,
             studyModeEnabled = studyModeEnabled,
             lyricsFontPath = lyricsFontPath,
+            stands4Configured = stands4Configured,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LyricsUiState())
 
@@ -209,6 +216,24 @@ class LyricsViewModel @Inject constructor(
     fun retryOnlineFetch() {
         val tl = trackAndLyrics.value ?: return
         fetchOnline(tl.trackId, tl.path, tl.title, tl.artistName, tl.durationMs)
+    }
+
+    /** The explicit "Искать в STANDS4" button -- never fired automatically, see
+     * [LyricsUiState.stands4Configured]'s doc for why. */
+    fun searchStands4() {
+        val tl = trackAndLyrics.value ?: return
+        viewModelScope.launch {
+            _isFetchingOnline.value = true
+            try {
+                val fetched = lyricsRepository.fetchFromStands4(tl.title, tl.artistName, tl.durationMs)
+                if (fetched != null && fetched.lines.isNotEmpty()) {
+                    lyricsRepository.saveLyrics(tl.path, fetched)
+                    reloadSignal.value++
+                }
+            } finally {
+                _isFetchingOnline.value = false
+            }
+        }
     }
 
     private fun fetchOnline(trackId: TrackId, path: String, title: String, artistName: String?, durationMs: Long) {

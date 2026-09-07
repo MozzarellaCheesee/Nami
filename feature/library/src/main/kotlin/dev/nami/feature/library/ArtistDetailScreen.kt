@@ -70,7 +70,6 @@ import kotlin.math.roundToInt
 
 private const val TOP_TRACKS_LIMIT = 10
 private const val ALBUMS_COLLAPSED_LIMIT = 6
-private val HEADER_MAX_HEIGHT = 280.dp
 private val HEADER_MIN_HEIGHT = 56.dp
 private val AVATAR_SIZE = 40.dp
 
@@ -105,7 +104,10 @@ fun ArtistDetailScreen(
     val effectivePhotoPath = uiState.artist?.photoPath ?: uiState.albums.firstOrNull()?.artworkPath
 
     val density = LocalDensity.current
-    val headerState = rememberCollapsingHeaderState(maxHeight = HEADER_MAX_HEIGHT, minHeight = HEADER_MIN_HEIGHT)
+    // Square photo (matches the avatar's own aspectRatio elsewhere), not a fixed 280dp that reads
+    // as a wide rectangle on any screen wider than that -- see AlbumDetailScreen's identical fix.
+    val headerMaxHeight = LocalConfiguration.current.screenWidthDp.dp
+    val headerState = rememberCollapsingHeaderState(maxHeight = headerMaxHeight, minHeight = HEADER_MIN_HEIGHT)
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     // Only two resting states -- fully expanded or fully collapsed. Without this, releasing
     // mid-scroll left the header (and the sliding avatar/photo, whose size/shape/position are all
@@ -122,7 +124,7 @@ fun ArtistDetailScreen(
     var rootOffset by remember { mutableStateOf(Offset.Zero) }
     var avatarSlotOffset by remember { mutableStateOf(Offset.Zero) }
     val screenWidthPx = with(density) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
-    val headerMaxHeightPx = with(density) { HEADER_MAX_HEIGHT.toPx() }
+    val headerMaxHeightPx = with(density) { headerMaxHeight.toPx() }
     val avatarSizePx = with(density) { AVATAR_SIZE.toPx() }
     val progress = headerState.collapseFraction
     val headerHeightDp = with(density) { headerState.heightPx.toDp() }
@@ -136,7 +138,7 @@ fun ArtistDetailScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             Spacer(modifier = Modifier.fillMaxWidth().height(headerHeightDp))
             Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
-                Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+                Column(modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 4.dp)) {
                     Text(
                         text = artistName ?: "",
                         color = NamiColors.Paper100,

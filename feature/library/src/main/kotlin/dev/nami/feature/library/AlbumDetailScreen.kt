@@ -73,7 +73,6 @@ import dev.nami.core.model.TrackId
 import dev.nami.feature.playlists.AddToPlaylistDialog
 import kotlin.math.roundToInt
 
-private val HEADER_MAX_HEIGHT = 280.dp
 private val HEADER_MIN_HEIGHT = 56.dp
 private val AVATAR_SIZE = 40.dp
 
@@ -103,7 +102,11 @@ fun AlbumDetailScreen(
     var editTagsTrackId by remember { mutableStateOf<TrackId?>(null) }
 
     val density = LocalDensity.current
-    val headerState = rememberCollapsingHeaderState(maxHeight = HEADER_MAX_HEIGHT, minHeight = HEADER_MIN_HEIGHT)
+    // The cover is square (aspectRatio 1f everywhere else it's shown -- grid, Info screen); the
+    // header needs to match, not a fixed 280dp that reads as a wide rectangle on any screen wider
+    // than that. Screen width IS the cover's width here (it fills it), so that's also its height.
+    val headerMaxHeight = LocalConfiguration.current.screenWidthDp.dp
+    val headerState = rememberCollapsingHeaderState(maxHeight = headerMaxHeight, minHeight = HEADER_MIN_HEIGHT)
     val listState = rememberLazyListState()
     // Only two resting states -- fully expanded or fully collapsed. Without this, releasing
     // mid-scroll left the header (and the sliding cover, whose size/shape/position are all
@@ -119,7 +122,7 @@ fun AlbumDetailScreen(
     var rootOffset by remember { mutableStateOf(Offset.Zero) }
     var avatarSlotOffset by remember { mutableStateOf(Offset.Zero) }
     val screenWidthPx = with(density) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
-    val headerMaxHeightPx = with(density) { HEADER_MAX_HEIGHT.toPx() }
+    val headerMaxHeightPx = with(density) { headerMaxHeight.toPx() }
     val avatarSizePx = with(density) { AVATAR_SIZE.toPx() }
     val progress = headerState.collapseFraction
     val headerHeightDp = with(density) { headerState.heightPx.toDp() }
@@ -133,7 +136,7 @@ fun AlbumDetailScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             Spacer(modifier = Modifier.fillMaxWidth().height(headerHeightDp))
             Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
-                Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+                Column(modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 4.dp)) {
                     Text(
                         text = uiState.album?.title ?: "",
                         color = NamiColors.Paper100,

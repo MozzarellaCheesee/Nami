@@ -287,7 +287,7 @@ class LibraryRepositoryImpl @Inject constructor(
         val counts = playHistoryDao.since(since).groupingBy { it.trackId }.eachCount()
         return counts.entries.sortedByDescending { it.value }.take(limit).mapNotNull { (trackId, count) ->
             val entity = trackDao.findByIdWithArtwork(trackId) ?: return@mapNotNull null
-            dev.nami.domain.TopTrackStat(TrackId(trackId), entity.track.title, entity.artistName, count)
+            dev.nami.domain.TopTrackStat(TrackId(trackId), entity.track.title, entity.artistName, entity.albumArtworkPath, count)
         }
     }
 

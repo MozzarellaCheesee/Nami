@@ -115,7 +115,16 @@ private fun TopTrackRow(rank: Int, track: TopTrackStat) {
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.width(28.dp),
         )
-        Box(modifier = Modifier.size(40.dp).background(NamiColors.Ink700, RoundedCornerShape(6.dp)))
+        if (track.albumArtworkPath != null) {
+            coil3.compose.AsyncImage(
+                model = track.albumArtworkPath,
+                contentDescription = null,
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.size(40.dp).background(NamiColors.Ink700, RoundedCornerShape(6.dp)),
+            )
+        } else {
+            Box(modifier = Modifier.size(40.dp).background(NamiColors.Ink700, RoundedCornerShape(6.dp)))
+        }
         Column(modifier = Modifier.padding(start = 12.dp)) {
             Text(track.title, color = NamiColors.Paper100, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             track.artistName?.let { Text(it, color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall, maxLines = 1) }
@@ -173,20 +182,41 @@ private fun colorForMinutes(minutes: Int) = when {
 }
 
 /** 24 bars, one per hour of day -- real data (PlayHistory.playedAt hour bucket), not a guessed
- * "night owl" heuristic. */
+ * "night owl" heuristic. Every bar has a visible floor line and every 6th hour is labeled so the
+ * chart reads as "time of day" and not just "bars of different heights". */
 @Composable
 private fun HourOfDayChart(hours: List<Int>, modifier: Modifier = Modifier) {
     val maxMinutes = remember(hours) { (hours.maxOrNull() ?: 0).coerceAtLeast(1) }
-    Canvas(modifier = modifier.fillMaxWidth().height(56.dp)) {
-        val barWidth = size.width / hours.size
-        hours.forEachIndexed { hour, minutes ->
-            val barHeight = size.height * (minutes.toFloat() / maxMinutes)
-            drawRoundRect(
-                color = if (minutes > 0) NamiColors.Ai else NamiColors.Ink700,
-                topLeft = androidx.compose.ui.geometry.Offset(hour * barWidth + 1f, size.height - barHeight),
-                size = androidx.compose.ui.geometry.Size((barWidth - 2f).coerceAtLeast(1f), barHeight.coerceAtLeast(2f)),
-                cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
+    Column(modifier = modifier.fillMaxWidth()) {
+        Canvas(modifier = Modifier.fillMaxWidth().height(56.dp)) {
+            val barWidth = size.width / hours.size
+            // Floor line -- without it a bar for "0 minutes" is invisible (zero height), reading
+            // as a gap rather than "nothing happened this hour".
+            drawLine(
+                color = NamiColors.Ink700,
+                start = androidx.compose.ui.geometry.Offset(0f, size.height),
+                end = androidx.compose.ui.geometry.Offset(size.width, size.height),
+                strokeWidth = 1.dp.toPx(),
             )
+            hours.forEachIndexed { hour, minutes ->
+                val barHeight = (size.height - 2.dp.toPx()) * (minutes.toFloat() / maxMinutes)
+                drawRoundRect(
+                    color = if (minutes > 0) NamiColors.Ai else NamiColors.Ink700,
+                    topLeft = androidx.compose.ui.geometry.Offset(hour * barWidth + 1f, size.height - barHeight - 2.dp.toPx()),
+                    size = androidx.compose.ui.geometry.Size((barWidth - 2f).coerceAtLeast(1f), barHeight.coerceAtLeast(2.dp.toPx())),
+                    cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
+                )
+            }
+        }
+        Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+            listOf(0, 6, 12, 18).forEach { hour ->
+                Text(
+                    text = "%02d:00".format(hour),
+                    color = NamiColors.Paper40,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
     }
 }

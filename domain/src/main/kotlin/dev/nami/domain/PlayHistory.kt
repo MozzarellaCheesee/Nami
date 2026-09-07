@@ -10,4 +10,10 @@ data class DayActivity(val epochDay: Long, val minutesPlayed: Int)
  * window, not the library's total size (a huge unplayed library shouldn't inflate these). */
 data class ListeningSummary(val totalMinutes: Int, val distinctTracks: Int, val distinctArtists: Int)
 
-data class TopTrackStat(val trackId: TrackId, val title: String, val artistName: String?, val playCount: Int)
+data class TopTrackStat(
+    val trackId: TrackId,
+    val title: String,
+    val artistName: String?,
+    val albumArtworkPath: String?,
+    val playCount: Int,
+)
