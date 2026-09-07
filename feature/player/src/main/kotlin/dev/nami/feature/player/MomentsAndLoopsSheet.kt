@@ -53,6 +53,7 @@ fun MomentsAndLoopsSheet(
     onMomentClick: (Moment) -> Unit,
     onMarkLoopStart: () -> Unit,
     onMarkLoopEnd: (startMs: Long) -> Unit,
+    onClearLoop: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -90,10 +91,16 @@ fun MomentsAndLoopsSheet(
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 12.dp)) {
                     Box(modifier = Modifier.size(10.dp).background(NamiColors.Wakaba, RoundedCornerShape(2.dp)))
                     Text(
-                        "Петля: ${formatMs(activeLoop.startMs)} – ${formatMs(activeLoop.endMs)}",
+                        "Петля: ${formatMs(activeLoop.startMs)} - ${formatMs(activeLoop.endMs)}",
                         color = NamiColors.Wakaba,
                         style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(start = 8.dp),
+                        modifier = Modifier.padding(start = 8.dp).weight(1f),
+                    )
+                    Text(
+                        "Убрать",
+                        color = NamiColors.Paper70,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.clickable(onClick = onClearLoop),
                     )
                 }
             } else if (pendingLoopStartMs != null) {

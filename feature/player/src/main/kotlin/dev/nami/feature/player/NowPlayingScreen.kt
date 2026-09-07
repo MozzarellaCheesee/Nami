@@ -327,6 +327,7 @@ fun NowPlayingScreen(
                     viewModel.setLoopRange(start, sheetPositionMs)
                     pendingLoopStartMs = null
                 },
+                onClearLoop = { viewModel.clearLoop() },
                 onDismiss = { showLoopSheet = false },
             )
             sheetPendingMomentPosition?.let { positionMsAt ->
