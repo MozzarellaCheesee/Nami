@@ -6,15 +6,19 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
@@ -32,9 +36,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.compose.material3.OutlinedTextField
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.model.AlbumId
 import dev.nami.domain.HealthAlbumRef
@@ -170,23 +174,51 @@ private fun YearlessAlbumsCategory(albums: List<HealthAlbumRef>, onSave: (AlbumI
         if (expanded) {
             albums.forEach { album ->
                 var year by remember(album.id) { mutableStateOf("") }
-                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(album.title, color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                    OutlinedTextField(
+                val yearValid = year.toIntOrNull() != null
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        album.title,
+                        color = NamiColors.Paper70,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    BasicTextField(
                         value = year,
                         onValueChange = { year = it.filter { c -> c.isDigit() }.take(4) },
-                        placeholder = { Text("Год") },
+                        textStyle = MaterialTheme.typography.bodySmall.copy(color = NamiColors.Paper100),
                         singleLine = true,
-                        modifier = Modifier.width(80.dp),
+                        cursorBrush = SolidColor(NamiColors.Shu),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                        decorationBox = { inner ->
+                            Box(
+                                modifier = Modifier
+                                    .background(NamiColors.Ink700, RoundedCornerShape(6.dp))
+                                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (year.isEmpty()) Text("Год", color = NamiColors.Paper40, style = MaterialTheme.typography.bodySmall)
+                                inner()
+                            }
+                        },
+                        modifier = Modifier.width(52.dp),
                     )
-                    Text(
-                        "Сохранить",
-                        color = NamiColors.Shu,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.clickable(enabled = year.toIntOrNull() != null) {
-                            onSave(album.id, year.toInt())
-                        }.padding(start = 8.dp),
-                    )
+                    IconButton(
+                        enabled = yearValid,
+                        onClick = { onSave(album.id, year.toInt()) },
+                        modifier = Modifier.size(32.dp),
+                    ) {
+                        Icon(
+                            Icons.Outlined.Check,
+                            contentDescription = "Сохранить",
+                            tint = if (yearValid) NamiColors.Shu else NamiColors.Paper40,
+                        )
+                    }
                 }
             }
         }

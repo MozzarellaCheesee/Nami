@@ -79,6 +79,7 @@ private const val ROUTE_SESSIONS = "settings/sessions"
 private const val ROUTE_SETTINGS_LYRICS = "settings/lyrics"
 private const val ROUTE_TRASH = "trash"
 private const val ROUTE_LIBRARY_HEALTH = "library_health"
+private const val ROUTE_TRACK_INFO = "track_info/{trackId}"
 private const val ROUTE_AUDIO_TRACT = "audio_tract"
 private const val ROUTE_EQUALIZER = "equalizer"
 
@@ -182,6 +183,7 @@ fun NamiNavHost(
                     onArtistClick = { artistId -> navController.navigate("artist/${artistId.value}") },
                     onImportRequested = onImportRequested,
                     onImportFolderRequested = onImportFolderRequested,
+                    onShowTrackInfo = { trackId -> navController.navigate("track_info/${trackId.value}") },
                     importProgress = importProgress,
                     resetSignal = libraryTabResetSignal,
                     viewModel = libraryViewModel,
@@ -253,6 +255,12 @@ fun NamiNavHost(
             composable(ROUTE_LIBRARY_HEALTH) {
                 dev.nami.feature.library.LibraryHealthScreen(onBack = { navController.popBackStack() })
             }
+            composable(
+                ROUTE_TRACK_INFO,
+                arguments = listOf(navArgument("trackId") { type = NavType.StringType }),
+            ) {
+                dev.nami.feature.library.TrackInfoScreen(onBack = { navController.popBackStack() })
+            }
             composable(ROUTE_TRASH) {
                 Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
                 TrashScreen(onBack = { navController.popBackStack() })
@@ -288,6 +296,7 @@ fun NamiNavHost(
                     onAddToQueue = { track -> nowPlayingViewModel.addToQueue(track, artistName = null) },
                     onPickCoverRequested = onPickAlbumCover,
                     onDeleted = { navController.popBackStack() },
+                    onShowTrackInfo = { trackId -> navController.navigate("track_info/${trackId.value}") },
                 )
             }
             composable(

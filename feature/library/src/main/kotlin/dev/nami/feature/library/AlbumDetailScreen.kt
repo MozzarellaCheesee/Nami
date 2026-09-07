@@ -86,6 +86,7 @@ fun AlbumDetailScreen(
     onAddToQueue: (Track) -> Unit,
     onPickCoverRequested: (AlbumId) -> Unit,
     onDeleted: () -> Unit,
+    onShowTrackInfo: (TrackId) -> Unit,
     viewModel: AlbumDetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -226,6 +227,7 @@ fun AlbumDetailScreen(
                                 onAddToPlaylist = { addToPlaylistTrackId = track.id },
                                 onLikeTrack = { viewModel.likeTrack(track.id) },
                                 onRemoveFromAlbum = { viewModel.removeTrackFromAlbum(track.id) },
+                                onShowInfo = { onShowTrackInfo(track.id) },
                                 isCurrentTrack = track.id == nowPlaying?.trackId,
                                 isPlaying = track.id == nowPlaying?.trackId && nowPlaying?.isPlaying == true,
                             )
@@ -250,6 +252,7 @@ fun AlbumDetailScreen(
                                     onAddToPlaylist = { addToPlaylistTrackId = track.id },
                                     onLikeTrack = { viewModel.likeTrack(track.id) },
                                     onRemoveFromAlbum = { viewModel.removeTrackFromAlbum(track.id) },
+                                    onShowInfo = { onShowTrackInfo(track.id) },
                                     isCurrentTrack = track.id == nowPlaying?.trackId,
                                     isPlaying = track.id == nowPlaying?.trackId && nowPlaying?.isPlaying == true,
                                 )

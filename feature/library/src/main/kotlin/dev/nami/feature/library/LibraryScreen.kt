@@ -97,6 +97,7 @@ fun LibraryScreen(
     onArtistClick: (ArtistId) -> Unit,
     onImportRequested: () -> Unit,
     onImportFolderRequested: () -> Unit,
+    onShowTrackInfo: (TrackId) -> Unit,
     importProgress: StateFlow<ImportProgress?>,
     // Bumped by the bottom nav's Library tab so re-tapping it while already here (or from any
     // other tab/detail screen) doesn't just switch back to the Tracks tab -- it scrolls that
@@ -205,6 +206,7 @@ fun LibraryScreen(
                         onSetSelection = { ids -> viewModel.setSelectedTracks(ids) },
                         onRenameTrack = { track -> renameTrack = track },
                         onEditNoteTrack = { track -> noteTrack = track },
+                        onShowTrackInfo = onShowTrackInfo,
                         nowPlaying = nowPlaying,
                     )
                     LibraryTab.ALBUMS -> AlbumGridContent(
@@ -576,6 +578,7 @@ private fun TrackListContent(
     onSetSelection: (Set<TrackId>) -> Unit,
     onRenameTrack: (Track) -> Unit,
     onEditNoteTrack: (Track) -> Unit,
+    onShowTrackInfo: (TrackId) -> Unit,
     nowPlaying: NowPlayingRow?,
 ) {
     if (tracks.itemCount == 0) {
@@ -701,6 +704,7 @@ private fun TrackListContent(
                         onDelete = if (selectionMode) null else { { onDelete(track.id) } },
                         onRename = if (selectionMode) null else { { onRenameTrack(track) } },
                         onEditNote = if (selectionMode) null else { { onEditNoteTrack(track) } },
+                        onShowInfo = if (selectionMode) null else { { onShowTrackInfo(track.id) } },
                         isCurrentTrack = track.id == nowPlaying?.trackId,
                         isPlaying = track.id == nowPlaying?.trackId && nowPlaying.isPlaying,
                     )
