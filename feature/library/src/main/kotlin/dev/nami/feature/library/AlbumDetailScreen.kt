@@ -279,7 +279,10 @@ fun AlbumDetailScreen(
                     contentAlignment = Alignment.BottomEnd,
                 ) {
                     Row(
-                        modifier = Modifier.graphicsLayer { alpha = (1f - progress / 0.6f).coerceIn(0f, 1f) }.padding(bottom = 12.dp, end = 12.dp),
+                        // 44dp bottom clearance -- roughly the title line's own height plus a
+                        // little air, so the buttons sit above where "Название альбома" actually
+                        // renders instead of right at the box edge (== title's top edge, no gap).
+                        modifier = Modifier.graphicsLayer { alpha = (1f - progress / 0.6f).coerceIn(0f, 1f) }.padding(bottom = 44.dp, end = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (uiState.tracks.isNotEmpty()) {
