@@ -239,6 +239,15 @@ val MIGRATION_21_22 = object : Migration(21, 22) {
     }
 }
 
+/** П.md §3 "модель данных" -- rest of Track's full field list closed out. */
+val MIGRATION_22_23 = object : Migration(22, 23) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE tracks ADD COLUMN rating INTEGER")
+        db.execSQL("ALTER TABLE tracks ADD COLUMN firstPlayed INTEGER")
+        db.execSQL("ALTER TABLE tracks ADD COLUMN fileHash TEXT")
+    }
+}
+
 val MIGRATION_14_15 = object : Migration(14, 15) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL(

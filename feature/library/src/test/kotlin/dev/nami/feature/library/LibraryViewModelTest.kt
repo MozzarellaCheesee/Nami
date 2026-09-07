@@ -131,6 +131,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
             override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
             override suspend fun incrementPlayCount(id: TrackId) {}
+            override suspend fun setTrackRating(id: TrackId, rating: Int?) {}
             override suspend fun recordPlayHistory(id: TrackId, playedAt: Long, durationMs: Long) {}
             override suspend fun dailyListeningMinutes(days: Int) = emptyList<dev.nami.domain.DayActivity>()
             override suspend fun listeningSummary(days: Int) = dev.nami.domain.ListeningSummary(0, 0, 0)
@@ -189,6 +190,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
             override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
             override suspend fun incrementPlayCount(id: TrackId) {}
+            override suspend fun setTrackRating(id: TrackId, rating: Int?) {}
             override suspend fun recordPlayHistory(id: TrackId, playedAt: Long, durationMs: Long) {}
             override suspend fun dailyListeningMinutes(days: Int) = emptyList<dev.nami.domain.DayActivity>()
             override suspend fun listeningSummary(days: Int) = dev.nami.domain.ListeningSummary(0, 0, 0)
@@ -249,6 +251,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
             override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
             override suspend fun incrementPlayCount(id: TrackId) {}
+            override suspend fun setTrackRating(id: TrackId, rating: Int?) {}
             override suspend fun recordPlayHistory(id: TrackId, playedAt: Long, durationMs: Long) {}
             override suspend fun dailyListeningMinutes(days: Int) = emptyList<dev.nami.domain.DayActivity>()
             override suspend fun listeningSummary(days: Int) = dev.nami.domain.ListeningSummary(0, 0, 0)
@@ -311,6 +314,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
             override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
             override suspend fun incrementPlayCount(id: TrackId) {}
+            override suspend fun setTrackRating(id: TrackId, rating: Int?) {}
             override suspend fun recordPlayHistory(id: TrackId, playedAt: Long, durationMs: Long) {}
             override suspend fun dailyListeningMinutes(days: Int) = emptyList<dev.nami.domain.DayActivity>()
             override suspend fun listeningSummary(days: Int) = dev.nami.domain.ListeningSummary(0, 0, 0)
@@ -374,6 +378,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
             override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
             override suspend fun incrementPlayCount(id: TrackId) {}
+            override suspend fun setTrackRating(id: TrackId, rating: Int?) {}
             override suspend fun recordPlayHistory(id: TrackId, playedAt: Long, durationMs: Long) {}
             override suspend fun dailyListeningMinutes(days: Int) = emptyList<dev.nami.domain.DayActivity>()
             override suspend fun listeningSummary(days: Int) = dev.nami.domain.ListeningSummary(0, 0, 0)
@@ -432,6 +437,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
             override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
             override suspend fun incrementPlayCount(id: TrackId) {}
+            override suspend fun setTrackRating(id: TrackId, rating: Int?) {}
             override suspend fun recordPlayHistory(id: TrackId, playedAt: Long, durationMs: Long) {}
             override suspend fun dailyListeningMinutes(days: Int) = emptyList<dev.nami.domain.DayActivity>()
             override suspend fun listeningSummary(days: Int) = dev.nami.domain.ListeningSummary(0, 0, 0)
@@ -490,6 +496,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
             override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
             override suspend fun incrementPlayCount(id: TrackId) {}
+            override suspend fun setTrackRating(id: TrackId, rating: Int?) {}
             override suspend fun recordPlayHistory(id: TrackId, playedAt: Long, durationMs: Long) {}
             override suspend fun dailyListeningMinutes(days: Int) = emptyList<dev.nami.domain.DayActivity>()
             override suspend fun listeningSummary(days: Int) = dev.nami.domain.ListeningSummary(0, 0, 0)
@@ -550,6 +557,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
             override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
             override suspend fun incrementPlayCount(id: TrackId) {}
+            override suspend fun setTrackRating(id: TrackId, rating: Int?) {}
             override suspend fun recordPlayHistory(id: TrackId, playedAt: Long, durationMs: Long) {}
             override suspend fun dailyListeningMinutes(days: Int) = emptyList<dev.nami.domain.DayActivity>()
             override suspend fun listeningSummary(days: Int) = dev.nami.domain.ListeningSummary(0, 0, 0)
@@ -610,6 +618,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
             override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
             override suspend fun incrementPlayCount(id: TrackId) {}
+            override suspend fun setTrackRating(id: TrackId, rating: Int?) {}
             override suspend fun recordPlayHistory(id: TrackId, playedAt: Long, durationMs: Long) {}
             override suspend fun dailyListeningMinutes(days: Int) = emptyList<dev.nami.domain.DayActivity>()
             override suspend fun listeningSummary(days: Int) = dev.nami.domain.ListeningSummary(0, 0, 0)
@@ -671,6 +680,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
             override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
             override suspend fun incrementPlayCount(id: TrackId) {}
+            override suspend fun setTrackRating(id: TrackId, rating: Int?) {}
             override suspend fun recordPlayHistory(id: TrackId, playedAt: Long, durationMs: Long) {}
             override suspend fun dailyListeningMinutes(days: Int) = emptyList<dev.nami.domain.DayActivity>()
             override suspend fun listeningSummary(days: Int) = dev.nami.domain.ListeningSummary(0, 0, 0)

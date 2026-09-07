@@ -246,6 +246,11 @@ class LibraryRepositoryImpl @Inject constructor(
 
     override suspend fun incrementPlayCount(id: TrackId) {
         trackDao.incrementPlayCount(id.value)
+        trackDao.setFirstPlayedIfUnset(id.value, System.currentTimeMillis())
+    }
+
+    override suspend fun setTrackRating(id: TrackId, rating: Int?) {
+        trackDao.updateRating(id.value, rating?.coerceIn(1, 5))
     }
 
     override suspend fun recordPlayHistory(id: TrackId, playedAt: Long, durationMs: Long) {
@@ -484,6 +489,23 @@ class LibraryRepositoryImpl @Inject constructor(
             return null
         }
 
+        // CRC32, not a real audio fingerprint (chromaprint) -- cheap, exact-byte identity check
+        // that strengthens LibraryHealthReport's title/artist/duration dedup heuristic for the
+        // common "same file, re-tagged" case, honestly not claiming to catch different rips of
+        // the same recording.
+        val fileHash = runCatching {
+            val crc = java.util.zip.CRC32()
+            destination.inputStream().use { input ->
+                val buffer = ByteArray(8192)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    crc.update(buffer, 0, read)
+                }
+            }
+            crc.value.toString(16)
+        }.getOrNull()
+
         val trackId = UUID.randomUUID().toString()
         val artwork = tags?.artwork
         var trackArtworkPath: String? = null
@@ -518,6 +540,7 @@ class LibraryRepositoryImpl @Inject constructor(
                     sampleRateHz = tags?.sampleRateHz,
                     bitDepth = tags?.bitDepth,
                     channels = tags?.channels,
+                    fileHash = fileHash,
                 ),
             ),
         )

@@ -66,6 +66,7 @@ class SearchViewModelTest {
         override suspend fun setArtistPhoto(id: ArtistId, imageUri: String) = error("unused")
         override fun tracksByArtist(id: ArtistId): Flow<List<Track>> = error("unused")
         override suspend fun incrementPlayCount(id: TrackId) = error("unused")
+        override suspend fun setTrackRating(id: TrackId, rating: Int?) = error("unused")
         override suspend fun recordPlayHistory(id: TrackId, playedAt: Long, durationMs: Long) = error("unused")
         override suspend fun dailyListeningMinutes(days: Int) = error("unused")
         override suspend fun listeningSummary(days: Int) = error("unused")

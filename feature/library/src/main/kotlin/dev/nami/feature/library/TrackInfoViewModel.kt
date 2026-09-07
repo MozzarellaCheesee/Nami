@@ -61,6 +61,10 @@ class TrackInfoViewModel @Inject constructor(
         viewModelScope.launch { libraryRepository.setAlbumYear(albumId, year) }
     }
 
+    fun setRating(rating: Int?) {
+        viewModelScope.launch { libraryRepository.setTrackRating(trackId, rating) }
+    }
+
     fun setNote(note: String?) {
         viewModelScope.launch { libraryRepository.setTrackNote(trackId, note) }
     }

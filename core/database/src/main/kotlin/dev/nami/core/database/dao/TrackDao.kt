@@ -174,6 +174,13 @@ interface TrackDao {
     @Query("UPDATE tracks SET bpm = :bpm, musicalKey = :musicalKey WHERE id = :id")
     suspend fun updateBpmKey(id: String, bpm: Float?, musicalKey: String?)
 
+    @Query("UPDATE tracks SET rating = :rating WHERE id = :id")
+    suspend fun updateRating(id: String, rating: Int?)
+
+    // Only ever set once -- firstPlayed IS NULL guards against a later play overwriting it.
+    @Query("UPDATE tracks SET firstPlayed = :timestamp WHERE id = :id AND firstPlayed IS NULL")
+    suspend fun setFirstPlayedIfUnset(id: String, timestamp: Long)
+
     // Unconditional -- unlike setArtworkPath (import's "only if null" writer), this is for the
     // user explicitly replacing a track's own (albumless) cover.
     @Query("UPDATE tracks SET artworkPath = :path WHERE id = :id")

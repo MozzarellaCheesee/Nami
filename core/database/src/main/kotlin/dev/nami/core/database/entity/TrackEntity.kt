@@ -65,4 +65,14 @@ data class TrackEntity(
      * here like replayGainDb. Null until scanned or on a decode/analysis failure. */
     val bpm: Float? = null,
     val musicalKey: String? = null,
+    /** План.md §3's full Track model -- user rating, 1-5, null = not rated. */
+    val rating: Int? = null,
+    /** Same shape as lastPlayed, set once and never overwritten -- "когда впервые услышал" is
+     * data the app already has for free the first time incrementPlayCount fires. */
+    val firstPlayed: Long? = null,
+    /** CRC32 of the whole file, computed once at import -- a real (if simple, no chromaprint)
+     * per-file identity check that strengthens the title/artist/duration dedup heuristic
+     * LibraryHealthReport already uses: two files with different tags but the same bytes (a
+     * re-rip, a re-tag) now hash-match even when their metadata doesn't. */
+    val fileHash: String? = null,
 )

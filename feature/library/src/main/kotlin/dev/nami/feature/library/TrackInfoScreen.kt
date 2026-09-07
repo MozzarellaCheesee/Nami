@@ -13,6 +13,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.Star
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material3.CircularProgressIndicator
@@ -73,6 +76,7 @@ fun TrackInfoScreen(onBack: () -> Unit, viewModel: TrackInfoViewModel = hiltView
                 InfoRow("Год", album?.year?.toString() ?: "—", onClick = if (album != null) ({ editField = TrackInfoField.Year }) else null)
                 InfoRow("Жанр", current.genre ?: "—", onClick = { editField = TrackInfoField.Genre })
                 InfoRow("Заметка", current.note ?: "—", onClick = { editField = TrackInfoField.Note })
+                RatingRow(current.rating, onRate = viewModel::setRating)
             }
             InfoSection(title = "Файл") {
                 InfoRow("Формат", current.format)
@@ -142,6 +146,27 @@ internal fun InfoRow(label: String, value: String, onClick: (() -> Unit)? = null
         )
         if (onClick != null) {
             Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40, modifier = Modifier.padding(start = 4.dp))
+        }
+    }
+}
+
+/** П.md §3's Track.rating -- 5 tappable stars, tapping the currently-set star clears it. */
+@Composable
+private fun RatingRow(rating: Int?, onRate: (Int?) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("Оценка", color = NamiColors.Paper70, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Row {
+            for (star in 1..5) {
+                Icon(
+                    if (rating != null && star <= rating) Icons.Filled.Star else Icons.Outlined.Star,
+                    contentDescription = null,
+                    tint = if (rating != null && star <= rating) NamiColors.Kin else NamiColors.Paper40,
+                    modifier = Modifier.size(20.dp).clickable { onRate(if (star == rating) null else star) },
+                )
+            }
         }
     }
 }

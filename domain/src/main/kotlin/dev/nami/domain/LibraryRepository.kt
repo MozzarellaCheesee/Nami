@@ -57,6 +57,8 @@ interface LibraryRepository {
     /** Called once a track has actually been "listened to" (see the player module's threshold),
      * not on every skip -- live everywhere that reads Track.playCount via a Flow. */
     suspend fun incrementPlayCount(id: TrackId)
+    /** null clears the rating; anything else is clamped to 1..5. */
+    suspend fun setTrackRating(id: TrackId, rating: Int?)
     suspend fun recordPlayHistory(id: TrackId, playedAt: Long, durationMs: Long)
     suspend fun dailyListeningMinutes(days: Int): List<DayActivity>
     suspend fun listeningSummary(days: Int): ListeningSummary

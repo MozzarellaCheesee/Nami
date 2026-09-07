@@ -28,4 +28,7 @@ data class Track(
     val skipCount: Int = 0,
     val bpm: Float? = null,
     val musicalKey: String? = null,
+    val rating: Int? = null,
+    val firstPlayed: Long? = null,
+    val fileHash: String? = null,
 )
