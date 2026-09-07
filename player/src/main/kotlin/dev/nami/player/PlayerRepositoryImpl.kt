@@ -221,16 +221,26 @@ class PlayerRepositoryImpl @Inject constructor(
     override suspend fun addToQueue(track: PlayableTrack) {
         val player = controller ?: return
         // No duplicates in the visible queue (current track + everything upcoming) -- repeatedly
-        // swiping/tapping "add to queue" on the same row used to stack it right after itself
-        // every time. Doesn't touch already-played history before the current index; queueing the
-        // same track again once it's actually played through is fine.
+        // swiping/tapping "add to queue" on the same row used to stack a second copy right after
+        // itself every time. If it's already queued somewhere ahead, MOVE that existing item to
+        // right after the current one instead of adding a new copy -- matches "queue this next"
+        // even when it's already further down the list. Doesn't touch already-played history
+        // before the current index; queueing the same track again once it's actually played
+        // through is fine (starts a fresh copy).
         val startIndex = player.currentMediaItemIndex.takeIf { it != androidx.media3.common.C.INDEX_UNSET } ?: 0
-        val alreadyQueued = (startIndex until player.mediaItemCount).any { i -> player.getMediaItemAt(i).mediaId == track.id.value }
-        if (alreadyQueued) return
+        val existingIndex = (startIndex until player.mediaItemCount).firstOrNull { i -> player.getMediaItemAt(i).mediaId == track.id.value }
+        val insertIndex = (player.currentMediaItemIndex + 1).coerceAtMost(player.mediaItemCount)
+        if (existingIndex != null) {
+            // Already the current track -- "queue it right after current" is meaningless for
+            // itself, leave it playing where it is.
+            if (existingIndex != player.currentMediaItemIndex && existingIndex != insertIndex) {
+                player.moveMediaItem(existingIndex, insertIndex)
+            }
+            return
+        }
         originByMediaId[track.id.value] = QueueOrigin.MANUAL
         trackInfoByMediaId[track.id.value] = track.toMediaItemInfo()
         val wasEmpty = player.mediaItemCount == 0
-        val insertIndex = (player.currentMediaItemIndex + 1).coerceAtMost(player.mediaItemCount)
         player.addMediaItem(insertIndex, track.toMediaItem())
         if (wasEmpty) {
             player.prepare()
