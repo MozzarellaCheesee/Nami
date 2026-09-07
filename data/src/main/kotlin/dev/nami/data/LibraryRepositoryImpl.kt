@@ -28,6 +28,7 @@ import dev.nami.domain.ImportSource
 import dev.nami.domain.LibraryRepository
 import dev.nami.domain.LyricsRepository
 import dev.nami.domain.NativeBridge
+import dev.nami.player.dsd.DsfToDopWav
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
@@ -303,12 +304,29 @@ class LibraryRepositoryImpl @Inject constructor(
         fallbackAlbum: String? = null,
         lyricsDoc: DocumentFile? = null,
     ): CopyAndIndexResult? {
+        val displayName = queryDisplayName(resolver, uri) ?: uri.lastPathSegment
         val extension = resolver.getType(uri)?.substringAfterLast('/') ?: "audio"
-        val destination = File(musicDir, "${UUID.randomUUID()}.$extension")
+        var destination = File(musicDir, "${UUID.randomUUID()}.$extension")
 
         resolver.openInputStream(uri)?.use { input ->
             destination.outputStream().use { output -> input.copyTo(output) }
         } ?: return null
+
+        // Этап 10: DSD import via DoP, wired to a real container parser (see DsfToDopWav's own
+        // doc for why this converts at import time instead of a custom streaming Extractor).
+        // Falls through to indexing the raw .dsf as-is (native tag reader will likely find
+        // nothing useful in it, same as any other unrecognized format) if conversion fails --
+        // never crashes the import over one bad/unsupported DSD file.
+        if (displayName?.endsWith(".dsf", ignoreCase = true) == true) {
+            val dsfBytes = destination.readBytes()
+            val wavBytes = DsfToDopWav.convert(dsfBytes)
+            if (wavBytes != null) {
+                val wavDestination = File(musicDir, "${destination.nameWithoutExtension}.wav")
+                wavDestination.writeBytes(wavBytes)
+                destination.delete()
+                destination = wavDestination
+            }
+        }
 
         // Same basename convention LyricsRepositoryImpl reads from (sibling .lrc next to the
         // audio file) -- copied alongside so a folder import with lyrics already sitting next to
@@ -330,8 +348,7 @@ class LibraryRepositoryImpl @Inject constructor(
 
         val artistId = metadataResolver.resolveArtist(tags?.artist ?: tags?.albumArtist ?: fallbackArtist)
         val albumId = metadataResolver.resolveAlbum(tags?.album ?: fallbackAlbum, artistId, tags?.year)
-        val fallbackTitle = (queryDisplayName(resolver, uri) ?: uri.lastPathSegment ?: "unknown")
-            .substringBeforeLast('.')
+        val fallbackTitle = (displayName ?: "unknown").substringBeforeLast('.')
         val title = tags?.title?.takeIf { it.isNotBlank() } ?: fallbackTitle
         val durationMs = tags?.durationMs?.takeIf { it > 0 } ?: readDurationMs(destination.path)
 
