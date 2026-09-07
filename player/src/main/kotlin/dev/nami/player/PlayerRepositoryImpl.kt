@@ -18,6 +18,8 @@ import dev.nami.domain.PlayerQueue
 import dev.nami.domain.PlayerRepository
 import dev.nami.domain.QueueOrigin
 import dev.nami.domain.RepeatMode
+import dev.nami.domain.SettingsRepository
+import dev.nami.domain.ShuffleMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -25,14 +27,19 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.pow
+
+private const val SMART_RESUME_THRESHOLD_MS = 12 * 60 * 60 * 1000L
 
 @Singleton
 class PlayerRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val libraryRepository: LibraryRepository,
+    private val settingsRepository: SettingsRepository,
 ) : PlayerRepository {
 
     private val _state = MutableStateFlow<PlaybackState>(PlaybackState.Idle)
@@ -87,6 +94,13 @@ class PlayerRepositoryImpl @Inject constructor(
     // this is keyed by mediaId, reset to null only on an actual track change).
     private var playCountedMediaId: String? = null
 
+    // План.md §22.10 "Умное возобновление" -- set the instant playback pauses (any way: the
+    // toggle button, headphones unplugged, audio focus loss), cleared once acted on. Resuming
+    // less than the threshold later continues from position as normal; resuming after it restarts
+    // the track from 0, on the reasoning that a pause that long usually means "I moved on/forgot
+    // about this", not "I'll be right back".
+    private var pausedAtMs: Long? = null
+
     init {
         val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
         val future = MediaController.Builder(context, token)
@@ -109,6 +123,10 @@ class PlayerRepositoryImpl @Inject constructor(
                             publishState(player)
                             publishQueue(player)
                             _repeatMode.value = player.repeatMode.toDomainRepeatMode()
+                        }
+
+                        override fun onIsPlayingChanged(isPlaying: Boolean) {
+                            if (!isPlaying) pausedAtMs = System.currentTimeMillis()
                         }
 
                         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -230,7 +248,17 @@ class PlayerRepositoryImpl @Inject constructor(
     }
 
     override suspend fun toggle() {
-        controller?.apply { if (isPlaying) pause() else play() }
+        controller?.apply {
+            if (isPlaying) {
+                pause()
+            } else {
+                pausedAtMs?.let { pausedAt ->
+                    if (System.currentTimeMillis() - pausedAt >= SMART_RESUME_THRESHOLD_MS) seekTo(0)
+                }
+                pausedAtMs = null
+                play()
+            }
+        }
     }
 
     override suspend fun seek(ms: Long) {
@@ -343,7 +371,11 @@ class PlayerRepositoryImpl @Inject constructor(
             // Physically reordering the items keeps that whole pipeline correct for free.
             val snapshot = (0 until player.mediaItemCount).mapTo(mutableListOf()) { player.getMediaItemAt(it) }
             preShuffleOrder = snapshot
-            val rest = snapshot.filterNot { it.mediaId == currentItem.mediaId }.shuffled()
+            val restItems = snapshot.filterNot { it.mediaId == currentItem.mediaId }
+            val rest = when (settingsRepository.shuffleMode.value) {
+                ShuffleMode.TRUE_RANDOM -> restItems.shuffled()
+                ShuffleMode.WEIGHTED_BY_STALENESS -> weightedByStaleness(restItems)
+            }
             reorderTo(player, listOf(currentItem) + rest)
         } else {
             val original = preShuffleOrder ?: return
@@ -351,6 +383,25 @@ class PlayerRepositoryImpl @Inject constructor(
             preShuffleOrder = null
         }
         _shuffleEnabled.value = enabled
+    }
+
+    /** Weighted-random permutation (Efraimidis-Spirakis: key = U^(1/weight), sort descending)
+     * biased toward tracks that haven't played in a while -- weight grows with time since
+     * [dev.nami.core.model.Track.lastPlayed] (never-played tracks get the max weight, same as a
+     * track that hasn't played in ~30 days, so new imports surface early without dominating
+     * every shuffle forever). Falls back to a flat weight (behaves like plain random) for any
+     * track this couldn't look up. */
+    private suspend fun weightedByStaleness(items: List<MediaItem>): List<MediaItem> {
+        val now = System.currentTimeMillis()
+        val thirtyDaysMs = 30L * 24 * 60 * 60 * 1000
+        val weighted = items.map { item ->
+            val lastPlayed = runCatching { libraryRepository.track(TrackId(item.mediaId)).first()?.lastPlayed }.getOrNull()
+            val staleness = if (lastPlayed == null) thirtyDaysMs else (now - lastPlayed).coerceIn(0, thirtyDaysMs)
+            val weight = 1.0 + staleness.toDouble() / thirtyDaysMs // 1..2, never zero
+            val key = Math.random().pow(1.0 / weight)
+            item to key
+        }
+        return weighted.sortedByDescending { it.second }.map { it.first }
     }
 
     /** Rearranges the live queue to [target] order using ONLY [Player.moveMediaItem] -- never

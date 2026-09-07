@@ -29,6 +29,7 @@ import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PlayCircleOutline
 import androidx.compose.material.icons.outlined.School
+import androidx.compose.material.icons.outlined.Shuffle
 import androidx.compose.material.icons.outlined.Usb
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -194,6 +195,7 @@ fun SettingsPlayerScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hilt
     val autoOpenPlayer by viewModel.autoOpenPlayer.collectAsState()
     val hideSystemBars by viewModel.hideSystemBars.collectAsState()
     val karaokeEnabled by viewModel.karaokeEnabled.collectAsState()
+    val shuffleMode by viewModel.shuffleMode.collectAsState()
 
     SettingsSubScreenScaffold(title = "Плеер", onBack = onBack) {
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
@@ -214,6 +216,27 @@ fun SettingsPlayerScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hilt
                 title = "Караоке-подсветка слов (Beta)",
                 trailing = { NamiSwitch(checked = karaokeEnabled, onCheckedChange = viewModel::setKaraokeEnabled) },
                 onClick = { viewModel.setKaraokeEnabled(!karaokeEnabled) },
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Shuffle,
+                title = "Перемешивание",
+                trailing = {
+                    Text(
+                        text = when (shuffleMode) {
+                            dev.nami.domain.ShuffleMode.TRUE_RANDOM -> "Случайно"
+                            dev.nami.domain.ShuffleMode.WEIGHTED_BY_STALENESS -> "Давно не играло"
+                        },
+                        color = NamiColors.Paper40,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                },
+                onClick = {
+                    val next = when (shuffleMode) {
+                        dev.nami.domain.ShuffleMode.TRUE_RANDOM -> dev.nami.domain.ShuffleMode.WEIGHTED_BY_STALENESS
+                        dev.nami.domain.ShuffleMode.WEIGHTED_BY_STALENESS -> dev.nami.domain.ShuffleMode.TRUE_RANDOM
+                    }
+                    viewModel.setShuffleMode(next)
+                },
             )
         }
     }

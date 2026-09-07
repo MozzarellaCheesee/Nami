@@ -8,6 +8,13 @@ import kotlinx.coroutines.flow.StateFlow
  * that might just be a charging cable's audio pins). */
 enum class OutputDeviceType { WIRED, BLUETOOTH, USB_DAC, SPEAKER }
 
+/** План.md §22.14 "Гибкий shuffle". TRUE_RANDOM is a flat random permutation (already inherently
+ * "no repeats until the cycle ends" -- it reorders the existing queue once, it doesn't resample
+ * with replacement). WEIGHTED_BY_STALENESS biases toward tracks that haven't played in a while
+ * (Track.lastPlayed) so a shuffle surfaces forgotten tracks more often than ones on repeat.
+ * Rating-weighted isn't here yet -- Track has no rating field in this codebase. */
+enum class ShuffleMode { TRUE_RANDOM, WEIGHTED_BY_STALENESS }
+
 /** Per-device profile from План.md §16/§20: its own EQ and a volume ceiling, applied automatically
  * when the routed output changes. Crossfeed/ReplayGain-mode aren't per-profile here -- crossfeed
  * doesn't exist as a processor in this codebase yet, and ReplayGain mode is a single global
@@ -118,6 +125,10 @@ interface SettingsRepository {
      * is read/written on a new day. */
     val stands4RequestsToday: StateFlow<Int>
     fun recordStands4Request()
+
+    /** См. [ShuffleMode]. */
+    val shuffleMode: StateFlow<ShuffleMode>
+    fun setShuffleMode(mode: ShuffleMode)
 
     companion object {
         const val STANDS4_DAILY_LIMIT = 100

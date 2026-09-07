@@ -7,6 +7,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.nami.domain.OutputDeviceType
 import dev.nami.domain.OutputProfile
 import dev.nami.domain.SettingsRepository
+import dev.nami.domain.ShuffleMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
@@ -32,6 +33,7 @@ private const val KEY_STANDS4_UID = "stands4_uid"
 private const val KEY_STANDS4_TOKEN = "stands4_token"
 private const val KEY_STANDS4_REQUEST_COUNT = "stands4_request_count"
 private const val KEY_STANDS4_REQUEST_DATE = "stands4_request_date" // yyyy-MM-dd, device-local
+private const val KEY_SHUFFLE_MODE = "shuffle_mode"
 private const val KEY_OUTPUT_PROFILES_ENABLED = "output_profiles_enabled"
 // One "<CSV of 9 gains>|<volumeLimitPercent>" string per device type.
 private fun outputProfileKey(type: OutputDeviceType) = "output_profile_${type.name}"
@@ -236,5 +238,16 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
             putInt(KEY_STANDS4_REQUEST_COUNT, newCount)
         }
         _stands4RequestsToday.value = newCount
+    }
+
+    private val _shuffleMode = MutableStateFlow(
+        prefs.getString(KEY_SHUFFLE_MODE, null)?.let { runCatching { ShuffleMode.valueOf(it) }.getOrNull() }
+            ?: ShuffleMode.TRUE_RANDOM,
+    )
+    override val shuffleMode: StateFlow<ShuffleMode> = _shuffleMode
+
+    override fun setShuffleMode(mode: ShuffleMode) {
+        prefs.edit { putString(KEY_SHUFFLE_MODE, mode.name) }
+        _shuffleMode.value = mode
     }
 }
