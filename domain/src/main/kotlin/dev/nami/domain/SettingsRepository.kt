@@ -43,4 +43,13 @@ interface SettingsRepository {
      * back to the normal mixed path when the device/DAC can't actually do it. */
     val bitPerfectUsbEnabled: StateFlow<Boolean>
     fun setBitPerfectUsbEnabled(value: Boolean)
+
+    /** ReplayGain-lite (Этап 4, Beta) -- RMS-loudness normalization, not true EBU R128. Off by
+     * default, same "sits in every second of audio" reasoning as EQ. */
+    val replayGainEnabled: StateFlow<Boolean>
+    fun setReplayGainEnabled(value: Boolean)
+
+    /** TPDF dither before the sink's own bit-depth truncation (Этап 4, Beta). Off by default. */
+    val ditherEnabled: StateFlow<Boolean>
+    fun setDitherEnabled(value: Boolean)
 }

@@ -113,6 +113,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
             override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
             override suspend fun incrementPlayCount(id: TrackId) {}
+            override suspend fun setTrackReplayGain(id: TrackId, gainDb: Float) {}
             override suspend fun import(source: ImportSource): Flow<ImportProgress> =
                 flowOf(ImportProgress(1, 2), ImportProgress(2, 2))
             override suspend fun deleteTrack(id: TrackId) {}
@@ -158,6 +159,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
             override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
             override suspend fun incrementPlayCount(id: TrackId) {}
+            override suspend fun setTrackReplayGain(id: TrackId, gainDb: Float) {}
             override suspend fun import(source: ImportSource): Flow<ImportProgress> {
                 assertEquals(ImportSource.Folder("content://tree/fake"), source)
                 return flowOf(ImportProgress(1, 3), ImportProgress(3, 3))
@@ -205,6 +207,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
             override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
             override suspend fun incrementPlayCount(id: TrackId) {}
+            override suspend fun setTrackReplayGain(id: TrackId, gainDb: Float) {}
             override suspend fun import(source: ImportSource) = flowOf(ImportProgress(0, 0))
             override suspend fun deleteTrack(id: TrackId) {}
             override suspend fun deleteTracks(ids: List<TrackId>) {}
@@ -254,6 +257,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
             override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
             override suspend fun incrementPlayCount(id: TrackId) {}
+            override suspend fun setTrackReplayGain(id: TrackId, gainDb: Float) {}
             override suspend fun import(source: ImportSource): Flow<ImportProgress> =
                 flowOf(ImportProgress(1, 1))
             override suspend fun deleteTrack(id: TrackId) {}
@@ -304,6 +308,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
             override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
             override suspend fun incrementPlayCount(id: TrackId) {}
+            override suspend fun setTrackReplayGain(id: TrackId, gainDb: Float) {}
             override suspend fun import(source: ImportSource): Flow<ImportProgress> =
                 flow { throw RuntimeException("boom") }
             override suspend fun deleteTrack(id: TrackId) {}
@@ -349,6 +354,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
             override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
             override suspend fun incrementPlayCount(id: TrackId) {}
+            override suspend fun setTrackReplayGain(id: TrackId, gainDb: Float) {}
             override suspend fun import(source: ImportSource) = flowOf(ImportProgress(0, 0))
             override suspend fun deleteTrack(id: TrackId) {}
             override suspend fun deleteTracks(ids: List<TrackId>) {}
@@ -394,6 +400,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
             override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
             override suspend fun incrementPlayCount(id: TrackId) {}
+            override suspend fun setTrackReplayGain(id: TrackId, gainDb: Float) {}
             override suspend fun import(source: ImportSource) = flowOf(ImportProgress(0, 0))
             override suspend fun deleteTrack(id: TrackId) {}
             override suspend fun deleteTracks(ids: List<TrackId>) {}
@@ -441,6 +448,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
             override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
             override suspend fun incrementPlayCount(id: TrackId) {}
+            override suspend fun setTrackReplayGain(id: TrackId, gainDb: Float) {}
             override suspend fun import(source: ImportSource) = flowOf(ImportProgress(0, 0))
             override suspend fun deleteTrack(id: TrackId) {}
             override suspend fun deleteTracks(ids: List<TrackId>) {}
@@ -488,6 +496,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
             override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
             override suspend fun incrementPlayCount(id: TrackId) {}
+            override suspend fun setTrackReplayGain(id: TrackId, gainDb: Float) {}
             override suspend fun import(source: ImportSource) = flowOf(ImportProgress(0, 0))
             override suspend fun deleteTrack(id: TrackId) {}
             override suspend fun deleteTracks(ids: List<TrackId>) { deletedIds.addAll(ids) }
@@ -536,6 +545,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
             override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
             override suspend fun incrementPlayCount(id: TrackId) {}
+            override suspend fun setTrackReplayGain(id: TrackId, gainDb: Float) {}
             override suspend fun import(source: ImportSource) = flowOf(ImportProgress(0, 0))
             override suspend fun deleteTrack(id: TrackId) {}
             override suspend fun deleteTracks(ids: List<TrackId>) {}

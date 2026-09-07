@@ -183,6 +183,10 @@ class LibraryRepositoryImpl @Inject constructor(
         trackDao.incrementPlayCount(id.value)
     }
 
+    override suspend fun setTrackReplayGain(id: TrackId, gainDb: Float) {
+        trackDao.updateReplayGain(id.value, gainDb)
+    }
+
     override suspend fun deleteTrack(id: TrackId) {
         val track = trackDao.findById(id.value) ?: return
         val trashedPath = trashFileStore.moveToTrash(id.value, track.path) ?: track.path

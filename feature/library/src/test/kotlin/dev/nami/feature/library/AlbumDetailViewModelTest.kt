@@ -74,6 +74,7 @@ class AlbumDetailViewModelTest {
             override fun tracksByArtist(id: ArtistId) = throw NotImplementedError()
             override fun albumsByArtist(id: ArtistId) = throw NotImplementedError()
             override suspend fun incrementPlayCount(id: TrackId) {}
+            override suspend fun setTrackReplayGain(id: TrackId, gainDb: Float) {}
             override suspend fun import(source: ImportSource) = throw NotImplementedError()
             override suspend fun deleteTrack(id: TrackId) = throw NotImplementedError()
             override suspend fun deleteTracks(ids: List<TrackId>) {}

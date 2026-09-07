@@ -66,6 +66,7 @@ class SearchRepositoryImplTest {
         override suspend fun setArtistId(id: String, artistId: String?) = error("unused")
         override fun trashedTracksFlow() = error("unused")
         override suspend fun incrementPlayCount(id: String) = error("unused")
+        override suspend fun updateReplayGain(id: String, gainDb: Float) = error("unused")
     }
 
     private fun fakeAlbumDao(rows: List<AlbumDao.AlbumListRow> = emptyList()) = object : AlbumDao {

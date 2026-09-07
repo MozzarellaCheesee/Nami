@@ -21,18 +21,23 @@ import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.model.Track
+import dev.nami.player.bluetooth.BluetoothCodecReader
 
 private data class ChainNode(val name: String, val detail: String)
 
@@ -43,27 +48,26 @@ private data class ChainNode(val name: String, val detail: String)
 fun AudioTractScreen(onBack: () -> Unit, onOpenEqualizer: () -> Unit, viewModel: AudioTractViewModel = hiltViewModel()) {
     val uiState by viewModel.uiState.collectAsState()
     val track = uiState.track
+    val context = LocalContext.current
+    val isBluetoothOutput = remember { BluetoothCodecReader.isBluetoothOutputActive(context) }
+
+    val processingParts = buildList {
+        if (uiState.eqEnabled) add("EQ %+.1f/%+.1f/%+.1f дБ".format(uiState.eqBassDb, uiState.eqMidDb, uiState.eqTrebleDb))
+        if (uiState.replayGainEnabled) add("ReplayGain")
+        if (uiState.ditherEnabled) add("dither")
+    }
+
+    val outputDetail = buildString {
+        append(if (uiState.bitPerfectUsbEnabled) "USB · bit-perfect (если поддерживается)" else "системный микшер")
+        if (isBluetoothOutput) append(" · Bluetooth (кодек недоступен через public API)")
+    }
 
     val nodes = buildList {
         add(ChainNode("Файл", track?.let { formatFileDetail(it) } ?: "ничего не играет"))
         add(ChainNode("Декодер", "нативный, без потерь"))
-        add(
-            ChainNode(
-                "Обработка",
-                if (uiState.eqEnabled) {
-                    "EQ (бас %+.1f, сред %+.1f, выс %+.1f дБ)".format(uiState.eqBassDb, uiState.eqMidDb, uiState.eqTrebleDb)
-                } else {
-                    "нет"
-                },
-            ),
-        )
+        add(ChainNode("Обработка", processingParts.takeIf { it.isNotEmpty() }?.joinToString(" · ") ?: "нет"))
         add(ChainNode("Ресемплинг", "нет"))
-        add(
-            ChainNode(
-                "Вывод",
-                if (uiState.bitPerfectUsbEnabled) "USB · bit-perfect (если поддерживается)" else "системный микшер",
-            ),
-        )
+        add(ChainNode("Вывод", outputDetail))
     }
 
     val bitPerfectBlockedByEq = uiState.bitPerfectUsbEnabled && uiState.eqEnabled
@@ -136,9 +140,37 @@ fun AudioTractScreen(onBack: () -> Unit, onOpenEqualizer: () -> Unit, viewModel:
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(top = 20.dp).clickable(onClick = onOpenEqualizer),
                 )
+
+                Column(modifier = Modifier.fillMaxWidth().padding(top = 24.dp)) {
+                    ToggleRow("ReplayGain (Beta)", "выравнивает громкость треков, не EBU R128", uiState.replayGainEnabled, viewModel::setReplayGainEnabled)
+                    ToggleRow("Dither (Beta)", "сглаживает шум квантования при обработке", uiState.ditherEnabled, viewModel::setDitherEnabled)
+                }
                 Spacer(modifier = Modifier.height(24.dp))
             }
         }
+    }
+}
+
+@Composable
+private fun ToggleRow(title: String, caption: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp)
+            .background(NamiColors.Ink800, RoundedCornerShape(16.dp))
+            .clickable { onCheckedChange(!checked) }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, color = NamiColors.Paper100, style = MaterialTheme.typography.bodyMedium)
+            Text(caption, color = NamiColors.Paper40, style = MaterialTheme.typography.bodySmall)
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(checkedTrackColor = NamiColors.Shu, uncheckedTrackColor = NamiColors.Ink600),
+        )
     }
 }
 

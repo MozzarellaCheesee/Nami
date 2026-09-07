@@ -4,6 +4,7 @@ import android.app.PendingIntent
 import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
@@ -12,16 +13,22 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import dagger.hilt.android.AndroidEntryPoint
 import dev.nami.core.model.TrackId
+import dev.nami.domain.LibraryRepository
 import dev.nami.domain.PlaybackState
 import dev.nami.domain.SettingsRepository
+import dev.nami.player.dither.DitherAudioProcessor
 import dev.nami.player.eq.NamiRenderersFactory
 import dev.nami.player.eq.ParametricEqAudioProcessor
+import dev.nami.player.replaygain.ReplayGainAudioProcessor
+import dev.nami.player.replaygain.ReplayGainScanner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /** Set on the intent MainActivity is launched with from the system media notification/status-bar
@@ -33,9 +40,12 @@ class PlaybackService : MediaSessionService() {
     private lateinit var player: ExoPlayer
     private lateinit var mediaSession: MediaSession
     private val eqProcessor = ParametricEqAudioProcessor()
+    private val replayGainProcessor = ReplayGainAudioProcessor()
+    private val ditherProcessor = DitherAudioProcessor()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     @Inject lateinit var settingsRepository: SettingsRepository
+    @Inject lateinit var libraryRepository: LibraryRepository
 
     override fun onCreate() {
         super.onCreate()
@@ -68,8 +78,11 @@ class PlaybackService : MediaSessionService() {
         // Known limitation: turning EQ on for the first time needs an app restart to actually
         // engage (this decision is made once, here, not re-checked per track) -- an acceptable
         // cost for keeping every other playback session on the already-proven path.
-        val playerBuilder = if (settingsRepository.eqEnabled.value) {
-            ExoPlayer.Builder(this, NamiRenderersFactory(this, eqProcessor))
+        val needsCustomSink = settingsRepository.eqEnabled.value ||
+            settingsRepository.replayGainEnabled.value ||
+            settingsRepository.ditherEnabled.value
+        val playerBuilder = if (needsCustomSink) {
+            ExoPlayer.Builder(this, NamiRenderersFactory(this, replayGainProcessor, eqProcessor, ditherProcessor))
         } else {
             ExoPlayer.Builder(this)
         }
@@ -120,7 +133,53 @@ class PlaybackService : MediaSessionService() {
             }
             .launchIn(scope)
 
+        settingsRepository.ditherEnabled
+            .onEach { enabled ->
+                val wasEnabled = ditherProcessor.enabled
+                ditherProcessor.enabled = enabled
+                if (enabled != wasEnabled && player.playbackState != Player.STATE_IDLE) {
+                    player.seekTo(player.currentPosition)
+                }
+            }
+            .launchIn(scope)
+
+        settingsRepository.replayGainEnabled
+            .onEach { enabled ->
+                val wasEnabled = replayGainProcessor.enabled
+                replayGainProcessor.enabled = enabled
+                if (enabled != wasEnabled && player.playbackState != Player.STATE_IDLE) {
+                    player.seekTo(player.currentPosition)
+                }
+            }
+            .launchIn(scope)
+
+        // ReplayGain scan happens lazily, once per track, on first play -- not during import
+        // (would stall the whole folder scan on decoding every file). Cheap after the first time:
+        // the result is cached on the track (see ReplayGainScanner/replayGainDb).
+        player.addListener(object : Player.Listener {
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                val trackId = mediaItem?.mediaId?.let(::TrackId) ?: return
+                scope.launch { updateReplayGainForCurrentTrack(trackId) }
+            }
+        })
+
         BitPerfectUsbController(this, player, settingsRepository, scope)
+    }
+
+    private suspend fun updateReplayGainForCurrentTrack(trackId: TrackId) {
+        if (!settingsRepository.replayGainEnabled.value) return
+        val track = libraryRepository.track(trackId).first() ?: return
+        val cachedGain = track.replayGainDb
+        val gain = if (cachedGain != null) {
+            cachedGain
+        } else {
+            // Blocking decode -- runs on Dispatchers.Default so it doesn't touch Main.immediate,
+            // which the rest of this scope (and the player itself) lives on.
+            val scanned = kotlinx.coroutines.withContext(Dispatchers.Default) { ReplayGainScanner.scan(track.path) }
+            if (scanned != null) libraryRepository.setTrackReplayGain(trackId, scanned)
+            scanned
+        }
+        replayGainProcessor.setGainDb(gain)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession =

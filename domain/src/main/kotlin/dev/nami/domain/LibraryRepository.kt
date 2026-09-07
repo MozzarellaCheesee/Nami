@@ -49,6 +49,7 @@ interface LibraryRepository {
     /** Called once a track has actually been "listened to" (see the player module's threshold),
      * not on every skip -- live everywhere that reads Track.playCount via a Flow. */
     suspend fun incrementPlayCount(id: TrackId)
+    suspend fun setTrackReplayGain(id: TrackId, gainDb: Float)
     fun albumsByArtist(id: ArtistId): Flow<List<AlbumSummary>>
     suspend fun import(source: ImportSource): Flow<ImportProgress>
     suspend fun deleteTrack(id: TrackId)

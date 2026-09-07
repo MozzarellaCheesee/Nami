@@ -50,4 +50,8 @@ data class TrackEntity(
     val sampleRateHz: Int? = null,
     val bitDepth: Int? = null,
     val channels: Int? = null,
+    /** ReplayGain-lite: RMS-loudness gain to reach a -18dBFS target, scanned once on first play.
+     * Null until scanned (or if scanning failed) -- not true EBU R128 (no true-peak/gating), just
+     * simple RMS over the decoded track. */
+    val replayGainDb: Float? = null,
 )

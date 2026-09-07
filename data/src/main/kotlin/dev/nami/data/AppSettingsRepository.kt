@@ -21,6 +21,8 @@ private const val KEY_EQ_BASS_DB = "eq_bass_db"
 private const val KEY_EQ_MID_DB = "eq_mid_db"
 private const val KEY_EQ_TREBLE_DB = "eq_treble_db"
 private const val KEY_BIT_PERFECT_USB_ENABLED = "bit_perfect_usb_enabled"
+private const val KEY_REPLAY_GAIN_ENABLED = "replay_gain_enabled"
+private const val KEY_DITHER_ENABLED = "dither_enabled"
 
 @Singleton
 class AppSettingsRepository @Inject constructor(@ApplicationContext context: Context) : SettingsRepository {
@@ -106,5 +108,21 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
     override fun setBitPerfectUsbEnabled(value: Boolean) {
         prefs.edit { putBoolean(KEY_BIT_PERFECT_USB_ENABLED, value) }
         _bitPerfectUsbEnabled.value = value
+    }
+
+    private val _replayGainEnabled = MutableStateFlow(prefs.getBoolean(KEY_REPLAY_GAIN_ENABLED, false))
+    override val replayGainEnabled: StateFlow<Boolean> = _replayGainEnabled
+
+    override fun setReplayGainEnabled(value: Boolean) {
+        prefs.edit { putBoolean(KEY_REPLAY_GAIN_ENABLED, value) }
+        _replayGainEnabled.value = value
+    }
+
+    private val _ditherEnabled = MutableStateFlow(prefs.getBoolean(KEY_DITHER_ENABLED, false))
+    override val ditherEnabled: StateFlow<Boolean> = _ditherEnabled
+
+    override fun setDitherEnabled(value: Boolean) {
+        prefs.edit { putBoolean(KEY_DITHER_ENABLED, value) }
+        _ditherEnabled.value = value
     }
 }

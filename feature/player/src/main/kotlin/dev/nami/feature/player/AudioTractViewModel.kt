@@ -23,6 +23,8 @@ data class AudioTractUiState(
     val eqMidDb: Float = 0f,
     val eqTrebleDb: Float = 0f,
     val bitPerfectUsbEnabled: Boolean = false,
+    val replayGainEnabled: Boolean = false,
+    val ditherEnabled: Boolean = false,
 )
 
 /** Feeds both План.md's 4.6 "Аудиотракт" and 4.7 "Эквалайзер" screens -- same underlying state,
@@ -45,6 +47,8 @@ class AudioTractViewModel @Inject constructor(
         settingsRepository.eqMidDb,
         settingsRepository.eqTrebleDb,
         settingsRepository.bitPerfectUsbEnabled,
+        settingsRepository.replayGainEnabled,
+        settingsRepository.ditherEnabled,
     ) { values ->
         AudioTractUiState(
             track = values[0] as Track?,
@@ -53,6 +57,8 @@ class AudioTractViewModel @Inject constructor(
             eqMidDb = values[3] as Float,
             eqTrebleDb = values[4] as Float,
             bitPerfectUsbEnabled = values[5] as Boolean,
+            replayGainEnabled = values[6] as Boolean,
+            ditherEnabled = values[7] as Boolean,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AudioTractUiState())
 
@@ -60,4 +66,8 @@ class AudioTractViewModel @Inject constructor(
 
     fun setEqGains(bassDb: Float, midDb: Float, trebleDb: Float) =
         settingsRepository.setEqGains(bassDb, midDb, trebleDb)
+
+    fun setReplayGainEnabled(enabled: Boolean) = settingsRepository.setReplayGainEnabled(enabled)
+
+    fun setDitherEnabled(enabled: Boolean) = settingsRepository.setDitherEnabled(enabled)
 }
