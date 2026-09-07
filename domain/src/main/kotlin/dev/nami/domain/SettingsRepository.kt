@@ -33,10 +33,9 @@ interface SettingsRepository {
     val eqEnabled: StateFlow<Boolean>
     fun setEqEnabled(value: Boolean)
 
-    val eqBassDb: StateFlow<Float>
-    val eqMidDb: StateFlow<Float>
-    val eqTrebleDb: StateFlow<Float>
-    fun setEqGains(bassDb: Float, midDb: Float, trebleDb: Float)
+    /** One gain per band, in ParametricEqAudioProcessor.BAND_FREQS_HZ order (9 bands: 63Hz..16kHz). */
+    val eqBandGains: StateFlow<List<Float>>
+    fun setEqBandGains(gainsDb: List<Float>)
 
     /** Bit-perfect USB output (Этап 10, Beta) -- Android 14+'s AudioMixerAttributes API only,
      * requires vendor HAL support most devices don't have; off by default and silently falls

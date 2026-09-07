@@ -3,8 +3,7 @@ package dev.nami.feature.player
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,7 +15,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material3.Icon
@@ -32,7 +34,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.layout.width
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -40,26 +41,24 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.player.eq.EqPreset
+import dev.nami.player.eq.ParametricEqAudioProcessor
 import kotlin.math.ln
 
-private data class EqBand(val label: String, val freqLabel: String, val freqHz: Float, val gainDb: Float)
+private val BAND_FREQS_HZ = ParametricEqAudioProcessor.BAND_FREQS_HZ
 
-/** План.md §4.7 -- the actual gain curve drawn from the three real bands (not decorative),
- * three preset pills (Плоский/V-образный real, AutoEQ import not implemented -- flagged, not
- * faked), and a card per band with a live slider. */
+private fun freqLabel(freqHz: Float): String =
+    if (freqHz >= 1000f) "${(freqHz / 1000f).toInt()} кГц" else "${freqHz.toInt()} Гц"
+
+/** План.md §4.7 -- 9-band graphic EQ (63Hz..16kHz), a real gain curve drawn from the actual band
+ * values, six fixed presets plus an auto-detected "Пользовательский" state, and a card per band
+ * with a live slider. */
 @Composable
 fun EqualizerScreen(onBack: () -> Unit, viewModel: AudioTractViewModel = hiltViewModel()) {
     val uiState by viewModel.uiState.collectAsState()
     val eqEnabled = uiState.eqEnabled
-    val bassDb = uiState.eqBassDb
-    val midDb = uiState.eqMidDb
-    val trebleDb = uiState.eqTrebleDb
-
-    val bands = listOf(
-        EqBand("Низкие", "100 Гц", 100f, bassDb),
-        EqBand("Средние", "1 кГц", 1000f, midDb),
-        EqBand("Высокие", "8 кГц", 8000f, trebleDb),
-    )
+    val gains = uiState.eqBandGains
+    val activePreset = EqPreset.matching(gains)
 
     Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
         Column(modifier = Modifier.fillMaxSize().statusBarsPadding().displayCutoutPadding()) {
@@ -71,7 +70,12 @@ fun EqualizerScreen(onBack: () -> Unit, viewModel: AudioTractViewModel = hiltVie
                 Switch(
                     checked = eqEnabled,
                     onCheckedChange = { viewModel.setEqEnabled(it) },
-                    colors = SwitchDefaults.colors(checkedTrackColor = NamiColors.Shu, uncheckedTrackColor = NamiColors.Ink600),
+                    colors = SwitchDefaults.colors(
+                        checkedTrackColor = NamiColors.Shu,
+                        checkedThumbColor = NamiColors.Paper100,
+                        uncheckedTrackColor = NamiColors.Ink600,
+                        uncheckedThumbColor = NamiColors.Paper70,
+                    ),
                     modifier = Modifier.padding(end = 16.dp),
                 )
             }
@@ -82,27 +86,27 @@ fun EqualizerScreen(onBack: () -> Unit, viewModel: AudioTractViewModel = hiltVie
                     .padding(horizontal = 20.dp)
                     .padding(bottom = 24.dp),
             ) {
-                EqCurve(bands = bands, modifier = Modifier.fillMaxWidth().height(180.dp).padding(top = 8.dp))
+                EqCurve(gains = gains, modifier = Modifier.fillMaxWidth().height(180.dp).padding(top = 8.dp))
                 Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
-                    Text("20 Гц", color = NamiColors.Paper40, style = MaterialTheme.typography.labelSmall)
+                    Text("63 Гц", color = NamiColors.Paper40, style = MaterialTheme.typography.labelSmall)
                     Text("1 кГц", color = NamiColors.Paper40, style = MaterialTheme.typography.labelSmall)
-                    Text("20 кГц", color = NamiColors.Paper40, style = MaterialTheme.typography.labelSmall)
+                    Text("16 кГц", color = NamiColors.Paper40, style = MaterialTheme.typography.labelSmall)
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 24.dp)) {
-                    PresetPill("Плоский", selected = bassDb == 0f && midDb == 0f && trebleDb == 0f) {
-                        viewModel.setEqGains(0f, 0f, 0f)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.horizontalScroll(rememberScrollState()).padding(top = 24.dp),
+                ) {
+                    EqPreset.entries.forEach { preset ->
+                        PresetPill(preset.label, selected = activePreset == preset) {
+                            viewModel.setEqBandGains(preset.gainsDb)
+                        }
                     }
-                    PresetPill("V-образный", selected = bassDb == 6f && midDb == -3f && trebleDb == 6f) {
-                        viewModel.setEqGains(6f, -3f, 6f)
-                    }
-                    // План.md wants importing a ParametricEQ.txt (AutoEQ) profile -- needs its own
-                    // file-format parser, not built this pass, so this stays a disabled stub
-                    // instead of pretending to work.
-                    PresetPill("Импорт AutoEQ", selected = false, enabled = false, onClick = {})
+                    PresetPill("Пользовательский", selected = activePreset == null, enabled = false, onClick = {})
                 }
 
-                bands.forEach { band ->
+                gains.forEachIndexed { index, gainDb ->
+                    val freqHz = BAND_FREQS_HZ[index]
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -112,28 +116,22 @@ fun EqualizerScreen(onBack: () -> Unit, viewModel: AudioTractViewModel = hiltVie
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = band.label,
+                                text = freqLabel(freqHz),
                                 color = NamiColors.Paper100,
                                 style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.width(80.dp),
+                                modifier = Modifier.width(72.dp),
                             )
-                            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
-                                Text(band.freqLabel, color = NamiColors.Paper100, style = MaterialTheme.typography.titleMedium)
-                                Text("частота", color = NamiColors.Paper40, style = MaterialTheme.typography.labelSmall)
-                            }
-                            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
-                                Text("%+.1f дБ".format(band.gainDb), color = NamiColors.Paper100, style = MaterialTheme.typography.titleMedium)
-                                Text("усиление", color = NamiColors.Paper40, style = MaterialTheme.typography.labelSmall)
-                            }
+                            Text(
+                                text = "%+.1f дБ".format(gainDb),
+                                color = NamiColors.Paper70,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f),
+                            )
                         }
                         Slider(
-                            value = band.gainDb,
+                            value = gainDb,
                             onValueChange = { value ->
-                                when (band.label) {
-                                    "Низкие" -> viewModel.setEqGains(value, midDb, trebleDb)
-                                    "Средние" -> viewModel.setEqGains(bassDb, value, trebleDb)
-                                    else -> viewModel.setEqGains(bassDb, midDb, value)
-                                }
+                                viewModel.setEqBandGains(gains.toMutableList().also { it[index] = value })
                             },
                             valueRange = -12f..12f,
                             colors = SliderDefaults.colors(thumbColor = NamiColors.Shu, activeTrackColor = NamiColors.Shu, inactiveTrackColor = NamiColors.Ink600),
@@ -166,10 +164,10 @@ private fun PresetPill(label: String, selected: Boolean, enabled: Boolean = true
     }
 }
 
-/** Real frequency-response curve, not decorative -- sums the three peaking bands' actual gain at
- * each drawn frequency (log-spaced 20Hz..20kHz), same bell-shape math the DSP itself uses. */
+/** Real frequency-response curve, not decorative -- sums all 9 peaking bands' actual gain at each
+ * drawn frequency (log-spaced 20Hz..20kHz), same bell-shape math the DSP itself uses. */
 @Composable
-private fun EqCurve(bands: List<EqBand>, modifier: Modifier = Modifier) {
+private fun EqCurve(gains: List<Float>, modifier: Modifier = Modifier) {
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
@@ -177,14 +175,14 @@ private fun EqCurve(bands: List<EqBand>, modifier: Modifier = Modifier) {
         val maxDb = 12f
 
         fun gainAt(freqHz: Float): Float =
-            bands.sumOf { band ->
+            BAND_FREQS_HZ.indices.sumOf { i ->
                 // Same bell curve shape a peaking biquad traces (Q-scaled Gaussian in log-freq
-                // space) -- not the exact same numbers a biquad's actual frequency response
-                // would show, but the same visual shape for the same reason: it peaks at freqHz
-                // and falls off symmetrically in octaves either side.
-                val octaves = ln(freqHz / band.freqHz) / ln(2f)
-                val bellWidth = 1.2
-                (band.gainDb * kotlin.math.exp(-(octaves * octaves) / (2 * bellWidth * bellWidth))).toDouble()
+                // space) -- not the exact same numbers a biquad's actual frequency response would
+                // show, but the same visual shape for the same reason: it peaks at the band's
+                // center frequency and falls off symmetrically in octaves either side.
+                val octaves = ln(freqHz / BAND_FREQS_HZ[i]) / ln(2f)
+                val bellWidth = 0.7
+                (gains[i] * kotlin.math.exp(-(octaves * octaves) / (2 * bellWidth * bellWidth))).toDouble()
             }.toFloat()
 
         fun xFor(freqHz: Float): Float {
@@ -195,7 +193,6 @@ private fun EqCurve(bands: List<EqBand>, modifier: Modifier = Modifier) {
 
         fun yFor(gainDb: Float): Float = midY - (gainDb / maxDb) * midY
 
-        // Gridlines at +/-6dB and 0dB (three horizontal lines, per the mock).
         listOf(0.25f, 0.5f, 0.75f).forEach { fraction ->
             drawLine(NamiColors.Ink700, Offset(0f, h * fraction), Offset(w, h * fraction), strokeWidth = 1.5f)
         }
@@ -204,7 +201,6 @@ private fun EqCurve(bands: List<EqBand>, modifier: Modifier = Modifier) {
         val fillPath = Path()
         var first = true
         var lastX = 0f
-        var lastY = midY
         val steps = 120
         for (i in 0..steps) {
             val t = i / steps.toFloat()
@@ -223,7 +219,6 @@ private fun EqCurve(bands: List<EqBand>, modifier: Modifier = Modifier) {
                 fillPath.lineTo(x, y)
             }
             lastX = x
-            lastY = y
         }
         fillPath.lineTo(lastX, h)
         fillPath.close()
@@ -231,11 +226,11 @@ private fun EqCurve(bands: List<EqBand>, modifier: Modifier = Modifier) {
         drawPath(fillPath, color = NamiColors.Shu.copy(alpha = 0.10f))
         drawPath(path, color = NamiColors.Shu, style = Stroke(width = 4f, cap = StrokeCap.Round))
 
-        bands.forEach { band ->
-            val x = xFor(band.freqHz)
-            val y = yFor(band.gainDb)
-            drawCircle(NamiColors.Paper100, radius = 7f, center = Offset(x, y))
-            drawCircle(NamiColors.Ink900, radius = 7f, center = Offset(x, y), style = Stroke(width = 3f))
+        BAND_FREQS_HZ.forEachIndexed { i, freqHz ->
+            val x = xFor(freqHz)
+            val y = yFor(gains[i])
+            drawCircle(NamiColors.Paper100, radius = 6f, center = Offset(x, y))
+            drawCircle(NamiColors.Ink900, radius = 6f, center = Offset(x, y), style = Stroke(width = 2.5f))
         }
     }
 }

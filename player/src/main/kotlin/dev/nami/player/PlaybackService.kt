@@ -24,7 +24,6 @@ import dev.nami.player.replaygain.ReplayGainScanner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -105,8 +104,8 @@ class PlaybackService : MediaSessionService() {
         // the on/off switch itself only takes effect on DefaultAudioSink's next pipeline rebuild
         // -- force one via a same-position seek so flipping the Settings toggle is felt right
         // away instead of "starting with the next track".
-        combine(settingsRepository.eqBassDb, settingsRepository.eqMidDb, settingsRepository.eqTrebleDb) { b, m, t -> Triple(b, m, t) }
-            .onEach { (b, m, t) -> eqProcessor.setGains(b, m, t) }
+        settingsRepository.eqBandGains
+            .onEach { gains -> eqProcessor.setGains(gains) }
             .launchIn(scope)
         settingsRepository.eqEnabled
             .onEach { enabled ->

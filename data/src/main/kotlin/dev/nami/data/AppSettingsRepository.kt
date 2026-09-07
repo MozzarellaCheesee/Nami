@@ -17,9 +17,8 @@ private const val KEY_KARAOKE_ENABLED = "karaoke_enabled"
 private const val KEY_STUDY_MODE_ENABLED = "study_mode_enabled"
 private const val KEY_LYRICS_FONT_PATH = "lyrics_font_path"
 private const val KEY_EQ_ENABLED = "eq_enabled"
-private const val KEY_EQ_BASS_DB = "eq_bass_db"
-private const val KEY_EQ_MID_DB = "eq_mid_db"
-private const val KEY_EQ_TREBLE_DB = "eq_treble_db"
+private const val KEY_EQ_BAND_GAINS = "eq_band_gains" // CSV, 9 floats, BAND_FREQS_HZ order
+private const val EQ_BAND_COUNT = 9
 private const val KEY_BIT_PERFECT_USB_ENABLED = "bit_perfect_usb_enabled"
 private const val KEY_REPLAY_GAIN_ENABLED = "replay_gain_enabled"
 private const val KEY_DITHER_ENABLED = "dither_enabled"
@@ -86,22 +85,19 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
         _eqEnabled.value = value
     }
 
-    private val _eqBassDb = MutableStateFlow(prefs.getFloat(KEY_EQ_BASS_DB, 0f))
-    override val eqBassDb: StateFlow<Float> = _eqBassDb
-    private val _eqMidDb = MutableStateFlow(prefs.getFloat(KEY_EQ_MID_DB, 0f))
-    override val eqMidDb: StateFlow<Float> = _eqMidDb
-    private val _eqTrebleDb = MutableStateFlow(prefs.getFloat(KEY_EQ_TREBLE_DB, 0f))
-    override val eqTrebleDb: StateFlow<Float> = _eqTrebleDb
+    private val _eqBandGains = MutableStateFlow(readEqBandGains())
+    override val eqBandGains: StateFlow<List<Float>> = _eqBandGains
 
-    override fun setEqGains(bassDb: Float, midDb: Float, trebleDb: Float) {
-        prefs.edit {
-            putFloat(KEY_EQ_BASS_DB, bassDb)
-            putFloat(KEY_EQ_MID_DB, midDb)
-            putFloat(KEY_EQ_TREBLE_DB, trebleDb)
-        }
-        _eqBassDb.value = bassDb
-        _eqMidDb.value = midDb
-        _eqTrebleDb.value = trebleDb
+    override fun setEqBandGains(gainsDb: List<Float>) {
+        require(gainsDb.size == EQ_BAND_COUNT) { "expected $EQ_BAND_COUNT gains, got ${gainsDb.size}" }
+        prefs.edit { putString(KEY_EQ_BAND_GAINS, gainsDb.joinToString(",")) }
+        _eqBandGains.value = gainsDb
+    }
+
+    private fun readEqBandGains(): List<Float> {
+        val csv = prefs.getString(KEY_EQ_BAND_GAINS, null) ?: return List(EQ_BAND_COUNT) { 0f }
+        val parsed = csv.split(",").mapNotNull { it.toFloatOrNull() }
+        return if (parsed.size == EQ_BAND_COUNT) parsed else List(EQ_BAND_COUNT) { 0f }
     }
 
     private val _bitPerfectUsbEnabled = MutableStateFlow(prefs.getBoolean(KEY_BIT_PERFECT_USB_ENABLED, false))

@@ -58,7 +58,10 @@ fun AudioTractScreen(onBack: () -> Unit, onOpenEqualizer: () -> Unit, viewModel:
     val isBluetoothOutput = remember { BluetoothCodecReader.isBluetoothOutputActive(context) }
 
     val processingParts = buildList {
-        if (uiState.eqEnabled) add("EQ %+.1f/%+.1f/%+.1f дБ".format(uiState.eqBassDb, uiState.eqMidDb, uiState.eqTrebleDb))
+        if (uiState.eqEnabled) {
+            val presetLabel = dev.nami.player.eq.EqPreset.matching(uiState.eqBandGains)?.label ?: "Пользовательский"
+            add("EQ ($presetLabel)")
+        }
         if (uiState.replayGainEnabled) add("ReplayGain")
         if (uiState.ditherEnabled) add("dither")
         if (uiState.crossfadeEnabled) add("кроссфейд")
@@ -199,7 +202,12 @@ private fun ToggleRow(title: String, caption: String, checked: Boolean, onChecke
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(checkedTrackColor = NamiColors.Shu, uncheckedTrackColor = NamiColors.Ink600),
+            colors = SwitchDefaults.colors(
+                checkedTrackColor = NamiColors.Shu,
+                checkedThumbColor = NamiColors.Paper100,
+                uncheckedTrackColor = NamiColors.Ink600,
+                uncheckedThumbColor = NamiColors.Paper70,
+            ),
         )
     }
 }

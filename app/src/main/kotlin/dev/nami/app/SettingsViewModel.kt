@@ -25,11 +25,6 @@ class SettingsViewModel @Inject constructor(
     val karaokeEnabled: StateFlow<Boolean> = appSettingsRepository.karaokeEnabled
     val studyModeEnabled: StateFlow<Boolean> = appSettingsRepository.studyModeEnabled
     val lyricsFontPath: StateFlow<String?> = appSettingsRepository.lyricsFontPath
-    val eqEnabled: StateFlow<Boolean> = appSettingsRepository.eqEnabled
-    val eqBassDb: StateFlow<Float> = appSettingsRepository.eqBassDb
-    val eqMidDb: StateFlow<Float> = appSettingsRepository.eqMidDb
-    val eqTrebleDb: StateFlow<Float> = appSettingsRepository.eqTrebleDb
-    val bitPerfectUsbEnabled: StateFlow<Boolean> = appSettingsRepository.bitPerfectUsbEnabled
 
     fun setAutoOpenPlayer(value: Boolean) {
         appSettingsRepository.setAutoOpenPlayer(value)
@@ -65,17 +60,5 @@ class SettingsViewModel @Inject constructor(
 
     fun clearLyricsFont() {
         appSettingsRepository.setLyricsFontPath(null)
-    }
-
-    fun setEqEnabled(value: Boolean) {
-        appSettingsRepository.setEqEnabled(value)
-    }
-
-    fun setEqGains(bassDb: Float, midDb: Float, trebleDb: Float) {
-        appSettingsRepository.setEqGains(bassDb, midDb, trebleDb)
-    }
-
-    fun setBitPerfectUsbEnabled(value: Boolean) {
-        appSettingsRepository.setBitPerfectUsbEnabled(value)
     }
 }

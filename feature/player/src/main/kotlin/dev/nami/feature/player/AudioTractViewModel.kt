@@ -8,6 +8,7 @@ import dev.nami.domain.LibraryRepository
 import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerRepository
 import dev.nami.domain.SettingsRepository
+import dev.nami.player.eq.ParametricEqAudioProcessor
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -19,9 +20,7 @@ import javax.inject.Inject
 data class AudioTractUiState(
     val track: Track? = null,
     val eqEnabled: Boolean = false,
-    val eqBassDb: Float = 0f,
-    val eqMidDb: Float = 0f,
-    val eqTrebleDb: Float = 0f,
+    val eqBandGains: List<Float> = List(ParametricEqAudioProcessor.BAND_FREQS_HZ.size) { 0f },
     val bitPerfectUsbEnabled: Boolean = false,
     val replayGainEnabled: Boolean = false,
     val ditherEnabled: Boolean = false,
@@ -45,33 +44,29 @@ class AudioTractViewModel @Inject constructor(
     val uiState: StateFlow<AudioTractUiState> = combine(
         currentTrack,
         settingsRepository.eqEnabled,
-        settingsRepository.eqBassDb,
-        settingsRepository.eqMidDb,
-        settingsRepository.eqTrebleDb,
+        settingsRepository.eqBandGains,
         settingsRepository.bitPerfectUsbEnabled,
         settingsRepository.replayGainEnabled,
         settingsRepository.ditherEnabled,
         settingsRepository.crossfadeEnabled,
         settingsRepository.playbackGainDb,
     ) { values ->
+        @Suppress("UNCHECKED_CAST")
         AudioTractUiState(
             track = values[0] as Track?,
             eqEnabled = values[1] as Boolean,
-            eqBassDb = values[2] as Float,
-            eqMidDb = values[3] as Float,
-            eqTrebleDb = values[4] as Float,
-            bitPerfectUsbEnabled = values[5] as Boolean,
-            replayGainEnabled = values[6] as Boolean,
-            ditherEnabled = values[7] as Boolean,
-            crossfadeEnabled = values[8] as Boolean,
-            playbackGainDb = values[9] as Float,
+            eqBandGains = values[2] as List<Float>,
+            bitPerfectUsbEnabled = values[3] as Boolean,
+            replayGainEnabled = values[4] as Boolean,
+            ditherEnabled = values[5] as Boolean,
+            crossfadeEnabled = values[6] as Boolean,
+            playbackGainDb = values[7] as Float,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AudioTractUiState())
 
     fun setEqEnabled(enabled: Boolean) = settingsRepository.setEqEnabled(enabled)
 
-    fun setEqGains(bassDb: Float, midDb: Float, trebleDb: Float) =
-        settingsRepository.setEqGains(bassDb, midDb, trebleDb)
+    fun setEqBandGains(gainsDb: List<Float>) = settingsRepository.setEqBandGains(gainsDb)
 
     fun setReplayGainEnabled(enabled: Boolean) = settingsRepository.setReplayGainEnabled(enabled)
 
