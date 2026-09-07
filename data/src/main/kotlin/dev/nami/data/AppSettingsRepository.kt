@@ -23,6 +23,7 @@ private const val KEY_EQ_TREBLE_DB = "eq_treble_db"
 private const val KEY_BIT_PERFECT_USB_ENABLED = "bit_perfect_usb_enabled"
 private const val KEY_REPLAY_GAIN_ENABLED = "replay_gain_enabled"
 private const val KEY_DITHER_ENABLED = "dither_enabled"
+private const val KEY_CROSSFADE_ENABLED = "crossfade_enabled"
 
 @Singleton
 class AppSettingsRepository @Inject constructor(@ApplicationContext context: Context) : SettingsRepository {
@@ -124,5 +125,13 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
     override fun setDitherEnabled(value: Boolean) {
         prefs.edit { putBoolean(KEY_DITHER_ENABLED, value) }
         _ditherEnabled.value = value
+    }
+
+    private val _crossfadeEnabled = MutableStateFlow(prefs.getBoolean(KEY_CROSSFADE_ENABLED, false))
+    override val crossfadeEnabled: StateFlow<Boolean> = _crossfadeEnabled
+
+    override fun setCrossfadeEnabled(value: Boolean) {
+        prefs.edit { putBoolean(KEY_CROSSFADE_ENABLED, value) }
+        _crossfadeEnabled.value = value
     }
 }

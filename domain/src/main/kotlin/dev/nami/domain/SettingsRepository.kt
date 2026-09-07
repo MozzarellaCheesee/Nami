@@ -52,4 +52,9 @@ interface SettingsRepository {
     /** TPDF dither before the sink's own bit-depth truncation (Этап 4, Beta). Off by default. */
     val ditherEnabled: StateFlow<Boolean>
     fun setDitherEnabled(value: Boolean)
+
+    /** Fade-out/fade-in "soft cut" between tracks (Этап 4, Beta) -- not a true overlapping mix,
+     * see CrossfadeController's own doc for why. Off by default. */
+    val crossfadeEnabled: StateFlow<Boolean>
+    fun setCrossfadeEnabled(value: Boolean)
 }

@@ -164,6 +164,7 @@ class PlaybackService : MediaSessionService() {
         })
 
         BitPerfectUsbController(this, player, settingsRepository, scope)
+        CrossfadeController(player, settingsRepository, scope)
     }
 
     private suspend fun updateReplayGainForCurrentTrack(trackId: TrackId) {

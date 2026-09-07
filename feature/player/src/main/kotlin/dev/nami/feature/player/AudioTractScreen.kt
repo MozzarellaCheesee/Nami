@@ -55,6 +55,7 @@ fun AudioTractScreen(onBack: () -> Unit, onOpenEqualizer: () -> Unit, viewModel:
         if (uiState.eqEnabled) add("EQ %+.1f/%+.1f/%+.1f дБ".format(uiState.eqBassDb, uiState.eqMidDb, uiState.eqTrebleDb))
         if (uiState.replayGainEnabled) add("ReplayGain")
         if (uiState.ditherEnabled) add("dither")
+        if (uiState.crossfadeEnabled) add("кроссфейд")
     }
 
     val outputDetail = buildString {
@@ -144,6 +145,7 @@ fun AudioTractScreen(onBack: () -> Unit, onOpenEqualizer: () -> Unit, viewModel:
                 Column(modifier = Modifier.fillMaxWidth().padding(top = 24.dp)) {
                     ToggleRow("ReplayGain (Beta)", "выравнивает громкость треков, не EBU R128", uiState.replayGainEnabled, viewModel::setReplayGainEnabled)
                     ToggleRow("Dither (Beta)", "сглаживает шум квантования при обработке", uiState.ditherEnabled, viewModel::setDitherEnabled)
+                    ToggleRow("Кроссфейд (Beta)", "плавный переход между треками, не настоящее смешивание", uiState.crossfadeEnabled, viewModel::setCrossfadeEnabled)
                 }
                 Spacer(modifier = Modifier.height(24.dp))
             }
