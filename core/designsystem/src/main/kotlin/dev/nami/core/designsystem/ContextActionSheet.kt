@@ -42,34 +42,35 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContextActionSheet(onDismiss: () -> Unit, actions: List<ContextAction>) {
-    // ModalBottomSheet opens its own separate Android Window (a Dialog), which doesn't inherit
-    // MainActivity's immersive (hidden system bars) state -- the nav/status bar used to pop back
-    // in every time this sheet opened, AND (the part that actually caused the visible "jump")
-    // that dialog window defaults to decorFitsSystemWindows(true): the instant the nav bar shows,
-    // the system resizes/insets the dialog's own content to sit above it, so the sheet -- and by
-    // extension everything anchored relative to it, like NowPlayingScreen's transport row sitting
-    // right above the sheet's own top edge -- visibly shifts upward for that one frame.
-    // setDecorFitsSystemWindows(false) here (matching what enableEdgeToEdge already did on the
-    // activity window) stops that reflow from ever happening, regardless of bar visibility; the
-    // bar-hiding below is then just a cosmetic match, not load-bearing for the jump anymore.
-    val view = LocalView.current
-    DisposableEffect(view) {
-        val dialogWindow = (view.parent as? DialogWindowProvider)?.window
-        val activityWindow = view.context.findActivity()?.window
-        if (dialogWindow != null && activityWindow != null) {
-            WindowCompat.setDecorFitsSystemWindows(dialogWindow, false)
-            val activityBarsHidden = ViewCompat.getRootWindowInsets(activityWindow.decorView)
-                ?.isVisible(WindowInsetsCompat.Type.systemBars()) == false
-            if (activityBarsHidden) {
-                val controller = WindowInsetsControllerCompat(dialogWindow, dialogWindow.decorView)
-                controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                controller.hide(WindowInsetsCompat.Type.systemBars())
-            }
-        }
-        onDispose {}
-    }
-
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
+        // ModalBottomSheet opens its own separate Android Window (a Dialog), which doesn't
+        // inherit MainActivity's immersive (hidden system bars) state -- the nav/status bar
+        // popped back in every time this sheet opened. Must run INSIDE this content lambda, not
+        // above the ModalBottomSheet call: LocalView.current out there resolves to the ACTIVITY's
+        // own view (the dialog doesn't exist yet at that point in composition), so
+        // `view.parent as? DialogWindowProvider` was always null and this never actually touched
+        // the sheet's window at all -- a real, silent no-op, not just "still buggy".
+        // setDecorFitsSystemWindows(false) (matching what enableEdgeToEdge already did on the
+        // activity window) stops the sheet's content from reflowing/jumping the instant the nav
+        // bar shows; the bar-hiding below then keeps it from showing in the first place, mirroring
+        // whatever the activity's own window is currently doing.
+        val view = LocalView.current
+        DisposableEffect(view) {
+            val dialogWindow = (view.parent as? DialogWindowProvider)?.window
+            val activityWindow = view.context.findActivity()?.window
+            if (dialogWindow != null && activityWindow != null) {
+                WindowCompat.setDecorFitsSystemWindows(dialogWindow, false)
+                val activityBarsHidden = ViewCompat.getRootWindowInsets(activityWindow.decorView)
+                    ?.isVisible(WindowInsetsCompat.Type.systemBars()) == false
+                if (activityBarsHidden) {
+                    val controller = WindowInsetsControllerCompat(dialogWindow, dialogWindow.decorView)
+                    controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    controller.hide(WindowInsetsCompat.Type.systemBars())
+                }
+            }
+            onDispose {}
+        }
+
         Column(modifier = Modifier.padding(bottom = 20.dp)) {
             actions.forEach { action ->
                 Row(
