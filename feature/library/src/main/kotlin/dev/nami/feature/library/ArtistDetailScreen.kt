@@ -302,10 +302,18 @@ fun ArtistDetailScreen(
             // Deliberately NOT reusing slideModifier here: no clip, and gone from composition
             // (not just alpha 0) past the threshold so they're not still tappable once invisible.
             if (progress < 0.5f) {
+                // Fixed to the FULLY EXPANDED cover's own position/size (offsetX/Y=0, full
+                // width/height, no bleed lerp) instead of tracking currentWidthPx/currentHeightPx
+                // -- those shrink toward the avatar slot together with the cover, which dragged
+                // this box (and the buttons BottomEnd-aligned inside it) along for the ride,
+                // visibly sliding and shrinking into the collapsing circle before the alpha fade
+                // even finished. The buttons only ever show on the still-mostly-expanded cover
+                // (progress < 0.5), so anchoring to its resting geometry and just fading out reads
+                // as "the buttons fade away" instead of "the buttons get sucked into a shrinking hole".
                 Box(
                     modifier = Modifier
-                        .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
-                        .size(with(density) { currentWidthPx.toDp() }, with(density) { currentHeightPx.toDp() }),
+                        .offset { IntOffset(0, rootOffset.y.roundToInt()) }
+                        .size(with(density) { screenWidthPx.toDp() }, with(density) { (headerMaxHeightPx + rootOffset.y).toDp() }),
                     contentAlignment = Alignment.BottomEnd,
                 ) {
                 Row(

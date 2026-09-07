@@ -12,8 +12,8 @@ import dev.nami.player.eq.ParametricEqAudioProcessor
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
@@ -38,9 +38,14 @@ class AudioTractViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
+    // Was filterIsInstance<Playing>() -- which never emits at all while nothing is playing, so
+    // the whole combine() below stayed stuck on its initial value forever and every toggle looked
+    // like it silently reverted (it was actually saved fine, the screen just never redrew). Falls
+    // back to a null track instead of blocking, so settings work regardless of playback state.
     private val currentTrack = playerRepository.state
-        .filterIsInstance<PlaybackState.Playing>()
-        .flatMapLatest { playing -> libraryRepository.track(playing.trackId) }
+        .flatMapLatest { state ->
+            if (state is PlaybackState.Playing) libraryRepository.track(state.trackId) else flowOf(null)
+        }
 
     val uiState: StateFlow<AudioTractUiState> = combine(
         currentTrack,

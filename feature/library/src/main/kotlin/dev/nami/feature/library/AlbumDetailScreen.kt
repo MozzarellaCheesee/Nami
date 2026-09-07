@@ -230,10 +230,15 @@ fun AlbumDetailScreen(
             // avoids them visibly getting chewed into the shrinking circle), and gone from
             // composition (not just alpha 0) past the threshold so they're not still tappable.
             if (progress < 0.5f) {
+                // Fixed to the FULLY EXPANDED cover's own position/size instead of tracking
+                // currentWidthPx/currentHeightPx -- those shrink toward the avatar slot together
+                // with the cover, dragging this box (and the buttons BottomEnd-aligned inside it)
+                // along for the ride, visibly sliding and shrinking into the collapsing circle
+                // before the alpha fade even finished. See ArtistDetailScreen's identical fix.
                 Box(
                     modifier = Modifier
-                        .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
-                        .size(with(density) { currentWidthPx.toDp() }, with(density) { currentHeightPx.toDp() }),
+                        .offset { IntOffset(0, rootOffset.y.roundToInt()) }
+                        .size(with(density) { screenWidthPx.toDp() }, with(density) { (headerMaxHeightPx + rootOffset.y).toDp() }),
                     contentAlignment = Alignment.BottomEnd,
                 ) {
                     Row(
