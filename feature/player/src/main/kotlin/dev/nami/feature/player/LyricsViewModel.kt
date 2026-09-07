@@ -60,6 +60,8 @@ data class LyricsUiState(
     val isPreciseSyncing: Boolean = false,
     val preciseSyncProgress: Float = 0f,
     val karaokeEnabled: Boolean = false,
+    val studyModeEnabled: Boolean = false,
+    val lyricsFontPath: String? = null,
 )
 
 @HiltViewModel

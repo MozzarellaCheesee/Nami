@@ -16,4 +16,14 @@ interface SettingsRepository {
      * correct), opt-in from Settings. */
     val karaokeEnabled: StateFlow<Boolean>
     fun setKaraokeEnabled(value: Boolean)
+
+    /** Study mode (Beta): translation hidden per line until tapped, quiz entry point in the
+     * vocabulary screen. Off by default, same reasoning as karaoke -- opt-in, not fully polished. */
+    val studyModeEnabled: StateFlow<Boolean>
+    fun setStudyModeEnabled(value: Boolean)
+
+    /** Local file path to a user-picked .ttf/.otf for the lyrics screen, copied into app storage
+     * (a content:// pick isn't a stable path). Null = system default font. */
+    val lyricsFontPath: StateFlow<String?>
+    fun setLyricsFontPath(path: String?)
 }

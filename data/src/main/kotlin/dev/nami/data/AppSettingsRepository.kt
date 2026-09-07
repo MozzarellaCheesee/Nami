@@ -14,6 +14,8 @@ private const val PREFS_NAME = "nami_settings"
 private const val KEY_AUTO_OPEN_PLAYER = "auto_open_player"
 private const val KEY_HIDE_SYSTEM_BARS = "hide_system_bars"
 private const val KEY_KARAOKE_ENABLED = "karaoke_enabled"
+private const val KEY_STUDY_MODE_ENABLED = "study_mode_enabled"
+private const val KEY_LYRICS_FONT_PATH = "lyrics_font_path"
 
 @Singleton
 class AppSettingsRepository @Inject constructor(@ApplicationContext context: Context) : SettingsRepository {
@@ -49,5 +51,21 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
     override fun setKaraokeEnabled(value: Boolean) {
         prefs.edit { putBoolean(KEY_KARAOKE_ENABLED, value) }
         _karaokeEnabled.value = value
+    }
+
+    private val _studyModeEnabled = MutableStateFlow(prefs.getBoolean(KEY_STUDY_MODE_ENABLED, false))
+    override val studyModeEnabled: StateFlow<Boolean> = _studyModeEnabled
+
+    override fun setStudyModeEnabled(value: Boolean) {
+        prefs.edit { putBoolean(KEY_STUDY_MODE_ENABLED, value) }
+        _studyModeEnabled.value = value
+    }
+
+    private val _lyricsFontPath = MutableStateFlow(prefs.getString(KEY_LYRICS_FONT_PATH, null))
+    override val lyricsFontPath: StateFlow<String?> = _lyricsFontPath
+
+    override fun setLyricsFontPath(path: String?) {
+        prefs.edit { putString(KEY_LYRICS_FONT_PATH, path) }
+        _lyricsFontPath.value = path
     }
 }

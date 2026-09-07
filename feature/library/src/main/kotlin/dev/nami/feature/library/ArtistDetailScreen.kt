@@ -8,9 +8,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.displayCutout
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -148,7 +145,13 @@ fun ArtistDetailScreen(
                     Spacer(
                         modifier = Modifier
                             .padding(top = 12.dp)
-                            .size(width = with(density) { (avatarSizePx * progress).toDp() }, height = AVATAR_SIZE)
+                            .size(
+                                width = with(density) { (avatarSizePx * progress).toDp() },
+                                // Also 0 at rest (progress 0) -- reserving the full 40dp height
+                                // even before there's a collapsed avatar to show there just left
+                                // an empty band under the title for no reason.
+                                height = with(density) { (avatarSizePx * progress).toDp() },
+                            )
                             .onGloballyPositioned { avatarSlotOffset = it.positionInRoot() - rootOffset },
                     )
                 }
@@ -238,14 +241,14 @@ fun ArtistDetailScreen(
         // would otherwise paint over the image the moment it slides down past the header line,
         // which is exactly where its landing slot lives.
         run {
-            // Bleeds the fully-expanded cover up into the status bar/cutout inset instead of
-            // leaving Ink900 background showing through there -- with system bars hidden,
-            // statusBarsPadding() (applied once, up in NamiNavHost) collapses to 0 but
-            // displayCutoutPadding() doesn't, so that gap alone used to show as a grey strip
-            // above the image. Tapers to 0 as the cover collapses into the avatar slot, since at
-            // that point it's meant to sit inside the padded content, not bleed past it.
-            val cutoutInsetPx = with(density) { WindowInsets.statusBars.getTop(this) + WindowInsets.displayCutout.getTop(this) }.toFloat()
-            val bleed = cutoutInsetPx * (1f - progress)
+            // Bleeds the fully-expanded cover up past this screen's own top edge, which
+            // NamiNavHost's ambient statusBarsPadding()+displayCutoutPadding() pushed down by
+            // rootOffset.y -- otherwise that gap (the cutout's share of it doesn't collapse to 0
+            // just because the status bar is hidden) shows as an Ink900 strip above the image.
+            // rootOffset.y is the real measured value, not a guess at which inset composition
+            // locals are or aren't already consumed by the ancestor padding. Tapers to 0 as the
+            // cover collapses into the avatar slot, which sits inside the padded content normally.
+            val bleed = rootOffset.y * (1f - progress)
             val currentWidthPx = lerp(screenWidthPx, avatarSizePx, progress)
             val currentHeightPx = lerp(headerMaxHeightPx, avatarSizePx, progress) + bleed
             val offsetX = lerp(0f, avatarSlotOffset.x, progress)
@@ -293,11 +296,20 @@ fun ArtistDetailScreen(
             }
 
             // Play/overflow live on the cover itself now instead of a dedicated row under the
-            // title -- fade out as the cover collapses into the small avatar, where they
-            // wouldn't fit anyway.
-            Box(modifier = slideModifier, contentAlignment = Alignment.BottomEnd) {
+            // title -- fade out well before the cover collapses into the small 40dp avatar
+            // (a 56dp button doesn't fit inside that, and reusing slideModifier's own clip made
+            // them visibly get chewed into the shrinking circle instead of just fading away).
+            // Deliberately NOT reusing slideModifier here: no clip, and gone from composition
+            // (not just alpha 0) past the threshold so they're not still tappable once invisible.
+            if (progress < 0.5f) {
+                Box(
+                    modifier = Modifier
+                        .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
+                        .size(with(density) { currentWidthPx.toDp() }, with(density) { currentHeightPx.toDp() }),
+                    contentAlignment = Alignment.BottomEnd,
+                ) {
                 Row(
-                    modifier = Modifier.graphicsLayer { alpha = 1f - progress }.padding(12.dp),
+                    modifier = Modifier.graphicsLayer { alpha = ((0.5f - progress) / 0.5f).coerceIn(0f, 1f) }.padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (uiState.tracks.isNotEmpty()) {
@@ -318,15 +330,17 @@ fun ArtistDetailScreen(
                         Icon(Icons.Outlined.MoreVert, contentDescription = "Действия с артистом", tint = NamiColors.Paper100)
                     }
                 }
+                }
             }
         }
 
         IconButton(
             onClick = onBack,
-            modifier = Modifier.align(Alignment.TopStart).padding(
-                top = 12.dp + with(density) { WindowInsets.statusBars.getTop(this).toDp() } + with(density) { WindowInsets.displayCutout.getTop(this).toDp() },
-                start = 12.dp,
-            ),
+            // Not extra-padded for the status bar/cutout -- this whole screen already sits below
+            // NamiNavHost's ambient statusBarsPadding()+displayCutoutPadding(), same as the back
+            // button on every other screen; only the floating cover (drawn further up, outside
+            // that flow) needed the manual bleed compensation above.
+            modifier = Modifier.align(Alignment.TopStart).padding(top = 12.dp, start = 12.dp),
         ) {
             Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
         }

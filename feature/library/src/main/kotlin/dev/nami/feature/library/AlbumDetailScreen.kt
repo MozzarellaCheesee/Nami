@@ -6,9 +6,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.displayCutout
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -143,7 +140,10 @@ fun AlbumDetailScreen(
                     Spacer(
                         modifier = Modifier
                             .padding(top = 12.dp)
-                            .size(width = with(density) { (avatarSizePx * progress).toDp() }, height = AVATAR_SIZE)
+                            .size(
+                                width = with(density) { (avatarSizePx * progress).toDp() },
+                                height = with(density) { (avatarSizePx * progress).toDp() },
+                            )
                             .onGloballyPositioned { avatarSlotOffset = it.positionInRoot() - rootOffset },
                     )
                 }
@@ -186,8 +186,11 @@ fun AlbumDetailScreen(
             // into the status bar/cutout inset instead of showing Ink900 through the gap that
             // displayCutoutPadding() (applied once, up in NamiNavHost) leaves even when the
             // status bar itself is hidden. Tapers to 0 as the cover collapses into the avatar slot.
-            val cutoutInsetPx = with(density) { WindowInsets.statusBars.getTop(this) + WindowInsets.displayCutout.getTop(this) }.toFloat()
-            val bleed = cutoutInsetPx * (1f - progress)
+            // rootOffset.y is the real measured push-down from NamiNavHost's ambient
+            // statusBarsPadding()+displayCutoutPadding() -- see ArtistDetailScreen's identical
+            // block for the full rationale (a composition-local-based guess at the inset was
+            // wrong here; this is the actual value, not a guess).
+            val bleed = rootOffset.y * (1f - progress)
             val currentWidthPx = lerp(screenWidthPx, avatarSizePx, progress)
             val currentHeightPx = lerp(headerMaxHeightPx, avatarSizePx, progress) + bleed
             val offsetX = lerp(0f, avatarSlotOffset.x, progress)
@@ -222,28 +225,38 @@ fun AlbumDetailScreen(
             }
 
             // Play/overflow live on the cover itself now instead of a dedicated row under the
-            // title -- fade out as the cover collapses into the small avatar.
-            Box(modifier = slideModifier, contentAlignment = Alignment.BottomEnd) {
-                Row(
-                    modifier = Modifier.graphicsLayer { alpha = 1f - progress }.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+            // title -- fade out well before the cover collapses into the small 40dp avatar (a
+            // 56dp button doesn't fit inside that; not reusing slideModifier's own clip here
+            // avoids them visibly getting chewed into the shrinking circle), and gone from
+            // composition (not just alpha 0) past the threshold so they're not still tappable.
+            if (progress < 0.5f) {
+                Box(
+                    modifier = Modifier
+                        .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
+                        .size(with(density) { currentWidthPx.toDp() }, with(density) { currentHeightPx.toDp() }),
+                    contentAlignment = Alignment.BottomEnd,
                 ) {
-                    if (uiState.tracks.isNotEmpty()) {
-                        IconButton(
-                            onClick = { onPlayTracks(uiState.tracks, 0) },
-                            modifier = Modifier
-                                .size(56.dp)
-                                .background(NamiColors.Paper100, RoundedCornerShape(18.dp)),
-                        ) {
-                            Icon(Icons.Filled.PlayArrow, contentDescription = "Играть альбом", tint = NamiColors.Ink900)
-                        }
-                    }
-                    Spacer(modifier = Modifier.padding(start = 8.dp))
-                    IconButton(
-                        onClick = { showAlbumMenu = true },
-                        modifier = Modifier.background(NamiColors.Ink900.copy(alpha = 0.4f), androidx.compose.foundation.shape.CircleShape),
+                    Row(
+                        modifier = Modifier.graphicsLayer { alpha = ((0.5f - progress) / 0.5f).coerceIn(0f, 1f) }.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(Icons.Outlined.MoreVert, contentDescription = "Действия с альбомом", tint = NamiColors.Paper100)
+                        if (uiState.tracks.isNotEmpty()) {
+                            IconButton(
+                                onClick = { onPlayTracks(uiState.tracks, 0) },
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .background(NamiColors.Paper100, RoundedCornerShape(18.dp)),
+                            ) {
+                                Icon(Icons.Filled.PlayArrow, contentDescription = "Играть альбом", tint = NamiColors.Ink900)
+                            }
+                        }
+                        Spacer(modifier = Modifier.padding(start = 8.dp))
+                        IconButton(
+                            onClick = { showAlbumMenu = true },
+                            modifier = Modifier.background(NamiColors.Ink900.copy(alpha = 0.4f), androidx.compose.foundation.shape.CircleShape),
+                        ) {
+                            Icon(Icons.Outlined.MoreVert, contentDescription = "Действия с альбомом", tint = NamiColors.Paper100)
+                        }
                     }
                 }
             }
@@ -251,10 +264,7 @@ fun AlbumDetailScreen(
 
         IconButton(
             onClick = onBack,
-            modifier = Modifier.align(Alignment.TopStart).padding(
-                top = 12.dp + with(density) { WindowInsets.statusBars.getTop(this).toDp() } + with(density) { WindowInsets.displayCutout.getTop(this).toDp() },
-                start = 12.dp,
-            ),
+            modifier = Modifier.align(Alignment.TopStart).padding(top = 12.dp, start = 12.dp),
         ) {
             Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
         }

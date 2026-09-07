@@ -20,10 +20,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.FontDownload
 import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.PlayCircleOutline
+import androidx.compose.material.icons.outlined.School
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -51,7 +54,12 @@ fun SettingsScreen(onTrashClick: () -> Unit, viewModel: SettingsViewModel = hilt
     val autoOpenPlayer by viewModel.autoOpenPlayer.collectAsState()
     val hideSystemBars by viewModel.hideSystemBars.collectAsState()
     val karaokeEnabled by viewModel.karaokeEnabled.collectAsState()
+    val studyModeEnabled by viewModel.studyModeEnabled.collectAsState()
+    val lyricsFontPath by viewModel.lyricsFontPath.collectAsState()
     val context = LocalContext.current
+    val pickLyricsFont = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+    ) { uri -> uri?.let(viewModel::pickLyricsFont) }
     var selectedIcon by remember { mutableStateOf(IconPicker.current(context)) }
     var pendingIcon by remember { mutableStateOf<LauncherIcon?>(null) }
 
@@ -111,6 +119,36 @@ fun SettingsScreen(onTrashClick: () -> Unit, viewModel: SettingsViewModel = hilt
                 trailing = { NamiSwitch(checked = karaokeEnabled, onCheckedChange = viewModel::setKaraokeEnabled) },
                 onClick = { viewModel.setKaraokeEnabled(!karaokeEnabled) },
             )
+        }
+
+        SettingsSectionLabel("Лирика")
+        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            SettingsRow(
+                icon = Icons.Outlined.School,
+                title = "Режим изучения (Beta)",
+                trailing = { NamiSwitch(checked = studyModeEnabled, onCheckedChange = viewModel::setStudyModeEnabled) },
+                onClick = { viewModel.setStudyModeEnabled(!studyModeEnabled) },
+            )
+            SettingsRow(
+                icon = Icons.Outlined.FontDownload,
+                title = "Шрифт текста песни",
+                trailing = {
+                    Text(
+                        text = if (lyricsFontPath != null) "Свой" else "Стандартный",
+                        color = NamiColors.Paper40,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                },
+                onClick = { pickLyricsFont.launch(arrayOf("font/ttf", "font/otf", "*/*")) },
+            )
+            if (lyricsFontPath != null) {
+                SettingsRow(
+                    icon = Icons.Outlined.Close,
+                    title = "Сбросить шрифт",
+                    trailing = {},
+                    onClick = viewModel::clearLyricsFont,
+                )
+            }
         }
 
         SettingsSectionLabel("Хранилище")
