@@ -26,7 +26,15 @@ class CrossfadeController(
         scope.launch {
             while (isActive) {
                 delay(TICK_MS)
-                tick()
+                // A single bad tick (e.g. the player instance mid-swapPlayer()) must not kill
+                // this loop for the rest of the session -- without a catch here, any exception
+                // propagates out of the while loop and the whole coroutine just quietly stops,
+                // silently disabling crossfade for good with nothing to restart it.
+                try {
+                    tick()
+                } catch (e: Exception) {
+                    // Next tick tries again in TICK_MS.
+                }
             }
         }
     }

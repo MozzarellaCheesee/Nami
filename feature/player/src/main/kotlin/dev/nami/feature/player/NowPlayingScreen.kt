@@ -70,6 +70,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil3.compose.AsyncImage
+import coil3.request.crossfade
 import coil3.compose.LocalPlatformContext
 import coil3.imageLoader
 import coil3.request.ImageRequest
@@ -129,8 +130,15 @@ fun NowPlayingScreen(
         // this stays a backdrop, never competing with the actual artwork/controls on top of it.
         val backgroundArtworkPath = queue.nowPlaying?.artworkPath
         if (backgroundArtworkPath != null) {
+            // Coil's own crossfade (not an abrupt swap) between the old and new backdrop -- Coil
+            // caches the previous successful result for this ImageView-equivalent internally, so
+            // this alone is enough, no separate AnimatedContent/Crossfade wrapper needed.
+            val request = ImageRequest.Builder(LocalPlatformContext.current)
+                .data(backgroundArtworkPath)
+                .crossfade(400)
+                .build()
             AsyncImage(
-                model = backgroundArtworkPath,
+                model = request,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize().blur(64.dp),
@@ -521,10 +529,18 @@ internal fun LaunchedEffectAutoAdvance(
             return@LaunchedEffect
         }
         if (!hasPrevious) return@LaunchedEffect
+        // try/finally: without it, a SECOND auto-advance signal arriving before this animation
+        // finishes cancels this coroutine mid-flight (LaunchedEffect restarts on a new key) --
+        // execution stops right there, skipping the reset below and leaving suppressSkip stuck
+        // true FOREVER. That silently broke the real previous-track button/swipe (LaunchedEffect-
+        // SettlePage's page-0 branch checks suppressSkip() too) for the rest of the session.
         suppressSkip.value = true
-        pagerState.scrollToPage(0)
-        pagerState.animateScrollToPage(1, animationSpec = TRACK_SLIDE_SPEC)
-        suppressSkip.value = false
+        try {
+            pagerState.scrollToPage(0)
+            pagerState.animateScrollToPage(1, animationSpec = TRACK_SLIDE_SPEC)
+        } finally {
+            suppressSkip.value = false
+        }
     }
 }
 
