@@ -55,6 +55,7 @@ class PlaylistDetailViewModelTest {
                 ImportM3u8Result(PlaylistId("x"), 0, 0)
             override fun isTrackLiked(trackId: TrackId) = flowOf(false)
             override suspend fun toggleLike(trackId: TrackId) = true
+            override suspend fun likeTrack(trackId: TrackId) {}
         }
         val savedStateHandle = SavedStateHandle(mapOf("playlistId" to "p1"))
 

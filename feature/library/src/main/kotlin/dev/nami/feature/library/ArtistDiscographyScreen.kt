@@ -94,6 +94,7 @@ fun ArtistDiscographyScreen(
                     onTrackClick = { index -> onPlayTracks(albumTracks, artistName, index) },
                     onAddToQueue = { track -> onAddToQueue(track, artistName) },
                     onAddToPlaylist = { trackId -> addToPlaylistTrackId = trackId },
+                    onLikeTrack = { trackId -> viewModel.likeTrack(trackId) },
                 )
             }
         }
@@ -133,6 +134,7 @@ private fun AlbumDiscographyBlock(
     onTrackClick: (Int) -> Unit,
     onAddToQueue: (Track) -> Unit,
     onAddToPlaylist: (TrackId) -> Unit,
+    onLikeTrack: (TrackId) -> Unit,
 ) {
     Column(modifier = Modifier.padding(bottom = 28.dp)) {
         Box(
@@ -199,6 +201,7 @@ private fun AlbumDiscographyBlock(
                 onClick = { onTrackClick(index) },
                 onAddToQueue = if (nowPlayingTrackId != null) { { onAddToQueue(track) } } else null,
                 onAddToPlaylist = { onAddToPlaylist(track.id) },
+                onLikeTrack = { onLikeTrack(track.id) },
                 isCurrentTrack = track.id == nowPlayingTrackId,
                 isPlaying = track.id == nowPlayingTrackId && isPlayingNow,
             )

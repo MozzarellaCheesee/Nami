@@ -186,6 +186,7 @@ fun LibraryScreen(
                         onArtistClick = onArtistClick,
                         onShowAllArtists = { viewModel.selectTab(LibraryTab.ARTISTS) },
                         onAddToPlaylist = { trackId -> addToPlaylistTrackId = trackId },
+                        onLikeTrack = { trackId -> viewModel.likeTrack(trackId) },
                         onAddToQueueTrack = { track -> viewModel.addToQueue(track) },
                         onDelete = { trackId -> viewModel.deleteTrack(trackId) },
                         onToggleSelection = { trackId -> viewModel.toggleTrackSelection(trackId) },
@@ -431,6 +432,7 @@ private fun TrackListContent(
     onArtistClick: (ArtistId) -> Unit,
     onShowAllArtists: () -> Unit,
     onAddToPlaylist: (TrackId) -> Unit,
+    onLikeTrack: (TrackId) -> Unit,
     onAddToQueueTrack: (Track) -> Unit,
     onDelete: (TrackId) -> Unit,
     onToggleSelection: (TrackId) -> Unit,
@@ -553,6 +555,7 @@ private fun TrackListContent(
                         selectionMode = selectionMode,
                         isSelected = track.id in selectedTrackIds,
                         onAddToPlaylist = if (selectionMode) null else { { onAddToPlaylist(track.id) } },
+                        onLikeTrack = if (selectionMode) null else { { onLikeTrack(track.id) } },
                         // Only shown while something's actually playing -- queueing behind
                         // nothing playing doesn't map to anything meaningful for the user to
                         // picture happening.

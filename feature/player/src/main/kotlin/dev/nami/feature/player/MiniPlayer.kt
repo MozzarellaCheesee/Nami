@@ -24,6 +24,8 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Icon
@@ -161,6 +163,20 @@ fun MiniPlayer(
                 else -> queue.nowPlaying
             }
             MiniPlayerTrackBlock(track = track)
+        }
+        val isFavorite by viewModel.isCurrentTrackLiked.collectAsState()
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(40.dp)
+                .fullBlockClickable(shape = androidx.compose.foundation.shape.CircleShape, onClick = viewModel::toggleLikeCurrentTrack),
+        ) {
+            Icon(
+                imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                contentDescription = if (isFavorite) "Убрать из любимых" else "В любимые",
+                tint = if (isFavorite) NamiColors.Shu else NamiColors.Paper70,
+                modifier = Modifier.size(20.dp),
+            )
         }
         Box(
             contentAlignment = Alignment.Center,

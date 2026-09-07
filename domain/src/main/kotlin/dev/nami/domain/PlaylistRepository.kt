@@ -32,6 +32,10 @@ interface PlaylistRepository {
      * playlist_tracks row is keyed by (playlistId, trackId), so liking an already-liked track is
      * a no-op on the add path, same guarantee every other "add to playlist" flow already has. */
     suspend fun toggleLike(trackId: TrackId): Boolean
+
+    /** Add-only version of [toggleLike] for a plain "В любимые" menu action (as opposed to the
+     * player's heart, which toggles) -- no-op if already liked. */
+    suspend fun likeTrack(trackId: TrackId)
 }
 
 data class ImportM3u8Result(val playlistId: PlaylistId, val matchedCount: Int, val skippedCount: Int)

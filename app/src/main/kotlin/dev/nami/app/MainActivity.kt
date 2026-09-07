@@ -103,6 +103,17 @@ class MainActivity : ComponentActivity() {
             .stateIn(lifecycleScope, SharingStarted.Eagerly, libraryViewModel.uiState.value.importProgress)
         setContent {
             val hideSystemBars by appSettingsRepository.hideSystemBars.collectAsState()
+            val nightModeEnabled by appSettingsRepository.nightModeEnabled.collectAsState()
+            // Dims the actual screen backlight (not just an on-screen overlay) to its minimum --
+            // WindowManager.LayoutParams.screenBrightness in [0,1] overrides the system brightness
+            // for this window only; -1 (BRIGHTNESS_OVERRIDE_NONE) restores following the system
+            // setting when night mode turns off, so it never leaves the user stuck dim after
+            // leaving the app.
+            LaunchedEffect(nightModeEnabled) {
+                val attrs = window.attributes
+                attrs.screenBrightness = if (nightModeEnabled) 0.01f else android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                window.attributes = attrs
+            }
             LaunchedEffect(hideSystemBars) {
                 val controller = WindowInsetsControllerCompat(window, window.decorView)
                 if (hideSystemBars) {

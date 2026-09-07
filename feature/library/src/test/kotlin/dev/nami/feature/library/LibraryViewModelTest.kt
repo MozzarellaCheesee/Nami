@@ -15,6 +15,7 @@ import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayableTrack
 import dev.nami.domain.PlayerQueue
 import dev.nami.domain.PlayerRepository
+import dev.nami.domain.PlaylistRepository
 import dev.nami.domain.SearchRepository
 import dev.nami.domain.SearchResult
 import dev.nami.domain.TrashRepository
@@ -127,7 +128,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun deleteTrack(id: TrackId) {}
             override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
-        val viewModel = LibraryViewModel(fakeRepo, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository())
+        val viewModel = LibraryViewModel(fakeRepo, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository(), NoOpPlaylistRepository)
 
         viewModel.importFiles(listOf("content://fake/1", "content://fake/2"))
 
@@ -175,7 +176,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun deleteTrack(id: TrackId) {}
             override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
-        val viewModel = LibraryViewModel(fakeRepo, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository())
+        val viewModel = LibraryViewModel(fakeRepo, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository(), NoOpPlaylistRepository)
 
         viewModel.importFolder("content://tree/fake")
 
@@ -220,7 +221,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun deleteTrack(id: TrackId) {}
             override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
-        val viewModel = LibraryViewModel(fakeRepo, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository())
+        val viewModel = LibraryViewModel(fakeRepo, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository(), NoOpPlaylistRepository)
 
         viewModel.selectTab(LibraryTab.ALBUMS)
 
@@ -271,7 +272,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun deleteTrack(id: TrackId) {}
             override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
-        val viewModel = LibraryViewModel(fakeRepo, fakeSearchRepo, FakeTrashRepository(), FakePlayerRepository())
+        val viewModel = LibraryViewModel(fakeRepo, fakeSearchRepo, FakeTrashRepository(), FakePlayerRepository(), NoOpPlaylistRepository)
 
         viewModel.importFiles(listOf("content://fake/1"))
 
@@ -322,7 +323,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun deleteTrack(id: TrackId) {}
             override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
-        val viewModel = LibraryViewModel(fakeRepo, fakeSearchRepo, FakeTrashRepository(), FakePlayerRepository())
+        val viewModel = LibraryViewModel(fakeRepo, fakeSearchRepo, FakeTrashRepository(), FakePlayerRepository(), NoOpPlaylistRepository)
 
         viewModel.importFiles(listOf("content://fake/1"))
 
@@ -368,7 +369,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
         val fakeTrashRepository = FakeTrashRepository()
-        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, fakeTrashRepository, FakePlayerRepository())
+        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, fakeTrashRepository, FakePlayerRepository(), NoOpPlaylistRepository)
 
         viewModel.deleteTrack(TrackId("t1"))
 
@@ -414,7 +415,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
         val fakeTrashRepository = FakeTrashRepository()
-        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, fakeTrashRepository, FakePlayerRepository())
+        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, fakeTrashRepository, FakePlayerRepository(), NoOpPlaylistRepository)
         viewModel.deleteTrack(TrackId("t1"))
 
         viewModel.undoLastDelete()
@@ -461,7 +462,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun deleteTrack(id: TrackId) {}
             override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
-        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository())
+        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository(), NoOpPlaylistRepository)
 
         viewModel.toggleTrackSelection(TrackId("t1"))
         assertEquals(setOf(TrackId("t1")), viewModel.uiState.value.selectedTrackIds)
@@ -509,7 +510,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun deleteTrack(id: TrackId) {}
             override suspend fun deleteTracks(ids: List<TrackId>) { deletedIds.addAll(ids) }
         }
-        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository())
+        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository(), NoOpPlaylistRepository)
         viewModel.toggleTrackSelection(TrackId("t1"))
         viewModel.toggleTrackSelection(TrackId("t2"))
 
@@ -558,11 +559,28 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun deleteTrack(id: TrackId) {}
             override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
-        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository())
+        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository(), NoOpPlaylistRepository)
         viewModel.toggleTrackSelection(TrackId("t1"))
 
         viewModel.clearSelection()
 
         assertEquals(emptySet<TrackId>(), viewModel.uiState.value.selectedTrackIds)
     }
+}
+
+private object NoOpPlaylistRepository : PlaylistRepository {
+    override fun playlists() = flowOf(PagingData.empty<dev.nami.core.model.PlaylistSummary>())
+    override fun playlist(id: PlaylistId) = flowOf<dev.nami.core.model.Playlist?>(null)
+    override fun tracksInPlaylist(id: PlaylistId) = flowOf(emptyList<Track>())
+    override suspend fun createPlaylist(name: String): PlaylistId = error("unused")
+    override suspend fun renamePlaylist(id: PlaylistId, name: String) = error("unused")
+    override suspend fun deletePlaylist(id: PlaylistId) = error("unused")
+    override suspend fun setCoverImage(id: PlaylistId, imageUri: String) = error("unused")
+    override suspend fun addTrack(playlistId: PlaylistId, trackId: TrackId) = error("unused")
+    override suspend fun removeTrack(playlistId: PlaylistId, trackId: TrackId) = error("unused")
+    override suspend fun exportM3u8(id: PlaylistId, destinationUri: String) = error("unused")
+    override suspend fun importM3u8(sourceUri: String, playlistName: String) = error("unused")
+    override fun isTrackLiked(trackId: TrackId) = flowOf(false)
+    override suspend fun toggleLike(trackId: TrackId): Boolean = error("unused")
+    override suspend fun likeTrack(trackId: TrackId) {}
 }

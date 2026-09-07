@@ -1,4 +1,4 @@
-package dev.nami.feature.library
+package dev.nami.core.designsystem
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -19,10 +19,12 @@ import kotlin.math.min
  * the top -- a standard collapsing-toolbar handoff via [NestedScrollConnection]: this consumes
  * scroll deltas to resize the header BEFORE the list gets them (shrinking), and takes what the
  * list couldn't consume at its own top edge AFTER it scrolls (expanding), so the two never fight
- * over the same drag. Album/Artist detail screens each draw their own header content around this
- * (a floating cover that slides/shrinks into a compact row) rather than sharing one composable --
- * they differ enough (avatar vs square cover, extra rows) that a shared header was more
- * indirection than reuse.
+ * over the same drag. Album/Artist/Playlist detail screens each draw their own header content
+ * around this (a floating cover that slides/shrinks into a compact row) rather than sharing one
+ * composable -- they differ enough (avatar vs square cover, extra rows) that a shared header was
+ * more indirection than reuse. Lives in core:designsystem (not feature:library) so
+ * feature:playlists can share it too -- feature:library already depends on feature:playlists, so
+ * the reverse dependency isn't available.
  */
 class CollapsingHeaderState(maxHeightPx: Float, private val minHeightPx: Float) {
     var heightPx by mutableFloatStateOf(maxHeightPx)

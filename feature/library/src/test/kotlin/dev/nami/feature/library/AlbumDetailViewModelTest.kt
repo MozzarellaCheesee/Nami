@@ -13,6 +13,7 @@ import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayableTrack
 import dev.nami.domain.PlayerQueue
 import dev.nami.domain.PlayerRepository
+import dev.nami.domain.PlaylistRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -102,9 +103,25 @@ class AlbumDetailViewModelTest {
             override suspend fun cancelSleepTimer() {}
             override suspend fun stop() {}
         }
+        val fakePlaylistRepo = object : PlaylistRepository {
+            override fun playlists() = throw NotImplementedError()
+            override fun playlist(id: dev.nami.core.model.PlaylistId) = throw NotImplementedError()
+            override fun tracksInPlaylist(id: dev.nami.core.model.PlaylistId) = throw NotImplementedError()
+            override suspend fun createPlaylist(name: String) = error("unused")
+            override suspend fun renamePlaylist(id: dev.nami.core.model.PlaylistId, name: String) = error("unused")
+            override suspend fun deletePlaylist(id: dev.nami.core.model.PlaylistId) = error("unused")
+            override suspend fun setCoverImage(id: dev.nami.core.model.PlaylistId, imageUri: String) = error("unused")
+            override suspend fun addTrack(playlistId: dev.nami.core.model.PlaylistId, trackId: TrackId) = error("unused")
+            override suspend fun removeTrack(playlistId: dev.nami.core.model.PlaylistId, trackId: TrackId) = error("unused")
+            override suspend fun exportM3u8(id: dev.nami.core.model.PlaylistId, destinationUri: String) = error("unused")
+            override suspend fun importM3u8(sourceUri: String, playlistName: String) = error("unused")
+            override fun isTrackLiked(trackId: TrackId) = flowOf(false)
+            override suspend fun toggleLike(trackId: TrackId) = error("unused")
+            override suspend fun likeTrack(trackId: TrackId) {}
+        }
         val savedStateHandle = SavedStateHandle(mapOf("albumId" to "al1"))
 
-        val viewModel = AlbumDetailViewModel(fakeRepo, fakePlayerRepo, savedStateHandle)
+        val viewModel = AlbumDetailViewModel(fakeRepo, fakePlayerRepo, fakePlaylistRepo, savedStateHandle)
 
         assertEquals(album, viewModel.uiState.value.album)
         assertEquals(listOf(track), viewModel.uiState.value.tracks)

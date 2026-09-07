@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.MoreVert
@@ -67,6 +68,7 @@ fun TrackListItem(
     onClick: () -> Unit,
     onAddToQueue: (() -> Unit)? = null,
     onAddToPlaylist: (() -> Unit)? = null,
+    onLikeTrack: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
     onRename: (() -> Unit)? = null,
     onRemoveFromAlbum: (() -> Unit)? = null,
@@ -190,7 +192,7 @@ fun TrackListItem(
         }
         if (selectionMode) {
             Checkbox(checked = isSelected, onCheckedChange = null)
-        } else if (onAddToPlaylist != null || onAddToQueue != null || onDelete != null || onRename != null || onRemoveFromAlbum != null || onRemoveFromArtist != null) {
+        } else if (onAddToPlaylist != null || onAddToQueue != null || onDelete != null || onRename != null || onRemoveFromAlbum != null || onRemoveFromArtist != null || onLikeTrack != null) {
             IconButton(onClick = { showMenu = true }) {
                 Icon(Icons.Outlined.MoreVert, contentDescription = "Ещё", tint = NamiColors.Paper40)
             }
@@ -198,6 +200,7 @@ fun TrackListItem(
                 ContextActionSheet(
                     onDismiss = { showMenu = false },
                     actions = listOfNotNull(
+                        onLikeTrack?.let { ContextAction("В любимые", Icons.Outlined.FavoriteBorder, it) },
                         onAddToPlaylist?.let { ContextAction("В плейлист", Icons.Outlined.LibraryAdd, it) },
                         onAddToQueue?.let { ContextAction("В очередь", Icons.Outlined.PlaylistAdd, it) },
                         onRename?.let { ContextAction("Переименовать", Icons.Outlined.Edit, it) },

@@ -13,6 +13,7 @@ import dev.nami.core.model.TrackId
 import dev.nami.domain.LibraryRepository
 import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerRepository
+import dev.nami.domain.PlaylistRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -35,10 +36,15 @@ data class AlbumDetailUiState(
 class AlbumDetailViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
     private val playerRepository: PlayerRepository,
+    private val playlistRepository: PlaylistRepository,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
     private val albumId = AlbumId(checkNotNull(savedStateHandle.get<String>("albumId")))
+
+    fun likeTrack(trackId: TrackId) {
+        viewModelScope.launch { playlistRepository.likeTrack(trackId) }
+    }
 
     private val _uiState = MutableStateFlow(AlbumDetailUiState())
     val uiState: StateFlow<AlbumDetailUiState> = _uiState.asStateFlow()

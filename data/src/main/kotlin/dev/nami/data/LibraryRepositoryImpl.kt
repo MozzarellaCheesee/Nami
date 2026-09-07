@@ -152,11 +152,26 @@ class LibraryRepositoryImpl @Inject constructor(
     }
 
     override suspend fun addTrackToAlbum(trackId: TrackId, albumId: AlbumId) {
+        val previousAlbumId = trackDao.findById(trackId.value)?.albumId
         trackDao.setAlbumId(trackId.value, albumId.value)
+        syncAlbumIsSingle(albumId.value)
+        previousAlbumId?.let { syncAlbumIsSingle(it) }
     }
 
     override suspend fun removeTrackFromAlbum(trackId: TrackId) {
+        val previousAlbumId = trackDao.findById(trackId.value)?.albumId
         trackDao.setAlbumId(trackId.value, null)
+        previousAlbumId?.let { syncAlbumIsSingle(it) }
+    }
+
+    /** Auto-tags an album "single" the moment it has exactly one (non-deleted) track, and clears
+     * the tag the moment it no longer does -- called after every mutation that can change an
+     * album's track count (add/remove/delete a track, import). Doesn't touch albums the user
+     * never marked -- an album with 2+ tracks the user manually flagged single (if that's ever
+     * allowed elsewhere) also gets un-flagged here, since "single" is defined purely by track
+     * count for this app, not a separate manual-only concept. */
+    private suspend fun syncAlbumIsSingle(albumId: String) {
+        albumDao.setIsSingle(albumId, trackDao.countByAlbum(albumId) == 1)
     }
 
     override suspend fun addTrackToArtist(trackId: TrackId, artistId: ArtistId) {
@@ -191,6 +206,7 @@ class LibraryRepositoryImpl @Inject constructor(
         val track = trackDao.findById(id.value) ?: return
         val trashedPath = trashFileStore.moveToTrash(id.value, track.path) ?: track.path
         trackDao.setDeletedAt(id.value, deletedAt = System.currentTimeMillis(), path = trashedPath)
+        track.albumId?.let { syncAlbumIsSingle(it) }
     }
 
     override suspend fun deleteTracks(ids: List<TrackId>) {
@@ -223,7 +239,8 @@ class LibraryRepositoryImpl @Inject constructor(
         val resolver = context.contentResolver
 
         uris.forEachIndexed { index, uri ->
-            copyAndIndex(resolver, uri, musicDir)
+            val result = copyAndIndex(resolver, uri, musicDir)
+            result?.albumId?.let { syncAlbumIsSingle(it) }
             emit(ImportProgress(done = index + 1, total = uris.size))
         }
     }.flowOn(Dispatchers.IO)
@@ -253,6 +270,7 @@ class LibraryRepositoryImpl @Inject constructor(
             }
 
             val albumId = albumIdForGroup
+            if (albumId != null) syncAlbumIsSingle(albumId)
             if (albumId != null && albumDao.findById(albumId)?.artworkPath == null) {
                 val coverDoc = folderImportScanner.findFolderCover(group.sourceDir)
                 val bytes = coverDoc?.let { resolver.openInputStream(it.uri)?.use { stream -> stream.readBytes() } }

@@ -112,6 +112,10 @@ class PlaylistRepositoryImpl @Inject constructor(
         return !alreadyLiked
     }
 
+    override suspend fun likeTrack(trackId: TrackId) {
+        addTrack(ensureLikedPlaylist(), trackId)
+    }
+
     /** Finds the one Liked playlist, creating it (with its own fixed name -- see [LIKED_PLAYLIST_NAME])
      * the first time anything is ever liked. Idempotent: a second call while one already exists
      * just returns its id. */

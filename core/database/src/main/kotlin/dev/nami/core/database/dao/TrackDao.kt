@@ -155,6 +155,10 @@ interface TrackDao {
     @Query("UPDATE tracks SET albumId = :albumId WHERE id = :id")
     suspend fun setAlbumId(id: String, albumId: String?)
 
+    // Drives the "single" auto-tag -- see LibraryRepositoryImpl.syncAlbumIsSingle.
+    @Query("SELECT COUNT(*) FROM tracks WHERE albumId = :albumId AND deletedAt IS NULL")
+    suspend fun countByAlbum(albumId: String): Int
+
     // null detaches the track from any artist (used by "remove from artist").
     @Query("UPDATE tracks SET artistId = :artistId WHERE id = :id")
     suspend fun setArtistId(id: String, artistId: String?)

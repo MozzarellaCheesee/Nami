@@ -30,6 +30,7 @@ import androidx.compose.material.icons.outlined.Shuffle
 import androidx.compose.material.icons.outlined.Star
 import dev.nami.core.designsystem.NamiAlertDialog
 import dev.nami.core.designsystem.RenameDialog
+import dev.nami.core.designsystem.rememberCollapsingHeaderState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -211,6 +212,7 @@ fun AlbumDetailScreen(
                             onClick = { onPlayTracks(uiState.tracks, index) },
                             onAddToQueue = if (nowPlaying != null) { { onAddToQueue(track) } } else null,
                             onAddToPlaylist = { addToPlaylistTrackId = track.id },
+                            onLikeTrack = { viewModel.likeTrack(track.id) },
                             onRemoveFromAlbum = { viewModel.removeTrackFromAlbum(track.id) },
                             isCurrentTrack = track.id == nowPlaying?.trackId,
                             isPlaying = track.id == nowPlaying?.trackId && nowPlaying?.isPlaying == true,

@@ -59,6 +59,7 @@ import dev.nami.core.designsystem.ContextAction
 import dev.nami.core.designsystem.ContextActionSheet
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.designsystem.RenameDialog
+import dev.nami.core.designsystem.rememberCollapsingHeaderState
 import dev.nami.core.model.AlbumId
 import dev.nami.core.model.ArtistId
 import dev.nami.core.model.Track
@@ -230,6 +231,7 @@ fun ArtistDetailScreen(
                             onClick = { onPlayTracks(topTracks, artistName, index) },
                             onAddToQueue = if (nowPlaying != null) { { onAddToQueue(track, artistName) } } else null,
                             onAddToPlaylist = { addToPlaylistTrackId = track.id },
+                            onLikeTrack = { viewModel.likeTrack(track.id) },
                             onRemoveFromArtist = { viewModel.removeTrackFromArtist(track.id) },
                             isCurrentTrack = track.id == nowPlaying?.trackId,
                             isPlaying = track.id == nowPlaying?.trackId && nowPlaying?.isPlaying == true,

@@ -15,6 +15,7 @@ import dev.nami.domain.ImportSource
 import dev.nami.domain.LibraryRepository
 import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerRepository
+import dev.nami.domain.PlaylistRepository
 import dev.nami.domain.SearchRepository
 import dev.nami.domain.TrashRepository
 import kotlinx.coroutines.CancellationException
@@ -47,7 +48,12 @@ class LibraryViewModel @Inject constructor(
     private val searchRepository: SearchRepository,
     private val trashRepository: TrashRepository,
     private val playerRepository: PlayerRepository,
+    private val playlistRepository: PlaylistRepository,
 ) : ViewModel() {
+
+    fun likeTrack(trackId: TrackId) {
+        viewModelScope.launch { playlistRepository.likeTrack(trackId) }
+    }
 
     val tracks: Flow<PagingData<Track>> =
         libraryRepository.tracks().cachedIn(viewModelScope)
