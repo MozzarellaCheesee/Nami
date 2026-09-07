@@ -49,6 +49,7 @@ class SearchRepositoryImplTest {
         override suspend fun allOrderedWithArtwork(): List<TrackDao.TrackWithArtwork> = error("unused")
         override suspend fun findById(id: String): TrackEntity? = error("unused")
         override suspend fun findByIdWithArtwork(id: String): TrackDao.TrackWithArtwork? = null
+        override fun observeByIdWithArtwork(id: String) = error("unused")
         override suspend fun findByPath(path: String): TrackEntity? = error("unused")
         override suspend fun findDuplicate(title: String, artistId: String?, albumId: String?, durationMs: Long): TrackEntity? = error("unused")
         override suspend fun insertAll(tracks: List<TrackEntity>) = error("unused")

@@ -86,11 +86,13 @@ fun PlaylistDetailScreen(
     onPlayTracks: (tracks: List<Track>, startIndex: Int) -> Unit,
     onExportRequested: (PlaylistId) -> Unit,
     onPickCoverRequested: (PlaylistId) -> Unit,
+    onEditSmartPlaylist: (PlaylistId) -> Unit,
     viewModel: PlaylistDetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val playlist = uiState.playlist
     val isLiked = playlist?.isLiked == true
+    val isSmart = playlist?.isSmart == true
     var showRenameDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
@@ -176,8 +178,12 @@ fun PlaylistDetailScreen(
                 if (showMenu) {
                     ContextActionSheet(
                         onDismiss = { showMenu = false },
-                        actions = listOf(
-                            ContextAction("Изменить обложку", Icons.Outlined.Image) { onPickCoverRequested(viewModel.playlistId) },
+                        actions = listOfNotNull(
+                            if (isSmart) {
+                                ContextAction("Изменить правила", Icons.Outlined.Image) { onEditSmartPlaylist(viewModel.playlistId) }
+                            } else {
+                                ContextAction("Изменить обложку", Icons.Outlined.Image) { onPickCoverRequested(viewModel.playlistId) }
+                            },
                             ContextAction("Экспорт в .m3u8", Icons.Outlined.Share) { onExportRequested(viewModel.playlistId) },
                             ContextAction("Удалить плейлист", Icons.Outlined.Delete) { showDeleteDialog = true },
                         ),
@@ -188,7 +194,9 @@ fun PlaylistDetailScreen(
                         PlaylistTrackRow(
                             track = track,
                             onClick = { onPlayTracks(uiState.tracks, index) },
-                            onRemove = { viewModel.removeTrack(track.id) },
+                            // Smart playlist tracks aren't rows in playlist_tracks (they're
+                            // computed by SmartPlaylistEvaluator) -- there's nothing to remove.
+                            onRemove = if (isSmart) null else { { viewModel.removeTrack(track.id) } },
                         )
                     }
                 }
@@ -331,7 +339,7 @@ private fun tracksWord(count: Int): String {
  * reverse dependency needed to reuse TrackListItem directly isn't available without a bigger
  * module reshuffle out of scope here. */
 @Composable
-private fun PlaylistTrackRow(track: Track, onClick: () -> Unit, onRemove: () -> Unit) {
+private fun PlaylistTrackRow(track: Track, onClick: () -> Unit, onRemove: (() -> Unit)?) {
     var showMenu by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
@@ -356,11 +364,13 @@ private fun PlaylistTrackRow(track: Track, onClick: () -> Unit, onRemove: () -> 
                 Text(text = name, color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
-        IconButton(onClick = { showMenu = true }) {
-            Icon(Icons.Outlined.MoreVert, contentDescription = "Ещё", tint = NamiColors.Paper40)
+        if (onRemove != null) {
+            IconButton(onClick = { showMenu = true }) {
+                Icon(Icons.Outlined.MoreVert, contentDescription = "Ещё", tint = NamiColors.Paper40)
+            }
         }
     }
-    if (showMenu) {
+    if (showMenu && onRemove != null) {
         ContextActionSheet(
             onDismiss = { showMenu = false },
             actions = listOf(

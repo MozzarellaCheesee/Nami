@@ -13,6 +13,7 @@ fun PlaylistDao.PlaylistListRow.toDomain(): PlaylistSummary = PlaylistSummary(
     coverPath = coverPath,
     trackCount = trackCount,
     isLiked = isLiked,
+    isSmart = isSmart,
 )
 
 fun PlaylistEntity.toDomain(): Playlist = Playlist(
@@ -20,6 +21,8 @@ fun PlaylistEntity.toDomain(): Playlist = Playlist(
     name = name,
     coverPath = coverPath,
     isLiked = isLiked,
+    isSmart = isSmart,
+    smartQueryJson = smartQueryJson,
 )
 
 fun PlaylistDao.PlaylistListRow.toTrashedDomain(): TrashedPlaylist = TrashedPlaylist(

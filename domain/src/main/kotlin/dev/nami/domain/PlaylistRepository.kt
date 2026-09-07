@@ -36,6 +36,16 @@ interface PlaylistRepository {
     /** Add-only version of [toggleLike] for a plain "В любимые" menu action (as opposed to the
      * player's heart, which toggles) -- no-op if already liked. */
     suspend fun likeTrack(trackId: TrackId)
+
+    /** П.md §20 "умные плейлисты" -- [tracksInPlaylist] evaluates [query] fresh every time it's
+     * collected for one of these (not cached), so opening a smart playlist always reflects the
+     * current library, per the plan's own "даёт актуальный на момент открытия список" wording. */
+    suspend fun createSmartPlaylist(name: String, query: SmartQuery): PlaylistId
+    suspend fun updateSmartQuery(id: PlaylistId, query: SmartQuery)
+
+    /** The other direction of [Playlist.smartQueryJson] -- parses it back into a [SmartQuery] for
+     * an editor screen to load. Null on a missing/corrupted value, same as a fresh, ruleless query. */
+    fun parseSmartQuery(json: String): SmartQuery?
 }
 
 data class ImportM3u8Result(val playlistId: PlaylistId, val matchedCount: Int, val skippedCount: Int)

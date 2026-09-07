@@ -215,6 +215,14 @@ val MIGRATION_19_20 = object : Migration(19, 20) {
     }
 }
 
+/** Умные плейлисты (П.md §20). */
+val MIGRATION_20_21 = object : Migration(20, 21) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE playlists ADD COLUMN isSmart INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE playlists ADD COLUMN smartQueryJson TEXT")
+    }
+}
+
 val MIGRATION_14_15 = object : Migration(14, 15) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL(

@@ -16,4 +16,7 @@ data class PlaylistEntity(
      * find-or-create, not a DB constraint -- a unique partial index isn't worth it for a value
      * that's only ever written by one code path). */
     val isLiked: Boolean = false,
+    /** П.md §20 "умные плейлисты" -- see core.model.Playlist's identical doc. */
+    val isSmart: Boolean = false,
+    val smartQueryJson: String? = null,
 )

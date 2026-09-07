@@ -49,6 +49,9 @@ class PlaylistsViewModelTest {
         override fun isTrackLiked(trackId: TrackId) = kotlinx.coroutines.flow.flowOf(false)
         override suspend fun toggleLike(trackId: TrackId) = true
         override suspend fun likeTrack(trackId: TrackId) {}
+        override suspend fun createSmartPlaylist(name: String, query: dev.nami.domain.SmartQuery) = error("unused")
+        override suspend fun updateSmartQuery(id: PlaylistId, query: dev.nami.domain.SmartQuery) {}
+        override fun parseSmartQuery(json: String): dev.nami.domain.SmartQuery? = null
     }
 
     @Test

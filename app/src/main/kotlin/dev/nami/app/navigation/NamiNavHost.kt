@@ -71,6 +71,8 @@ private const val ROUTE_ARTIST_DETAIL = "artist/{artistId}"
 private const val ROUTE_ARTIST_DISCOGRAPHY = "artist/{artistId}/discography"
 private const val ROUTE_ARTIST_ALL_TRACKS = "artist/{artistId}/tracks"
 private const val ROUTE_PLAYLIST_DETAIL = "playlist/{playlistId}"
+private const val ROUTE_SMART_PLAYLIST_EDITOR = "smart_playlist_editor"
+private const val ROUTE_SMART_PLAYLIST_EDIT_EXISTING = "smart_playlist_editor/{playlistId}"
 private const val ROUTE_SETTINGS_APPEARANCE = "settings/appearance"
 private const val ROUTE_SETTINGS_PLAYER = "settings/player"
 private const val ROUTE_SESSIONS = "settings/sessions"
@@ -205,10 +207,20 @@ fun NamiNavHost(
                 PlaylistsScreen(
                     onPlaylistClick = { playlistId -> navController.navigate("playlist/${playlistId.value}") },
                     onImportRequested = onImportPlaylist,
+                    onCreateSmartPlaylist = { navController.navigate(ROUTE_SMART_PLAYLIST_EDITOR) },
                     lastImportResult = lastImportResult,
                     onImportResultShown = onImportResultShown,
                 )
                 }
+            }
+            composable(ROUTE_SMART_PLAYLIST_EDITOR) {
+                dev.nami.feature.playlists.SmartPlaylistEditorScreen(onBack = { navController.popBackStack() })
+            }
+            composable(
+                ROUTE_SMART_PLAYLIST_EDIT_EXISTING,
+                arguments = listOf(navArgument("playlistId") { type = NavType.StringType }),
+            ) {
+                dev.nami.feature.playlists.SmartPlaylistEditorScreen(onBack = { navController.popBackStack() })
             }
             composable(ROUTE_SETTINGS) {
                 Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
@@ -356,6 +368,7 @@ fun NamiNavHost(
                     },
                     onExportRequested = onExportPlaylist,
                     onPickCoverRequested = onPickPlaylistCover,
+                    onEditSmartPlaylist = { playlistId -> navController.navigate("smart_playlist_editor/${playlistId.value}") },
                 )
                 }
             }

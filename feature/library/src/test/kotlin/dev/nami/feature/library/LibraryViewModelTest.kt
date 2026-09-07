@@ -628,4 +628,7 @@ private object NoOpPlaylistRepository : PlaylistRepository {
     override fun isTrackLiked(trackId: TrackId) = flowOf(false)
     override suspend fun toggleLike(trackId: TrackId): Boolean = error("unused")
     override suspend fun likeTrack(trackId: TrackId) {}
+    override suspend fun createSmartPlaylist(name: String, query: dev.nami.domain.SmartQuery) = error("unused")
+    override suspend fun updateSmartQuery(id: dev.nami.core.model.PlaylistId, query: dev.nami.domain.SmartQuery) {}
+    override fun parseSmartQuery(json: String): dev.nami.domain.SmartQuery? = null
 }

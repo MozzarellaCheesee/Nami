@@ -20,8 +20,11 @@ import dev.nami.core.model.TrackId
 import dev.nami.data.mapper.toDomain
 import dev.nami.domain.ImportM3u8Result
 import dev.nami.domain.PlaylistRepository
+import dev.nami.domain.SmartQuery
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import java.util.UUID
 import javax.inject.Inject
@@ -44,8 +47,18 @@ class PlaylistRepositoryImpl @Inject constructor(
     override fun playlist(id: PlaylistId): Flow<Playlist?> =
         playlistDao.findByIdFlow(id.value).map { it?.toDomain() }
 
-    override fun tracksInPlaylist(id: PlaylistId): Flow<List<Track>> =
-        playlistTrackDao.tracksInPlaylistFlow(id.value).map { list -> list.map { it.toDomain() } }
+    override fun tracksInPlaylist(id: PlaylistId): Flow<List<Track>> = flow {
+        val playlist = playlistDao.findById(id.value)
+        if (playlist?.isSmart == true) {
+            // Re-evaluated fresh on every collection (each screen open), not cached -- see
+            // PlaylistRepository.createSmartPlaylist's own doc.
+            val query = playlist.smartQueryJson?.let(SmartQuerySerializer::parse)
+            val allTracks = trackDao.allOrderedWithArtwork().map { it.toDomain() }
+            emit(query?.let { SmartPlaylistEvaluator.evaluate(allTracks, it) } ?: emptyList())
+        } else {
+            emitAll(playlistTrackDao.tracksInPlaylistFlow(id.value).map { list -> list.map { it.toDomain() } })
+        }
+    }
 
     override suspend fun createPlaylist(name: String): PlaylistId {
         val id = UUID.randomUUID().toString()
@@ -115,6 +128,27 @@ class PlaylistRepositoryImpl @Inject constructor(
     override suspend fun likeTrack(trackId: TrackId) {
         addTrack(ensureLikedPlaylist(), trackId)
     }
+
+    override suspend fun createSmartPlaylist(name: String, query: SmartQuery): PlaylistId {
+        val id = UUID.randomUUID().toString()
+        playlistDao.insert(
+            PlaylistEntity(
+                id = id,
+                name = name,
+                coverPath = null,
+                createdAt = System.currentTimeMillis(),
+                isSmart = true,
+                smartQueryJson = SmartQuerySerializer.serialize(query),
+            ),
+        )
+        return PlaylistId(id)
+    }
+
+    override suspend fun updateSmartQuery(id: PlaylistId, query: SmartQuery) {
+        playlistDao.updateSmartQuery(id.value, SmartQuerySerializer.serialize(query))
+    }
+
+    override fun parseSmartQuery(json: String): SmartQuery? = SmartQuerySerializer.parse(json)
 
     /** Finds the one Liked playlist, creating it (with its own fixed name -- see [LIKED_PLAYLIST_NAME])
      * the first time anything is ever liked. Idempotent: a second call while one already exists

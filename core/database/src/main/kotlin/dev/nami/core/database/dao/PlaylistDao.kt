@@ -42,7 +42,8 @@ interface PlaylistDao {
     @Query(
         """
         SELECT playlists.id AS id, playlists.name AS name, playlists.coverPath AS coverPath,
-               playlists.isLiked AS isLiked, COUNT(playlist_tracks.trackId) AS trackCount
+               playlists.isLiked AS isLiked, playlists.isSmart AS isSmart,
+               COUNT(playlist_tracks.trackId) AS trackCount
         FROM playlists
         LEFT JOIN playlist_tracks ON playlists.id = playlist_tracks.playlistId
         WHERE playlists.deletedAt IS NULL
@@ -56,7 +57,7 @@ interface PlaylistDao {
         """
         SELECT playlists.id AS id, playlists.name AS name, playlists.coverPath AS coverPath,
                playlists.deletedAt AS deletedAt, playlists.isLiked AS isLiked,
-               COUNT(playlist_tracks.trackId) AS trackCount
+               playlists.isSmart AS isSmart, COUNT(playlist_tracks.trackId) AS trackCount
         FROM playlists
         LEFT JOIN playlist_tracks ON playlists.id = playlist_tracks.playlistId
         WHERE playlists.deletedAt IS NOT NULL
@@ -69,6 +70,9 @@ interface PlaylistDao {
     @Query("SELECT deletedAt FROM playlists WHERE id = :id")
     suspend fun deletedAtOf(id: String): Long?
 
+    @Query("UPDATE playlists SET smartQueryJson = :queryJson WHERE id = :id")
+    suspend fun updateSmartQuery(id: String, queryJson: String)
+
     data class PlaylistListRow(
         val id: String,
         val name: String,
@@ -76,5 +80,6 @@ interface PlaylistDao {
         val trackCount: Int,
         val deletedAt: Long? = null,
         val isLiked: Boolean = false,
+        val isSmart: Boolean = false,
     )
 }

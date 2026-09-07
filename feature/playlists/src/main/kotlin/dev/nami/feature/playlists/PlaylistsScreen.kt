@@ -48,12 +48,14 @@ import kotlinx.coroutines.flow.StateFlow
 fun PlaylistsScreen(
     onPlaylistClick: (PlaylistId) -> Unit,
     onImportRequested: (playlistName: String) -> Unit,
+    onCreateSmartPlaylist: () -> Unit,
     lastImportResult: StateFlow<ImportM3u8Result?>,
     onImportResultShown: () -> Unit,
     viewModel: PlaylistsViewModel = hiltViewModel(),
 ) {
     val playlists = viewModel.playlists.collectAsLazyPagingItems()
     var showCreateDialog by remember { mutableStateOf(false) }
+    var showCreateChooser by remember { mutableStateOf(false) }
     var showImportDialog by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val importResult by lastImportResult.collectAsState()
@@ -108,7 +110,7 @@ fun PlaylistsScreen(
             }
 
             FloatingActionButton(
-                onClick = { showCreateDialog = true },
+                onClick = { showCreateChooser = true },
                 containerColor = NamiColors.Shu,
                 contentColor = NamiColors.Paper100,
                 elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 0.dp),
@@ -118,6 +120,16 @@ fun PlaylistsScreen(
             }
         }
     }
+    }
+
+    if (showCreateChooser) {
+        dev.nami.core.designsystem.ContextActionSheet(
+            onDismiss = { showCreateChooser = false },
+            actions = listOf(
+                dev.nami.core.designsystem.ContextAction("Обычный плейлист", Icons.Outlined.Add) { showCreateDialog = true },
+                dev.nami.core.designsystem.ContextAction("Умный плейлист", Icons.Outlined.Add, onCreateSmartPlaylist),
+            ),
+        )
     }
 
     if (showCreateDialog) {
