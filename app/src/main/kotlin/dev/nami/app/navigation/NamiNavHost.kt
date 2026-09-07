@@ -138,10 +138,14 @@ fun NamiNavHost(
         NavHost(
             navController = navController,
             startDestination = ROUTE_LIBRARY,
-            // clipToBounds: a list's last row can render partially past its own weighted area
-            // right where MiniPlayer starts (the boundary in a Column doesn't clip children by
-            // default), showing a sliver of it squeezed between the list and the bar below.
-            modifier = Modifier.weight(1f).clipToBounds(),
+            // No clipToBounds here anymore -- it used to blanket-clip every destination to this
+            // Column's own bounds, which also meant Album/Artist detail's cover couldn't bleed
+            // up past the status-bar-height padding above (their own negative-offset trick for
+            // that was otherwise correct, just clipped away before it could ever draw). The
+            // "list's last row peeking past MiniPlayer" bug this used to guard against is now
+            // handled per-route below (each list screen wraps itself in its own clipToBounds()),
+            // so screens that don't need it aren't clipped for no reason.
+            modifier = Modifier.weight(1f),
             // Default Navigation-Compose cross-fade leaves the outgoing destination composed
             // and touchable for the transition's duration, overlapping the incoming one. That
             // window is where a screen popped by back (e.g. AlbumDetailScreen) can still catch
@@ -153,6 +157,8 @@ fun NamiNavHost(
             popExitTransition = { ExitTransition.None },
         ) {
             composable(ROUTE_LIBRARY) {
+                // LibraryScreen already wraps its own list in clipToBounds() internally -- no
+                // extra wrap needed here.
                 LibraryScreen(
                     onTrackClick = { trackId ->
                         if (queue.nowPlaying?.id == trackId) {
@@ -172,6 +178,7 @@ fun NamiNavHost(
                 )
             }
             composable(ROUTE_SEARCH) {
+                Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
                 SearchScreen(
                     onTrackClick = { trackId ->
                         if (queue.nowPlaying?.id == trackId) {
@@ -184,23 +191,30 @@ fun NamiNavHost(
                     onAlbumClick = { albumId -> navController.navigate("album/${albumId.value}") },
                     onArtistClick = { artistId -> navController.navigate("artist/${artistId.value}") },
                 )
+                }
             }
             composable(ROUTE_PLAYLISTS) {
+                Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
                 PlaylistsScreen(
                     onPlaylistClick = { playlistId -> navController.navigate("playlist/${playlistId.value}") },
                     onImportRequested = onImportPlaylist,
                     lastImportResult = lastImportResult,
                     onImportResultShown = onImportResultShown,
                 )
+                }
             }
             composable(ROUTE_SETTINGS) {
+                Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
                 SettingsScreen(
                     onTrashClick = { navController.navigate(ROUTE_TRASH) },
                     onAudioTractClick = { navController.navigate(ROUTE_AUDIO_TRACT) },
                 )
+                }
             }
             composable(ROUTE_TRASH) {
+                Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
                 TrashScreen(onBack = { navController.popBackStack() })
+                }
             }
             composable(ROUTE_AUDIO_TRACT) {
                 AudioTractScreen(
@@ -256,6 +270,7 @@ fun NamiNavHost(
                 ROUTE_ARTIST_DISCOGRAPHY,
                 arguments = listOf(navArgument("artistId") { type = NavType.StringType }),
             ) {
+                Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
                 ArtistDiscographyScreen(
                     onBack = { navController.popBackStack() },
                     onAlbumClick = { albumId -> navController.navigate("album/${albumId.value}") },
@@ -269,11 +284,13 @@ fun NamiNavHost(
                     },
                     onAddToQueue = { track, artistName -> nowPlayingViewModel.addToQueue(track, artistName) },
                 )
+                }
             }
             composable(
                 ROUTE_ARTIST_ALL_TRACKS,
                 arguments = listOf(navArgument("artistId") { type = NavType.StringType }),
             ) {
+                Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
                 ArtistAllTracksScreen(
                     onBack = { navController.popBackStack() },
                     onPlayTracks = { tracks, artistName, startIndex ->
@@ -286,11 +303,13 @@ fun NamiNavHost(
                     },
                     onAddToQueue = { track, artistName -> nowPlayingViewModel.addToQueue(track, artistName) },
                 )
+                }
             }
             composable(
                 ROUTE_PLAYLIST_DETAIL,
                 arguments = listOf(navArgument("playlistId") { type = NavType.StringType }),
             ) {
+                Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
                 PlaylistDetailScreen(
                     onBack = { navController.popBackStack() },
                     onDeleted = { navController.popBackStack() },
@@ -305,6 +324,7 @@ fun NamiNavHost(
                     onExportRequested = onExportPlaylist,
                     onPickCoverRequested = onPickPlaylistCover,
                 )
+                }
             }
         }
         // Always mounted, even while Now Playing is open/closing -- it's what Now Playing's

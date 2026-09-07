@@ -135,17 +135,47 @@ fun AlbumDetailScreen(
                     uiState.album?.year?.let { year ->
                         Text(text = year.toString(), color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall)
                     }
-                    // Just the slide-target anchor now -- play/overflow moved onto the cover
-                    // image itself (see the floating image below).
-                    Spacer(
-                        modifier = Modifier
-                            .padding(top = 12.dp)
-                            .size(
-                                width = with(density) { (avatarSizePx * progress).toDp() },
-                                height = with(density) { (avatarSizePx * progress).toDp() },
-                            )
-                            .onGloballyPositioned { avatarSlotOffset = it.positionInRoot() - rootOffset },
-                    )
+                    // Avatar slot (the floating cover's landing target) plus Play/overflow laid
+                    // out in a real Row right next to it -- previously these lived in a manually
+                    // offset-and-sized Box floating over the cover, sized/positioned off the
+                    // COVER's own shrink math (currentWidthPx/currentHeightPx) instead of the
+                    // ACTUAL on-screen header height, so mid-scroll (header already shorter than
+                    // its max, cover not yet circular) that box still claimed the full original
+                    // header area and drew over the title. Laying them out for real, in-flow,
+                    // next to the avatar spacer can't overlap anything above it -- Compose does
+                    // that math, not manual offsets.
+                    Row(modifier = Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Spacer(
+                            modifier = Modifier
+                                .size(
+                                    width = with(density) { (avatarSizePx * progress).toDp() },
+                                    height = with(density) { (avatarSizePx * progress).toDp() },
+                                )
+                                .onGloballyPositioned { avatarSlotOffset = it.positionInRoot() - rootOffset },
+                        )
+                        // Fades in only once the cover is mostly a circle -- while it's still
+                        // large, Play/overflow live on the cover image itself instead (below).
+                        if (progress > 0.6f) {
+                            Row(
+                                modifier = Modifier
+                                    .graphicsLayer { alpha = ((progress - 0.6f) / 0.4f).coerceIn(0f, 1f) }
+                                    .padding(start = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                if (uiState.tracks.isNotEmpty()) {
+                                    IconButton(
+                                        onClick = { onPlayTracks(uiState.tracks, 0) },
+                                        modifier = Modifier.size(36.dp).background(NamiColors.Paper100, RoundedCornerShape(12.dp)),
+                                    ) {
+                                        Icon(Icons.Filled.PlayArrow, contentDescription = "Играть альбом", tint = NamiColors.Ink900, modifier = Modifier.size(18.dp))
+                                    }
+                                }
+                                IconButton(onClick = { showAlbumMenu = true }, modifier = Modifier.padding(start = 4.dp)) {
+                                    Icon(Icons.Outlined.MoreVert, contentDescription = "Действия с альбомом", tint = NamiColors.Paper100)
+                                }
+                            }
+                        }
+                    }
                 }
                 if (showAlbumMenu) {
                     ContextActionSheet(
@@ -224,25 +254,27 @@ fun AlbumDetailScreen(
                 Box(modifier = slideModifier.background(NamiColors.Ink700))
             }
 
-            // Play/overflow live on the cover itself now instead of a dedicated row under the
-            // title -- fade out well before the cover collapses into the small 40dp avatar (a
-            // 56dp button doesn't fit inside that; not reusing slideModifier's own clip here
-            // avoids them visibly getting chewed into the shrinking circle), and gone from
-            // composition (not just alpha 0) past the threshold so they're not still tappable.
-            if (progress < 0.5f) {
-                // Fixed to the FULLY EXPANDED cover's own position/size instead of tracking
-                // currentWidthPx/currentHeightPx -- those shrink toward the avatar slot together
-                // with the cover, dragging this box (and the buttons BottomEnd-aligned inside it)
-                // along for the ride, visibly sliding and shrinking into the collapsing circle
-                // before the alpha fade even finished. See ArtistDetailScreen's identical fix.
+            // Play/overflow live on the cover itself while it's still large, then crossfade to
+            // the smaller inline pair next to the avatar slot once it's mostly a circle (see the
+            // Row next to the avatar Spacer above) -- gone from composition (not just alpha 0)
+            // past the threshold so they're not still tappable once invisible.
+            if (progress < 0.6f) {
+                // Height tracks headerState.heightPx -- the ACTUAL current on-screen header
+                // height (shrinks continuously as the list scrolls, all the way from
+                // HEADER_MAX_HEIGHT to HEADER_MIN_HEIGHT) -- not headerMaxHeightPx (which stays
+                // constant) and not currentWidthPx/currentHeightPx (the cover's own shrink toward
+                // the avatar, a different curve). Its bottom edge lands exactly where the title
+                // Column starts (that Column sits right after a Spacer(headerHeightDp) of the
+                // same height), so this box can never draw over the title regardless of scroll
+                // position. Crossfades with the inline avatar-row buttons above (progress > 0.6).
                 Box(
                     modifier = Modifier
                         .offset { IntOffset(0, rootOffset.y.roundToInt()) }
-                        .size(with(density) { screenWidthPx.toDp() }, with(density) { (headerMaxHeightPx + rootOffset.y).toDp() }),
+                        .size(with(density) { screenWidthPx.toDp() }, with(density) { (headerState.heightPx + rootOffset.y).toDp() }),
                     contentAlignment = Alignment.BottomEnd,
                 ) {
                     Row(
-                        modifier = Modifier.graphicsLayer { alpha = ((0.5f - progress) / 0.5f).coerceIn(0f, 1f) }.padding(12.dp),
+                        modifier = Modifier.graphicsLayer { alpha = (1f - progress / 0.6f).coerceIn(0f, 1f) }.padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (uiState.tracks.isNotEmpty()) {

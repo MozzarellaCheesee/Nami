@@ -139,21 +139,40 @@ fun ArtistDetailScreen(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.fillMaxWidth().basicMarquee(iterations = Int.MAX_VALUE),
                     )
-                    // Just the slide-target anchor now -- play/overflow moved onto the cover image
-                    // itself (see the floating image below), so this Row no longer reserves a
-                    // whole extra row of vertical space under the title for buttons.
-                    Spacer(
-                        modifier = Modifier
-                            .padding(top = 12.dp)
-                            .size(
-                                width = with(density) { (avatarSizePx * progress).toDp() },
-                                // Also 0 at rest (progress 0) -- reserving the full 40dp height
-                                // even before there's a collapsed avatar to show there just left
-                                // an empty band under the title for no reason.
-                                height = with(density) { (avatarSizePx * progress).toDp() },
-                            )
-                            .onGloballyPositioned { avatarSlotOffset = it.positionInRoot() - rootOffset },
-                    )
+                    // Avatar slot plus Play/overflow laid out in a real Row next to it -- see
+                    // AlbumDetailScreen's identical block for why (manual offset/size math tied
+                    // to the cover's own shrink, not the actual on-screen header height, drew the
+                    // buttons over the title mid-scroll).
+                    Row(modifier = Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Spacer(
+                            modifier = Modifier
+                                .size(
+                                    width = with(density) { (avatarSizePx * progress).toDp() },
+                                    height = with(density) { (avatarSizePx * progress).toDp() },
+                                )
+                                .onGloballyPositioned { avatarSlotOffset = it.positionInRoot() - rootOffset },
+                        )
+                        if (progress > 0.6f) {
+                            Row(
+                                modifier = Modifier
+                                    .graphicsLayer { alpha = ((progress - 0.6f) / 0.4f).coerceIn(0f, 1f) }
+                                    .padding(start = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                if (uiState.tracks.isNotEmpty()) {
+                                    IconButton(
+                                        onClick = { onPlayTracks(uiState.tracks, artistName, 0) },
+                                        modifier = Modifier.size(36.dp).background(NamiColors.Paper100, RoundedCornerShape(12.dp)),
+                                    ) {
+                                        Icon(Icons.Filled.PlayArrow, contentDescription = "Играть всё", tint = NamiColors.Ink900, modifier = Modifier.size(18.dp))
+                                    }
+                                }
+                                IconButton(onClick = { showArtistMenu = true }, modifier = Modifier.padding(start = 4.dp)) {
+                                    Icon(Icons.Outlined.MoreVert, contentDescription = "Действия с артистом", tint = NamiColors.Paper100)
+                                }
+                            }
+                        }
+                    }
                 }
                 if (showArtistMenu) {
                     ContextActionSheet(
@@ -295,29 +314,23 @@ fun ArtistDetailScreen(
                 Box(modifier = slideModifier.background(NamiColors.Ink700))
             }
 
-            // Play/overflow live on the cover itself now instead of a dedicated row under the
-            // title -- fade out well before the cover collapses into the small 40dp avatar
-            // (a 56dp button doesn't fit inside that, and reusing slideModifier's own clip made
-            // them visibly get chewed into the shrinking circle instead of just fading away).
-            // Deliberately NOT reusing slideModifier here: no clip, and gone from composition
-            // (not just alpha 0) past the threshold so they're not still tappable once invisible.
-            if (progress < 0.5f) {
-                // Fixed to the FULLY EXPANDED cover's own position/size (offsetX/Y=0, full
-                // width/height, no bleed lerp) instead of tracking currentWidthPx/currentHeightPx
-                // -- those shrink toward the avatar slot together with the cover, which dragged
-                // this box (and the buttons BottomEnd-aligned inside it) along for the ride,
-                // visibly sliding and shrinking into the collapsing circle before the alpha fade
-                // even finished. The buttons only ever show on the still-mostly-expanded cover
-                // (progress < 0.5), so anchoring to its resting geometry and just fading out reads
-                // as "the buttons fade away" instead of "the buttons get sucked into a shrinking hole".
+            // Play/overflow live on the cover itself while it's still large, then crossfade to
+            // the smaller inline pair next to the avatar slot once it's mostly a circle (see the
+            // Row next to the avatar Spacer above).
+            if (progress < 0.6f) {
+                // Height tracks headerState.heightPx -- the ACTUAL current on-screen header
+                // height, not headerMaxHeightPx (constant) or currentWidthPx/currentHeightPx (the
+                // cover's own different shrink curve). Its bottom edge lands exactly where the
+                // title Column starts, so this can never draw over the title mid-scroll. See
+                // AlbumDetailScreen's identical block for the full rationale.
                 Box(
                     modifier = Modifier
                         .offset { IntOffset(0, rootOffset.y.roundToInt()) }
-                        .size(with(density) { screenWidthPx.toDp() }, with(density) { (headerMaxHeightPx + rootOffset.y).toDp() }),
+                        .size(with(density) { screenWidthPx.toDp() }, with(density) { (headerState.heightPx + rootOffset.y).toDp() }),
                     contentAlignment = Alignment.BottomEnd,
                 ) {
                 Row(
-                    modifier = Modifier.graphicsLayer { alpha = ((0.5f - progress) / 0.5f).coerceIn(0f, 1f) }.padding(12.dp),
+                    modifier = Modifier.graphicsLayer { alpha = (1f - progress / 0.6f).coerceIn(0f, 1f) }.padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (uiState.tracks.isNotEmpty()) {
