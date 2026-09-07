@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -660,14 +661,24 @@ private fun SyncedLyricsList(
     // Scrolls by the raw (gap-inclusive) index -- during an instrumental break there's no active
     // line to highlight, but the list should still be sitting at the last line that played, not
     // jump back to the top because the highlight temporarily went to -1.
+    //
+    // "-2 items back" (an earlier version of this) put the active line near the top, not centered
+    // -- it assumed every item was the same fixed height, which isn't true here (romaji/
+    // translation lines make some rows taller than others). Real centering: scroll to the item
+    // first, then measure where it actually landed and correct by the leftover pixel delta so its
+    // center lines up with the viewport's center regardless of row height.
     LaunchedEffect(rawIndex) {
-        if (rawIndex != lastCentered) {
-            lastCentered = rawIndex
-            scope.launch {
-                listState.animateScrollToItem(
-                    index = (rawIndex - 2).coerceAtLeast(0),
-                )
-            }
+        if (rawIndex == lastCentered) return@LaunchedEffect
+        lastCentered = rawIndex
+        val targetIndex = rawIndex.coerceAtLeast(0)
+        scope.launch {
+            listState.animateScrollToItem(index = targetIndex)
+            val info = listState.layoutInfo
+            val item = info.visibleItemsInfo.firstOrNull { it.index == targetIndex } ?: return@launch
+            val viewportCenter = (info.viewportStartOffset + info.viewportEndOffset) / 2
+            val itemCenter = item.offset + item.size / 2
+            val delta = (itemCenter - viewportCenter).toFloat()
+            if (kotlin.math.abs(delta) > 1f) listState.animateScrollBy(delta)
         }
     }
 
