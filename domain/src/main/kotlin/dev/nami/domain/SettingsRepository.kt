@@ -70,4 +70,10 @@ interface SettingsRepository {
      * default so the DSP toggles keep working as-is unless the user asks for the direct path. */
     val hiFiEnabled: StateFlow<Boolean>
     fun setHiFiEnabled(value: Boolean)
+
+    /** Now Playing's "night mode" pill -- a warmer, dimmer ambient backdrop for late-night
+     * listening (not a separate app-wide theme; scoped to that one screen's own blurred-artwork
+     * background). Persisted so it's remembered across sessions like every other toggle here. */
+    val nightModeEnabled: StateFlow<Boolean>
+    fun setNightModeEnabled(value: Boolean)
 }

@@ -49,9 +49,27 @@ private data class ChainNode(val name: String, val detail: String, val icon: and
 
 /** План.md §4.6 -- one screen, a vertical chain diagram of exactly what's happening to the
  * audio right now (файл -> декодер -> обработка -> ресемплинг -> вывод), plus a status card
- * explaining why bit-perfect is or isn't active. */
+ * explaining why bit-perfect is or isn't active. Thin wrapper around [AudioTractBody] -- the
+ * standalone full-screen route (status bar padding + real back navigation). */
 @Composable
 fun AudioTractScreen(onBack: () -> Unit, onOpenEqualizer: () -> Unit, viewModel: AudioTractViewModel = hiltViewModel()) {
+    Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
+        Column(modifier = Modifier.fillMaxSize().statusBarsPadding().displayCutoutPadding()) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
+                }
+            }
+            AudioTractBody(onOpenEqualizer = onOpenEqualizer, viewModel = viewModel)
+        }
+    }
+}
+
+/** The actual content, no outer screen chrome (no back button/status-bar padding) -- reused
+ * as-is both by [AudioTractScreen] (the full-screen route) and by NowPlayingScreen's overflow
+ * menu, which shows this same content inline in a bottom sheet instead of navigating away. */
+@Composable
+fun AudioTractBody(onOpenEqualizer: () -> Unit, viewModel: AudioTractViewModel = hiltViewModel()) {
     val uiState by viewModel.uiState.collectAsState()
     val track = uiState.track
     val context = LocalContext.current
@@ -105,13 +123,6 @@ fun AudioTractScreen(onBack: () -> Unit, onOpenEqualizer: () -> Unit, viewModel:
         else -> "Обычный вывод через системный микшер. Bit-perfect и EQ включаются в Настройках."
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
-        Column(modifier = Modifier.fillMaxSize().statusBarsPadding().displayCutoutPadding()) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
-                }
-            }
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -199,8 +210,6 @@ fun AudioTractScreen(onBack: () -> Unit, onOpenEqualizer: () -> Unit, viewModel:
                 }
                 Spacer(modifier = Modifier.height(24.dp))
             }
-        }
-    }
 }
 
 @Composable

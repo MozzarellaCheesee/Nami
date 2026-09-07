@@ -55,13 +55,24 @@ private fun freqLabel(freqHz: Float): String =
  * with a live slider. */
 @Composable
 fun EqualizerScreen(onBack: () -> Unit, viewModel: AudioTractViewModel = hiltViewModel()) {
+    Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
+        Column(modifier = Modifier.fillMaxSize().statusBarsPadding().displayCutoutPadding()) {
+            EqualizerBody(onBack = onBack, viewModel = viewModel)
+        }
+    }
+}
+
+/** Same content as [EqualizerScreen] but without the outer status-bar padding -- reused inline
+ * inside NowPlayingScreen's Аудиотракт bottom sheet, where [onBack] steps back to that sheet's
+ * Аудиотракт body instead of a real nav pop. */
+@Composable
+fun EqualizerBody(onBack: () -> Unit, viewModel: AudioTractViewModel = hiltViewModel()) {
     val uiState by viewModel.uiState.collectAsState()
     val eqEnabled = uiState.eqEnabled
     val gains = uiState.eqBandGains
     val activePreset = EqPreset.matching(gains)
 
-    Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
-        Column(modifier = Modifier.fillMaxSize().statusBarsPadding().displayCutoutPadding()) {
+    Column {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
                 IconButton(onClick = onBack) {
                     Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
@@ -140,7 +151,6 @@ fun EqualizerScreen(onBack: () -> Unit, viewModel: AudioTractViewModel = hiltVie
                 }
                 Spacer(modifier = Modifier.height(24.dp))
             }
-        }
     }
 }
 

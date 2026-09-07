@@ -71,6 +71,9 @@ class NowPlayingViewModelTest {
         override suspend fun removeTracks(ids: Set<TrackId>) {}
         override suspend fun setShuffleEnabled(enabled: Boolean) {}
         override suspend fun setRepeatMode(mode: dev.nami.domain.RepeatMode) {}
+        override val sleepTimerRemainingMs: StateFlow<Long?> = MutableStateFlow(null)
+        override suspend fun startSleepTimer(durationMs: Long) {}
+        override suspend fun cancelSleepTimer() {}
         override suspend fun stop() {}
     }
 

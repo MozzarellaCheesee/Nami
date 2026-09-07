@@ -19,6 +19,7 @@ import dev.nami.domain.QueueOrigin
 import dev.nami.domain.RepeatMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,6 +52,10 @@ class PlayerRepositoryImpl @Inject constructor(
 
     private val _repeatMode = MutableStateFlow(RepeatMode.OFF)
     override val repeatMode: StateFlow<RepeatMode> = _repeatMode
+
+    private val _sleepTimerRemainingMs = MutableStateFlow<Long?>(null)
+    override val sleepTimerRemainingMs: StateFlow<Long?> = _sleepTimerRemainingMs
+    private var sleepTimerJob: Job? = null
 
     private var controller: MediaController? = null
     // Known limitation: keyed by mediaId, not by queue position — if the same track
@@ -362,5 +367,25 @@ class PlayerRepositoryImpl @Inject constructor(
         RepeatMode.OFF -> Player.REPEAT_MODE_OFF
         RepeatMode.ALL -> Player.REPEAT_MODE_ALL
         RepeatMode.ONE -> Player.REPEAT_MODE_ONE
+    }
+
+    override suspend fun startSleepTimer(durationMs: Long) {
+        sleepTimerJob?.cancel()
+        sleepTimerJob = scope.launch {
+            var remaining = durationMs
+            while (remaining > 0) {
+                _sleepTimerRemainingMs.value = remaining
+                delay(1000)
+                remaining -= 1000
+            }
+            _sleepTimerRemainingMs.value = null
+            controller?.pause()
+        }
+    }
+
+    override suspend fun cancelSleepTimer() {
+        sleepTimerJob?.cancel()
+        sleepTimerJob = null
+        _sleepTimerRemainingMs.value = null
     }
 }

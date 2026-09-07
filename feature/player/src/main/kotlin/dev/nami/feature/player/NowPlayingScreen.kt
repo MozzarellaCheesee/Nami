@@ -43,14 +43,17 @@ import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -84,7 +87,7 @@ import kotlin.math.roundToInt
 
 private const val DISMISS_THRESHOLD_DP = 120
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun NowPlayingScreen(
     onCollapse: () -> Unit,
@@ -103,6 +106,9 @@ fun NowPlayingScreen(
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
     val scope = rememberCoroutineScope()
     var showOverflowMenu by remember { mutableStateOf(false) }
+    var showAudioTractSheet by remember { mutableStateOf(false) }
+    var showEqualizerInSheet by remember { mutableStateOf(false) }
+    var showSleepTimerSheet by remember { mutableStateOf(false) }
     // Local-only stub -- no "favorites" concept exists in the domain layer yet, so this doesn't
     // persist across tracks/sessions. Resets whenever the playing track changes.
     var isFavorite by remember { mutableStateOf(false) }
@@ -112,6 +118,9 @@ fun NowPlayingScreen(
     val shuffleEnabled by viewModel.shuffleEnabled.collectAsState()
     // Real ExoPlayer repeat mode -- OFF/ALL/ONE, cycled by cycleRepeatMode().
     val repeatMode by viewModel.repeatMode.collectAsState()
+    // Real, persisted -- see SettingsRepository.nightModeEnabled. Read up here (not just at the
+    // pill row further down) so the ambient backdrop below can react to it too.
+    val nightModeEnabled by viewModel.nightModeEnabled.collectAsState()
 
     // Shared by the swipe gesture and the chevron button so both dismiss paths always finish
     // the slide-down themselves before popping -- see the comment on the swipe branch below.
@@ -147,6 +156,14 @@ fun NowPlayingScreen(
             )
         }
         Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900.copy(alpha = if (backgroundArtworkPath != null) 0.72f else 1f)))
+        // Real night-mode effect, not decorative -- a warmer, dimmer overlay for late-night
+        // listening (screen-scoped, not an app-wide theme switch): a near-black scrim plus a
+        // faint amber tint, the same idea as a blue-light filter but for the player's own
+        // ambient backdrop specifically.
+        if (nightModeEnabled) {
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)))
+            Box(modifier = Modifier.fillMaxSize().background(Color(0xFFFF8A00).copy(alpha = 0.06f)))
+        }
 
     Column(
         modifier = Modifier
@@ -192,18 +209,37 @@ fun NowPlayingScreen(
         }
         // Slide-up sheet instead of a dropdown -- this is the pattern requested for every
         // "..." menu app-wide (track/album/playlist/artist, each with its own action set).
-        // This is the first one wired; the rest (library track rows, album/artist detail
-        // overflow, playlist rows) are a separate follow-up, not done in this pass.
         if (showOverflowMenu) {
-            // Stub actions: no queue-source/playlist-origin data is plumbed through yet (see
-            // Дизайн.md §4.3's "Из плейлиста ..." label, also skipped for the same reason), and
-            // no audio-chain/sleep-timer screens exist yet either.
             ContextActionSheet(
                 onDismiss = { showOverflowMenu = false },
                 actions = listOf(
-                    ContextAction("Аудиотракт", Icons.Outlined.QueueMusic) {},
-                    ContextAction("Таймер сна", Icons.Outlined.DarkMode) {},
+                    ContextAction("Аудиотракт", Icons.Outlined.QueueMusic) { showAudioTractSheet = true },
+                    ContextAction("Таймер сна", Icons.Outlined.DarkMode) { showSleepTimerSheet = true },
                 ),
+            )
+        }
+        // Аудиотракт (and, from inside it, Эквалайзер) appear right here as a sliding-up sheet
+        // instead of navigating to a separate screen -- same content (AudioTractBody/
+        // EqualizerBody) the standalone routes use, just embedded. showEqualizerInSheet swaps
+        // which body the ONE sheet shows instead of stacking a second ModalBottomSheet on top.
+        if (showAudioTractSheet) {
+            ModalBottomSheet(onDismissRequest = { showAudioTractSheet = false; showEqualizerInSheet = false }) {
+                Column(modifier = Modifier.padding(horizontal = 4.dp)) {
+                    if (showEqualizerInSheet) {
+                        EqualizerBody(onBack = { showEqualizerInSheet = false })
+                    } else {
+                        AudioTractBody(onOpenEqualizer = { showEqualizerInSheet = true })
+                    }
+                }
+            }
+        }
+        if (showSleepTimerSheet) {
+            val sleepTimerRemainingMs by viewModel.sleepTimerRemainingMs.collectAsState()
+            SleepTimerSheet(
+                remainingMs = sleepTimerRemainingMs,
+                onDismiss = { showSleepTimerSheet = false },
+                onStart = { minutes -> viewModel.startSleepTimer(minutes * 60_000L) },
+                onCancel = { viewModel.cancelSleepTimer() },
             )
         }
         androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))
@@ -400,10 +436,10 @@ fun NowPlayingScreen(
                     .padding(horizontal = 6.dp, vertical = 2.dp),
             )
         }
-        // Bottom pill row per Дизайн.md §4.3: Очередь (real), night mode + lyrics ("Текст") are
-        // stubs -- neither an AMOLED/night toggle nor a lyrics screen exists yet, so these are
-        // present per the mockup but currently no-ops. Очередь/Текст are rectangular with sharp
-        // corners (r4); night mode is its own small circle, set apart from the other two.
+        // Bottom pill row per Дизайн.md §4.3: Очередь, night mode, and lyrics ("Текст") --
+        // night mode is real (see NowPlayingViewModel.nightModeEnabled/toggleNightMode), not a
+        // stub. Очередь/Текст are rectangular with sharp corners (r4); night mode is its own
+        // small circle, set apart from the other two.
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 40.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -415,7 +451,13 @@ fun NowPlayingScreen(
                 onClick = onQueueClick,
                 modifier = Modifier.weight(1f),
             )
-            NowPlayingPill(icon = Icons.Outlined.DarkMode, onClick = {}, shape = CircleShape, modifier = Modifier.size(48.dp))
+            NowPlayingPill(
+                icon = Icons.Outlined.DarkMode,
+                onClick = { viewModel.toggleNightMode() },
+                shape = CircleShape,
+                active = nightModeEnabled,
+                modifier = Modifier.size(48.dp),
+            )
             NowPlayingPill(text = "Текст", icon = Icons.Outlined.Subject, onClick = onLyricsClick, modifier = Modifier.weight(1f))
         }
     }
@@ -431,21 +473,22 @@ private fun NowPlayingPill(
     // Rectangle, but noticeably rounded (not the near-sharp r4 this started at); night mode
     // passes CircleShape to stand apart as its own small round button.
     shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(14.dp),
+    active: Boolean = false,
 ) {
     Row(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .height(48.dp)
-            .background(NamiColors.Ink800, shape)
+            .background(if (active) NamiColors.Shu.copy(alpha = 0.18f) else NamiColors.Ink800, shape)
             .fullBlockClickable(shape = shape, onClick = onClick)
             .padding(horizontal = 8.dp),
     ) {
         icon?.let {
-            Icon(it, contentDescription = text, tint = NamiColors.Paper70, modifier = Modifier.size(18.dp))
+            Icon(it, contentDescription = text, tint = if (active) NamiColors.Shu else NamiColors.Paper70, modifier = Modifier.size(18.dp))
             if (text != null) androidx.compose.foundation.layout.Spacer(modifier = Modifier.padding(start = 4.dp))
         }
-        text?.let { Text(text = it, color = NamiColors.Paper70) }
+        text?.let { Text(text = it, color = if (active) NamiColors.Shu else NamiColors.Paper70) }
     }
 }
 

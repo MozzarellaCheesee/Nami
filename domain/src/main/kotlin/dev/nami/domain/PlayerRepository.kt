@@ -83,4 +83,10 @@ interface PlayerRepository {
      * if false is requested with nothing to restore (shuffle was never turned on this queue). */
     suspend fun setShuffleEnabled(enabled: Boolean)
     suspend fun setRepeatMode(mode: RepeatMode)
+    /** Milliseconds left on the sleep timer, ticking down once per second; null when no timer is
+     * running. Reaching 0 pauses playback and clears back to null. */
+    val sleepTimerRemainingMs: StateFlow<Long?>
+    /** Starts (replacing any running one) a timer that pauses playback after [durationMs]. */
+    suspend fun startSleepTimer(durationMs: Long)
+    suspend fun cancelSleepTimer()
 }

@@ -25,6 +25,7 @@ private const val KEY_DITHER_ENABLED = "dither_enabled"
 private const val KEY_CROSSFADE_ENABLED = "crossfade_enabled"
 private const val KEY_PLAYBACK_GAIN_DB = "playback_gain_db"
 private const val KEY_HIFI_ENABLED = "hifi_enabled"
+private const val KEY_NIGHT_MODE_ENABLED = "night_mode_enabled"
 
 @Singleton
 class AppSettingsRepository @Inject constructor(@ApplicationContext context: Context) : SettingsRepository {
@@ -149,5 +150,13 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
     override fun setHiFiEnabled(value: Boolean) {
         prefs.edit { putBoolean(KEY_HIFI_ENABLED, value) }
         _hiFiEnabled.value = value
+    }
+
+    private val _nightModeEnabled = MutableStateFlow(prefs.getBoolean(KEY_NIGHT_MODE_ENABLED, false))
+    override val nightModeEnabled: StateFlow<Boolean> = _nightModeEnabled
+
+    override fun setNightModeEnabled(value: Boolean) {
+        prefs.edit { putBoolean(KEY_NIGHT_MODE_ENABLED, value) }
+        _nightModeEnabled.value = value
     }
 }

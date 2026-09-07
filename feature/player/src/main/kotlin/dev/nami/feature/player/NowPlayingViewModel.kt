@@ -13,6 +13,7 @@ import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerQueue
 import dev.nami.domain.PlayerRepository
 import dev.nami.domain.RepeatMode
+import dev.nami.domain.SettingsRepository
 import dev.nami.player.waveform.WaveformCache
 import dev.nami.player.waveform.WaveformScanner
 import kotlinx.coroutines.Dispatchers
@@ -40,6 +41,9 @@ class NowPlayingViewModel @Inject constructor(
     // constructing this ViewModel with just the two repositories, same as before this field
     // existed -- WaveformCache itself no-ops (returns null / does nothing) when context is null.
     @ApplicationContext context: Context? = null,
+    // Also nullable/defaulted for the same reason -- only used for the night-mode pill, every
+    // existing test constructs this ViewModel with just the two repositories.
+    private val settingsRepository: SettingsRepository? = null,
 ) : ViewModel() {
 
     private val waveformDiskCache = WaveformCache(context)
@@ -49,6 +53,9 @@ class NowPlayingViewModel @Inject constructor(
     val autoAdvanceSignal: StateFlow<Int> = playerRepository.autoAdvanceSignal
     val shuffleEnabled: StateFlow<Boolean> = playerRepository.shuffleEnabled
     val repeatMode: StateFlow<RepeatMode> = playerRepository.repeatMode
+    val sleepTimerRemainingMs: StateFlow<Long?> = playerRepository.sleepTimerRemainingMs
+    val nightModeEnabled: StateFlow<Boolean> = settingsRepository?.nightModeEnabled
+        ?: MutableStateFlow(false)
 
     /** Full Track for the "Аудиотракт"-style file details (bitrate/size/etc.) shown near the
      * format badge -- QueueTrack only carries what the mini/full player needs for display, not
@@ -172,6 +179,19 @@ class NowPlayingViewModel @Inject constructor(
             RepeatMode.ONE -> RepeatMode.OFF
         }
         viewModelScope.launch { playerRepository.setRepeatMode(next) }
+    }
+
+    fun toggleNightMode() {
+        val repo = settingsRepository ?: return
+        repo.setNightModeEnabled(!repo.nightModeEnabled.value)
+    }
+
+    fun startSleepTimer(durationMs: Long) {
+        viewModelScope.launch { playerRepository.startSleepTimer(durationMs) }
+    }
+
+    fun cancelSleepTimer() {
+        viewModelScope.launch { playerRepository.cancelSleepTimer() }
     }
 
     fun addToQueue(track: Track, artistName: String?) {
