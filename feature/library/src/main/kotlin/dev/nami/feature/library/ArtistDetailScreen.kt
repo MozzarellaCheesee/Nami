@@ -332,7 +332,7 @@ fun ArtistDetailScreen(
                 ) {
                 Row(
                     // 44dp bottom clearance -- see AlbumDetailScreen's identical fix.
-                    modifier = Modifier.graphicsLayer { alpha = (1f - progress / 0.6f).coerceIn(0f, 1f) }.padding(bottom = 44.dp, end = 12.dp),
+                    modifier = Modifier.graphicsLayer { alpha = (1f - progress / 0.6f).coerceIn(0f, 1f) }.padding(bottom = 64.dp, end = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (uiState.tracks.isNotEmpty()) {
