@@ -1,5 +1,8 @@
 package dev.nami.core.designsystem
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,12 +14,24 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 
 data class ContextAction(val label: String, val icon: ImageVector, val onClick: () -> Unit)
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
 
 /**
  * Slide-up sheet for a "..." menu -- the app-wide replacement for a plain
@@ -26,6 +41,27 @@ data class ContextAction(val label: String, val icon: ImageVector, val onClick: 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContextActionSheet(onDismiss: () -> Unit, actions: List<ContextAction>) {
+    // ModalBottomSheet opens its own separate Android Window (a Dialog), which doesn't inherit
+    // MainActivity's immersive (hidden system bars) state -- the nav/status bar used to pop back
+    // in every time this sheet opened. Reads whether the ACTIVITY's own window currently has bars
+    // hidden and, if so, applies the same hide to this sheet's window too -- no direct dependency
+    // on SettingsRepository needed, this module just mirrors whatever the activity is already doing.
+    val view = LocalView.current
+    DisposableEffect(view) {
+        val dialogWindow = (view.parent as? DialogWindowProvider)?.window
+        val activityWindow = view.context.findActivity()?.window
+        if (dialogWindow != null && activityWindow != null) {
+            val activityBarsHidden = ViewCompat.getRootWindowInsets(activityWindow.decorView)
+                ?.isVisible(WindowInsetsCompat.Type.systemBars()) == false
+            if (activityBarsHidden) {
+                val controller = WindowInsetsControllerCompat(dialogWindow, dialogWindow.decorView)
+                controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                controller.hide(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+        onDispose {}
+    }
+
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
         Column(modifier = Modifier.padding(bottom = 20.dp)) {
             actions.forEach { action ->
