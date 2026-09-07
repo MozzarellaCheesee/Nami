@@ -95,6 +95,11 @@ class NowPlayingViewModel @Inject constructor(
         viewModelScope.launch { repo.add(trackId, positionMs, label, colorArgb) }
     }
 
+    fun removeMoment(id: Long) {
+        val repo = momentsRepository ?: return
+        viewModelScope.launch { repo.remove(id) }
+    }
+
     /** Full Track for the "Аудиотракт"-style file details (bitrate/size/etc.) shown near the
      * format badge -- QueueTrack only carries what the mini/full player needs for display, not
      * the byte-level stuff, so this looks the real Track back up by id instead of growing

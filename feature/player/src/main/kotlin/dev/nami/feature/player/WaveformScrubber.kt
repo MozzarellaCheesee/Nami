@@ -28,6 +28,10 @@ import kotlin.random.Random
 private const val BAR_COUNT = 120
 private const val BAR_WIDTH_DP = 2
 private const val BAR_GAP_DP = 1
+private const val MOMENT_HIT_RADIUS_DP = 12
+
+/** One "Метки моментов" marker on the scrubber -- see WaveformScrubber's `moments` param. */
+data class MomentMarker(val id: Long, val fraction: Float, val colorArgb: Int)
 
 /** Placeholder shape shown before the real scan (see WaveformScanner/NowPlayingViewModel.waveform)
  * finishes, or if it fails -- deterministic per-track so it doesn't visibly jitter between
@@ -54,12 +58,15 @@ fun WaveformScrubber(
     // -- null while it's still decoding or if the scan failed, in which case the placeholder
     // shape below is what's actually drawn.
     realHeights: List<Float>? = null,
-    // План.md §22.1 "Метки моментов" -- (positionFraction 0..1, ARGB color) per marker, drawn as
-    // a small triangle above the bar it lands on. No separate tap-to-jump handling needed: a
-    // marker's fraction IS a point on the scrubber, so the existing tap-to-seek already lands
-    // there when tapped.
-    moments: List<Pair<Float, Int>> = emptyList(),
+    // План.md §22.1 "Метки моментов" -- drawn as a thin full-height tick (not a dot sitting on
+    // the bar it lands on, which reads badly against an uneven waveform -- a dot's vertical
+    // position has to pick some bar height to sit at, and any choice looks arbitrary/misaligned
+    // next to neighboring bars of a different height; a full-height line has no such problem).
+    // Tapping near one (see MOMENT_HIT_RADIUS_DP) calls onMomentClick instead of seeking, so
+    // there's always a way to manage (rename/delete) a marker instead of just jumping to it.
+    moments: List<MomentMarker> = emptyList(),
     onLongPress: (Float) -> Unit = {},
+    onMomentClick: (Long) -> Unit = {},
 ) {
     val placeholder = remember(seedKey) { barHeights(seedKey) }
     val isReal = realHeights != null && realHeights.size == placeholder.size
@@ -93,11 +100,16 @@ fun WaveformScrubber(
     Canvas(
         modifier = modifier
             .height(48.dp)
-            .pointerInput(seedKey) {
+            .pointerInput(seedKey, moments) {
+                val hitRadiusPx = MOMENT_HIT_RADIUS_DP.dp.toPx()
                 detectTapGestures(
                     onTap = { offset ->
-                        val fraction = (offset.x / size.width).coerceIn(0f, 1f)
-                        onSeek(fraction)
+                        val nearest = moments.minByOrNull { kotlin.math.abs(it.fraction * size.width - offset.x) }
+                        if (nearest != null && kotlin.math.abs(nearest.fraction * size.width - offset.x) <= hitRadiusPx) {
+                            onMomentClick(nearest.id)
+                        } else {
+                            onSeek((offset.x / size.width).coerceIn(0f, 1f))
+                        }
                     },
                     onLongPress = { offset ->
                         val fraction = (offset.x / size.width).coerceIn(0f, 1f)
@@ -155,13 +167,24 @@ fun WaveformScrubber(
             strokeWidth = 2.dp.toPx(),
         )
 
-        val markerRadiusPx = 4.dp.toPx()
-        moments.forEach { (fraction, colorArgb) ->
-            val x = fraction.coerceIn(0f, 1f) * size.width
-            drawCircle(
-                color = androidx.compose.ui.graphics.Color(colorArgb),
-                radius = markerRadiusPx,
-                center = Offset(x, markerRadiusPx),
+        // Full-height, low-alpha tick (visible over any bar height, no arbitrary "which height
+        // does the dot sit at" choice) plus a small solid flag at the very top so it also reads
+        // as a distinct, tappable thing rather than just a faint stripe.
+        val flagWidthPx = 3.dp.toPx()
+        val flagHeightPx = 8.dp.toPx()
+        moments.forEach { marker ->
+            val x = marker.fraction.coerceIn(0f, 1f) * size.width
+            val color = androidx.compose.ui.graphics.Color(marker.colorArgb)
+            drawLine(
+                color = color.copy(alpha = 0.35f),
+                start = Offset(x, 0f),
+                end = Offset(x, size.height),
+                strokeWidth = 1.5.dp.toPx(),
+            )
+            drawRect(
+                color = color,
+                topLeft = Offset(x - flagWidthPx / 2f, 0f),
+                size = androidx.compose.ui.geometry.Size(flagWidthPx, flagHeightPx),
             )
         }
     }

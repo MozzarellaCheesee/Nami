@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.MoreVert
@@ -335,6 +336,7 @@ fun NowPlayingScreen(
         val waveform by viewModel.waveform.collectAsState()
         val moments by viewModel.currentTrackMoments.collectAsState()
         var pendingMomentFraction by remember { mutableStateOf<Float?>(null) }
+        var selectedMoment by remember { mutableStateOf<dev.nami.domain.Moment?>(null) }
         WaveformScrubber(
             seedKey = queue.nowPlaying?.id?.value ?: "",
             progress = actualProgress,
@@ -343,8 +345,13 @@ fun NowPlayingScreen(
             onPreviewEnd = { previewProgress = null },
             modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
             realHeights = waveform,
-            moments = if (durationMs > 0) moments.map { (it.positionMs.toFloat() / durationMs) to it.colorArgb } else emptyList(),
+            moments = if (durationMs > 0) {
+                moments.map { MomentMarker(it.id, it.positionMs.toFloat() / durationMs, it.colorArgb) }
+            } else {
+                emptyList()
+            },
             onLongPress = { fraction -> pendingMomentFraction = fraction },
+            onMomentClick = { id -> selectedMoment = moments.firstOrNull { it.id == id } },
         )
         pendingMomentFraction?.let { fraction ->
             AddMomentDialog(
@@ -353,6 +360,23 @@ fun NowPlayingScreen(
                     pendingMomentFraction = null
                 },
                 onDismiss = { pendingMomentFraction = null },
+            )
+        }
+        // Tapping a marker (WaveformScrubber's own hit-test) is the only way to manage one -- see
+        // "как убирать метки и управлять ими": jump there, or delete it.
+        selectedMoment?.let { moment ->
+            ContextActionSheet(
+                onDismiss = { selectedMoment = null },
+                actions = listOf(
+                    ContextAction("Перейти: ${moment.label}", Icons.Rounded.PlayArrow) {
+                        viewModel.seek(moment.positionMs)
+                        selectedMoment = null
+                    },
+                    ContextAction("Удалить метку", Icons.Outlined.Delete) {
+                        viewModel.removeMoment(moment.id)
+                        selectedMoment = null
+                    },
+                ),
             )
         }
         Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
