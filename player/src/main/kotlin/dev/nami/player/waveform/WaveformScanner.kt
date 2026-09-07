@@ -91,14 +91,39 @@ object WaveformScanner {
             val maxRms = rms.max()
             if (maxRms <= 0.0) return null
             // Normalize to the track's own loudest bucket (not absolute 0dBFS) so a quiet track
-            // still fills the scrubber. No extra gamma curve on top -- RMS values already span a
-            // real range track-to-track (unlike peak), a further compression here just flattens
-            // that range back out the same way the old sqrt() did.
-            rms.map { (it / maxRms).toFloat().coerceIn(0.05f, 1f) }
+            // still fills the scrubber. No gamma curve on top -- RMS values already span a real
+            // range track-to-track (unlike peak), a compression curve here just flattens that
+            // range back out the same way the old sqrt() did.
+            val normalized = rms.map { (it / maxRms).toFloat().coerceIn(0.05f, 1f) }
+            smooth(normalized)
         } catch (e: Exception) {
             null
         } finally {
             extractor.release()
+        }
+    }
+
+    /** 5-tap weighted moving average -- takes the edge off bucket-to-bucket jaggedness (adjacent
+     * buckets can land on either side of a hard transient/silence boundary and swing wildly)
+     * without eroding the track's actual loud/quiet contour, which a heavier smoothing window or
+     * another gamma curve would. Edge buckets use a shorter, still-centered window instead of
+     * padding with zeros, so the very start/end of the track don't fade toward silence for a
+     * reason that has nothing to do with the audio itself. */
+    private fun smooth(values: List<Float>): List<Float> {
+        val weights = floatArrayOf(1f, 2f, 4f, 2f, 1f)
+        val radius = weights.size / 2
+        return values.indices.map { i ->
+            var weightedSum = 0f
+            var weightTotal = 0f
+            for (offset in -radius..radius) {
+                val j = i + offset
+                if (j in values.indices) {
+                    val weight = weights[offset + radius]
+                    weightedSum += values[j] * weight
+                    weightTotal += weight
+                }
+            }
+            weightedSum / weightTotal
         }
     }
 }
