@@ -220,6 +220,13 @@ class PlayerRepositoryImpl @Inject constructor(
 
     override suspend fun addToQueue(track: PlayableTrack) {
         val player = controller ?: return
+        // No duplicates in the visible queue (current track + everything upcoming) -- repeatedly
+        // swiping/tapping "add to queue" on the same row used to stack it right after itself
+        // every time. Doesn't touch already-played history before the current index; queueing the
+        // same track again once it's actually played through is fine.
+        val startIndex = player.currentMediaItemIndex.takeIf { it != androidx.media3.common.C.INDEX_UNSET } ?: 0
+        val alreadyQueued = (startIndex until player.mediaItemCount).any { i -> player.getMediaItemAt(i).mediaId == track.id.value }
+        if (alreadyQueued) return
         originByMediaId[track.id.value] = QueueOrigin.MANUAL
         trackInfoByMediaId[track.id.value] = track.toMediaItemInfo()
         val wasEmpty = player.mediaItemCount == 0
