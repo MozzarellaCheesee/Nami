@@ -22,6 +22,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 
@@ -43,14 +44,20 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 fun ContextActionSheet(onDismiss: () -> Unit, actions: List<ContextAction>) {
     // ModalBottomSheet opens its own separate Android Window (a Dialog), which doesn't inherit
     // MainActivity's immersive (hidden system bars) state -- the nav/status bar used to pop back
-    // in every time this sheet opened. Reads whether the ACTIVITY's own window currently has bars
-    // hidden and, if so, applies the same hide to this sheet's window too -- no direct dependency
-    // on SettingsRepository needed, this module just mirrors whatever the activity is already doing.
+    // in every time this sheet opened, AND (the part that actually caused the visible "jump")
+    // that dialog window defaults to decorFitsSystemWindows(true): the instant the nav bar shows,
+    // the system resizes/insets the dialog's own content to sit above it, so the sheet -- and by
+    // extension everything anchored relative to it, like NowPlayingScreen's transport row sitting
+    // right above the sheet's own top edge -- visibly shifts upward for that one frame.
+    // setDecorFitsSystemWindows(false) here (matching what enableEdgeToEdge already did on the
+    // activity window) stops that reflow from ever happening, regardless of bar visibility; the
+    // bar-hiding below is then just a cosmetic match, not load-bearing for the jump anymore.
     val view = LocalView.current
     DisposableEffect(view) {
         val dialogWindow = (view.parent as? DialogWindowProvider)?.window
         val activityWindow = view.context.findActivity()?.window
         if (dialogWindow != null && activityWindow != null) {
+            WindowCompat.setDecorFitsSystemWindows(dialogWindow, false)
             val activityBarsHidden = ViewCompat.getRootWindowInsets(activityWindow.decorView)
                 ?.isVisible(WindowInsetsCompat.Type.systemBars()) == false
             if (activityBarsHidden) {
