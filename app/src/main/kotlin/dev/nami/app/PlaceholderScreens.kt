@@ -343,7 +343,7 @@ fun SettingsLyricsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hilt
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                 Text(
                     text = "Заметно лучше переводит с японского, чем встроенный офлайн-переводчик. " +
-                        "Бесплатный лимит -- 500 000 символов в месяц. Пусто -- перевод остаётся " +
+                        "Бесплатный лимит: 500 000 символов в месяц. Пусто: перевод остаётся " +
                         "офлайн (хуже качеством, но без ключа и сети).",
                     color = NamiColors.Paper40,
                     style = MaterialTheme.typography.bodySmall,
