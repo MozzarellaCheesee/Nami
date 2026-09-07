@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
@@ -172,7 +173,7 @@ fun LyricsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .statusBarsPadding()
+            .statusBarsPadding().displayCutoutPadding()
             .draggable(
                 orientation = Orientation.Vertical,
                 state = rememberDraggableState { delta -> dragOffsetY = (dragOffsetY + delta).coerceAtLeast(0f) },
@@ -287,7 +288,7 @@ fun LyricsScreen(
         exit = androidx.compose.animation.shrinkVertically(shrinkTowards = Alignment.Top) + androidx.compose.animation.fadeOut(),
         modifier = Modifier
             .align(Alignment.TopEnd)
-            .statusBarsPadding()
+            .statusBarsPadding().displayCutoutPadding()
             .padding(top = 56.dp, end = 4.dp),
     ) {
         Column(

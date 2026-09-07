@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -227,7 +228,7 @@ private fun ExpandedSectionScreen(
     onAddToPlaylist: (TrackId) -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
-        Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+        Column(modifier = Modifier.fillMaxSize().statusBarsPadding().displayCutoutPadding()) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
                 IconButton(onClick = onBack) {
                     Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)

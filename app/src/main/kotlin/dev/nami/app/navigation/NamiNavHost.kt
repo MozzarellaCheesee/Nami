@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -129,7 +130,7 @@ fun NamiNavHost(
     var libraryTabResetSignal by remember { mutableIntStateOf(0) }
 
     Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
-    Column(modifier = Modifier.statusBarsPadding()) {
+    Column(modifier = Modifier.statusBarsPadding().displayCutoutPadding()) {
         NavHost(
             navController = navController,
             startDestination = ROUTE_LIBRARY,
