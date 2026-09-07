@@ -2,6 +2,7 @@ package dev.nami.feature.library
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
@@ -11,12 +12,17 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -34,19 +40,25 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import dev.nami.core.designsystem.ContextAction
 import dev.nami.core.designsystem.ContextActionSheet
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.model.Track
+import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -68,14 +80,53 @@ fun TrackListItem(
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(64.dp)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(horizontal = 20.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    // Swipe-to-queue: only when the caller actually gave us an add-to-queue action -- every call
+    // site already passes null for it when nothing is playing (there's no "current track" to
+    // queue after), so that's the same condition this reuses to decide whether the gesture exists
+    // at all, not a separate flag to keep in sync.
+    val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
+    var dragOffsetX by remember { mutableFloatStateOf(0f) }
+    val revealThresholdPx = with(density) { 72.dp.toPx() }
+    val maxDragPx = with(density) { 96.dp.toPx() }
+
+    Box(modifier = modifier.fillMaxWidth().height(64.dp)) {
+        if (onAddToQueue != null) {
+            Row(
+                modifier = Modifier.fillMaxHeight().padding(start = 20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Outlined.PlaylistAdd,
+                    contentDescription = "В очередь следующим",
+                    tint = if (dragOffsetX > revealThresholdPx) NamiColors.Shu else NamiColors.Paper40,
+                )
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(64.dp)
+                .offset { IntOffset(dragOffsetX.roundToInt(), 0) }
+                .background(NamiColors.Ink900)
+                .let { rowModifier ->
+                    if (onAddToQueue == null) {
+                        rowModifier
+                    } else {
+                        rowModifier.draggable(
+                            orientation = Orientation.Horizontal,
+                            state = rememberDraggableState { delta -> dragOffsetX = (dragOffsetX + delta).coerceIn(0f, maxDragPx) },
+                            onDragStopped = {
+                                if (dragOffsetX > revealThresholdPx) onAddToQueue()
+                                scope.launch { animate(dragOffsetX, 0f) { value, _ -> dragOffsetX = value } }
+                            },
+                        )
+                    }
+                }
+                .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+                .padding(horizontal = 20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
         AnimatedVisibility(
             visible = isCurrentTrack,
             enter = expandHorizontally(animationSpec = tween(200)) + fadeIn(tween(200)),
@@ -156,6 +207,7 @@ fun TrackListItem(
                     ),
                 )
             }
+        }
         }
     }
 }
