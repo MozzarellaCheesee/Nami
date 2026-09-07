@@ -2,6 +2,7 @@ package dev.nami.feature.playlists
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,6 +17,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material3.Icon
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -57,9 +63,8 @@ fun AddToPlaylistDialog(
                     LazyColumn {
                         items(count = playlists.itemCount, key = playlists.itemKey { it.id.value }) { index ->
                             playlists[index]?.let { playlist ->
-                                Text(
-                                    text = playlist.name,
-                                    color = NamiColors.Paper100,
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable {
@@ -67,7 +72,17 @@ fun AddToPlaylistDialog(
                                             onDismiss()
                                         }
                                         .padding(vertical = 12.dp),
-                                )
+                                ) {
+                                    if (playlist.isLiked) {
+                                        Icon(
+                                            Icons.Filled.Favorite,
+                                            contentDescription = null,
+                                            tint = NamiColors.Shu,
+                                            modifier = Modifier.padding(end = 8.dp).size(18.dp),
+                                        )
+                                    }
+                                    Text(text = playlist.name, color = NamiColors.Paper100)
+                                }
                             }
                         }
                     }

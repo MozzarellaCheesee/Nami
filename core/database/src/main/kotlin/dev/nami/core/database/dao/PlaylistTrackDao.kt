@@ -20,6 +20,21 @@ interface PlaylistTrackDao {
     @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM playlist_tracks WHERE playlistId = :playlistId")
     suspend fun nextPosition(playlistId: String): Int
 
+    /** Reactive "is trackId in the (one) Liked playlist" -- joins through playlists.isLiked
+     * rather than taking a playlistId directly, so it stays correct even if the Liked playlist
+     * doesn't exist yet (nothing liked yet: the join finds nothing, false) without the caller
+     * needing to know/cache its id first. */
+    @Query(
+        """
+        SELECT EXISTS(
+            SELECT 1 FROM playlist_tracks
+            JOIN playlists ON playlist_tracks.playlistId = playlists.id
+            WHERE playlists.isLiked = 1 AND playlist_tracks.trackId = :trackId
+        )
+        """,
+    )
+    fun isTrackInLikedPlaylistFlow(trackId: String): Flow<Boolean>
+
     @Query(
         """
         SELECT tracks.* FROM playlist_tracks

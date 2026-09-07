@@ -150,3 +150,11 @@ val MIGRATION_11_12 = object : Migration(11, 12) {
         db.execSQL("ALTER TABLE tracks ADD COLUMN replayGainDb REAL")
     }
 }
+
+val MIGRATION_12_13 = object : Migration(12, 13) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // Defaults to 0 (false) for every existing row -- the Liked playlist itself is created
+        // lazily, the first time anything is liked, not backfilled here.
+        db.execSQL("ALTER TABLE playlists ADD COLUMN isLiked INTEGER NOT NULL DEFAULT 0")
+    }
+}

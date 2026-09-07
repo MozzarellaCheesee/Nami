@@ -58,6 +58,7 @@ import coil3.compose.AsyncImage
 import dev.nami.core.designsystem.ContextAction
 import dev.nami.core.designsystem.ContextActionSheet
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.RenameDialog
 import dev.nami.core.model.AlbumId
 import dev.nami.core.model.ArtistId
 import dev.nami.core.model.Track

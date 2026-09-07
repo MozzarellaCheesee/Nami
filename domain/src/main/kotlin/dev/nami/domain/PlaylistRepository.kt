@@ -21,6 +21,17 @@ interface PlaylistRepository {
     suspend fun removeTrack(playlistId: PlaylistId, trackId: TrackId)
     suspend fun exportM3u8(id: PlaylistId, destinationUri: String)
     suspend fun importM3u8(sourceUri: String, playlistName: String): ImportM3u8Result
+
+    /** Live "is this track in the Любимые треки playlist right now" -- for a heart icon anywhere
+     * a track is shown. False (never a loading state) if the Liked playlist doesn't exist yet,
+     * i.e. nothing has ever been liked. */
+    fun isTrackLiked(trackId: TrackId): Flow<Boolean>
+
+    /** Adds/removes [trackId] from the Любимые треки playlist, creating it on first use (lazily,
+     * not at app install) -- returns the new liked state. Duplicate-safe: the underlying
+     * playlist_tracks row is keyed by (playlistId, trackId), so liking an already-liked track is
+     * a no-op on the add path, same guarantee every other "add to playlist" flow already has. */
+    suspend fun toggleLike(trackId: TrackId): Boolean
 }
 
 data class ImportM3u8Result(val playlistId: PlaylistId, val matchedCount: Int, val skippedCount: Int)

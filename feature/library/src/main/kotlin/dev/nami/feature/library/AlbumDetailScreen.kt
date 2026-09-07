@@ -29,6 +29,7 @@ import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Shuffle
 import androidx.compose.material.icons.outlined.Star
 import dev.nami.core.designsystem.NamiAlertDialog
+import dev.nami.core.designsystem.RenameDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme

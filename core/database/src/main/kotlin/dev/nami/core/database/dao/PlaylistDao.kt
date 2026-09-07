@@ -34,15 +34,20 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlists WHERE id = :id")
     fun findByIdFlow(id: String): Flow<PlaylistEntity?>
 
+    /** The one Liked-songs playlist, if it's ever been created (see PlaylistRepositoryImpl.
+     * ensureLikedPlaylist) -- null before the user's first like. */
+    @Query("SELECT * FROM playlists WHERE isLiked = 1 AND deletedAt IS NULL LIMIT 1")
+    suspend fun findLikedPlaylist(): PlaylistEntity?
+
     @Query(
         """
         SELECT playlists.id AS id, playlists.name AS name, playlists.coverPath AS coverPath,
-               COUNT(playlist_tracks.trackId) AS trackCount
+               playlists.isLiked AS isLiked, COUNT(playlist_tracks.trackId) AS trackCount
         FROM playlists
         LEFT JOIN playlist_tracks ON playlists.id = playlist_tracks.playlistId
         WHERE playlists.deletedAt IS NULL
         GROUP BY playlists.id
-        ORDER BY playlists.createdAt DESC
+        ORDER BY playlists.isLiked DESC, playlists.createdAt DESC
         """,
     )
     fun pagingSource(): PagingSource<Int, PlaylistListRow>
@@ -50,7 +55,8 @@ interface PlaylistDao {
     @Query(
         """
         SELECT playlists.id AS id, playlists.name AS name, playlists.coverPath AS coverPath,
-               playlists.deletedAt AS deletedAt, COUNT(playlist_tracks.trackId) AS trackCount
+               playlists.deletedAt AS deletedAt, playlists.isLiked AS isLiked,
+               COUNT(playlist_tracks.trackId) AS trackCount
         FROM playlists
         LEFT JOIN playlist_tracks ON playlists.id = playlist_tracks.playlistId
         WHERE playlists.deletedAt IS NOT NULL
@@ -69,5 +75,6 @@ interface PlaylistDao {
         val coverPath: String?,
         val trackCount: Int,
         val deletedAt: Long? = null,
+        val isLiked: Boolean = false,
     )
 }

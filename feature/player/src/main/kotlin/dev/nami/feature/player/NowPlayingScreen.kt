@@ -111,8 +111,9 @@ fun NowPlayingScreen(
     var showSleepTimerSheet by remember { mutableStateOf(false) }
     // Local-only stub -- no "favorites" concept exists in the domain layer yet, so this doesn't
     // persist across tracks/sessions. Resets whenever the playing track changes.
-    var isFavorite by remember { mutableStateOf(false) }
-    androidx.compose.runtime.LaunchedEffect(queue.nowPlaying?.id) { isFavorite = false }
+    // Real, not a stub: backed by the Любимые треки system playlist (PlaylistRepository.
+    // isTrackLiked/toggleLike) -- see LikedPlaylistCover for the playlist's own heart cover.
+    val isFavorite by viewModel.isCurrentTrackLiked.collectAsState()
     // Real, not a stub: viewModel.shuffleEnabled reflects the live queue's actual order (see
     // PlayerRepository.setShuffleEnabled) -- toggling this really reorders/restores the queue.
     val shuffleEnabled by viewModel.shuffleEnabled.collectAsState()
@@ -306,10 +307,9 @@ fun NowPlayingScreen(
                 maxLines = 1,
                 modifier = Modifier.weight(1f).basicMarquee(iterations = Int.MAX_VALUE),
             )
-            // Stub, see isFavorite's declaration above -- not persisted anywhere yet.
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = Modifier.size(32.dp).fullBlockClickable(shape = CircleShape) { isFavorite = !isFavorite },
+                modifier = Modifier.size(32.dp).fullBlockClickable(shape = CircleShape) { viewModel.toggleLikeCurrentTrack() },
             ) {
                 Icon(
                     imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,

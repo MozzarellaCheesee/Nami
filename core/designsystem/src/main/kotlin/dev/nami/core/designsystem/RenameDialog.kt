@@ -1,4 +1,4 @@
-package dev.nami.feature.library
+package dev.nami.core.designsystem
 
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.OutlinedTextField
@@ -10,8 +10,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import dev.nami.core.designsystem.NamiAlertDialog
 
+/** Shared rename prompt -- used for tracks/albums/artists/playlists alike so every "rename this"
+ * flow in the app looks and behaves identically instead of each feature module rolling its own. */
 @Composable
 fun RenameDialog(
     currentName: String,

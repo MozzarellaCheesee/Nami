@@ -12,6 +12,7 @@ import dev.nami.domain.PlayableTrack
 import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerQueue
 import dev.nami.domain.PlayerRepository
+import dev.nami.domain.PlaylistRepository
 import dev.nami.domain.RepeatMode
 import dev.nami.domain.SettingsRepository
 import dev.nami.player.waveform.WaveformCache
@@ -44,6 +45,8 @@ class NowPlayingViewModel @Inject constructor(
     // Also nullable/defaulted for the same reason -- only used for the night-mode pill, every
     // existing test constructs this ViewModel with just the two repositories.
     private val settingsRepository: SettingsRepository? = null,
+    // Same reasoning -- only used for the Now Playing heart/like button.
+    private val playlistRepository: PlaylistRepository? = null,
 ) : ViewModel() {
 
     private val waveformDiskCache = WaveformCache(context)
@@ -56,6 +59,21 @@ class NowPlayingViewModel @Inject constructor(
     val sleepTimerRemainingMs: StateFlow<Long?> = playerRepository.sleepTimerRemainingMs
     val nightModeEnabled: StateFlow<Boolean> = settingsRepository?.nightModeEnabled
         ?: MutableStateFlow(false)
+
+    /** Real like state for whatever's currently playing -- see PlaylistRepository.isTrackLiked
+     * (backed by the "Любимые треки" system playlist, not a separate favorites concept). */
+    val isCurrentTrackLiked: StateFlow<Boolean> = playerRepository.state
+        .filterIsInstance<PlaybackState.Playing>()
+        .map { it.trackId }
+        .distinctUntilChanged()
+        .flatMapLatest { trackId -> playlistRepository?.isTrackLiked(trackId) ?: kotlinx.coroutines.flow.flowOf(false) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    fun toggleLikeCurrentTrack() {
+        val trackId = (playbackState.value as? PlaybackState.Playing)?.trackId ?: return
+        val repo = playlistRepository ?: return
+        viewModelScope.launch { repo.toggleLike(trackId) }
+    }
 
     /** Full Track for the "Аудиотракт"-style file details (bitrate/size/etc.) shown near the
      * format badge -- QueueTrack only carries what the mini/full player needs for display, not

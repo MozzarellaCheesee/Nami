@@ -21,9 +21,12 @@ import dev.nami.data.mapper.toDomain
 import dev.nami.domain.ImportM3u8Result
 import dev.nami.domain.PlaylistRepository
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.util.UUID
 import javax.inject.Inject
+
+private const val LIKED_PLAYLIST_NAME = "Любимые треки"
 
 class PlaylistRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -50,15 +53,23 @@ class PlaylistRepositoryImpl @Inject constructor(
         return PlaylistId(id)
     }
 
+    // Rename/delete/cover all guarded server-side too, not just hidden in the UI -- the Liked
+    // playlist's name and heart cover are fixed and it can't be trashed, matching Spotify's own
+    // Liked Songs. Silent no-ops (fail closed) rather than throwing: the UI is expected to never
+    // offer these actions for it in the first place, so reaching here at all means something
+    // upstream didn't check -- not worth crashing over.
     override suspend fun renamePlaylist(id: PlaylistId, name: String) {
+        if (playlistDao.findById(id.value)?.isLiked == true) return
         playlistDao.rename(id.value, name)
     }
 
     override suspend fun deletePlaylist(id: PlaylistId) {
+        if (playlistDao.findById(id.value)?.isLiked == true) return
         playlistDao.softDelete(id.value, deletedAt = System.currentTimeMillis())
     }
 
     override suspend fun setCoverImage(id: PlaylistId, imageUri: String) {
+        if (playlistDao.findById(id.value)?.isLiked == true) return
         val bytes = context.contentResolver.openInputStream(imageUri.toUri())?.use { it.readBytes() } ?: return
         artworkStore.save(id.value, bytes)?.let { path -> playlistDao.setCoverPath(id.value, path) }
     }
@@ -85,6 +96,38 @@ class PlaylistRepositoryImpl @Inject constructor(
         context.contentResolver.openOutputStream(destinationUri.toUri())?.use { output ->
             output.write(content.toByteArray())
         }
+    }
+
+    override fun isTrackLiked(trackId: TrackId): Flow<Boolean> =
+        playlistTrackDao.isTrackInLikedPlaylistFlow(trackId.value)
+
+    override suspend fun toggleLike(trackId: TrackId): Boolean {
+        val likedPlaylistId = ensureLikedPlaylist()
+        val alreadyLiked = playlistTrackDao.isTrackInLikedPlaylistFlow(trackId.value).first()
+        if (alreadyLiked) {
+            removeTrack(likedPlaylistId, trackId)
+        } else {
+            addTrack(likedPlaylistId, trackId)
+        }
+        return !alreadyLiked
+    }
+
+    /** Finds the one Liked playlist, creating it (with its own fixed name -- see [LIKED_PLAYLIST_NAME])
+     * the first time anything is ever liked. Idempotent: a second call while one already exists
+     * just returns its id. */
+    private suspend fun ensureLikedPlaylist(): PlaylistId {
+        playlistDao.findLikedPlaylist()?.let { return PlaylistId(it.id) }
+        val id = UUID.randomUUID().toString()
+        playlistDao.insert(
+            PlaylistEntity(
+                id = id,
+                name = LIKED_PLAYLIST_NAME,
+                coverPath = null,
+                createdAt = System.currentTimeMillis(),
+                isLiked = true,
+            ),
+        )
+        return PlaylistId(id)
     }
 
     override suspend fun importM3u8(sourceUri: String, playlistName: String): ImportM3u8Result {

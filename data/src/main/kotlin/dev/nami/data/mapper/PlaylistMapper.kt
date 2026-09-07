@@ -12,12 +12,14 @@ fun PlaylistDao.PlaylistListRow.toDomain(): PlaylistSummary = PlaylistSummary(
     name = name,
     coverPath = coverPath,
     trackCount = trackCount,
+    isLiked = isLiked,
 )
 
 fun PlaylistEntity.toDomain(): Playlist = Playlist(
     id = PlaylistId(id),
     name = name,
     coverPath = coverPath,
+    isLiked = isLiked,
 )
 
 fun PlaylistDao.PlaylistListRow.toTrashedDomain(): TrashedPlaylist = TrashedPlaylist(

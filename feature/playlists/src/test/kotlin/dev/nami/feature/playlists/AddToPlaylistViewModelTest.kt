@@ -49,6 +49,8 @@ class AddToPlaylistViewModelTest {
         override suspend fun exportM3u8(id: PlaylistId, destinationUri: String) {}
         override suspend fun importM3u8(sourceUri: String, playlistName: String) =
             ImportM3u8Result(PlaylistId("x"), 0, 0)
+        override fun isTrackLiked(trackId: TrackId) = kotlinx.coroutines.flow.flowOf(false)
+        override suspend fun toggleLike(trackId: TrackId) = true
     }
 
     @Test
