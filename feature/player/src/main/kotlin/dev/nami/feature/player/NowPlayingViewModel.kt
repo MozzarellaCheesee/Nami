@@ -1,8 +1,10 @@
 package dev.nami.feature.player
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.nami.core.model.Track
 import dev.nami.core.model.TrackId
 import dev.nami.domain.LibraryRepository
@@ -10,6 +12,7 @@ import dev.nami.domain.PlayableTrack
 import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerQueue
 import dev.nami.domain.PlayerRepository
+import dev.nami.player.waveform.WaveformCache
 import dev.nami.player.waveform.WaveformScanner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,7 +35,13 @@ import javax.inject.Inject
 class NowPlayingViewModel @Inject constructor(
     private val playerRepository: PlayerRepository,
     private val libraryRepository: LibraryRepository,
+    // Nullable with a default so plain-JVM unit tests (no Robolectric in this project) can keep
+    // constructing this ViewModel with just the two repositories, same as before this field
+    // existed -- WaveformCache itself no-ops (returns null / does nothing) when context is null.
+    @ApplicationContext context: Context? = null,
 ) : ViewModel() {
+
+    private val waveformDiskCache = WaveformCache(context)
 
     val playbackState: StateFlow<PlaybackState> = playerRepository.state
     val queue: StateFlow<PlayerQueue> = playerRepository.queue
@@ -48,11 +57,11 @@ class NowPlayingViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     // Real per-track waveform for the scrubber (see WaveformScanner) -- a full-track decode, so
-    // it's scanned lazily off the main thread and cached (path -> bars) in memory for the
-    // session, not persisted; re-decoding on every open of the same track this session would be
-    // wasteful, but there's no DB column for it (would need a migration for a purely visual, easy
-    // -to-recompute value). Null while loading/on failure -- WaveformScrubber falls back to its
-    // own placeholder shape rather than showing nothing.
+    // it's scanned lazily off the main thread. Two-tier cache: an in-memory map for instant reuse
+    // within this session, backed by WaveformCache on disk so a track already scanned in a
+    // PREVIOUS session doesn't flash the placeholder shape again after an app restart while it
+    // re-decodes the whole file just to reproduce the same 120 numbers as last time. Null while
+    // loading/on failure -- WaveformScrubber falls back to its own placeholder shape.
     private val waveformCache = LinkedHashMap<String, List<Float>>()
     private val _waveform = MutableStateFlow<List<Float>?>(null)
     val waveform: StateFlow<List<Float>?> = _waveform.asStateFlow()
@@ -70,21 +79,31 @@ class NowPlayingViewModel @Inject constructor(
             _waveform.value = null
             return
         }
-        val cached = waveformCache[path]
-        if (cached != null) {
-            _waveform.value = cached
+        val memoryCached = waveformCache[path]
+        if (memoryCached != null) {
+            _waveform.value = memoryCached
             return
         }
         _waveform.value = null
         viewModelScope.launch {
-            val bars = withContext(Dispatchers.Default) { WaveformScanner.scan(path) } ?: return@launch
-            // Cap the cache so a long listening session doesn't grow this unbounded -- each
-            // track's own bar list is small (120 floats), but no reason to keep every track ever
-            // played this session.
-            if (waveformCache.size >= 30) waveformCache.remove(waveformCache.keys.first())
-            waveformCache[path] = bars
-            if (currentTrackDetails.value?.path == path) _waveform.value = bars
+            val diskCached = withContext(Dispatchers.IO) { waveformDiskCache.read(path) }
+            if (diskCached != null) {
+                rememberWaveform(path, diskCached)
+                return@launch
+            }
+            val scanned = withContext(Dispatchers.Default) { WaveformScanner.scan(path) } ?: return@launch
+            rememberWaveform(path, scanned)
+            withContext(Dispatchers.IO) { waveformDiskCache.write(path, scanned) }
         }
+    }
+
+    private fun rememberWaveform(path: String, bars: List<Float>) {
+        // Cap the in-memory cache so a long listening session doesn't grow this unbounded -- each
+        // track's own bar list is small (120 floats), but no reason to keep every track ever
+        // played this session in RAM; the disk cache already covers "seen it before".
+        if (waveformCache.size >= 30) waveformCache.remove(waveformCache.keys.first())
+        waveformCache[path] = bars
+        if (currentTrackDetails.value?.path == path) _waveform.value = bars
     }
 
     private val _externalTrackChangeSignal = MutableStateFlow(0)
