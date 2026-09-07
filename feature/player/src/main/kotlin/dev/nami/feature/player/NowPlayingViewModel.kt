@@ -174,13 +174,20 @@ class NowPlayingViewModel @Inject constructor(
             _waveform.value = memoryCached
             return
         }
+        // Disk read is ~120 bytes -- reading it synchronously (right here, before ever touching
+        // _waveform) is cheap enough to not need a dispatcher hop, and it's the whole fix: the
+        // old code always set _waveform.value = null first and read the disk cache inside a
+        // launched coroutine, so even an already-scanned-last-session track visibly flashed the
+        // placeholder for one frame (the Compose recomposition on the null) before the disk value
+        // came back on the next coroutine step. Checking synchronously first means a disk hit
+        // never sets null at all.
+        val diskCached = waveformDiskCache.read(path)
+        if (diskCached != null) {
+            rememberWaveform(path, diskCached)
+            return
+        }
         _waveform.value = null
         viewModelScope.launch {
-            val diskCached = withContext(Dispatchers.IO) { waveformDiskCache.read(path) }
-            if (diskCached != null) {
-                rememberWaveform(path, diskCached)
-                return@launch
-            }
             val scanned = withContext(Dispatchers.Default) { WaveformScanner.scan(path) } ?: return@launch
             rememberWaveform(path, scanned)
             withContext(Dispatchers.IO) { waveformDiskCache.write(path, scanned) }

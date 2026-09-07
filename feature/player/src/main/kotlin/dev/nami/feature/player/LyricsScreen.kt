@@ -254,7 +254,7 @@ fun LyricsScreen(
                 Spacer(modifier = Modifier.height(64.dp))
                 if (uiState.isFetchingOnline) {
                     androidx.compose.material3.CircularProgressIndicator(color = NamiColors.Paper70, modifier = Modifier.size(24.dp))
-                    Text(text = "Ищу текст в LRCLIB…", color = NamiColors.Paper70, modifier = Modifier.padding(top = 12.dp))
+                    Text(text = "Ищу текст в сети (LRCLIB, STANDS4)…", color = NamiColors.Paper70, modifier = Modifier.padding(top = 12.dp))
                 } else {
                     Text(text = "Текст не найден", color = NamiColors.Paper70)
                     Text(

@@ -710,6 +710,10 @@ private fun formatBadgeDetail(format: String, track: dev.nami.core.model.Track?)
             val mb = bytes / 1024.0 / 1024.0
             add("%.1f МБ".format(mb))
         }
+        // BpmKeyAnalyzer's cached result (Этап 6, П.md §3) -- null until the track has actually
+        // played once and gotten scanned, same lazy-cache lifecycle as replayGainDb.
+        track?.bpm?.let { add("${it.roundToInt()} BPM") }
+        track?.musicalKey?.let { add(it) }
     }
     return parts.joinToString(" · ")
 }

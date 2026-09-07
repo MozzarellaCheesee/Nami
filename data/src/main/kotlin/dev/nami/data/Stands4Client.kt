@@ -25,13 +25,30 @@ object Stands4Client {
     fun findPlainLyrics(title: String, artistName: String?, uid: String, token: String): String? {
         val term = if (!artistName.isNullOrBlank()) "$artistName $title" else title
         val url = "$BASE_URL?uid=${encode(uid)}&tokenid=${encode(token)}&term=${encode(term)}&format=json"
-        val body = httpGet(url) ?: return null
+        val body = httpGet(url)
+        if (body == null) {
+            Log.w("Stands4Client", "request failed (network/HTTP error) for term=\"$term\"")
+            return null
+        }
+        Log.d("Stands4Client", "response for term=\"$term\": $body")
         return runCatching {
             val root = JSONObject(body)
-            val results = root.optJSONArray("result") ?: return null
-            if (results.length() == 0) return null
-            results.getJSONObject(0).optString("lyrics", "").takeIf { it.isNotBlank() }
-        }.getOrNull()
+            // STANDS4's error responses come back 200 OK with an "ERRORS" object instead of
+            // "result" -- surfacing that message here is the only way to tell "wrong uid/token"
+            // apart from "no match", both of which otherwise look identical (null result).
+            root.optJSONObject("ERRORS")?.let { errors ->
+                Log.w("Stands4Client", "API error for term=\"$term\": $errors")
+                return null
+            }
+            val results = root.optJSONArray("result")
+            if (results == null || results.length() == 0) {
+                Log.d("Stands4Client", "no match for term=\"$term\"")
+                return null
+            }
+            val lyrics = results.getJSONObject(0).optString("lyrics", "").takeIf { it.isNotBlank() }
+            if (lyrics == null) Log.w("Stands4Client", "result had no non-blank \"lyrics\" field for term=\"$term\"")
+            lyrics
+        }.onFailure { e -> Log.w("Stands4Client", "parse failed for term=\"$term\": ${e.message}") }.getOrNull()
     }
 
     private fun encode(value: String) = URLEncoder.encode(value, "UTF-8")
@@ -44,7 +61,10 @@ object Stands4Client {
                 requestMethod = "GET"
                 setRequestProperty("User-Agent", "Nami Android app")
                 try {
-                    if (responseCode !in 200..299) return null
+                    if (responseCode !in 200..299) {
+                        Log.w("Stands4Client", "HTTP $responseCode for $url")
+                        return null
+                    }
                     inputStream.bufferedReader().use { it.readText() }
                 } finally {
                     disconnect()

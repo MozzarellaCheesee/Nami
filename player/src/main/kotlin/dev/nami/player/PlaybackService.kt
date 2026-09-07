@@ -417,7 +417,10 @@ class PlaybackService : MediaSessionService() {
      * gets fully decoded once for ReplayGain regardless. */
     private suspend fun scanBpmKeyIfMissing(trackId: TrackId) {
         val track = libraryRepository.track(trackId).first() ?: return
-        if (track.bpm != null || track.musicalKey != null) return
+        // Both fields are always written together below -- requiring both present here (not
+        // "either") avoids a stuck-forever gap where a partial result (say the tempo estimator
+        // failed but the key one didn't) permanently skips ever retrying the field that failed.
+        if (track.bpm != null && track.musicalKey != null) return
         val result = kotlinx.coroutines.withContext(Dispatchers.Default) {
             dev.nami.player.analysis.BpmKeyAnalyzer.scan(track.path)
         }
