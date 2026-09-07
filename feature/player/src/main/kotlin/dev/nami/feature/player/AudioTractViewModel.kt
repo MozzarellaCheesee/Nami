@@ -26,6 +26,7 @@ data class AudioTractUiState(
     val ditherEnabled: Boolean = false,
     val crossfadeEnabled: Boolean = false,
     val playbackGainDb: Float = 0f,
+    val hiFiEnabled: Boolean = false,
 )
 
 /** Feeds both План.md's 4.6 "Аудиотракт" and 4.7 "Эквалайзер" screens -- same underlying state,
@@ -50,6 +51,7 @@ class AudioTractViewModel @Inject constructor(
         settingsRepository.ditherEnabled,
         settingsRepository.crossfadeEnabled,
         settingsRepository.playbackGainDb,
+        settingsRepository.hiFiEnabled,
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         AudioTractUiState(
@@ -61,6 +63,7 @@ class AudioTractViewModel @Inject constructor(
             ditherEnabled = values[5] as Boolean,
             crossfadeEnabled = values[6] as Boolean,
             playbackGainDb = values[7] as Float,
+            hiFiEnabled = values[8] as Boolean,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AudioTractUiState())
 
@@ -77,4 +80,6 @@ class AudioTractViewModel @Inject constructor(
     fun setPlaybackGainDb(gainDb: Float) = settingsRepository.setPlaybackGainDb(gainDb)
 
     fun setBitPerfectUsbEnabled(enabled: Boolean) = settingsRepository.setBitPerfectUsbEnabled(enabled)
+
+    fun setHiFiEnabled(enabled: Boolean) = settingsRepository.setHiFiEnabled(enabled)
 }

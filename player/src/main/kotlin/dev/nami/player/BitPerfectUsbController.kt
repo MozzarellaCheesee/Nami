@@ -7,7 +7,6 @@ import android.media.AudioMixerAttributes
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.media3.common.AudioAttributes as Media3AudioAttributes
-import androidx.media3.exoplayer.ExoPlayer
 import dev.nami.domain.SettingsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.launchIn
@@ -31,7 +30,6 @@ import kotlinx.coroutines.flow.onEach
  */
 class BitPerfectUsbController(
     private val context: Context,
-    private val player: ExoPlayer,
     settingsRepository: SettingsRepository,
     scope: CoroutineScope,
 ) {

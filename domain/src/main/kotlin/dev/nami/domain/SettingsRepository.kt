@@ -61,4 +61,13 @@ interface SettingsRepository {
      * per-track ReplayGain. */
     val playbackGainDb: StateFlow<Float>
     fun setPlaybackGainDb(value: Float)
+
+    /** Hi-Fi (Beta) -- "shortest path" output: while it's on, the custom DSP AudioSink is never
+     * built at all, so EQ/ReplayGain/dither/усиление are bypassed and decoded samples reach
+     * AudioTrack untouched by this app. It cannot promise bit-perfect (AudioFlinger still mixes
+     * and may resample -- only the separate bit-perfect USB path can skip that, and only on
+     * hardware that supports it); what it does promise is that Nami itself adds nothing. Off by
+     * default so the DSP toggles keep working as-is unless the user asks for the direct path. */
+    val hiFiEnabled: StateFlow<Boolean>
+    fun setHiFiEnabled(value: Boolean)
 }

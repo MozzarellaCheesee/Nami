@@ -3,11 +3,12 @@ package dev.nami.player.replaygain
 import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.BaseAudioProcessor
+import dev.nami.player.toPcm16
 import java.nio.ByteBuffer
 import kotlin.math.pow
 
 /** Applies the current track's scanned ReplayGain (see ReplayGainScanner) as a flat linear
- * multiply on the float PCM stream. Same isActive()-only-checked-on-(re)build caveat as
+ * multiply on the int16 PCM stream. Same isActive()-only-checked-on-(re)build caveat as
  * ParametricEqAudioProcessor -- gain updates apply live, on/off needs a seek/track-change. */
 class ReplayGainAudioProcessor : BaseAudioProcessor() {
 
@@ -35,7 +36,7 @@ class ReplayGainAudioProcessor : BaseAudioProcessor() {
     }
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
-        if (inputAudioFormat.encoding != C.ENCODING_PCM_FLOAT) {
+        if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT) {
             throw AudioProcessor.UnhandledAudioFormatException(inputAudioFormat)
         }
         configured = true
@@ -48,11 +49,11 @@ class ReplayGainAudioProcessor : BaseAudioProcessor() {
         val remaining = inputBuffer.remaining()
         if (remaining == 0) return
         val output = replaceOutputBuffer(remaining)
-        val inFloats = inputBuffer.asFloatBuffer()
-        val outFloats = output.asFloatBuffer()
+        val inShorts = inputBuffer.asShortBuffer()
+        val outShorts = output.asShortBuffer()
         val gain = totalGainLinear()
-        while (inFloats.hasRemaining()) {
-            outFloats.put((inFloats.get() * gain).coerceIn(-1f, 1f))
+        while (inShorts.hasRemaining()) {
+            outShorts.put((inShorts.get() * gain).toPcm16())
         }
         inputBuffer.position(inputBuffer.limit())
         output.position(remaining).flip()

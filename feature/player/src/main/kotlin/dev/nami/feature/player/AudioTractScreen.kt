@@ -44,6 +44,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.model.Track
 import dev.nami.player.bluetooth.BluetoothCodecReader
+import dev.nami.player.output.AudioOutputInfo
 
 private data class ChainNode(val name: String, val detail: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
 
@@ -56,15 +57,30 @@ fun AudioTractScreen(onBack: () -> Unit, onOpenEqualizer: () -> Unit, viewModel:
     val track = uiState.track
     val context = LocalContext.current
     val isBluetoothOutput = remember { BluetoothCodecReader.isBluetoothOutputActive(context) }
+    val outputSampleRateHz = remember { AudioOutputInfo.outputSampleRateHz(context) }
 
+    // Hi-Fi keeps the DSP sink out of the path entirely (PlaybackService.currentNeedsCustomSink),
+    // so the chain diagram has to say so rather than listing effects that aren't running.
     val processingParts = buildList {
+        if (uiState.hiFiEnabled) return@buildList
         if (uiState.eqEnabled) {
             val presetLabel = dev.nami.player.eq.EqPreset.matching(uiState.eqBandGains)?.label ?: "Пользовательский"
             add("EQ ($presetLabel)")
         }
         if (uiState.replayGainEnabled) add("ReplayGain")
         if (uiState.ditherEnabled) add("dither")
+        if (uiState.playbackGainDb != 0f) add("усиление +${uiState.playbackGainDb.toInt()} дБ")
         if (uiState.crossfadeEnabled) add("кроссфейд")
+    }
+
+    // Real answer instead of a hardcoded "нет": AudioFlinger resamples whenever the file's rate
+    // isn't the mixer's rate, and that's the one part of it a normal app can actually read.
+    val trackSampleRateHz = track?.sampleRateHz
+    val resamplingDetail = when {
+        outputSampleRateHz == null -> "неизвестно (система не сообщает частоту вывода)"
+        trackSampleRateHz == null -> "выход ${outputSampleRateHz / 1000} кГц"
+        trackSampleRateHz == outputSampleRateHz -> "нет · ${outputSampleRateHz / 1000} кГц"
+        else -> "${trackSampleRateHz / 1000} → ${outputSampleRateHz / 1000} кГц (системный микшер)"
     }
 
     val outputDetail = buildString {
@@ -75,14 +91,17 @@ fun AudioTractScreen(onBack: () -> Unit, onOpenEqualizer: () -> Unit, viewModel:
     val nodes = buildList {
         add(ChainNode("Файл", track?.let { formatFileDetail(it) } ?: "ничего не играет", Icons.Outlined.Description))
         add(ChainNode("Декодер", track?.let { decoderDetail(it) } ?: "нативный", Icons.Outlined.Memory))
-        add(ChainNode("Обработка", processingParts.takeIf { it.isNotEmpty() }?.joinToString(" · ") ?: "нет", Icons.Outlined.Tune))
-        add(ChainNode("Ресемплинг", "нет", Icons.Outlined.CompareArrows))
+        val processingDetail = processingParts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
+            ?: if (uiState.hiFiEnabled) "нет · Hi-Fi (прямой тракт)" else "нет"
+        add(ChainNode("Обработка", processingDetail, Icons.Outlined.Tune))
+        add(ChainNode("Ресемплинг", resamplingDetail, Icons.Outlined.CompareArrows))
         add(ChainNode("Вывод", outputDetail, Icons.Outlined.Speaker))
     }
 
-    val bitPerfectBlockedByEq = uiState.bitPerfectUsbEnabled && uiState.eqEnabled
+    val bitPerfectBlockedByEq = uiState.bitPerfectUsbEnabled && uiState.eqEnabled && !uiState.hiFiEnabled
     val statusText = when {
         bitPerfectBlockedByEq -> "BIT-PERFECT недоступен -- включён EQ, а bit-perfect отключает любую обработку в приложении."
+        uiState.hiFiEnabled -> "HI-FI включён -- Nami не трогает сэмплы: EQ/ReplayGain/dither/усиление обходятся, декодированный поток идёт в AudioTrack как есть. Системный микшер (и его ресемплинг) это не отменяет -- за это отвечает только bit-perfect по USB, и только если железо его тянет."
         uiState.bitPerfectUsbEnabled -> "BIT-PERFECT включён -- если ЦАП и его драйвер это реально поддерживают, микширование/ресемплинг/громкость системы для него сейчас пропускаются."
         else -> "Обычный вывод через системный микшер. Bit-perfect и EQ включаются в Настройках."
     }
@@ -161,6 +180,7 @@ fun AudioTractScreen(onBack: () -> Unit, onOpenEqualizer: () -> Unit, viewModel:
                 )
 
                 Column(modifier = Modifier.fillMaxWidth().padding(top = 24.dp)) {
+                    ToggleRow("Hi-Fi (Beta)", "прямой тракт: обходит EQ/ReplayGain/dither/усиление, ничего не считает по сэмплам", uiState.hiFiEnabled, viewModel::setHiFiEnabled)
                     ToggleRow("Bit-perfect по USB (Android 14+, Beta)", "выключает EQ/ReplayGain/dither/кроссфейд, если реально включился", uiState.bitPerfectUsbEnabled, viewModel::setBitPerfectUsbEnabled)
                     ToggleRow("ReplayGain (Beta)", "выравнивает громкость треков, не EBU R128", uiState.replayGainEnabled, viewModel::setReplayGainEnabled)
                     ToggleRow("Dither (Beta)", "сглаживает шум квантования при обработке", uiState.ditherEnabled, viewModel::setDitherEnabled)

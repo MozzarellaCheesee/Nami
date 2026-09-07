@@ -88,18 +88,20 @@ class PlaybackService : MediaSessionService() {
         notificationProvider.setSmallIcon(R.drawable.ic_notification)
         setMediaNotificationProvider(notificationProvider)
 
-        // Whether ANY effect that needs the custom float-output sink is on right now. Forcing
-        // float output unconditionally caused sped-up/pitched-up playback on real hardware (a
-        // Media3/vendor-HAL bug class), so the sink is only ever built when actually needed --
-        // but the user still shouldn't have to restart the app to feel a toggle, so instead of
-        // gating this once at cold start, swapPlayer() rebuilds the live ExoPlayer instance
-        // (mediaSession.setPlayer, preserving queue/position/playWhenReady) the moment this flips.
+        // Whether ANY effect that needs the custom DSP sink is on right now (and Hi-Fi isn't
+        // vetoing all of them). The sink is only ever built when actually needed -- but the user
+        // still shouldn't have to restart the app to feel a toggle, so instead of gating this once
+        // at cold start, swapPlayer() rebuilds the live ExoPlayer instance (mediaSession.setPlayer,
+        // preserving queue/position/playWhenReady) the moment this flips.
         combine(
             settingsRepository.eqEnabled,
             settingsRepository.replayGainEnabled,
             settingsRepository.ditherEnabled,
             settingsRepository.playbackGainDb,
-        ) { eq, replayGain, dither, boostDb -> eq || replayGain || dither || boostDb != 0f }
+            settingsRepository.hiFiEnabled,
+        ) { eq, replayGain, dither, boostDb, hiFi ->
+            !hiFi && (eq || replayGain || dither || boostDb != 0f)
+        }
             .distinctUntilChanged()
             .onEach { needed -> if (needed != usingCustomSink) swapPlayer(needed) }
             .launchIn(scope)
@@ -155,15 +157,17 @@ class PlaybackService : MediaSessionService() {
             }
             .launchIn(scope)
 
-        BitPerfectUsbController(this, player, settingsRepository, scope)
+        BitPerfectUsbController(this, settingsRepository, scope)
         CrossfadeController({ player }, settingsRepository, scope)
     }
 
     private fun currentNeedsCustomSink(): Boolean =
-        settingsRepository.eqEnabled.value ||
-            settingsRepository.replayGainEnabled.value ||
-            settingsRepository.ditherEnabled.value ||
-            settingsRepository.playbackGainDb.value != 0f
+        !settingsRepository.hiFiEnabled.value && (
+            settingsRepository.eqEnabled.value ||
+                settingsRepository.replayGainEnabled.value ||
+                settingsRepository.ditherEnabled.value ||
+                settingsRepository.playbackGainDb.value != 0f
+            )
 
     private fun buildPlayer(useCustomSink: Boolean): ExoPlayer {
         usingCustomSink = useCustomSink

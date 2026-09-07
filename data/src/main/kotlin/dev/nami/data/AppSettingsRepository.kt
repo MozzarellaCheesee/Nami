@@ -24,6 +24,7 @@ private const val KEY_REPLAY_GAIN_ENABLED = "replay_gain_enabled"
 private const val KEY_DITHER_ENABLED = "dither_enabled"
 private const val KEY_CROSSFADE_ENABLED = "crossfade_enabled"
 private const val KEY_PLAYBACK_GAIN_DB = "playback_gain_db"
+private const val KEY_HIFI_ENABLED = "hifi_enabled"
 
 @Singleton
 class AppSettingsRepository @Inject constructor(@ApplicationContext context: Context) : SettingsRepository {
@@ -138,5 +139,15 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
     override fun setPlaybackGainDb(value: Float) {
         prefs.edit { putFloat(KEY_PLAYBACK_GAIN_DB, value) }
         _playbackGainDb.value = value
+    }
+
+    // Default OFF: turning it on silently disables whatever DSP the user already had enabled, so
+    // it has to be a deliberate choice rather than something they wake up in.
+    private val _hiFiEnabled = MutableStateFlow(prefs.getBoolean(KEY_HIFI_ENABLED, false))
+    override val hiFiEnabled: StateFlow<Boolean> = _hiFiEnabled
+
+    override fun setHiFiEnabled(value: Boolean) {
+        prefs.edit { putBoolean(KEY_HIFI_ENABLED, value) }
+        _hiFiEnabled.value = value
     }
 }

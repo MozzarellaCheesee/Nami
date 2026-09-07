@@ -3,19 +3,20 @@ package dev.nami.player.eq
 import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.BaseAudioProcessor
+import dev.nami.player.toPcm16
 import java.nio.ByteBuffer
 
 /** Этап 4's parametric EQ -- a 9-band graphic EQ (ISO-ish octave centers: 63/125/250/500/1k/2k/
- * 4k/8k/16k Hz, peaking filters at Q=1.0), real DSP on the actual float PCM stream, wired into
+ * 4k/8k/16k Hz, peaking filters at Q=1.0), real DSP on the actual PCM stream, wired into
  * DefaultAudioSink via NamiRenderersFactory, gated off by default (Settings -> Аудиотракт, Beta)
  * since this is the one processor sitting directly in the path of every second of audio the app
- * ever plays -- a subtle bug here means "everything sounds wrong", not "one feature is broken",
- * so it stays strictly opt-in until it's had real listening verification beyond this session.
+ * ever plays -- a subtle bug here means "everything sounds wrong", not "one feature is broken".
  *
- * ponytail: only accepts ENCODING_PCM_FLOAT input (ExoPlayer's DefaultAudioSink already prefers
- * float when setEnableFloatOutput(true) is set, which NamiRenderersFactory does) -- isActive()
- * returns false for any other encoding, so it never touches a format it wasn't verified against.
- */
+ * Operates on ENCODING_PCM_16BIT, which is what DefaultAudioSink's int pipeline (ToInt16Pcm ->
+ * channel mapping -> trimming -> here) actually hands a custom processor. See
+ * NamiRenderersFactory's doc for why the float variant of this was both inert and actively broken.
+ * The biquad itself runs on the raw sample value as a Float (±32768 range) -- a linear filter
+ * doesn't care about the scale, so there's no normalization step to get wrong. */
 class ParametricEqAudioProcessor : BaseAudioProcessor() {
 
     @Volatile private var coeffs: Array<BiquadCoefficients> = Array(BAND_FREQS_HZ.size) { BiquadCoefficients.IDENTITY }
@@ -39,7 +40,7 @@ class ParametricEqAudioProcessor : BaseAudioProcessor() {
     }
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
-        if (inputAudioFormat.encoding != C.ENCODING_PCM_FLOAT) {
+        if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT) {
             throw AudioProcessor.UnhandledAudioFormatException(inputAudioFormat)
         }
         sampleRateHz = inputAudioFormat.sampleRate
@@ -54,16 +55,16 @@ class ParametricEqAudioProcessor : BaseAudioProcessor() {
         if (remaining == 0) return
         val channelCount = states.getOrNull(0)?.size ?: return
         val output = replaceOutputBuffer(remaining)
-        val inFloats = inputBuffer.asFloatBuffer()
-        val outFloats = output.asFloatBuffer()
+        val inShorts = inputBuffer.asShortBuffer()
+        val outShorts = output.asShortBuffer()
         val currentCoeffs = coeffs
         var channel = 0
-        while (inFloats.hasRemaining()) {
-            var sample = inFloats.get()
+        while (inShorts.hasRemaining()) {
+            var sample = inShorts.get().toFloat()
             for (band in BAND_FREQS_HZ.indices) {
                 sample = states[band][channel].process(sample, currentCoeffs[band])
             }
-            outFloats.put(sample.coerceIn(-1f, 1f))
+            outShorts.put(sample.toPcm16())
             channel = (channel + 1) % channelCount
         }
         inputBuffer.position(inputBuffer.limit())
