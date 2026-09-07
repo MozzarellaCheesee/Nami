@@ -126,7 +126,17 @@ class PlayerRepositoryImpl @Inject constructor(
                         }
 
                         override fun onIsPlayingChanged(isPlaying: Boolean) {
-                            if (!isPlaying) pausedAtMs = System.currentTimeMillis()
+                            if (!isPlaying) {
+                                val now = System.currentTimeMillis()
+                                pausedAtMs = now
+                                // Persisted, not just in-memory -- see SettingsRepository.
+                                // lastPlaybackTrackId's doc for why (a paused, backgrounded
+                                // service is killable, wiping pausedAtMs along with everything
+                                // else in-memory).
+                                controller?.currentMediaItem?.mediaId?.takeIf { it.isNotEmpty() }?.let { mediaId ->
+                                    settingsRepository.setLastPlayback(mediaId, controller?.currentPosition ?: 0L, now)
+                                }
+                            }
                         }
 
                         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -140,6 +150,7 @@ class PlayerRepositoryImpl @Inject constructor(
                         }
                     },
                 )
+                scope.launch { restoreLastPlaybackIfAny() }
                 scope.launch {
                     // 500ms was the original interval -- fine for a scrubber, but the lyrics
                     // screen's karaoke word-sweep visibly stepped/lagged behind the vocal at that
@@ -233,6 +244,31 @@ class PlayerRepositoryImpl @Inject constructor(
                 .build(),
         )
         .build()
+
+    // Cold start only -- fires once, right after the controller connects, and only if the player
+    // actually has nothing loaded (a live/backgrounded-but-alive service already has its own real
+    // queue, restoring over that would be wrong). See SettingsRepository.lastPlaybackTrackId.
+    private suspend fun restoreLastPlaybackIfAny() {
+        val player = controller ?: return
+        if (player.mediaItemCount != 0) return
+        val trackId = settingsRepository.lastPlaybackTrackId.value?.takeIf { it.isNotBlank() } ?: return
+        val pausedAt = settingsRepository.lastPlaybackPausedAt.value
+        if (System.currentTimeMillis() - pausedAt >= SMART_RESUME_THRESHOLD_MS) return
+        val track = libraryRepository.track(TrackId(trackId)).first() ?: return
+        val playable = PlayableTrack(
+            id = track.id,
+            title = track.title,
+            artistName = track.artistName,
+            path = track.path,
+            artworkPath = track.albumArtworkPath,
+            format = track.format,
+        )
+        trackInfoByMediaId[playable.id.value] = playable.toMediaItemInfo()
+        val positionMs = settingsRepository.lastPlaybackPositionMs.value
+        player.setMediaItems(listOf(playable.toMediaItem()), 0, positionMs)
+        player.prepare()
+        // Deliberately no play() -- restores paused, ready for the user's own tap to resume.
+    }
 
     override suspend fun play(tracks: List<PlayableTrack>, startIndex: Int, startMs: Long) {
         originByMediaId.clear()

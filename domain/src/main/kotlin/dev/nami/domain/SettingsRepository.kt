@@ -146,6 +146,16 @@ interface SettingsRepository {
     val stands4RequestsToday: StateFlow<Int>
     fun recordStands4Request()
 
+    /** "Умное возобновление" (План.md §22.10) needs to survive the process actually dying, not
+     * just the app being backgrounded -- a paused, non-foreground PlaybackService is killable by
+     * Android at any time, wiping ExoPlayer's whole in-memory queue. Persisted here so a cold
+     * start can restore the paused track (never auto-plays) if the pause was recent enough; null
+     * trackId means "nothing to restore". */
+    val lastPlaybackTrackId: StateFlow<String?>
+    val lastPlaybackPositionMs: StateFlow<Long>
+    val lastPlaybackPausedAt: StateFlow<Long>
+    fun setLastPlayback(trackId: String, positionMs: Long, pausedAt: Long)
+
     /** DeepL API key for lyrics translation (Settings -> Лирика) -- each user's own free-tier
      * key (500k chars/month), not shared across installs. Blank means "not configured", the
      * on-device MLKit translator (worse quality, esp. JA->RU, but keyless/offline) is used
