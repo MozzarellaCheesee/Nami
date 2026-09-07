@@ -198,6 +198,14 @@ fun AudioTractBody(onOpenEqualizer: () -> Unit, viewModel: AudioTractViewModel =
                     ToggleRow("ReplayGain (Beta)", "выравнивает громкость треков, не EBU R128", uiState.replayGainEnabled, viewModel::setReplayGainEnabled)
                     ToggleRow("Dither (Beta)", "сглаживает шум квантования при обработке", uiState.ditherEnabled, viewModel::setDitherEnabled)
                     ToggleRow("Кроссфейд (Beta)", "плавный переход между треками, не настоящее смешивание", uiState.crossfadeEnabled, viewModel::setCrossfadeEnabled)
+                    if (uiState.crossfadeEnabled) {
+                        ToggleRow(
+                            "Умный кроссфейд (Beta)",
+                            "не применять переход, если трек резко обрывается на пике громкости",
+                            uiState.smartCrossfadeEnabled,
+                            viewModel::setSmartCrossfadeEnabled,
+                        )
+                    }
                 }
 
                 Text(

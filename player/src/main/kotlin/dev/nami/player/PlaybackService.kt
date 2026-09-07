@@ -69,6 +69,15 @@ class PlaybackService : MediaSessionService() {
     private var currentTrackGainDb: Float? = null
     private lateinit var outputDeviceDetector: OutputDeviceDetector
 
+    // Этап 6's "умный кроссфейд" -- per-track result of TrackEndingAnalyzer, checked once when
+    // the fade window is entered (CrossfadeController's isCrossfadeSuitable). true (apply
+    // crossfade) is the default/fail-open value: unscanned yet, smart mode off, or a decode
+    // failure all fall back to today's unconditional behavior rather than silently disabling
+    // crossfade for every track. In-memory only, capped, same reasoning as NowPlayingViewModel's
+    // waveform cache -- this is a per-session convenience, not data worth a DB migration for.
+    private var currentEndsWithNaturalFade = true
+    private val endingFadeCache = LinkedHashMap<String, Boolean>()
+
     // Automatic audio-focus handling: pauses when another app starts playing audio/video
     // (transient or permanent focus loss), and resumes on its own once that app stops --
     // but only if playback was still going when focus was lost (a manual pause beforehand
@@ -85,6 +94,7 @@ class PlaybackService : MediaSessionService() {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             val trackId = mediaItem?.mediaId?.let(::TrackId) ?: return
             scope.launch { updateReplayGainForCurrentTrack(trackId) }
+            scope.launch { updateEndingFadeForCurrentTrack(trackId) }
         }
     }
 
@@ -144,6 +154,7 @@ class PlaybackService : MediaSessionService() {
             startIncoming = ::buildIncomingPlayer,
             promote = ::promoteIncomingPlayer,
             retire = ::retireOutgoingPlayer,
+            isCrossfadeSuitable = { !settingsRepository.smartCrossfadeEnabled.value || currentEndsWithNaturalFade },
         )
         BitPerfectUsbController(this, settingsRepository, scope)
 
@@ -374,6 +385,28 @@ class PlaybackService : MediaSessionService() {
         }
         currentTrackGainDb = gain
         dsp.replayGain.setGainDb(gain)
+    }
+
+    private suspend fun updateEndingFadeForCurrentTrack(trackId: TrackId) {
+        // Fails open (stays true, crossfade applies as it always did) rather than doing the
+        // decode work at all when the setting is off -- this analysis is pure overhead unless
+        // "умный кроссфейд" is actually on.
+        if (!settingsRepository.smartCrossfadeEnabled.value) {
+            currentEndsWithNaturalFade = true
+            return
+        }
+        val cached = endingFadeCache[trackId.value]
+        if (cached != null) {
+            currentEndsWithNaturalFade = cached
+            return
+        }
+        val track = libraryRepository.track(trackId).first() ?: return
+        val naturalFade = kotlinx.coroutines.withContext(Dispatchers.Default) {
+            dev.nami.player.replaygain.TrackEndingAnalyzer.endsWithNaturalFade(track.path)
+        } ?: true
+        if (endingFadeCache.size >= 30) endingFadeCache.remove(endingFadeCache.keys.first())
+        endingFadeCache[trackId.value] = naturalFade
+        currentEndsWithNaturalFade = naturalFade
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession =

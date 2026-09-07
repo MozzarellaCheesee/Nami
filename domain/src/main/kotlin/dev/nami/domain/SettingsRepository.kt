@@ -93,6 +93,13 @@ interface SettingsRepository {
     val crossfadeEnabled: StateFlow<Boolean>
     fun setCrossfadeEnabled(value: Boolean)
 
+    /** Этап 6's "умный кроссфейд" (План.md §22.9, Beta) -- only takes effect while
+     * [crossfadeEnabled] is also on. Skips the crossfade for a track that ends abruptly (loud
+     * right up to a hard cut) instead of chopping its ending early; BPM-matching (the other half
+     * of "уместно" from the plan) isn't implemented -- see TrackEndingAnalyzer's own doc. */
+    val smartCrossfadeEnabled: StateFlow<Boolean>
+    fun setSmartCrossfadeEnabled(value: Boolean)
+
     /** "Усиление воспроизведения" -- flat library-wide boost (0/3/6 dB), independent of
      * per-track ReplayGain. */
     val playbackGainDb: StateFlow<Float>

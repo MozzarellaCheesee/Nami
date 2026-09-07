@@ -31,6 +31,7 @@ data class AudioTractUiState(
     val hiFiEnabled: Boolean = false,
     val outputProfilesEnabled: Boolean = false,
     val outputProfiles: Map<OutputDeviceType, OutputProfile> = emptyMap(),
+    val smartCrossfadeEnabled: Boolean = false,
 )
 
 /** Feeds both План.md's 4.6 "Аудиотракт" and 4.7 "Эквалайзер" screens -- same underlying state,
@@ -63,6 +64,7 @@ class AudioTractViewModel @Inject constructor(
         settingsRepository.hiFiEnabled,
         settingsRepository.outputProfilesEnabled,
         settingsRepository.outputProfiles,
+        settingsRepository.smartCrossfadeEnabled,
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         AudioTractUiState(
@@ -77,6 +79,7 @@ class AudioTractViewModel @Inject constructor(
             hiFiEnabled = values[8] as Boolean,
             outputProfilesEnabled = values[9] as Boolean,
             outputProfiles = values[10] as Map<OutputDeviceType, OutputProfile>,
+            smartCrossfadeEnabled = values[11] as Boolean,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AudioTractUiState())
 
@@ -99,4 +102,6 @@ class AudioTractViewModel @Inject constructor(
     fun setOutputProfilesEnabled(enabled: Boolean) = settingsRepository.setOutputProfilesEnabled(enabled)
 
     fun setOutputProfile(type: OutputDeviceType, profile: OutputProfile) = settingsRepository.setOutputProfile(type, profile)
+
+    fun setSmartCrossfadeEnabled(enabled: Boolean) = settingsRepository.setSmartCrossfadeEnabled(enabled)
 }

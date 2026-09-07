@@ -43,6 +43,10 @@ class CrossfadeController(
     private val promote: (ExoPlayer) -> Unit,
     /** Releases the faded-out player and gives audio focus back to the surviving one. */
     private val retire: (ExoPlayer) -> Unit,
+    /** Этап 6's "умный кроссфейд" gate -- true means it's fine to start the overlap for the
+     * CURRENT track (checked once, right as the fade window is entered). Defaults to always-true
+     * so callers that don't care about this (existing tests) see identical behavior to before. */
+    private val isCrossfadeSuitable: () -> Boolean = { true },
 ) {
     private var outgoing: ExoPlayer? = null
 
@@ -106,7 +110,8 @@ class CrossfadeController(
 
         if (outgoing == null && durationMs > 0 && current.isPlaying &&
             durationMs - current.currentPosition <= FADE_MS &&
-            current.repeatMode != Player.REPEAT_MODE_ONE && current.hasNextMediaItem()
+            current.repeatMode != Player.REPEAT_MODE_ONE && current.hasNextMediaItem() &&
+            isCrossfadeSuitable()
         ) {
             val incoming = startIncoming()
             if (incoming != null) {
@@ -121,7 +126,14 @@ class CrossfadeController(
 
         // Also covers the incoming player's own fade-in (its position is inside the first FADE_MS),
         // which is the exact complement of the fadeOut() applied to the outgoing one above.
-        current.volume = volumeFor(current.currentPosition, durationMs) * volumeCeiling
+        // The tail half of volumeFor() (this track's own ending) is skipped when the smart gate
+        // rejected an overlap and there IS a next item to reach -- otherwise this single-player
+        // ramp would quietly fade out exactly the "abrupt, don't fade" ending isCrossfadeSuitable()
+        // was checking for in the first place, defeating the whole point of the gate.
+        val skipTailFade = outgoing == null && current.hasNextMediaItem() &&
+            current.repeatMode != Player.REPEAT_MODE_ONE && !isCrossfadeSuitable() &&
+            durationMs - current.currentPosition <= FADE_MS
+        current.volume = if (skipTailFade) volumeCeiling else volumeFor(current.currentPosition, durationMs) * volumeCeiling
     }
 
     companion object {

@@ -29,6 +29,7 @@ private const val KEY_BIT_PERFECT_USB_ENABLED = "bit_perfect_usb_enabled"
 private const val KEY_REPLAY_GAIN_ENABLED = "replay_gain_enabled"
 private const val KEY_DITHER_ENABLED = "dither_enabled"
 private const val KEY_CROSSFADE_ENABLED = "crossfade_enabled"
+private const val KEY_SMART_CROSSFADE_ENABLED = "smart_crossfade_enabled"
 private const val KEY_PLAYBACK_GAIN_DB = "playback_gain_db"
 private const val KEY_HIFI_ENABLED = "hifi_enabled"
 private const val KEY_NIGHT_MODE_ENABLED = "night_mode_enabled"
@@ -147,6 +148,14 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
     override fun setCrossfadeEnabled(value: Boolean) {
         prefs.edit { putBoolean(KEY_CROSSFADE_ENABLED, value) }
         _crossfadeEnabled.value = value
+    }
+
+    private val _smartCrossfadeEnabled = MutableStateFlow(prefs.getBoolean(KEY_SMART_CROSSFADE_ENABLED, false))
+    override val smartCrossfadeEnabled: StateFlow<Boolean> = _smartCrossfadeEnabled
+
+    override fun setSmartCrossfadeEnabled(value: Boolean) {
+        prefs.edit { putBoolean(KEY_SMART_CROSSFADE_ENABLED, value) }
+        _smartCrossfadeEnabled.value = value
     }
 
     private val _playbackGainDb = MutableStateFlow(prefs.getFloat(KEY_PLAYBACK_GAIN_DB, 0f))
