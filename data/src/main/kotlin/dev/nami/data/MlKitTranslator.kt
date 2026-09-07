@@ -18,6 +18,14 @@ import kotlin.coroutines.resumeWithException
 // language, chosen per line/segment instead.
 private val PARENTHETICAL = Regex("^(.*?)\\s*\\((.*)\\)\\s*$")
 
+// A lyric line that doesn't end on one of these usually isn't a complete sentence -- whoever
+// timed the .lrc file split it mid-clause across two lines (common in J-pop, the vocal phrasing
+// doesn't line up with sentence grammar). Translating that fragment alone is exactly what makes
+// JA->RU come out "кривой" -- MLKit has no cross-line context, so it either drops the dangling
+// clause or invents a subject/verb to complete it. Joining continuation lines into one sentence
+// before translating gives the model the grammar it actually needs.
+private val SENTENCE_END = Regex("[。！？…!?]+[」』）)]*$")
+
 object MlKitTranslator {
     suspend fun translateToRussian(lines: List<String>): List<String>? {
         val ja = buildTranslator(TranslateLanguage.JAPANESE)
@@ -25,7 +33,22 @@ object MlKitTranslator {
         return try {
             ja.downloadModelIfNeeded(DownloadConditions.Builder().build()).await()
             en.downloadModelIfNeeded(DownloadConditions.Builder().build()).await()
-            lines.map { line -> translateLine(line, ja, en) }
+            val result = arrayOfNulls<String>(lines.size)
+            var groupStart = 0
+            for (i in lines.indices) {
+                val isBlank = lines[i].isBlank()
+                val endsGroup = isBlank || SENTENCE_END.containsMatchIn(lines[i]) || i == lines.lastIndex
+                if (!endsGroup) continue
+                val group = (groupStart..i).filterNot { lines[it].isBlank() }
+                if (group.isNotEmpty()) {
+                    val joined = group.joinToString(" ") { lines[it] }
+                    val translated = translateLine(joined, ja, en)
+                    group.forEach { idx -> result[idx] = translated }
+                }
+                for (idx in groupStart..i) if (lines[idx].isBlank()) result[idx] = lines[idx]
+                groupStart = i + 1
+            }
+            result.map { it.orEmpty() }
         } catch (e: Exception) {
             Log.w("MlKitTranslator", "translation failed: ${e.message}")
             null
