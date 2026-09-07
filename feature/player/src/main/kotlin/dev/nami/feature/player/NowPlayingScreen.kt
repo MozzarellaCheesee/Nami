@@ -162,12 +162,22 @@ fun NowPlayingScreen(
         // dark scrim for text legibility -- for atmosphere, per Дизайн.md's "тихое" restraint
         // this stays a backdrop, never competing with the actual artwork/controls on top of it.
         val backgroundArtworkPath = queue.nowPlaying?.artworkPath
-        if (backgroundArtworkPath != null) {
+        // Sticks to the last real artwork through a momentary null (artworkPath briefly unset
+        // between tracks while the new one resolves) instead of unmounting AsyncImage -- an
+        // unmount/remount is an instant cut with no crossfade at all, since Coil has nothing to
+        // fade FROM once the composable is gone. Keeping it mounted continuously is what lets
+        // Coil's own crossfade actually run when the real new artwork shows up.
+        var lastArtworkPath by remember { mutableStateOf(backgroundArtworkPath) }
+        androidx.compose.runtime.LaunchedEffect(backgroundArtworkPath) {
+            if (backgroundArtworkPath != null) lastArtworkPath = backgroundArtworkPath
+        }
+        val displayArtworkPath = backgroundArtworkPath ?: lastArtworkPath
+        if (displayArtworkPath != null) {
             // Coil's own crossfade (not an abrupt swap) between the old and new backdrop -- Coil
             // caches the previous successful result for this ImageView-equivalent internally, so
             // this alone is enough, no separate AnimatedContent/Crossfade wrapper needed.
             val request = ImageRequest.Builder(LocalPlatformContext.current)
-                .data(backgroundArtworkPath)
+                .data(displayArtworkPath)
                 .crossfade(400)
                 .build()
             AsyncImage(
@@ -177,7 +187,7 @@ fun NowPlayingScreen(
                 modifier = Modifier.fillMaxSize().blur(64.dp),
             )
         }
-        Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900.copy(alpha = if (backgroundArtworkPath != null) 0.72f else 1f)))
+        Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900.copy(alpha = if (displayArtworkPath != null) 0.72f else 1f)))
 
     Column(
         modifier = Modifier
