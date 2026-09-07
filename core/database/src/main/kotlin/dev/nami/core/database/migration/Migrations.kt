@@ -185,6 +185,13 @@ val MIGRATION_15_16 = object : Migration(15, 16) {
     }
 }
 
+/** Этап 6's "главы и закладки" (План.md §22.16) -- reuses the moments table, see MomentEntity. */
+val MIGRATION_16_17 = object : Migration(16, 17) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE moments ADD COLUMN isChapter INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
 val MIGRATION_14_15 = object : Migration(14, 15) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL(

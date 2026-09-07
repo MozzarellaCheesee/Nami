@@ -376,8 +376,8 @@ fun NowPlayingScreen(
         )
         pendingMomentFraction?.let { fraction ->
             AddMomentDialog(
-                onSave = { label, colorArgb ->
-                    viewModel.addMoment((fraction * durationMs).toLong(), label, colorArgb)
+                onSave = { label, colorArgb, isChapter ->
+                    viewModel.addMoment((fraction * durationMs).toLong(), label, colorArgb, isChapter)
                     pendingMomentFraction = null
                 },
                 onDismiss = { pendingMomentFraction = null },
@@ -718,8 +718,9 @@ private fun formatBadgeDetail(format: String, track: dev.nami.core.model.Track?)
  * swatches rather than a full picker: a moment marker is a tiny dot on the waveform, a handful of
  * clearly distinct hues reads better there than any color a full picker could produce. */
 @Composable
-private fun AddMomentDialog(onSave: (label: String, colorArgb: Int) -> Unit, onDismiss: () -> Unit) {
+private fun AddMomentDialog(onSave: (label: String, colorArgb: Int, isChapter: Boolean) -> Unit, onDismiss: () -> Unit) {
     var label by remember { mutableStateOf("") }
+    var isChapter by remember { mutableStateOf(false) }
     val swatches = listOf(
         NamiColors.Shu.toArgb(),
         NamiColors.Ai.toArgb(),
@@ -758,11 +759,20 @@ private fun AddMomentDialog(onSave: (label: String, colorArgb: Int) -> Unit, onD
                         )
                     }
                 }
+                // План.md §22.16 "Главы и закладки" -- same marker, flagged as a navigation
+                // point rather than a "best part" highlight (see MomentEntity.isChapter).
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 16.dp).clickable { isChapter = !isChapter },
+                ) {
+                    androidx.compose.material3.Checkbox(checked = isChapter, onCheckedChange = { isChapter = it })
+                    androidx.compose.material3.Text("Это глава/закладка, а не момент", color = NamiColors.Paper70)
+                }
             }
         },
         confirmButton = {
             androidx.compose.material3.TextButton(
-                onClick = { onSave(label.ifBlank { "Момент" }, selectedColor) },
+                onClick = { onSave(label.ifBlank { "Момент" }, selectedColor, isChapter) },
             ) { androidx.compose.material3.Text("Добавить", color = NamiColors.Shu) }
         },
         dismissButton = {

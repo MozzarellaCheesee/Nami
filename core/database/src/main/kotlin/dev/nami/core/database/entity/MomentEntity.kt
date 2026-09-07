@@ -14,4 +14,8 @@ data class MomentEntity(
     val label: String,
     val color: Int,
     val createdAt: Long,
+    /** План.md §22.16 "Главы и закладки" -- same table, different intent: a chapter/bookmark is a
+     * navigation point (long track, lecture, mix), not a "best part" highlight. Reuses this table
+     * instead of a separate one since the data shape (track + position + label) is identical. */
+    val isChapter: Boolean = false,
 )

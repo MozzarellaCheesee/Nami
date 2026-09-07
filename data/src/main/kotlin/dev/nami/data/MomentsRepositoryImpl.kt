@@ -16,7 +16,7 @@ class MomentsRepositoryImpl @Inject constructor(
     override fun momentsForTrack(trackId: TrackId): Flow<List<Moment>> =
         dao.observeForTrack(trackId.value).map { rows -> rows.map { it.toDomain() } }
 
-    override suspend fun add(trackId: TrackId, positionMs: Long, label: String, colorArgb: Int) {
+    override suspend fun add(trackId: TrackId, positionMs: Long, label: String, colorArgb: Int, isChapter: Boolean) {
         dao.insert(
             MomentEntity(
                 trackId = trackId.value,
@@ -24,6 +24,7 @@ class MomentsRepositoryImpl @Inject constructor(
                 label = label,
                 color = colorArgb,
                 createdAt = System.currentTimeMillis(),
+                isChapter = isChapter,
             ),
         )
     }
@@ -34,5 +35,5 @@ class MomentsRepositoryImpl @Inject constructor(
 
     override suspend fun allMoments(): List<Moment> = dao.allSnapshot().map { it.toDomain() }
 
-    private fun MomentEntity.toDomain() = Moment(id, TrackId(trackId), positionMs, label, color, createdAt)
+    private fun MomentEntity.toDomain() = Moment(id, TrackId(trackId), positionMs, label, color, createdAt, isChapter)
 }

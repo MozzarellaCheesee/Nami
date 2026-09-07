@@ -94,10 +94,10 @@ class NowPlayingViewModel @Inject constructor(
         .flatMapLatest { trackId -> momentsRepository?.momentsForTrack(trackId) ?: kotlinx.coroutines.flow.flowOf(emptyList()) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun addMoment(positionMs: Long, label: String, colorArgb: Int) {
+    fun addMoment(positionMs: Long, label: String, colorArgb: Int, isChapter: Boolean = false) {
         val trackId = (playbackState.value as? PlaybackState.Playing)?.trackId ?: return
         val repo = momentsRepository ?: return
-        viewModelScope.launch { repo.add(trackId, positionMs, label, colorArgb) }
+        viewModelScope.launch { repo.add(trackId, positionMs, label, colorArgb, isChapter) }
     }
 
     fun removeMoment(id: Long) {
