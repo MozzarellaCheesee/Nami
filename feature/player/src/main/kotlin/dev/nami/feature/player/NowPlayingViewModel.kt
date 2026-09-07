@@ -8,6 +8,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.nami.core.model.Track
 import dev.nami.core.model.TrackId
 import dev.nami.domain.LibraryRepository
+import dev.nami.domain.Moment
+import dev.nami.domain.MomentsRepository
 import dev.nami.domain.PlayableTrack
 import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerQueue
@@ -47,6 +49,8 @@ class NowPlayingViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository? = null,
     // Same reasoning -- only used for the Now Playing heart/like button.
     private val playlistRepository: PlaylistRepository? = null,
+    // Same reasoning -- only used for the waveform's Moments markers.
+    private val momentsRepository: MomentsRepository? = null,
 ) : ViewModel() {
 
     private val waveformDiskCache = WaveformCache(context)
@@ -73,6 +77,22 @@ class NowPlayingViewModel @Inject constructor(
         val trackId = (playbackState.value as? PlaybackState.Playing)?.trackId ?: return
         val repo = playlistRepository ?: return
         viewModelScope.launch { repo.toggleLike(trackId) }
+    }
+
+    /** Метки моментов (План.md §22.1) for whatever's currently playing -- see WaveformScrubber's
+     * `moments` param, which just draws these, and NowPlayingScreen's long-press dialog, which
+     * calls [addMoment]. */
+    val currentTrackMoments: StateFlow<List<Moment>> = playerRepository.state
+        .filterIsInstance<PlaybackState.Playing>()
+        .map { it.trackId }
+        .distinctUntilChanged()
+        .flatMapLatest { trackId -> momentsRepository?.momentsForTrack(trackId) ?: kotlinx.coroutines.flow.flowOf(emptyList()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun addMoment(positionMs: Long, label: String, colorArgb: Int) {
+        val trackId = (playbackState.value as? PlaybackState.Playing)?.trackId ?: return
+        val repo = momentsRepository ?: return
+        viewModelScope.launch { repo.add(trackId, positionMs, label, colorArgb) }
     }
 
     /** Full Track for the "Аудиотракт"-style file details (bitrate/size/etc.) shown near the

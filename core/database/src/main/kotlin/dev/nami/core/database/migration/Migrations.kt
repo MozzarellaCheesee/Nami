@@ -158,3 +158,21 @@ val MIGRATION_12_13 = object : Migration(12, 13) {
         db.execSQL("ALTER TABLE playlists ADD COLUMN isLiked INTEGER NOT NULL DEFAULT 0")
     }
 }
+
+/** Этап 6's "Метки моментов" (План.md §22.1) -- a new table, no existing columns touched. */
+val MIGRATION_13_14 = object : Migration(13, 14) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS moments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                trackId TEXT NOT NULL,
+                positionMs INTEGER NOT NULL,
+                label TEXT NOT NULL,
+                color INTEGER NOT NULL,
+                createdAt INTEGER NOT NULL
+            )
+            """,
+        )
+    }
+}

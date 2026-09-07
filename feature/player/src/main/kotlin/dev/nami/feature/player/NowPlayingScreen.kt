@@ -78,8 +78,11 @@ import coil3.request.crossfade
 import coil3.compose.LocalPlatformContext
 import coil3.imageLoader
 import coil3.request.ImageRequest
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.toArgb
 import dev.nami.core.designsystem.ContextAction
 import dev.nami.core.designsystem.ContextActionSheet
+import dev.nami.core.designsystem.NamiAlertDialog
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.designsystem.fullBlockClickable
 import dev.nami.domain.PlaybackState
@@ -330,6 +333,8 @@ fun NowPlayingScreen(
         val progress = previewProgress ?: actualProgress
         val positionMs = (progress * durationMs).toLong()
         val waveform by viewModel.waveform.collectAsState()
+        val moments by viewModel.currentTrackMoments.collectAsState()
+        var pendingMomentFraction by remember { mutableStateOf<Float?>(null) }
         WaveformScrubber(
             seedKey = queue.nowPlaying?.id?.value ?: "",
             progress = actualProgress,
@@ -338,7 +343,18 @@ fun NowPlayingScreen(
             onPreviewEnd = { previewProgress = null },
             modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
             realHeights = waveform,
+            moments = if (durationMs > 0) moments.map { (it.positionMs.toFloat() / durationMs) to it.colorArgb } else emptyList(),
+            onLongPress = { fraction -> pendingMomentFraction = fraction },
         )
+        pendingMomentFraction?.let { fraction ->
+            AddMomentDialog(
+                onSave = { label, colorArgb ->
+                    viewModel.addMoment((fraction * durationMs).toLong(), label, colorArgb)
+                    pendingMomentFraction = null
+                },
+                onDismiss = { pendingMomentFraction = null },
+            )
+        }
         Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(
                 text = formatDuration(positionMs),
@@ -651,4 +667,61 @@ private fun formatBadgeDetail(format: String, track: dev.nami.core.model.Track?)
         }
     }
     return parts.joinToString(" · ")
+}
+
+/** Long-press on the scrubber (План.md §22.1) -- name it, pick a color, done. Colors are fixed
+ * swatches rather than a full picker: a moment marker is a tiny dot on the waveform, a handful of
+ * clearly distinct hues reads better there than any color a full picker could produce. */
+@Composable
+private fun AddMomentDialog(onSave: (label: String, colorArgb: Int) -> Unit, onDismiss: () -> Unit) {
+    var label by remember { mutableStateOf("") }
+    val swatches = listOf(
+        NamiColors.Shu.toArgb(),
+        NamiColors.Ai.toArgb(),
+        androidx.compose.ui.graphics.Color(0xFF4CAF50).toArgb(),
+        androidx.compose.ui.graphics.Color(0xFFFFC107).toArgb(),
+        NamiColors.Paper100.toArgb(),
+    )
+    var selectedColor by remember { mutableStateOf(swatches.first()) }
+
+    NamiAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { androidx.compose.material3.Text("Новая метка", color = NamiColors.Paper100) },
+        text = {
+            Column {
+                androidx.compose.material3.OutlinedTextField(
+                    value = label,
+                    onValueChange = { label = it },
+                    placeholder = { androidx.compose.material3.Text("Например: лучший дроп") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(modifier = Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    swatches.forEach { colorArgb ->
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(androidx.compose.ui.graphics.Color(colorArgb), androidx.compose.foundation.shape.CircleShape)
+                                .then(
+                                    if (colorArgb == selectedColor) {
+                                        Modifier.border(2.dp, NamiColors.Paper100, androidx.compose.foundation.shape.CircleShape)
+                                    } else {
+                                        Modifier
+                                    },
+                                )
+                                .clickable { selectedColor = colorArgb },
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(
+                onClick = { onSave(label.ifBlank { "Момент" }, selectedColor) },
+            ) { androidx.compose.material3.Text("Добавить", color = NamiColors.Shu) }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) { androidx.compose.material3.Text("Отмена", color = NamiColors.Paper70) }
+        },
+    )
 }

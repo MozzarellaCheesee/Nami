@@ -54,6 +54,12 @@ fun WaveformScrubber(
     // -- null while it's still decoding or if the scan failed, in which case the placeholder
     // shape below is what's actually drawn.
     realHeights: List<Float>? = null,
+    // План.md §22.1 "Метки моментов" -- (positionFraction 0..1, ARGB color) per marker, drawn as
+    // a small triangle above the bar it lands on. No separate tap-to-jump handling needed: a
+    // marker's fraction IS a point on the scrubber, so the existing tap-to-seek already lands
+    // there when tapped.
+    moments: List<Pair<Float, Int>> = emptyList(),
+    onLongPress: (Float) -> Unit = {},
 ) {
     val placeholder = remember(seedKey) { barHeights(seedKey) }
     val isReal = realHeights != null && realHeights.size == placeholder.size
@@ -88,10 +94,16 @@ fun WaveformScrubber(
         modifier = modifier
             .height(48.dp)
             .pointerInput(seedKey) {
-                detectTapGestures { offset ->
-                    val fraction = (offset.x / size.width).coerceIn(0f, 1f)
-                    onSeek(fraction)
-                }
+                detectTapGestures(
+                    onTap = { offset ->
+                        val fraction = (offset.x / size.width).coerceIn(0f, 1f)
+                        onSeek(fraction)
+                    },
+                    onLongPress = { offset ->
+                        val fraction = (offset.x / size.width).coerceIn(0f, 1f)
+                        onLongPress(fraction)
+                    },
+                )
             }
             .pointerInput(seedKey) {
                 detectDragGestures(
@@ -142,5 +154,15 @@ fun WaveformScrubber(
             end = Offset(headX, size.height),
             strokeWidth = 2.dp.toPx(),
         )
+
+        val markerRadiusPx = 4.dp.toPx()
+        moments.forEach { (fraction, colorArgb) ->
+            val x = fraction.coerceIn(0f, 1f) * size.width
+            drawCircle(
+                color = androidx.compose.ui.graphics.Color(colorArgb),
+                radius = markerRadiusPx,
+                center = Offset(x, markerRadiusPx),
+            )
+        }
     }
 }
