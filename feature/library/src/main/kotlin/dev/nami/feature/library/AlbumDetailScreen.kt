@@ -277,8 +277,13 @@ fun AlbumDetailScreen(
                     // Pushed below the back button's own row (56dp) so they don't collide there.
                     contentAlignment = Alignment.TopEnd,
                 ) {
+                    // Top padding tracks where the cover's own gradient scrim starts (0.4 of its
+                    // height, matching the Brush.verticalGradient(0.4f to ...) below) instead of a
+                    // fixed 56dp guess -- so the buttons land right at the fade line regardless of
+                    // scroll position, not wherever happened to clear the back button.
+                    val gradientStartDp = with(density) { ((headerState.heightPx + rootOffset.y) * 0.4f).toDp() }
                     Row(
-                        modifier = Modifier.graphicsLayer { alpha = (1f - progress / 0.6f).coerceIn(0f, 1f) }.padding(top = 56.dp, end = 12.dp),
+                        modifier = Modifier.graphicsLayer { alpha = (1f - progress / 0.6f).coerceIn(0f, 1f) }.padding(top = gradientStartDp, end = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (uiState.tracks.isNotEmpty()) {
