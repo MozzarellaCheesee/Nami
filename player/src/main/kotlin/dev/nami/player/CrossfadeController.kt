@@ -1,27 +1,51 @@
 package dev.nami.player
 
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import dev.nami.domain.SettingsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.PI
 
-/** Этап 4's crossfade -- NOT a true overlapping mix of two tracks (Media3's ExoPlayer decodes one
- * item at a time; a real overlap needs two players sharing one AudioTrack, out of scope for the
- * risk it'd add to the one already-proven playback path). This is the honest, lower-risk version:
- * a soft fade-out as a track ends and fade-in as the next one starts, driven purely by
- * `player.volume` -- no custom AudioSink/RenderersFactory, so unlike EQ/ReplayGain/dither it needs
- * no restart to take effect and can't destabilize decoding at all. */
+/** Этап 4's crossfade -- a REAL overlap: for the last FADE_MS of a track a second ExoPlayer is
+ * already playing the next queue item from its own position 0, the two volumes cross on an
+ * equal-power curve, and the outgoing player is released once it has faded to silence.
+ *
+ * Why it was rewritten: the previous version faded the single player's `volume` down over a track's
+ * last 3 seconds and back up over the next track's first 3 seconds. That is verifiably applied (the
+ * volume really does ramp 1.0 -> 0.0 -> 1.0 on the device), but it is not a crossfade at all -- the
+ * two ramps are sequential, so it removes music instead of overlapping it, and both windows sit
+ * exactly where most tracks are already fading out / silently leading in. Result: nothing audible,
+ * reported as "кроссфейд не работает" several times over. One ExoPlayer decodes one item at a time,
+ * so two players is the only way to actually overlap them.
+ *
+ * The session is handed to the incoming player at the START of the fade, not the end: the new track
+ * is the one you are hearing come up, so that's when the UI/notification should be showing it. (An
+ * end-of-fade handover left the cover and title stuck on the finished track for three full seconds.)
+ * The outgoing player just keeps decoding in the background, muted-and-falling, until it's released.
+ *
+ * The overlap is confined to the fade itself: outside it there is still exactly one player, and
+ * with the setting off (the default) nothing here touches playback at all. */
 class CrossfadeController(
-    // Lambda, not a fixed instance -- PlaybackService can swap out the live ExoPlayer (see
-    // swapPlayer()) when EQ/ReplayGain/dither toggle, and this always needs the CURRENT one.
+    // Lambda, not a fixed instance -- PlaybackService swaps out the live ExoPlayer (see swapPlayer()
+    // and the handover below), and this always needs the CURRENT one.
     private val player: () -> ExoPlayer,
     private val settingsRepository: SettingsRepository,
     scope: CoroutineScope,
+    /** Builds a second player already prepared and playing the next queue item from 0 at volume 0,
+     * or null when there is nothing to cross into (last track). */
+    private val startIncoming: () -> ExoPlayer?,
+    /** Makes that player the media session's player, so the UI follows the track now coming up. */
+    private val promote: (ExoPlayer) -> Unit,
+    /** Releases the faded-out player and gives audio focus back to the surviving one. */
+    private val retire: (ExoPlayer) -> Unit,
 ) {
+    private var outgoing: ExoPlayer? = null
+
     init {
         scope.launch {
             while (isActive) {
@@ -39,36 +63,84 @@ class CrossfadeController(
         }
     }
 
+    /** Ends an in-flight crossfade immediately, releasing the outgoing player -- needed when the DSP
+     * sink swaps mid-fade (PlaybackService.swapPlayer), when the setting is turned off, and on
+     * service teardown, so a second ExoPlayer can never outlive the fade that created it. */
+    fun cancel() {
+        outgoing?.let(retire)
+        outgoing = null
+        try {
+            player().volume = 1f
+        } catch (e: Exception) {
+            // Player already released / not built yet -- nothing to restore.
+        }
+    }
+
     private fun tick() {
-        val p = player()
+        val current = player()
         if (!settingsRepository.crossfadeEnabled.value) {
-            if (p.volume != 1f) p.volume = 1f
+            if (outgoing != null) cancel()
+            if (current.volume != 1f) current.volume = 1f
             return
         }
-        p.volume = volumeFor(p.currentPosition, p.duration)
+
+        val durationMs = current.duration
+        // Progress through the overlap, measured on the INCOMING track's own position -- it starts
+        // at 0 by construction, so this stays exact even if it spent a moment buffering first.
+        val progress = (current.currentPosition.toFloat() / FADE_MS).coerceIn(0f, 1f)
+
+        outgoing?.let { old ->
+            old.volume = fadeOut(progress)
+            if (progress >= 1f) {
+                outgoing = null
+                retire(old)
+            }
+        }
+
+        if (outgoing == null && durationMs > 0 && current.isPlaying &&
+            durationMs - current.currentPosition <= FADE_MS &&
+            current.repeatMode != Player.REPEAT_MODE_ONE && current.hasNextMediaItem()
+        ) {
+            val incoming = startIncoming()
+            if (incoming != null) {
+                // Otherwise the outgoing player runs on into the very item the incoming one is
+                // already playing, and the same track decodes twice at once.
+                current.setPauseAtEndOfMediaItems(true)
+                outgoing = current
+                promote(incoming)
+                return
+            }
+        }
+
+        // Also covers the incoming player's own fade-in (its position is inside the first FADE_MS),
+        // which is the exact complement of the fadeOut() applied to the outgoing one above.
+        current.volume = volumeFor(current.currentPosition, durationMs)
     }
 
     companion object {
         private const val TICK_MS = 150L
         const val FADE_MS = 3000L
+        private val HALF_PI = (PI / 2).toFloat()
 
-        /** Pure so it's testable without an ExoPlayer -- 1.0 outside the fade windows, ramping
-         * near the very start (fade-in after a transition) and very end (fade-out before one) of
-         * the current item. durationMs <= 0 (unknown/live) always returns full volume.
-         *
-         * Equal-power taper (sin of the linear progress, not the linear progress itself) --
-         * human loudness perception is roughly logarithmic, so a straight linear ramp reads as a
-         * dip toward silence in the middle of the fade instead of a smooth blend (this is the
-         * standard reason DAWs default crossfades to an equal-power curve, not linear). */
+        /** Equal-power pair: fadeIn(t)² + fadeOut(t)² == 1, so the summed power of the two
+         * overlapping tracks stays constant across the fade. A linear pair dips ~3dB in the middle,
+         * which is exactly the "sagging" hole DAWs default to equal-power crossfades to avoid. */
+        fun fadeIn(progress: Float): Float = sin(progress.coerceIn(0f, 1f) * HALF_PI)
+
+        fun fadeOut(progress: Float): Float = cos(progress.coerceIn(0f, 1f) * HALF_PI)
+
+        /** The single-player ramp: the incoming half of a crossfade, and the whole effect when
+         * there is nothing to cross into (last track in the queue, or repeat-one). Pure so it's
+         * testable without an ExoPlayer. durationMs <= 0 (unknown/live) always returns full volume. */
         fun volumeFor(positionMs: Long, durationMs: Long): Float {
             if (durationMs <= 0) return 1f
             val remainingMs = durationMs - positionMs
-            val linear = when {
-                positionMs < FADE_MS -> (positionMs.toFloat() / FADE_MS).coerceIn(0f, 1f)
-                remainingMs < FADE_MS -> (remainingMs.toFloat() / FADE_MS).coerceIn(0f, 1f)
+            val progress = when {
+                positionMs < FADE_MS -> positionMs.toFloat() / FADE_MS
+                remainingMs < FADE_MS -> remainingMs.toFloat() / FADE_MS
                 else -> return 1f
             }
-            return sin(linear * (PI / 2).toFloat())
+            return fadeIn(progress)
         }
     }
 }

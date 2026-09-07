@@ -37,4 +37,31 @@ class CrossfadeControllerTest {
         val volume = CrossfadeController.volumeFor(positionMs = 500, durationMs = duration)
         assert(volume in 0f..1f)
     }
+
+    @Test
+    fun `crossfade pair starts and ends fully handed over`() {
+        assertEquals(0f, CrossfadeController.fadeIn(0f))
+        assertEquals(1f, CrossfadeController.fadeOut(0f))
+        assertEquals(1f, CrossfadeController.fadeIn(1f))
+        assert(CrossfadeController.fadeOut(1f) < 1e-6f) { "outgoing must reach silence" }
+    }
+
+    @Test
+    fun `crossfade pair is equal-power across the whole overlap`() {
+        // The point of the sin/cos pair: summed POWER stays 1 through the overlap, so the two
+        // tracks playing at once don't sag ~3dB in the middle the way a linear pair does.
+        for (step in 0..20) {
+            val t = step / 20f
+            val inVol = CrossfadeController.fadeIn(t)
+            val outVol = CrossfadeController.fadeOut(t)
+            val power = inVol * inVol + outVol * outVol
+            assert(power in 0.999f..1.001f) { "power at t=$t was $power" }
+        }
+    }
+
+    @Test
+    fun `crossfade progress is clamped outside the fade window`() {
+        assertEquals(0f, CrossfadeController.fadeIn(-1f))
+        assertEquals(1f, CrossfadeController.fadeIn(5f))
+    }
 }

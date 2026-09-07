@@ -30,13 +30,27 @@ class ParametricEqAudioProcessor : BaseAudioProcessor() {
     private var sampleRateHz = 0
     private var states: Array<Array<BiquadState>> = emptyArray() // [band][channel]
 
+    // Kept as dB, not only as computed coefficients: the biquad math needs a sample rate, which is
+    // only known once onConfigure() runs. Settings' StateFlow emits its stored gains the moment the
+    // service collects it -- i.e. before any audio format is known -- and the old code just dropped
+    // that emission on the floor, so saved EQ gains stayed inert until the user physically moved a
+    // slider again. Remembering them here and recomputing on configure fixes that, and is also what
+    // lets a freshly built processor (one per player, see PlaybackService) start out correct.
+    @Volatile private var gainsDb: List<Float> = List(BAND_FREQS_HZ.size) { 0f }
+
     /** Called from Settings' live flow -- one gain per band in BAND_FREQS_HZ order, dB, ±12
      * typical range. Recomputes coefficients immediately; @Volatile field swap means the audio
      * thread picks up the new filter on its very next buffer, no restart needed. */
     fun setGains(gainsDb: List<Float>) {
-        if (sampleRateHz <= 0) return
         require(gainsDb.size == BAND_FREQS_HZ.size) { "expected ${BAND_FREQS_HZ.size} gains, got ${gainsDb.size}" }
-        coeffs = Array(BAND_FREQS_HZ.size) { i -> BiquadCoefficients.peaking(sampleRateHz, BAND_FREQS_HZ[i], gainsDb[i], BAND_Q) }
+        this.gainsDb = gainsDb
+        recomputeCoefficients()
+    }
+
+    private fun recomputeCoefficients() {
+        if (sampleRateHz <= 0) return
+        val gains = gainsDb
+        coeffs = Array(BAND_FREQS_HZ.size) { i -> BiquadCoefficients.peaking(sampleRateHz, BAND_FREQS_HZ[i], gains[i], BAND_Q) }
     }
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
@@ -45,6 +59,7 @@ class ParametricEqAudioProcessor : BaseAudioProcessor() {
         }
         sampleRateHz = inputAudioFormat.sampleRate
         states = Array(BAND_FREQS_HZ.size) { Array(inputAudioFormat.channelCount) { BiquadState() } }
+        recomputeCoefficients()
         return inputAudioFormat
     }
 

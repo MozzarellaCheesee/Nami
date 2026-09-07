@@ -2,6 +2,7 @@ package dev.nami.player
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.os.Bundle
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -36,15 +37,43 @@ import javax.inject.Inject
  * chip, so it can open Now Playing directly instead of whatever screen the user left. */
 const val EXTRA_OPEN_PLAYER = "dev.nami.player.OPEN_PLAYER"
 
+/** Session extra bumped once per crossfade handover -- see PlaybackService.promoteIncomingPlayer. */
+const val EXTRA_CROSSFADE_HANDOVER = "dev.nami.player.CROSSFADE_HANDOVER"
+
+/** The three custom AudioProcessors belonging to ONE built ExoPlayer. Grouped only so it's obvious
+ * they are created and replaced together -- sharing a set across two simultaneously-playing players
+ * (which a crossfade creates) would have both audio threads writing the same processor state. */
+private class DspChain {
+    val replayGain = ReplayGainAudioProcessor()
+    val eq = ParametricEqAudioProcessor()
+    val dither = DitherAudioProcessor()
+}
+
 @AndroidEntryPoint
 class PlaybackService : MediaSessionService() {
     private lateinit var player: ExoPlayer
     private lateinit var mediaSession: MediaSession
-    private val eqProcessor = ParametricEqAudioProcessor()
-    private val replayGainProcessor = ReplayGainAudioProcessor()
-    private val ditherProcessor = DitherAudioProcessor()
+    // One chain per built player, never shared: a crossfade has two ExoPlayers (so two
+    // DefaultAudioSinks, on two audio threads) live at once, and AudioProcessors are stateful --
+    // BaseAudioProcessor's single output buffer, the EQ's per-channel biquad histories -- so one
+    // shared set would be written by both pipelines at the same time.
+    private var dsp = DspChain()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var usingCustomSink = false
+    private var crossfade: CrossfadeController? = null
+    private var crossfadeHandovers = 0
+    // Last ReplayGain value scanned for the current track, so a chain built mid-track (crossfade,
+    // sink swap) starts at the right gain instead of 0dB until the next track change.
+    private var currentTrackGainDb: Float? = null
+
+    // Automatic audio-focus handling: pauses when another app starts playing audio/video
+    // (transient or permanent focus loss), and resumes on its own once that app stops --
+    // but only if playback was still going when focus was lost (a manual pause beforehand
+    // stays paused, ExoPlayer tracks this itself).
+    private val audioAttributes = AudioAttributes.Builder()
+        .setUsage(C.USAGE_MEDIA)
+        .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+        .build()
 
     // Per-track ReplayGain scan lives on the player instance's own listener list, re-attached to
     // whichever ExoPlayer is current after a swapPlayer() -- kept as a field so it's the exact
@@ -113,12 +142,12 @@ class PlaybackService : MediaSessionService() {
         // fresh pipeline when the sink itself needed to change; this seek covers flips that don't
         // (e.g. gains changing, or toggling EQ off while ReplayGain/dither keep the sink alive).
         settingsRepository.eqBandGains
-            .onEach { gains -> eqProcessor.setGains(gains) }
+            .onEach { gains -> dsp.eq.setGains(gains) }
             .launchIn(scope)
         settingsRepository.eqEnabled
             .onEach { enabled ->
-                val wasEnabled = eqProcessor.enabled
-                eqProcessor.enabled = enabled
+                val wasEnabled = dsp.eq.enabled
+                dsp.eq.enabled = enabled
                 if (enabled != wasEnabled && player.playbackState != Player.STATE_IDLE) {
                     player.seekTo(player.currentPosition)
                 }
@@ -127,8 +156,8 @@ class PlaybackService : MediaSessionService() {
 
         settingsRepository.ditherEnabled
             .onEach { enabled ->
-                val wasEnabled = ditherProcessor.enabled
-                ditherProcessor.enabled = enabled
+                val wasEnabled = dsp.dither.enabled
+                dsp.dither.enabled = enabled
                 if (enabled != wasEnabled && player.playbackState != Player.STATE_IDLE) {
                     player.seekTo(player.currentPosition)
                 }
@@ -137,9 +166,9 @@ class PlaybackService : MediaSessionService() {
 
         settingsRepository.replayGainEnabled
             .onEach { enabled ->
-                val wasActive = replayGainProcessor.isActive()
-                replayGainProcessor.enabled = enabled
-                if (replayGainProcessor.isActive() != wasActive && player.playbackState != Player.STATE_IDLE) {
+                val wasActive = dsp.replayGain.isActive()
+                dsp.replayGain.enabled = enabled
+                if (dsp.replayGain.isActive() != wasActive && player.playbackState != Player.STATE_IDLE) {
                     player.seekTo(player.currentPosition)
                 }
             }
@@ -149,16 +178,23 @@ class PlaybackService : MediaSessionService() {
         // own toggle (see ReplayGainAudioProcessor.isActive()).
         settingsRepository.playbackGainDb
             .onEach { boostDb ->
-                val wasActive = replayGainProcessor.isActive()
-                replayGainProcessor.boostDb = boostDb
-                if (replayGainProcessor.isActive() != wasActive && player.playbackState != Player.STATE_IDLE) {
+                val wasActive = dsp.replayGain.isActive()
+                dsp.replayGain.boostDb = boostDb
+                if (dsp.replayGain.isActive() != wasActive && player.playbackState != Player.STATE_IDLE) {
                     player.seekTo(player.currentPosition)
                 }
             }
             .launchIn(scope)
 
         BitPerfectUsbController(this, settingsRepository, scope)
-        CrossfadeController({ player }, settingsRepository, scope)
+        crossfade = CrossfadeController(
+            player = { player },
+            settingsRepository = settingsRepository,
+            scope = scope,
+            startIncoming = ::buildIncomingPlayer,
+            promote = ::promoteIncomingPlayer,
+            retire = ::retireOutgoingPlayer,
+        )
     }
 
     private fun currentNeedsCustomSink(): Boolean =
@@ -169,8 +205,21 @@ class PlaybackService : MediaSessionService() {
                 settingsRepository.playbackGainDb.value != 0f
             )
 
-    private fun buildPlayer(useCustomSink: Boolean): ExoPlayer {
+    /** Fresh, correctly-seeded processors for one player. Seeding matters: a chain built mid-session
+     * (crossfade, sink swap) must start at the settings the user already has, not at defaults. */
+    private fun newDspChain(): DspChain = DspChain().apply {
+        eq.enabled = settingsRepository.eqEnabled.value
+        eq.setGains(settingsRepository.eqBandGains.value)
+        dither.enabled = settingsRepository.ditherEnabled.value
+        replayGain.enabled = settingsRepository.replayGainEnabled.value
+        replayGain.boostDb = settingsRepository.playbackGainDb.value
+        replayGain.setGainDb(currentTrackGainDb)
+    }
+
+    private fun buildPlayer(useCustomSink: Boolean, handleAudioFocus: Boolean = true): ExoPlayer {
         usingCustomSink = useCustomSink
+        val chain = newDspChain()
+        dsp = chain
         // Local files only, no network wait -- widen the buffer window so several tracks
         // ahead/behind the current one stay decoded and ready, instead of ExoPlayer's default
         // which only keeps a small window and drops the back buffer entirely (causing a visible
@@ -184,23 +233,60 @@ class PlaybackService : MediaSessionService() {
             )
             .setBackBuffer(/* backBufferDurationMs = */ 60_000, /* retainBackBufferFromKeyframe = */ true)
             .build()
-        // Automatic audio-focus handling: pauses when another app starts playing audio/video
-        // (transient or permanent focus loss), and resumes on its own once that app stops --
-        // but only if playback was still going when focus was lost (a manual pause beforehand
-        // stays paused, ExoPlayer tracks this itself).
-        val audioAttributes = AudioAttributes.Builder()
-            .setUsage(C.USAGE_MEDIA)
-            .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-            .build()
         val builder = if (useCustomSink) {
-            ExoPlayer.Builder(this, NamiRenderersFactory(this, replayGainProcessor, eqProcessor, ditherProcessor))
+            ExoPlayer.Builder(this, NamiRenderersFactory(this, chain.replayGain, chain.eq, chain.dither))
         } else {
             ExoPlayer.Builder(this)
         }
         return builder
             .setLoadControl(loadControl)
-            .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ true)
+            .setAudioAttributes(audioAttributes, handleAudioFocus)
             .build()
+    }
+
+    /** The incoming half of a real crossfade (see CrossfadeController): a second ExoPlayer already
+     * playing the next queue item from 0 while the current one finishes. It gets the whole queue at
+     * that item's index, so promoting it later keeps previous/next and the queue screen intact.
+     *
+     * Audio focus is deliberately NOT handled by this one. A second focus request from the same app
+     * makes the framework tell the first requester it lost focus, and ExoPlayer's AudioFocusManager
+     * would then pause the track we are in the middle of fading out -- the crossfade would cut
+     * instead of blend. promoteIncomingPlayer() re-arms focus once it's the only player left. */
+    private fun buildIncomingPlayer(): ExoPlayer? {
+        val old = player
+        val nextIndex = old.nextMediaItemIndex
+        if (nextIndex == C.INDEX_UNSET) return null
+        val items = (0 until old.mediaItemCount).map { old.getMediaItemAt(it) }
+        if (items.isEmpty()) return null
+        val fresh = buildPlayer(usingCustomSink, handleAudioFocus = false)
+        fresh.addListener(replayGainListener)
+        fresh.setMediaItems(items, nextIndex, /* startPositionMs = */ 0L)
+        fresh.repeatMode = old.repeatMode
+        fresh.shuffleModeEnabled = old.shuffleModeEnabled
+        fresh.volume = 0f
+        fresh.prepare()
+        fresh.playWhenReady = true
+        return fresh
+    }
+
+    /** Hands the session over the moment the incoming track starts sounding, so the notification and
+     * the Now Playing screen follow the audio instead of lagging a full fade behind it. The bumped
+     * session extra is how PlayerRepositoryImpl tells this apart from an ordinary playlist change --
+     * a player swap doesn't reach a MediaController as MEDIA_ITEM_TRANSITION_REASON_AUTO, so without
+     * it the cover-slide animation for an auto-advance would silently stop happening on crossfades. */
+    private fun promoteIncomingPlayer(fresh: ExoPlayer) {
+        mediaSession.player = fresh
+        player = fresh
+        crossfadeHandovers++
+        mediaSession.setSessionExtras(Bundle().apply { putInt(EXTRA_CROSSFADE_HANDOVER, crossfadeHandovers) })
+    }
+
+    /** Audio focus is only re-armed here, once the faded-out player is gone: a second focus request
+     * while it still held focus is what the framework answers by telling IT it lost focus, and
+     * ExoPlayer's AudioFocusManager would then pause the track mid-fade. */
+    private fun retireOutgoingPlayer(old: ExoPlayer) {
+        old.release()
+        player.setAudioAttributes(audioAttributes, /* handleAudioFocus = */ true)
     }
 
     /** Swaps the live ExoPlayer for one built with (or without) the custom float-output sink,
@@ -209,6 +295,9 @@ class PlaybackService : MediaSessionService() {
      * of needing an app restart, without going back to forcing float output unconditionally
      * (that's what caused the chipmunk-pitch regression). */
     private fun swapPlayer(useCustomSink: Boolean) {
+        // A crossfade in flight owns a second player built against the OLD sink choice; drop it
+        // rather than leave it playing (and leaking) past the swap.
+        crossfade?.cancel()
         val old = player
         val mediaItems = (0 until old.mediaItemCount).map { old.getMediaItemAt(it) }
         val currentIndex = old.currentMediaItemIndex
@@ -245,13 +334,15 @@ class PlaybackService : MediaSessionService() {
             if (scanned != null) libraryRepository.setTrackReplayGain(trackId, scanned)
             scanned
         }
-        replayGainProcessor.setGainDb(gain)
+        currentTrackGainDb = gain
+        dsp.replayGain.setGainDb(gain)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession =
         mediaSession
 
     override fun onDestroy() {
+        crossfade?.cancel()
         mediaSession.run {
             player.release()
             release()

@@ -65,7 +65,17 @@ class PlayerRepositoryImpl @Inject constructor(
 
     init {
         val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
-        val future = MediaController.Builder(context, token).buildAsync()
+        val future = MediaController.Builder(context, token)
+            // A crossfade hands the session to a whole new ExoPlayer (PlaybackService.promote-
+            // IncomingPlayer), which reaches a controller as a playlist change, NOT as
+            // MEDIA_ITEM_TRANSITION_REASON_AUTO -- so the cover-slide animation below would never
+            // fire for a crossfaded transition. The service bumps this extra on each handover.
+            .setListener(object : MediaController.Listener {
+                override fun onExtrasChanged(controller: MediaController, extras: android.os.Bundle) {
+                    if (extras.containsKey(EXTRA_CROSSFADE_HANDOVER)) _autoAdvanceSignal.value++
+                }
+            })
+            .buildAsync()
         future.addListener(
             {
                 controller = future.get()
