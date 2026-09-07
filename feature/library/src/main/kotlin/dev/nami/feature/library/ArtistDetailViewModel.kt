@@ -69,4 +69,11 @@ class ArtistDetailViewModel @Inject constructor(
     fun removeTrackFromArtist(trackId: TrackId) {
         viewModelScope.launch { libraryRepository.removeTrackFromArtist(trackId) }
     }
+
+    fun batchEditTracks(ids: List<TrackId>, artistName: String?, albumName: String?, year: Int?, genre: String?) {
+        viewModelScope.launch { libraryRepository.batchEditTracks(ids, artistName, albumName, year, genre) }
+    }
+
+    suspend fun searchMusicBrainz(title: String, artistName: String?) =
+        libraryRepository.searchMusicBrainz(title, artistName)
 }

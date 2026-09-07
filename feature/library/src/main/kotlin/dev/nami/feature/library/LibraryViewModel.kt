@@ -64,6 +64,12 @@ class LibraryViewModel @Inject constructor(
     fun batchEditSelectedTracks(artistName: String?, albumName: String?, year: Int?, genre: String?) {
         val ids = uiState.value.selectedTrackIds.toList()
         clearSelection()
+        batchEditTracks(ids, artistName, albumName, year, genre)
+    }
+
+    /** Same TagEditDialog, single track from a row's own "⋮" menu -- [batchEditSelectedTracks]
+     * is just this called with the current selection. */
+    fun batchEditTracks(ids: List<TrackId>, artistName: String?, albumName: String?, year: Int?, genre: String?) {
         viewModelScope.launch { libraryRepository.batchEditTracks(ids, artistName, albumName, year, genre) }
     }
 

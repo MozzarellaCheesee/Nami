@@ -32,6 +32,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Label
 import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Notes
@@ -74,6 +75,7 @@ fun TrackListItem(
     onDelete: (() -> Unit)? = null,
     onRename: (() -> Unit)? = null,
     onEditNote: (() -> Unit)? = null,
+    onEditTags: (() -> Unit)? = null,
     onRemoveFromAlbum: (() -> Unit)? = null,
     onRemoveFromArtist: (() -> Unit)? = null,
     onShowInfo: (() -> Unit)? = null,
@@ -196,7 +198,7 @@ fun TrackListItem(
         }
         if (selectionMode) {
             Checkbox(checked = isSelected, onCheckedChange = null)
-        } else if (onAddToPlaylist != null || onAddToQueue != null || onDelete != null || onRename != null || onRemoveFromAlbum != null || onRemoveFromArtist != null || onLikeTrack != null || onEditNote != null || onShowInfo != null) {
+        } else if (onAddToPlaylist != null || onAddToQueue != null || onDelete != null || onRename != null || onRemoveFromAlbum != null || onRemoveFromArtist != null || onLikeTrack != null || onEditNote != null || onEditTags != null || onShowInfo != null) {
             IconButton(onClick = { showMenu = true }) {
                 Icon(Icons.Outlined.MoreVert, contentDescription = "Ещё", tint = NamiColors.Paper40)
             }
@@ -209,6 +211,7 @@ fun TrackListItem(
                         onAddToQueue?.let { ContextAction("В очередь", Icons.Outlined.PlaylistAdd, it) },
                         onRename?.let { ContextAction("Переименовать", Icons.Outlined.Edit, it) },
                         onEditNote?.let { ContextAction("Заметка", Icons.Outlined.Notes, it) },
+                        onEditTags?.let { ContextAction("Редактировать теги", Icons.Outlined.Label, it) },
                         onShowInfo?.let { ContextAction("Информация о треке", Icons.Outlined.Info, it) },
                         onRemoveFromAlbum?.let { ContextAction("Убрать из альбома", Icons.Outlined.Delete, it) },
                         onRemoveFromArtist?.let { ContextAction("Убрать у артиста", Icons.Outlined.Delete, it) },
@@ -244,9 +247,4 @@ private fun playsWord(count: Int): String {
     }
 }
 
-private fun formatDuration(durationMs: Long): String {
-    val totalSeconds = durationMs / 1000
-    val minutes = totalSeconds / 60
-    val seconds = totalSeconds % 60
-    return "%d:%02d".format(minutes, seconds)
-}
+// formatDuration now lives in TrackInfoScreen.kt (internal, shared across this package).

@@ -24,6 +24,7 @@ import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PlaylistAdd
@@ -87,6 +88,7 @@ fun AlbumDetailScreen(
     onPickCoverRequested: (AlbumId) -> Unit,
     onDeleted: () -> Unit,
     onShowTrackInfo: (TrackId) -> Unit,
+    onShowAlbumInfo: (AlbumId) -> Unit,
     viewModel: AlbumDetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -98,6 +100,7 @@ fun AlbumDetailScreen(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showPickArtistDialog by remember { mutableStateOf(false) }
     var showEditYearDialog by remember { mutableStateOf(false) }
+    var editTagsTrackId by remember { mutableStateOf<TrackId?>(null) }
 
     val density = LocalDensity.current
     val headerState = rememberCollapsingHeaderState(maxHeight = HEADER_MAX_HEIGHT, minHeight = HEADER_MIN_HEIGHT)
@@ -205,6 +208,7 @@ fun AlbumDetailScreen(
                                 Icons.Outlined.Star,
                             ) { uiState.album?.let { viewModel.setIsSingle(!it.isSingle) } },
                             ContextAction("Удалить альбом", Icons.Outlined.Delete) { showDeleteConfirm = true },
+                            ContextAction("Информация об альбоме", Icons.Outlined.Info) { uiState.album?.let { onShowAlbumInfo(it.id) } },
                         ),
                     )
                 }
@@ -227,6 +231,7 @@ fun AlbumDetailScreen(
                                 onAddToPlaylist = { addToPlaylistTrackId = track.id },
                                 onLikeTrack = { viewModel.likeTrack(track.id) },
                                 onRemoveFromAlbum = { viewModel.removeTrackFromAlbum(track.id) },
+                                onEditTags = { editTagsTrackId = track.id },
                                 onShowInfo = { onShowTrackInfo(track.id) },
                                 isCurrentTrack = track.id == nowPlaying?.trackId,
                                 isPlaying = track.id == nowPlaying?.trackId && nowPlaying?.isPlaying == true,
@@ -252,6 +257,7 @@ fun AlbumDetailScreen(
                                     onAddToPlaylist = { addToPlaylistTrackId = track.id },
                                     onLikeTrack = { viewModel.likeTrack(track.id) },
                                     onRemoveFromAlbum = { viewModel.removeTrackFromAlbum(track.id) },
+                                    onEditTags = { editTagsTrackId = track.id },
                                     onShowInfo = { onShowTrackInfo(track.id) },
                                     isCurrentTrack = track.id == nowPlaying?.trackId,
                                     isPlaying = track.id == nowPlaying?.trackId && nowPlaying?.isPlaying == true,
@@ -423,6 +429,18 @@ fun AlbumDetailScreen(
                 }) { Text("Удалить") }
             },
             dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Отмена") } },
+        )
+    }
+
+    editTagsTrackId?.let { trackId ->
+        TagEditDialog(
+            trackCount = 1,
+            onSearchMusicBrainz = { title, artist -> viewModel.searchMusicBrainz(title, artist) },
+            onSave = { artistName, albumName, year, genre ->
+                viewModel.batchEditTracks(listOf(trackId), artistName, albumName, year, genre)
+                editTagsTrackId = null
+            },
+            onDismiss = { editTagsTrackId = null },
         )
     }
 }

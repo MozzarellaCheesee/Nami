@@ -115,6 +115,7 @@ fun LibraryScreen(
     var addToPlaylistTrackId by remember { mutableStateOf<TrackId?>(null) }
     var showAddSelectedToPlaylist by remember { mutableStateOf(false) }
     var showBatchEditDialog by remember { mutableStateOf(false) }
+    var editTagsTrackId by remember { mutableStateOf<TrackId?>(null) }
     var renameTrack by remember { mutableStateOf<Track?>(null) }
     var noteTrack by remember { mutableStateOf<Track?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -206,6 +207,7 @@ fun LibraryScreen(
                         onSetSelection = { ids -> viewModel.setSelectedTracks(ids) },
                         onRenameTrack = { track -> renameTrack = track },
                         onEditNoteTrack = { track -> noteTrack = track },
+                        onEditTagsTrack = { track -> editTagsTrackId = track.id },
                         onShowTrackInfo = onShowTrackInfo,
                         nowPlaying = nowPlaying,
                     )
@@ -298,7 +300,7 @@ fun LibraryScreen(
     }
 
     if (showBatchEditDialog) {
-        BatchEditDialog(
+        TagEditDialog(
             trackCount = uiState.selectedTrackIds.size,
             onSearchMusicBrainz = { title, artist -> viewModel.searchMusicBrainz(title, artist) },
             onSave = { artistName, albumName, year, genre ->
@@ -308,98 +310,18 @@ fun LibraryScreen(
             onDismiss = { showBatchEditDialog = false },
         )
     }
-}
 
-/** A3 "Редактор тегов batch" (П.md §23.20) -- artist/album/year/genre fields, blank = leave
- * unchanged for that field across every selected track (see LibraryRepositoryImpl.batchEditTracks
- * for exact per-field semantics, e.g. year with no album name applies to each track's existing
- * album). "Найти в MusicBrainz" searches by a manually typed title/artist and prefills the form
- * from the first result on tap -- no per-track auto-detection, this batch-edits many tracks at
- * once so there's no single "the" title to derive a search from. */
-@Composable
-private fun BatchEditDialog(
-    trackCount: Int,
-    onSearchMusicBrainz: suspend (title: String, artist: String?) -> List<dev.nami.domain.MusicBrainzCandidate>,
-    onSave: (artistName: String?, albumName: String?, year: Int?, genre: String?) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    var artistName by remember { mutableStateOf("") }
-    var albumName by remember { mutableStateOf("") }
-    var year by remember { mutableStateOf("") }
-    var genre by remember { mutableStateOf("") }
-    var searchTitle by remember { mutableStateOf("") }
-    var searching by remember { mutableStateOf(false) }
-    var candidates by remember { mutableStateOf<List<dev.nami.domain.MusicBrainzCandidate>>(emptyList()) }
-    val scope = rememberCoroutineScope()
-
-    dev.nami.core.designsystem.NamiAlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Редактировать теги ($trackCount)") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Пустое поле -- не менять.", style = MaterialTheme.typography.bodySmall)
-                androidx.compose.material3.OutlinedTextField(
-                    value = artistName, onValueChange = { artistName = it },
-                    label = { Text("Исполнитель") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                )
-                androidx.compose.material3.OutlinedTextField(
-                    value = albumName, onValueChange = { albumName = it },
-                    label = { Text("Альбом") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                )
-                androidx.compose.material3.OutlinedTextField(
-                    value = year, onValueChange = { year = it.filter { c -> c.isDigit() } },
-                    label = { Text("Год") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                )
-                androidx.compose.material3.OutlinedTextField(
-                    value = genre, onValueChange = { genre = it },
-                    label = { Text("Жанр") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                )
-                Text("Поиск в MusicBrainz:", style = MaterialTheme.typography.bodySmall)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    androidx.compose.material3.OutlinedTextField(
-                        value = searchTitle, onValueChange = { searchTitle = it },
-                        label = { Text("Название трека") }, singleLine = true,
-                        modifier = Modifier.weight(1f),
-                    )
-                    IconButton(
-                        enabled = searchTitle.isNotBlank() && !searching,
-                        onClick = {
-                            searching = true
-                            scope.launch {
-                                candidates = onSearchMusicBrainz(searchTitle, artistName.ifBlank { null })
-                                searching = false
-                            }
-                        },
-                    ) { Icon(Icons.Outlined.Search, contentDescription = "Искать") }
-                }
-                candidates.forEach { candidate ->
-                    Text(
-                        text = listOfNotNull(candidate.artistName, candidate.title, candidate.albumName, candidate.year?.toString())
-                            .joinToString(" — "),
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.fillMaxWidth().clickable {
-                            candidate.artistName?.let { artistName = it }
-                            candidate.albumName?.let { albumName = it }
-                            candidate.year?.let { year = it.toString() }
-                            candidate.genre?.let { genre = it }
-                            candidates = emptyList()
-                        },
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            androidx.compose.material3.TextButton(onClick = {
-                onSave(
-                    artistName.trim().ifBlank { null },
-                    albumName.trim().ifBlank { null },
-                    year.trim().toIntOrNull(),
-                    genre.trim().ifBlank { null },
-                )
-            }) { Text("Сохранить") }
-        },
-        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Отмена") } },
-    )
+    editTagsTrackId?.let { trackId ->
+        TagEditDialog(
+            trackCount = 1,
+            onSearchMusicBrainz = { title, artist -> viewModel.searchMusicBrainz(title, artist) },
+            onSave = { artistName, albumName, year, genre ->
+                viewModel.batchEditTracks(listOf(trackId), artistName, albumName, year, genre)
+                editTagsTrackId = null
+            },
+            onDismiss = { editTagsTrackId = null },
+        )
+    }
 }
 
 @Composable
@@ -578,6 +500,7 @@ private fun TrackListContent(
     onSetSelection: (Set<TrackId>) -> Unit,
     onRenameTrack: (Track) -> Unit,
     onEditNoteTrack: (Track) -> Unit,
+    onEditTagsTrack: (Track) -> Unit,
     onShowTrackInfo: (TrackId) -> Unit,
     nowPlaying: NowPlayingRow?,
 ) {
@@ -704,6 +627,7 @@ private fun TrackListContent(
                         onDelete = if (selectionMode) null else { { onDelete(track.id) } },
                         onRename = if (selectionMode) null else { { onRenameTrack(track) } },
                         onEditNote = if (selectionMode) null else { { onEditNoteTrack(track) } },
+                        onEditTags = if (selectionMode) null else { { onEditTagsTrack(track) } },
                         onShowInfo = if (selectionMode) null else { { onShowTrackInfo(track.id) } },
                         isCurrentTrack = track.id == nowPlaying?.trackId,
                         isPlaying = track.id == nowPlaying?.trackId && nowPlaying.isPlaying,

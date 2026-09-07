@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Shuffle
@@ -85,6 +86,7 @@ fun ArtistDetailScreen(
     onShuffleTracks: (tracks: List<Track>, artistName: String?) -> Unit,
     onAddToQueue: (Track, artistName: String?) -> Unit,
     onPickPhotoRequested: (ArtistId) -> Unit,
+    onShowArtistInfo: (ArtistId) -> Unit,
     viewModel: ArtistDetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -197,6 +199,7 @@ fun ArtistDetailScreen(
                             ContextAction("Переименовать", Icons.Outlined.Edit) { showRenameDialog = true },
                             ContextAction("Изменить фото", Icons.Outlined.Image) { uiState.artist?.let { onPickPhotoRequested(it.id) } },
                             ContextAction("Добавить треки", Icons.Outlined.LibraryAdd) { showAddTracksDialog = true },
+                            ContextAction("Информация об артисте", Icons.Outlined.Info) { uiState.artist?.let { onShowArtistInfo(it.id) } },
                         ),
                     )
                 }

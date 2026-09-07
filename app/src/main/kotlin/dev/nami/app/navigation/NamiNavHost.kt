@@ -80,6 +80,8 @@ private const val ROUTE_SETTINGS_LYRICS = "settings/lyrics"
 private const val ROUTE_TRASH = "trash"
 private const val ROUTE_LIBRARY_HEALTH = "library_health"
 private const val ROUTE_TRACK_INFO = "track_info/{trackId}"
+private const val ROUTE_ALBUM_INFO = "album_info/{albumId}"
+private const val ROUTE_ARTIST_INFO = "artist_info/{artistId}"
 private const val ROUTE_AUDIO_TRACT = "audio_tract"
 private const val ROUTE_EQUALIZER = "equalizer"
 
@@ -261,6 +263,18 @@ fun NamiNavHost(
             ) {
                 dev.nami.feature.library.TrackInfoScreen(onBack = { navController.popBackStack() })
             }
+            composable(
+                ROUTE_ALBUM_INFO,
+                arguments = listOf(navArgument("albumId") { type = NavType.StringType }),
+            ) {
+                dev.nami.feature.library.AlbumInfoScreen(onBack = { navController.popBackStack() })
+            }
+            composable(
+                ROUTE_ARTIST_INFO,
+                arguments = listOf(navArgument("artistId") { type = NavType.StringType }),
+            ) {
+                dev.nami.feature.library.ArtistInfoScreen(onBack = { navController.popBackStack() })
+            }
             composable(ROUTE_TRASH) {
                 Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
                 TrashScreen(onBack = { navController.popBackStack() })
@@ -297,6 +311,7 @@ fun NamiNavHost(
                     onPickCoverRequested = onPickAlbumCover,
                     onDeleted = { navController.popBackStack() },
                     onShowTrackInfo = { trackId -> navController.navigate("track_info/${trackId.value}") },
+                    onShowAlbumInfo = { albumId -> navController.navigate("album_info/${albumId.value}") },
                 )
             }
             composable(
@@ -323,6 +338,7 @@ fun NamiNavHost(
                     },
                     onAddToQueue = { track, artistName -> nowPlayingViewModel.addToQueue(track, artistName) },
                     onPickPhotoRequested = onPickArtistPhoto,
+                    onShowArtistInfo = { id -> navController.navigate("artist_info/${id.value}") },
                 )
             }
             composable(
@@ -361,6 +377,7 @@ fun NamiNavHost(
                         }
                     },
                     onAddToQueue = { track, artistName -> nowPlayingViewModel.addToQueue(track, artistName) },
+                    onShowTrackInfo = { trackId -> navController.navigate("track_info/${trackId.value}") },
                 )
                 }
             }

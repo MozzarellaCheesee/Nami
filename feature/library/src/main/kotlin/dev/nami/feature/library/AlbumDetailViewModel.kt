@@ -46,6 +46,13 @@ class AlbumDetailViewModel @Inject constructor(
         viewModelScope.launch { playlistRepository.likeTrack(trackId) }
     }
 
+    fun batchEditTracks(ids: List<TrackId>, artistName: String?, albumName: String?, year: Int?, genre: String?) {
+        viewModelScope.launch { libraryRepository.batchEditTracks(ids, artistName, albumName, year, genre) }
+    }
+
+    suspend fun searchMusicBrainz(title: String, artistName: String?) =
+        libraryRepository.searchMusicBrainz(title, artistName)
+
     private val _uiState = MutableStateFlow(AlbumDetailUiState())
     val uiState: StateFlow<AlbumDetailUiState> = _uiState.asStateFlow()
 

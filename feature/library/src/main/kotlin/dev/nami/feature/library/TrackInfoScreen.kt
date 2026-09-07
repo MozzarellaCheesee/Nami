@@ -111,7 +111,7 @@ fun TrackInfoScreen(onBack: () -> Unit, viewModel: TrackInfoViewModel = hiltView
 private enum class TrackInfoField { Title, Artist, Album, Year, Genre, Note }
 
 @Composable
-private fun InfoSection(title: String, content: @Composable () -> Unit) {
+internal fun InfoSection(title: String, content: @Composable () -> Unit) {
     Text(
         title,
         color = NamiColors.Paper40,
@@ -124,7 +124,7 @@ private fun InfoSection(title: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun InfoRow(label: String, value: String, onClick: (() -> Unit)? = null) {
+internal fun InfoRow(label: String, value: String, onClick: (() -> Unit)? = null) {
     Row(
         modifier = Modifier.fillMaxWidth()
             .let { if (onClick != null) it.clickable(onClick = onClick) else it }
@@ -147,7 +147,7 @@ private fun InfoRow(label: String, value: String, onClick: (() -> Unit)? = null)
 }
 
 @Composable
-private fun TextEditDialog(
+internal fun TextEditDialog(
     label: String,
     initial: String,
     isNumeric: Boolean = false,
@@ -175,16 +175,16 @@ private fun TextEditDialog(
     )
 }
 
-private fun formatFileSize(bytes: Long): String = when {
+internal fun formatFileSize(bytes: Long): String = when {
     bytes >= 1_000_000 -> "%.1f МБ".format(bytes / 1_000_000.0)
     bytes >= 1_000 -> "%.0f КБ".format(bytes / 1_000.0)
     else -> "$bytes Б"
 }
 
-private fun formatDate(epochMs: Long): String =
+internal fun formatDate(epochMs: Long): String =
     SimpleDateFormat("d MMM yyyy", Locale("ru")).format(Date(epochMs))
 
-private fun formatDuration(durationMs: Long): String {
+internal fun formatDuration(durationMs: Long): String {
     val totalSeconds = durationMs / 1000
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
