@@ -46,6 +46,13 @@ class CrossfadeController(
 ) {
     private var outgoing: ExoPlayer? = null
 
+    /** Hard ceiling (0..1) multiplied into every volume value this controller writes -- this is
+     * the single owner of `player.volume` while crossfade exists (it runs every tick regardless
+     * of whether the crossfade setting is on), so per-device volume-limit profiles set this
+     * instead of writing player.volume directly. That's the fix for the ceiling racing an
+     * in-flight fade: there's no longer a second, independent writer of the same field. */
+    @Volatile var volumeCeiling: Float = 1f
+
     init {
         scope.launch {
             while (isActive) {
@@ -70,7 +77,7 @@ class CrossfadeController(
         outgoing?.let(retire)
         outgoing = null
         try {
-            player().volume = 1f
+            player().volume = volumeCeiling
         } catch (e: Exception) {
             // Player already released / not built yet -- nothing to restore.
         }
@@ -80,7 +87,7 @@ class CrossfadeController(
         val current = player()
         if (!settingsRepository.crossfadeEnabled.value) {
             if (outgoing != null) cancel()
-            if (current.volume != 1f) current.volume = 1f
+            if (current.volume != volumeCeiling) current.volume = volumeCeiling
             return
         }
 
@@ -90,7 +97,7 @@ class CrossfadeController(
         val progress = (current.currentPosition.toFloat() / FADE_MS).coerceIn(0f, 1f)
 
         outgoing?.let { old ->
-            old.volume = fadeOut(progress)
+            old.volume = fadeOut(progress) * volumeCeiling
             if (progress >= 1f) {
                 outgoing = null
                 retire(old)
@@ -114,7 +121,7 @@ class CrossfadeController(
 
         // Also covers the incoming player's own fade-in (its position is inside the first FADE_MS),
         // which is the exact complement of the fadeOut() applied to the outgoing one above.
-        current.volume = volumeFor(current.currentPosition, durationMs)
+        current.volume = volumeFor(current.currentPosition, durationMs) * volumeCeiling
     }
 
     companion object {

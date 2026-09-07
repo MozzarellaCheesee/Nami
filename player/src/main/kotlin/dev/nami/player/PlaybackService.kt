@@ -137,6 +137,16 @@ class PlaybackService : MediaSessionService() {
         notificationProvider.setSmallIcon(R.drawable.ic_notification)
         setMediaNotificationProvider(notificationProvider)
 
+        crossfade = CrossfadeController(
+            player = { player },
+            settingsRepository = settingsRepository,
+            scope = scope,
+            startIncoming = ::buildIncomingPlayer,
+            promote = ::promoteIncomingPlayer,
+            retire = ::retireOutgoingPlayer,
+        )
+        BitPerfectUsbController(this, settingsRepository, scope)
+
         // Whether ANY effect that needs the custom DSP sink is on right now (and Hi-Fi isn't
         // vetoing all of them). The sink is only ever built when actually needed -- but the user
         // still shouldn't have to restart the app to feel a toggle, so instead of gating this once
@@ -180,12 +190,12 @@ class PlaybackService : MediaSessionService() {
                 if (effective.enabled != wasEnabled && player.playbackState != Player.STATE_IDLE) {
                     player.seekTo(player.currentPosition)
                 }
-                // ponytail: sets `player.volume` directly as a hard ceiling, which can race a
-                // crossfade's own volume ramp on the same player if both fire in the same window
-                // (rare -- profile/route changes mid-crossfade). Full fix needs the volume limit
-                // threaded through CrossfadeController as a ceiling on its ramp target instead of
-                // written independently; not done here.
-                player.volume = effective.volumeLimitPercent / 100f
+                // Routed through CrossfadeController rather than writing player.volume directly --
+                // that controller is the sole owner of player.volume (it runs every tick
+                // regardless of whether crossfade itself is on, see its own doc), so setting a
+                // ceiling here can never race its fade math the way a second independent writer
+                // of the same field could.
+                crossfade?.volumeCeiling = effective.volumeLimitPercent / 100f
             }
             .launchIn(scope)
 
@@ -221,15 +231,6 @@ class PlaybackService : MediaSessionService() {
             }
             .launchIn(scope)
 
-        BitPerfectUsbController(this, settingsRepository, scope)
-        crossfade = CrossfadeController(
-            player = { player },
-            settingsRepository = settingsRepository,
-            scope = scope,
-            startIncoming = ::buildIncomingPlayer,
-            promote = ::promoteIncomingPlayer,
-            retire = ::retireOutgoingPlayer,
-        )
     }
 
     private fun currentNeedsCustomSink(): Boolean =
