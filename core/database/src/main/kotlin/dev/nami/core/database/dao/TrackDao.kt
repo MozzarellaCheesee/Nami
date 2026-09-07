@@ -52,6 +52,22 @@ interface TrackDao {
     )
     suspend fun findByIdWithArtwork(id: String): TrackWithArtwork?
 
+    // Reactive twin of findByIdWithArtwork -- Room auto-invalidates this on any write to `tracks`
+    // (BpmKeyAnalyzer's cached result, ReplayGain, skip count, a rename...), so a screen watching
+    // the currently playing track picks up a background scan finishing without needing a fresh
+    // track selection to re-trigger a one-shot lookup.
+    @Query(
+        """
+        SELECT tracks.*, COALESCE(albums.artworkPath, tracks.artworkPath) AS albumArtworkPath,
+               artists.name AS artistName
+        FROM tracks
+        LEFT JOIN albums ON tracks.albumId = albums.id
+        LEFT JOIN artists ON tracks.artistId = artists.id
+        WHERE tracks.id = :id
+        """,
+    )
+    fun observeByIdWithArtwork(id: String): Flow<TrackWithArtwork?>
+
     @Query("SELECT * FROM tracks WHERE path = :path AND deletedAt IS NULL LIMIT 1")
     suspend fun findByPath(path: String): TrackEntity?
 

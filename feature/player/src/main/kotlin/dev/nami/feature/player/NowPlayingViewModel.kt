@@ -143,7 +143,13 @@ class NowPlayingViewModel @Inject constructor(
      * QueueTrack for one screen's use. */
     val currentTrackDetails: StateFlow<Track?> = playerRepository.state
         .filterIsInstance<PlaybackState.Playing>()
-        .flatMapLatest { playing -> libraryRepository.track(playing.trackId) }
+        .map { it.trackId }
+        .distinctUntilChanged()
+        // libraryRepository.track() is a real Room-observed Flow (not a one-shot lookup) -- this
+        // re-subscribes only when the track itself changes, not on every ~100ms position tick, so
+        // a background scan finishing (BpmKeyAnalyzer, ReplayGain) updates the badge live instead
+        // of needing the next track selection to see it.
+        .flatMapLatest { trackId -> libraryRepository.track(trackId) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     // Real per-track waveform for the scrubber (see WaveformScanner) -- a full-track decode, so
