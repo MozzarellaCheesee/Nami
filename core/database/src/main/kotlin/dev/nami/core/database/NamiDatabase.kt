@@ -23,7 +23,7 @@ import dev.nami.core.database.entity.VocabularyEntity
         PlaylistEntity::class, PlaylistTrackEntity::class, AlbumArtistCrossRef::class,
         VocabularyEntity::class,
     ],
-    version = 10,
+    version = 11,
     exportSchema = true,
 )
 abstract class NamiDatabase : RoomDatabase() {

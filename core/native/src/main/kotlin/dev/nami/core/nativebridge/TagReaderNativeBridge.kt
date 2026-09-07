@@ -26,6 +26,9 @@ class TagReaderNativeBridge @Inject constructor() : NativeBridge {
                 artwork = native.artwork,
                 artworkMime = native.artworkMime,
                 lyrics = native.lyrics,
+                sampleRateHz = native.sampleRateHz?.toInt(),
+                bitDepth = native.bitDepth?.toInt(),
+                channels = native.channels?.toInt(),
             )
         } catch (e: Exception) {
             // Rust panics surface here as exceptions from the generated JNI layer;

@@ -46,6 +46,8 @@ import dev.nami.feature.library.ArtistDiscographyScreen
 import dev.nami.feature.library.LibraryScreen
 import dev.nami.feature.library.LibraryTab
 import dev.nami.feature.library.LibraryViewModel
+import dev.nami.feature.player.AudioTractScreen
+import dev.nami.feature.player.EqualizerScreen
 import dev.nami.feature.player.LyricsScreen
 import dev.nami.feature.player.MiniPlayer
 import dev.nami.feature.player.NowPlayingScreen
@@ -67,6 +69,8 @@ private const val ROUTE_ARTIST_DISCOGRAPHY = "artist/{artistId}/discography"
 private const val ROUTE_ARTIST_ALL_TRACKS = "artist/{artistId}/tracks"
 private const val ROUTE_PLAYLIST_DETAIL = "playlist/{playlistId}"
 private const val ROUTE_TRASH = "trash"
+private const val ROUTE_AUDIO_TRACT = "audio_tract"
+private const val ROUTE_EQUALIZER = "equalizer"
 
 
 @Composable
@@ -190,10 +194,22 @@ fun NamiNavHost(
                 )
             }
             composable(ROUTE_SETTINGS) {
-                SettingsScreen(onTrashClick = { navController.navigate(ROUTE_TRASH) })
+                SettingsScreen(
+                    onTrashClick = { navController.navigate(ROUTE_TRASH) },
+                    onAudioTractClick = { navController.navigate(ROUTE_AUDIO_TRACT) },
+                )
             }
             composable(ROUTE_TRASH) {
                 TrashScreen(onBack = { navController.popBackStack() })
+            }
+            composable(ROUTE_AUDIO_TRACT) {
+                AudioTractScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenEqualizer = { navController.navigate(ROUTE_EQUALIZER) },
+                )
+            }
+            composable(ROUTE_EQUALIZER) {
+                EqualizerScreen(onBack = { navController.popBackStack() })
             }
             composable(
                 ROUTE_ALBUM_DETAIL,

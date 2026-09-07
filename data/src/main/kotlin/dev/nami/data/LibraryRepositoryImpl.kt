@@ -351,6 +351,9 @@ class LibraryRepositoryImpl @Inject constructor(
                     playCount = 0,
                     genre = tags?.genre,
                     artworkPath = trackArtworkPath,
+                    sampleRateHz = tags?.sampleRateHz,
+                    bitDepth = tags?.bitDepth,
+                    channels = tags?.channels,
                 ),
             ),
         )

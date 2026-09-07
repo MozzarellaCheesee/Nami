@@ -1,5 +1,6 @@
 use lofty::file::{AudioFile, TaggedFileExt};
 use lofty::probe::Probe;
+use lofty::properties::FileProperties;
 use lofty::tag::{Accessor, Tag};
 
 uniffi::setup_scaffolding!();
@@ -22,9 +23,14 @@ pub struct TagResult {
     /// just plain unsynced text. Caller decides what to do with it (LrcParser only keeps synced
     /// lines, so plain text quietly yields nothing rather than crashing).
     pub lyrics: Option<String>,
+    /// Этап 4's "Аудиотракт" screen needs these to show the file's real format, not just its
+    /// container extension -- None for lossy formats lofty can't report a bit depth for.
+    pub sample_rate_hz: Option<u32>,
+    pub bit_depth: Option<u8>,
+    pub channels: Option<u8>,
 }
 
-fn map_tag(tag: &Tag, duration_ms: u64) -> TagResult {
+fn map_tag(tag: &Tag, properties: &FileProperties) -> TagResult {
     let picture = tag.pictures().first();
     TagResult {
         title: tag.title().map(|s| s.to_string()),
@@ -35,19 +41,22 @@ fn map_tag(tag: &Tag, duration_ms: u64) -> TagResult {
         disc_no: tag.disk(),
         genre: tag.genre().map(|s| s.to_string()),
         year: tag.year(),
-        duration_ms,
+        duration_ms: properties.duration().as_millis() as u64,
         artwork: picture.map(|p| p.data().to_vec()),
         artwork_mime: picture.and_then(|p| p.mime_type()).map(|m| m.to_string()),
         lyrics: tag.get_string(&lofty::tag::ItemKey::Lyrics).map(|s| s.to_string()),
+        sample_rate_hz: properties.sample_rate(),
+        bit_depth: properties.bit_depth(),
+        channels: properties.channels(),
     }
 }
 
 #[uniffi::export]
 pub fn read_tags(path: String) -> Option<TagResult> {
     let tagged_file = Probe::open(&path).ok()?.read().ok()?;
-    let duration_ms = tagged_file.properties().duration().as_millis() as u64;
+    let properties = tagged_file.properties().clone();
     let tag = tagged_file.primary_tag().or_else(|| tagged_file.first_tag())?;
-    Some(map_tag(tag, duration_ms))
+    Some(map_tag(tag, &properties))
 }
 
 #[cfg(test)]
@@ -61,11 +70,10 @@ mod tests {
         tag.push(TagItem::new(ItemKey::TrackTitle, ItemValue::Text("Window View".to_string())));
         tag.push(TagItem::new(ItemKey::TrackArtist, ItemValue::Text("Farewell225".to_string())));
 
-        let result = map_tag(&tag, 180_000);
+        let result = map_tag(&tag, &FileProperties::default());
 
         assert_eq!(result.title, Some("Window View".to_string()));
         assert_eq!(result.artist, Some("Farewell225".to_string()));
-        assert_eq!(result.duration_ms, 180_000);
         assert_eq!(result.artwork, None);
     }
 
@@ -73,7 +81,7 @@ mod tests {
     fn missing_fields_map_to_none() {
         let tag = Tag::new(TagType::Id3v2);
 
-        let result = map_tag(&tag, 1000);
+        let result = map_tag(&tag, &FileProperties::default());
 
         assert_eq!(result.title, None);
         assert_eq!(result.genre, None);

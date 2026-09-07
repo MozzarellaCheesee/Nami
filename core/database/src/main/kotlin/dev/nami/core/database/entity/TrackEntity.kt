@@ -46,4 +46,8 @@ data class TrackEntity(
     val genre: String? = null,
     val deletedAt: Long? = null,
     val artworkPath: String? = null,
+    /** For the "Аудиотракт" screen -- null for lossy formats lofty can't report a bit depth for. */
+    val sampleRateHz: Int? = null,
+    val bitDepth: Int? = null,
+    val channels: Int? = null,
 )

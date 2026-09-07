@@ -134,3 +134,13 @@ val MIGRATION_9_10 = object : Migration(9, 10) {
         )
     }
 }
+
+/** Этап 4's "Аудиотракт" screen -- existing tracks just show "неизвестно" for these until
+ * re-imported (a real analyzer/re-scan pass is a separate feature, not this migration's job). */
+val MIGRATION_10_11 = object : Migration(10, 11) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE tracks ADD COLUMN sampleRateHz INTEGER")
+        db.execSQL("ALTER TABLE tracks ADD COLUMN bitDepth INTEGER")
+        db.execSQL("ALTER TABLE tracks ADD COLUMN channels INTEGER")
+    }
+}

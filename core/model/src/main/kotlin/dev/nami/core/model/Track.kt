@@ -20,4 +20,7 @@ data class Track(
     val genre: String? = null,
     val albumArtworkPath: String? = null,
     val artistName: String? = null,
+    val sampleRateHz: Int? = null,
+    val bitDepth: Int? = null,
+    val channels: Int? = null,
 )
