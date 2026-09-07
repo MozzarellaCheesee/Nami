@@ -60,7 +60,20 @@ class PlaybackService : MediaSessionService() {
             .setUsage(C.USAGE_MEDIA)
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
             .build()
-        player = ExoPlayer.Builder(this, NamiRenderersFactory(this, eqProcessor))
+        // The custom RenderersFactory (needed to splice ParametricEqAudioProcessor into
+        // DefaultAudioSink) is itself unverified on real hardware -- only actually used once the
+        // user has explicitly turned EQ on themselves at least once before this cold start.
+        // Default (EQ off) keeps the exact plain ExoPlayer.Builder(this) path that was already
+        // working, so nothing about ordinary playback changes for anyone who hasn't opted in.
+        // Known limitation: turning EQ on for the first time needs an app restart to actually
+        // engage (this decision is made once, here, not re-checked per track) -- an acceptable
+        // cost for keeping every other playback session on the already-proven path.
+        val playerBuilder = if (settingsRepository.eqEnabled.value) {
+            ExoPlayer.Builder(this, NamiRenderersFactory(this, eqProcessor))
+        } else {
+            ExoPlayer.Builder(this)
+        }
+        player = playerBuilder
             .setLoadControl(loadControl)
             .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ true)
             .build()
@@ -90,7 +103,10 @@ class PlaybackService : MediaSessionService() {
         // Этап 4's parametric EQ (Beta): gains apply live (see ParametricEqAudioProcessor), but
         // the on/off switch itself only takes effect on DefaultAudioSink's next pipeline rebuild
         // -- force one via a same-position seek so flipping the Settings toggle is felt right
-        // away instead of "starting with the next track".
+        // away instead of "starting with the next track". Only meaningful when this session's
+        // player was actually built with NamiRenderersFactory (eqEnabled.value was already true
+        // at onCreate, see playerBuilder above) -- otherwise there's no EQ processor in the
+        // pipeline for these to activate at all, and the seek is a harmless no-op.
         combine(settingsRepository.eqBassDb, settingsRepository.eqMidDb, settingsRepository.eqTrebleDb) { b, m, t -> Triple(b, m, t) }
             .onEach { (b, m, t) -> eqProcessor.setGains(b, m, t) }
             .launchIn(scope)

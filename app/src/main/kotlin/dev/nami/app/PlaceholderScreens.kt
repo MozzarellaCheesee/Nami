@@ -171,6 +171,12 @@ fun SettingsScreen(onTrashClick: () -> Unit, viewModel: SettingsViewModel = hilt
                 EqSlider("Низкие (100 Гц)", eqBassDb) { viewModel.setEqGains(it, eqMidDb, eqTrebleDb) }
                 EqSlider("Средние (1 кГц)", eqMidDb) { viewModel.setEqGains(eqBassDb, it, eqTrebleDb) }
                 EqSlider("Высокие (8 кГц)", eqTrebleDb) { viewModel.setEqGains(eqBassDb, eqMidDb, it) }
+                Text(
+                    text = "Если только что включили -- перезапустите приложение, чтобы EQ реально заработал",
+                    color = NamiColors.Paper40,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(start = 52.dp, end = 16.dp, bottom = 8.dp),
+                )
             }
             SettingsRow(
                 icon = Icons.Outlined.Usb,
