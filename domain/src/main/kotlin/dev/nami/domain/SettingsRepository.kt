@@ -146,6 +146,13 @@ interface SettingsRepository {
     val stands4RequestsToday: StateFlow<Int>
     fun recordStands4Request()
 
+    /** DeepL API key for lyrics translation (Settings -> Лирика) -- each user's own free-tier
+     * key (500k chars/month), not shared across installs. Blank means "not configured", the
+     * on-device MLKit translator (worse quality, esp. JA->RU, but keyless/offline) is used
+     * instead -- see LyricsRepositoryImpl.translateToRussian. */
+    val deeplApiKey: StateFlow<String>
+    fun setDeeplApiKey(value: String)
+
     /** См. [ShuffleMode]. */
     val shuffleMode: StateFlow<ShuffleMode>
     fun setShuffleMode(mode: ShuffleMode)

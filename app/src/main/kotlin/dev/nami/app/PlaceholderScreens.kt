@@ -271,6 +271,7 @@ fun SettingsLyricsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hilt
     val stands4Uid by viewModel.stands4Uid.collectAsState()
     val stands4Token by viewModel.stands4Token.collectAsState()
     val stands4RequestsToday by viewModel.stands4RequestsToday.collectAsState()
+    val deeplApiKey by viewModel.deeplApiKey.collectAsState()
     val pickLyricsFont = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
     ) { uri -> uri?.let(viewModel::pickLyricsFont) }
@@ -333,6 +334,26 @@ fun SettingsLyricsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hilt
                     color = NamiColors.Paper70,
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(top = 12.dp),
+                )
+            }
+        }
+
+        SettingsSectionLabel("DeepL (перевод текста песни)")
+        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Text(
+                    text = "Заметно лучше переводит с японского, чем встроенный офлайн-переводчик. " +
+                        "Свой ключ -- на deepl.com/pro-api, бесплатный лимит 500 000 символов в месяц. " +
+                        "Пусто -- перевод остаётся офлайн (хуже качеством, но без ключа и сети).",
+                    color = NamiColors.Paper40,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                androidx.compose.material3.OutlinedTextField(
+                    value = deeplApiKey,
+                    onValueChange = viewModel::setDeeplApiKey,
+                    label = { Text("API-ключ") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                 )
             }
         }

@@ -35,6 +35,7 @@ private const val KEY_HIFI_ENABLED = "hifi_enabled"
 private const val KEY_NIGHT_MODE_ENABLED = "night_mode_enabled"
 private const val KEY_STANDS4_UID = "stands4_uid"
 private const val KEY_STANDS4_TOKEN = "stands4_token"
+private const val KEY_DEEPL_API_KEY = "deepl_api_key"
 private const val KEY_STANDS4_REQUEST_COUNT = "stands4_request_count"
 private const val KEY_STANDS4_REQUEST_DATE = "stands4_request_date" // yyyy-MM-dd, device-local
 private const val KEY_SHUFFLE_MODE = "shuffle_mode"
@@ -230,6 +231,14 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
     override fun setStands4Token(value: String) {
         prefs.edit { putString(KEY_STANDS4_TOKEN, value) }
         _stands4Token.value = value
+    }
+
+    private val _deeplApiKey = MutableStateFlow(prefs.getString(KEY_DEEPL_API_KEY, "") ?: "")
+    override val deeplApiKey: StateFlow<String> = _deeplApiKey
+
+    override fun setDeeplApiKey(value: String) {
+        prefs.edit { putString(KEY_DEEPL_API_KEY, value) }
+        _deeplApiKey.value = value
     }
 
     private fun today(): String = java.time.LocalDate.now().toString()

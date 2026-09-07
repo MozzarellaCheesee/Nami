@@ -95,8 +95,26 @@ class LyricsRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun translateToRussian(lines: List<String>): List<String>? =
-        MlKitTranslator.translateToRussian(lines)
+    override suspend fun translateToRussian(lines: List<String>): List<String>? {
+        val apiKey = settingsRepository.deeplApiKey.value
+        if (apiKey.isNotBlank()) {
+            translateWithDeepl(lines, apiKey)?.let { return it }
+            // DeepL failed (bad key, quota, no network) -- fall through to the offline fallback
+            // rather than showing nothing.
+        }
+        return MlKitTranslator.translateToRussian(lines)
+    }
+
+    private suspend fun translateWithDeepl(lines: List<String>, apiKey: String): List<String>? =
+        withContext(Dispatchers.IO) {
+            val groups = SentenceGrouper.group(lines)
+            if (groups.isEmpty()) return@withContext lines.map { it }
+            val translated = DeeplClient.translate(groups.map { it.text }, apiKey) ?: return@withContext null
+            val result = arrayOfNulls<String>(lines.size)
+            groups.forEachIndexed { gi, group -> group.indices.forEach { idx -> result[idx] = translated.getOrNull(gi) ?: "" } }
+            for (i in lines.indices) if (lines[i].isBlank()) result[i] = lines[i]
+            result.map { it.orEmpty() }
+        }
 
     private fun romajiFile(path: String) = File(sibling(path, ".romaji.txt"))
 
