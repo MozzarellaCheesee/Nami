@@ -161,10 +161,12 @@ fun ArtistDetailScreen(
                                     .padding(start = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                // Plays/shuffles topTracks -- the list actually rendered below --
-                                // not the raw uiState.tracks (unsorted, all of them): that used to
+                                // Play uses topTracks -- the list actually rendered below -- not
+                                // the raw uiState.tracks (unsorted, all of them): that used to
                                 // start playback at a track other than whatever the user was
                                 // looking at, since the visible rows are sorted by play count.
+                                // Shuffle is different on purpose: "перемешать" reads as shuffling
+                                // the artist's whole catalog, not just the top-10-by-plays list.
                                 if (topTracks.isNotEmpty()) {
                                     IconButton(
                                         onClick = { onPlayTracks(topTracks, artistName, 0) },
@@ -173,7 +175,7 @@ fun ArtistDetailScreen(
                                         Icon(Icons.Filled.PlayArrow, contentDescription = "Играть всё", tint = NamiColors.Ink900, modifier = Modifier.size(18.dp))
                                     }
                                     IconButton(
-                                        onClick = { onShuffleTracks(topTracks, artistName) },
+                                        onClick = { onShuffleTracks(uiState.tracks, artistName) },
                                         modifier = Modifier.padding(start = 4.dp),
                                     ) {
                                         Icon(Icons.Outlined.Shuffle, contentDescription = "Перемешать", tint = NamiColors.Paper100)
@@ -347,8 +349,8 @@ fun ArtistDetailScreen(
                     modifier = Modifier.graphicsLayer { alpha = (1f - progress / 0.6f).coerceIn(0f, 1f) }.padding(bottom = 64.dp, end = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // Same topTracks fix as the inline row above -- plays/shuffles what's actually
-                    // shown, not the raw unsorted uiState.tracks.
+                    // Same topTracks Play fix as the inline row above; Shuffle uses the whole
+                    // catalog (uiState.tracks), see that row's comment for why.
                     if (topTracks.isNotEmpty()) {
                         IconButton(
                             onClick = { onPlayTracks(topTracks, artistName, 0) },
@@ -360,7 +362,7 @@ fun ArtistDetailScreen(
                         }
                         Spacer(modifier = Modifier.padding(start = 8.dp))
                         IconButton(
-                            onClick = { onShuffleTracks(topTracks, artistName) },
+                            onClick = { onShuffleTracks(uiState.tracks, artistName) },
                             modifier = Modifier.background(NamiColors.Ink900.copy(alpha = 0.4f), androidx.compose.foundation.shape.CircleShape),
                         ) {
                             Icon(Icons.Outlined.Shuffle, contentDescription = "Перемешать", tint = NamiColors.Paper100)
