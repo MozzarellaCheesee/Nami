@@ -10,16 +10,32 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import dagger.hilt.android.AndroidEntryPoint
 import dev.nami.core.model.TrackId
 import dev.nami.domain.PlaybackState
+import dev.nami.domain.SettingsRepository
+import dev.nami.player.eq.NamiRenderersFactory
+import dev.nami.player.eq.ParametricEqAudioProcessor
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import javax.inject.Inject
 
 /** Set on the intent MainActivity is launched with from the system media notification/status-bar
  * chip, so it can open Now Playing directly instead of whatever screen the user left. */
 const val EXTRA_OPEN_PLAYER = "dev.nami.player.OPEN_PLAYER"
 
+@AndroidEntryPoint
 class PlaybackService : MediaSessionService() {
     private lateinit var player: ExoPlayer
     private lateinit var mediaSession: MediaSession
+    private val eqProcessor = ParametricEqAudioProcessor()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    @Inject lateinit var settingsRepository: SettingsRepository
 
     override fun onCreate() {
         super.onCreate()
@@ -44,7 +60,7 @@ class PlaybackService : MediaSessionService() {
             .setUsage(C.USAGE_MEDIA)
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
             .build()
-        player = ExoPlayer.Builder(this)
+        player = ExoPlayer.Builder(this, NamiRenderersFactory(this, eqProcessor))
             .setLoadControl(loadControl)
             .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ true)
             .build()
@@ -70,6 +86,25 @@ class PlaybackService : MediaSessionService() {
         val notificationProvider = DefaultMediaNotificationProvider.Builder(this).build()
         notificationProvider.setSmallIcon(R.drawable.ic_notification)
         setMediaNotificationProvider(notificationProvider)
+
+        // Этап 4's parametric EQ (Beta): gains apply live (see ParametricEqAudioProcessor), but
+        // the on/off switch itself only takes effect on DefaultAudioSink's next pipeline rebuild
+        // -- force one via a same-position seek so flipping the Settings toggle is felt right
+        // away instead of "starting with the next track".
+        combine(settingsRepository.eqBassDb, settingsRepository.eqMidDb, settingsRepository.eqTrebleDb) { b, m, t -> Triple(b, m, t) }
+            .onEach { (b, m, t) -> eqProcessor.setGains(b, m, t) }
+            .launchIn(scope)
+        settingsRepository.eqEnabled
+            .onEach { enabled ->
+                val wasEnabled = eqProcessor.enabled
+                eqProcessor.enabled = enabled
+                if (enabled != wasEnabled && player.playbackState != Player.STATE_IDLE) {
+                    player.seekTo(player.currentPosition)
+                }
+            }
+            .launchIn(scope)
+
+        BitPerfectUsbController(this, player, settingsRepository, scope)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession =

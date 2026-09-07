@@ -27,6 +27,9 @@ import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.PlayCircleOutline
 import androidx.compose.material.icons.outlined.School
+import androidx.compose.material.icons.outlined.Usb
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -56,6 +59,11 @@ fun SettingsScreen(onTrashClick: () -> Unit, viewModel: SettingsViewModel = hilt
     val karaokeEnabled by viewModel.karaokeEnabled.collectAsState()
     val studyModeEnabled by viewModel.studyModeEnabled.collectAsState()
     val lyricsFontPath by viewModel.lyricsFontPath.collectAsState()
+    val eqEnabled by viewModel.eqEnabled.collectAsState()
+    val eqBassDb by viewModel.eqBassDb.collectAsState()
+    val eqMidDb by viewModel.eqMidDb.collectAsState()
+    val eqTrebleDb by viewModel.eqTrebleDb.collectAsState()
+    val bitPerfectUsbEnabled by viewModel.bitPerfectUsbEnabled.collectAsState()
     val context = LocalContext.current
     val pickLyricsFont = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
@@ -151,6 +159,36 @@ fun SettingsScreen(onTrashClick: () -> Unit, viewModel: SettingsViewModel = hilt
             }
         }
 
+        SettingsSectionLabel("Аудиотракт (Beta)")
+        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            SettingsRow(
+                icon = Icons.Outlined.GraphicEq,
+                title = "Параметрический EQ",
+                trailing = { NamiSwitch(checked = eqEnabled, onCheckedChange = viewModel::setEqEnabled) },
+                onClick = { viewModel.setEqEnabled(!eqEnabled) },
+            )
+            if (eqEnabled) {
+                EqSlider("Низкие (100 Гц)", eqBassDb) { viewModel.setEqGains(it, eqMidDb, eqTrebleDb) }
+                EqSlider("Средние (1 кГц)", eqMidDb) { viewModel.setEqGains(eqBassDb, it, eqTrebleDb) }
+                EqSlider("Высокие (8 кГц)", eqTrebleDb) { viewModel.setEqGains(eqBassDb, eqMidDb, it) }
+            }
+            SettingsRow(
+                icon = Icons.Outlined.Usb,
+                title = "Bit-perfect по USB (Android 14+)",
+                trailing = { NamiSwitch(checked = bitPerfectUsbEnabled, onCheckedChange = viewModel::setBitPerfectUsbEnabled) },
+                onClick = { viewModel.setBitPerfectUsbEnabled(!bitPerfectUsbEnabled) },
+            )
+            if (bitPerfectUsbEnabled) {
+                Text(
+                    text = "Требует поддержку в HAL производителя -- работает не на всех устройствах, " +
+                        "отключает EQ и остальную обработку при активации.",
+                    color = NamiColors.Paper40,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(start = 52.dp, end = 16.dp, bottom = 8.dp),
+                )
+            }
+        }
+
         SettingsSectionLabel("Хранилище")
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
             SettingsRow(
@@ -225,6 +263,26 @@ private fun NamiSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
             uncheckedThumbColor = NamiColors.Paper70,
         ),
     )
+}
+
+@Composable
+private fun EqSlider(label: String, valueDb: Float, onValueChange: (Float) -> Unit) {
+    Column(modifier = Modifier.padding(start = 52.dp, end = 16.dp)) {
+        Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+            Text(text = label, color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall)
+            Text(text = "%+.1f дБ".format(valueDb), color = NamiColors.Paper40, style = MaterialTheme.typography.bodySmall)
+        }
+        Slider(
+            value = valueDb,
+            onValueChange = onValueChange,
+            valueRange = -12f..12f,
+            colors = SliderDefaults.colors(
+                thumbColor = NamiColors.Shu,
+                activeTrackColor = NamiColors.Shu,
+                inactiveTrackColor = NamiColors.Ink600,
+            ),
+        )
+    }
 }
 
 @Composable

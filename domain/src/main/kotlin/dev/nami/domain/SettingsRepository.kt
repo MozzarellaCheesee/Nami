@@ -26,4 +26,21 @@ interface SettingsRepository {
      * (a content:// pick isn't a stable path). Null = system default font. */
     val lyricsFontPath: StateFlow<String?>
     fun setLyricsFontPath(path: String?)
+
+    /** Этап 4's parametric EQ (Beta) -- off by default: it sits directly in the path of every
+     * second of audio the app plays, so a subtle DSP bug means "everything sounds wrong" rather
+     * than "one screen is broken". Bass/mid/treble in dB, ±12 typical range. */
+    val eqEnabled: StateFlow<Boolean>
+    fun setEqEnabled(value: Boolean)
+
+    val eqBassDb: StateFlow<Float>
+    val eqMidDb: StateFlow<Float>
+    val eqTrebleDb: StateFlow<Float>
+    fun setEqGains(bassDb: Float, midDb: Float, trebleDb: Float)
+
+    /** Bit-perfect USB output (Этап 10, Beta) -- Android 14+'s AudioMixerAttributes API only,
+     * requires vendor HAL support most devices don't have; off by default and silently falls
+     * back to the normal mixed path when the device/DAC can't actually do it. */
+    val bitPerfectUsbEnabled: StateFlow<Boolean>
+    fun setBitPerfectUsbEnabled(value: Boolean)
 }

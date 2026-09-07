@@ -16,6 +16,11 @@ private const val KEY_HIDE_SYSTEM_BARS = "hide_system_bars"
 private const val KEY_KARAOKE_ENABLED = "karaoke_enabled"
 private const val KEY_STUDY_MODE_ENABLED = "study_mode_enabled"
 private const val KEY_LYRICS_FONT_PATH = "lyrics_font_path"
+private const val KEY_EQ_ENABLED = "eq_enabled"
+private const val KEY_EQ_BASS_DB = "eq_bass_db"
+private const val KEY_EQ_MID_DB = "eq_mid_db"
+private const val KEY_EQ_TREBLE_DB = "eq_treble_db"
+private const val KEY_BIT_PERFECT_USB_ENABLED = "bit_perfect_usb_enabled"
 
 @Singleton
 class AppSettingsRepository @Inject constructor(@ApplicationContext context: Context) : SettingsRepository {
@@ -67,5 +72,39 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
     override fun setLyricsFontPath(path: String?) {
         prefs.edit { putString(KEY_LYRICS_FONT_PATH, path) }
         _lyricsFontPath.value = path
+    }
+
+    private val _eqEnabled = MutableStateFlow(prefs.getBoolean(KEY_EQ_ENABLED, false))
+    override val eqEnabled: StateFlow<Boolean> = _eqEnabled
+
+    override fun setEqEnabled(value: Boolean) {
+        prefs.edit { putBoolean(KEY_EQ_ENABLED, value) }
+        _eqEnabled.value = value
+    }
+
+    private val _eqBassDb = MutableStateFlow(prefs.getFloat(KEY_EQ_BASS_DB, 0f))
+    override val eqBassDb: StateFlow<Float> = _eqBassDb
+    private val _eqMidDb = MutableStateFlow(prefs.getFloat(KEY_EQ_MID_DB, 0f))
+    override val eqMidDb: StateFlow<Float> = _eqMidDb
+    private val _eqTrebleDb = MutableStateFlow(prefs.getFloat(KEY_EQ_TREBLE_DB, 0f))
+    override val eqTrebleDb: StateFlow<Float> = _eqTrebleDb
+
+    override fun setEqGains(bassDb: Float, midDb: Float, trebleDb: Float) {
+        prefs.edit {
+            putFloat(KEY_EQ_BASS_DB, bassDb)
+            putFloat(KEY_EQ_MID_DB, midDb)
+            putFloat(KEY_EQ_TREBLE_DB, trebleDb)
+        }
+        _eqBassDb.value = bassDb
+        _eqMidDb.value = midDb
+        _eqTrebleDb.value = trebleDb
+    }
+
+    private val _bitPerfectUsbEnabled = MutableStateFlow(prefs.getBoolean(KEY_BIT_PERFECT_USB_ENABLED, false))
+    override val bitPerfectUsbEnabled: StateFlow<Boolean> = _bitPerfectUsbEnabled
+
+    override fun setBitPerfectUsbEnabled(value: Boolean) {
+        prefs.edit { putBoolean(KEY_BIT_PERFECT_USB_ENABLED, value) }
+        _bitPerfectUsbEnabled.value = value
     }
 }

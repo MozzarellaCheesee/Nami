@@ -23,6 +23,7 @@ dependencies {
     implementation(libs.media3.session)
     implementation(libs.media3.common)
     implementation(libs.hilt.android)
+    implementation(libs.kotlinx.coroutines.android)
     ksp(libs.hilt.compiler)
     testImplementation(libs.junit)
     testImplementation(kotlin("test"))
