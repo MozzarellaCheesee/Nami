@@ -79,6 +79,7 @@ private const val ROUTE_SESSIONS = "settings/sessions"
 private const val ROUTE_SETTINGS_LYRICS = "settings/lyrics"
 private const val ROUTE_TRASH = "trash"
 private const val ROUTE_LIBRARY_HEALTH = "library_health"
+private const val ROUTE_STATS = "stats"
 private const val ROUTE_TRACK_INFO = "track_info/{trackId}"
 private const val ROUTE_ALBUM_INFO = "album_info/{albumId}"
 private const val ROUTE_ARTIST_INFO = "artist_info/{artistId}"
@@ -236,6 +237,7 @@ fun NamiNavHost(
                     onPlayerClick = { navController.navigate(ROUTE_SETTINGS_PLAYER) },
                     onLyricsClick = { navController.navigate(ROUTE_SETTINGS_LYRICS) },
                     onLibraryHealthClick = { navController.navigate(ROUTE_LIBRARY_HEALTH) },
+                    onStatsClick = { navController.navigate(ROUTE_STATS) },
                 )
                 }
             }
@@ -256,6 +258,9 @@ fun NamiNavHost(
             }
             composable(ROUTE_LIBRARY_HEALTH) {
                 dev.nami.feature.library.LibraryHealthScreen(onBack = { navController.popBackStack() })
+            }
+            composable(ROUTE_STATS) {
+                dev.nami.feature.library.StatsScreen(onBack = { navController.popBackStack() })
             }
             composable(
                 ROUTE_TRACK_INFO,

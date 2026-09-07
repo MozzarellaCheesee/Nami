@@ -72,7 +72,7 @@ class LibraryRepositoryImplTest {
         val artworkStore = ArtworkStore(context)
         val repo = LibraryRepositoryImpl(
             context, db.trackDao(), db.artistDao(), db.albumDao(), fakeBridge, resolver, artworkStore, TrashFileStore(context),
-            FolderImportScanner(context), fakeLyricsRepository,
+            FolderImportScanner(context), fakeLyricsRepository, db.playHistoryDao(),
         )
 
         // Register the stream directly instead of a file:// URI: Robolectric's real
@@ -103,7 +103,7 @@ class LibraryRepositoryImplTest {
         val artworkStore = ArtworkStore(context)
         val repo = LibraryRepositoryImpl(
             context, db.trackDao(), db.artistDao(), db.albumDao(), fakeBridge, resolver, artworkStore, TrashFileStore(context),
-            FolderImportScanner(context), fakeLyricsRepository,
+            FolderImportScanner(context), fakeLyricsRepository, db.playHistoryDao(),
         )
 
         val sourceUri = android.net.Uri.parse("content://fake/source2.flac")
@@ -139,7 +139,7 @@ class LibraryRepositoryImplTest {
             context, db.trackDao(), db.artistDao(), db.albumDao(), object : NativeBridge {
                 override suspend fun readTags(path: String) = null
             }, MetadataResolver(db.artistDao(), db.albumDao()), ArtworkStore(context), TrashFileStore(context),
-            FolderImportScanner(context), fakeLyricsRepository,
+            FolderImportScanner(context), fakeLyricsRepository, db.playHistoryDao(),
         )
 
         repo.deleteTracks(listOf(TrackId("t1"), TrackId("t2")))
@@ -158,7 +158,7 @@ class LibraryRepositoryImplTest {
         val repo = LibraryRepositoryImpl(
             context, db.trackDao(), db.artistDao(), db.albumDao(), fakeBridge,
             MetadataResolver(db.artistDao(), db.albumDao()), ArtworkStore(context), TrashFileStore(context),
-            FolderImportScanner(context), fakeLyricsRepository,
+            FolderImportScanner(context), fakeLyricsRepository, db.playHistoryDao(),
         )
 
         val root = File(context.cacheDir, "Farewell225").apply { mkdirs() }
@@ -207,7 +207,7 @@ class LibraryRepositoryImplTest {
         val repo = LibraryRepositoryImpl(
             context, db.trackDao(), db.artistDao(), db.albumDao(), fakeBridge,
             MetadataResolver(db.artistDao(), db.albumDao()), ArtworkStore(context), TrashFileStore(context),
-            FolderImportScanner(context), fakeLyricsRepository,
+            FolderImportScanner(context), fakeLyricsRepository, db.playHistoryDao(),
         )
 
         val albumDir = File(context.cacheDir, "Album").apply { mkdirs() }

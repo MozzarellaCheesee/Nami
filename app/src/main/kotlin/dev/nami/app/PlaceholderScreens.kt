@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Close
@@ -67,6 +68,7 @@ fun SettingsScreen(
     onPlayerClick: () -> Unit,
     onLyricsClick: () -> Unit,
     onLibraryHealthClick: () -> Unit,
+    onStatsClick: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900).padding(bottom = 24.dp)) {
         Text(
@@ -111,6 +113,12 @@ fun SettingsScreen(
                 title = "Здоровье библиотеки",
                 trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
                 onClick = onLibraryHealthClick,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.BarChart,
+                title = "Статистика",
+                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
+                onClick = onStatsClick,
             )
         }
     }

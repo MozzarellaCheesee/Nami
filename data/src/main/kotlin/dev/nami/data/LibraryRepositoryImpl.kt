@@ -13,7 +13,9 @@ import androidx.paging.map as pagingMap
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.nami.core.database.dao.AlbumDao
 import dev.nami.core.database.dao.ArtistDao
+import dev.nami.core.database.dao.PlayHistoryDao
 import dev.nami.core.database.dao.TrackDao
+import dev.nami.core.database.entity.PlayHistoryEntity
 import dev.nami.core.database.entity.TrackEntity
 import dev.nami.core.model.Album
 import dev.nami.core.model.AlbumId
@@ -53,6 +55,7 @@ class LibraryRepositoryImpl @Inject constructor(
     private val trashFileStore: TrashFileStore,
     private val folderImportScanner: FolderImportScanner,
     private val lyricsRepository: LyricsRepository,
+    private val playHistoryDao: PlayHistoryDao,
 ) : LibraryRepository {
 
     override suspend fun libraryHealthReport(): LibraryHealthReport {
@@ -243,6 +246,19 @@ class LibraryRepositoryImpl @Inject constructor(
 
     override suspend fun incrementPlayCount(id: TrackId) {
         trackDao.incrementPlayCount(id.value)
+    }
+
+    override suspend fun recordPlayHistory(id: TrackId, playedAt: Long, durationMs: Long) {
+        playHistoryDao.insert(PlayHistoryEntity(trackId = id.value, playedAt = playedAt, durationMs = durationMs))
+    }
+
+    // Aggregated in Kotlin, not SQL -- day boundaries use the device's local timezone via
+    // java.time, simplest to get right there rather than in a SQLite date() expression.
+    override suspend fun dailyListeningMinutes(days: Int): List<dev.nami.domain.DayActivity> {
+        val since = System.currentTimeMillis() - days * 24L * 60 * 60 * 1000
+        return playHistoryDao.since(since)
+            .groupBy { java.time.Instant.ofEpochMilli(it.playedAt).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toEpochDay() }
+            .map { (epochDay, rows) -> dev.nami.domain.DayActivity(epochDay, (rows.sumOf { it.durationMs } / 60_000).toInt()) }
     }
 
     override suspend fun setTrackReplayGain(id: TrackId, gainDb: Float) {

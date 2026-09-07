@@ -96,6 +96,8 @@ class NowPlayingViewModelTest {
         override fun tracksByArtist(id: dev.nami.core.model.ArtistId) = throw NotImplementedError()
         override fun albumsByArtist(id: dev.nami.core.model.ArtistId) = throw NotImplementedError()
         override suspend fun incrementPlayCount(id: dev.nami.core.model.TrackId) {}
+        override suspend fun recordPlayHistory(id: dev.nami.core.model.TrackId, playedAt: Long, durationMs: Long) {}
+        override suspend fun dailyListeningMinutes(days: Int) = emptyList<dev.nami.domain.DayActivity>()
         override suspend fun setTrackReplayGain(id: dev.nami.core.model.TrackId, gainDb: Float) {}
         override suspend fun setTrackNote(id: dev.nami.core.model.TrackId, note: String?) {}
         override suspend fun incrementSkipCount(id: dev.nami.core.model.TrackId) {}

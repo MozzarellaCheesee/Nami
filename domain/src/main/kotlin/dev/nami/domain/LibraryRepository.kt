@@ -57,6 +57,8 @@ interface LibraryRepository {
     /** Called once a track has actually been "listened to" (see the player module's threshold),
      * not on every skip -- live everywhere that reads Track.playCount via a Flow. */
     suspend fun incrementPlayCount(id: TrackId)
+    suspend fun recordPlayHistory(id: TrackId, playedAt: Long, durationMs: Long)
+    suspend fun dailyListeningMinutes(days: Int): List<DayActivity>
     suspend fun setTrackReplayGain(id: TrackId, gainDb: Float)
 
     /** План.md §22.17 "Заметки к треку" -- free-text personal comment, null clears it. */

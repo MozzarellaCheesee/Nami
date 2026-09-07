@@ -178,7 +178,10 @@ class PlayerRepositoryImpl @Inject constructor(
             val threshold = if (durationMs > 0) minOf(30_000L, durationMs / 2) else 30_000L
             if (positionMs >= threshold) {
                 playCountedMediaId = mediaId
-                scope.launch { libraryRepository.incrementPlayCount(trackId) }
+                scope.launch {
+                    libraryRepository.incrementPlayCount(trackId)
+                    libraryRepository.recordPlayHistory(trackId, System.currentTimeMillis(), durationMs)
+                }
             }
         }
     }

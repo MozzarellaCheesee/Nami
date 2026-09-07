@@ -223,6 +223,22 @@ val MIGRATION_20_21 = object : Migration(20, 21) {
     }
 }
 
+/** B1 "Статистика" (План.md §23.22) -- play history log. */
+val MIGRATION_21_22 = object : Migration(21, 22) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS play_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                trackId TEXT NOT NULL,
+                playedAt INTEGER NOT NULL,
+                durationMs INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
+    }
+}
+
 val MIGRATION_14_15 = object : Migration(14, 15) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL(
