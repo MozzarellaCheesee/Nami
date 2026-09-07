@@ -327,14 +327,11 @@ fun ArtistDetailScreen(
                     modifier = Modifier
                         .offset { IntOffset(0, rootOffset.y.roundToInt()) }
                         .size(with(density) { screenWidthPx.toDp() }, with(density) { (headerState.heightPx + rootOffset.y).toDp() }),
-                    // TopEnd, not BottomEnd -- see AlbumDetailScreen's identical fix.
-                    contentAlignment = Alignment.TopEnd,
+                    // Bottom of the gradient -- see AlbumDetailScreen's identical fix.
+                    contentAlignment = Alignment.BottomEnd,
                 ) {
-                // Tracks the gradient scrim's own start line (0.4 of cover height) instead of a
-                // fixed 56dp guess -- see AlbumDetailScreen's identical fix.
-                val gradientStartDp = with(density) { ((headerState.heightPx + rootOffset.y) * 0.4f).toDp() }
                 Row(
-                    modifier = Modifier.graphicsLayer { alpha = (1f - progress / 0.6f).coerceIn(0f, 1f) }.padding(top = gradientStartDp, end = 12.dp),
+                    modifier = Modifier.graphicsLayer { alpha = (1f - progress / 0.6f).coerceIn(0f, 1f) }.padding(bottom = 12.dp, end = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (uiState.tracks.isNotEmpty()) {

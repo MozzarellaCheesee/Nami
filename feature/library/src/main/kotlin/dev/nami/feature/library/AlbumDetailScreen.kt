@@ -271,19 +271,15 @@ fun AlbumDetailScreen(
                     modifier = Modifier
                         .offset { IntOffset(0, rootOffset.y.roundToInt()) }
                         .size(with(density) { screenWidthPx.toDp() }, with(density) { (headerState.heightPx + rootOffset.y).toDp() }),
-                    // TopEnd, not BottomEnd -- the box's bottom edge sits right where the title
-                    // starts (see the comment above), so bottom-aligned buttons ended up reading
-                    // as "sitting on the title" even though technically still inside the cover.
-                    // Pushed below the back button's own row (56dp) so they don't collide there.
-                    contentAlignment = Alignment.TopEnd,
+                    // Bottom of the gradient (near the box's own bottom edge), not its top -- the
+                    // box height already tracks headerState.heightPx (the ACTUAL current header
+                    // height, not a fixed guess), so its bottom edge lands exactly where the title
+                    // starts without drifting mid-scroll the way the old BottomEnd version used to
+                    // (that one was sized off the cover's own different shrink curve instead).
+                    contentAlignment = Alignment.BottomEnd,
                 ) {
-                    // Top padding tracks where the cover's own gradient scrim starts (0.4 of its
-                    // height, matching the Brush.verticalGradient(0.4f to ...) below) instead of a
-                    // fixed 56dp guess -- so the buttons land right at the fade line regardless of
-                    // scroll position, not wherever happened to clear the back button.
-                    val gradientStartDp = with(density) { ((headerState.heightPx + rootOffset.y) * 0.4f).toDp() }
                     Row(
-                        modifier = Modifier.graphicsLayer { alpha = (1f - progress / 0.6f).coerceIn(0f, 1f) }.padding(top = gradientStartDp, end = 12.dp),
+                        modifier = Modifier.graphicsLayer { alpha = (1f - progress / 0.6f).coerceIn(0f, 1f) }.padding(bottom = 12.dp, end = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (uiState.tracks.isNotEmpty()) {
