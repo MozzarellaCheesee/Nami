@@ -460,6 +460,18 @@ fun NamiNavHost(
             onCollapse = { showNowPlaying = false },
             onQueueClick = { showQueue = true },
             onLyricsClick = { showLyrics = true },
+            onOpenAlbum = { albumId ->
+                showNowPlaying = false
+                navController.navigate("album/${albumId.value}")
+            },
+            onOpenArtist = { artistId ->
+                showNowPlaying = false
+                navController.navigate("artist/${artistId.value}")
+            },
+            onShowTrackInfo = { trackId ->
+                showNowPlaying = false
+                navController.navigate("track_info/${trackId.value}")
+            },
             viewModel = nowPlayingViewModel,
         )
     }

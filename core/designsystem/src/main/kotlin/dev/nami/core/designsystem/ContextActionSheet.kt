@@ -34,11 +34,12 @@ data class ContextAction(val label: String, val icon: ImageVector, val onClick: 
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ContextActionSheet(onDismiss: () -> Unit, actions: List<ContextAction>) {
+fun ContextActionSheet(onDismiss: () -> Unit, actions: List<ContextAction>, header: (@Composable () -> Unit)? = null) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
         ImmersiveSheetEffect()
 
         Column(modifier = Modifier.padding(bottom = 28.dp, top = 4.dp)) {
+            header?.invoke()
             actions.forEach { action ->
                 val isDestructive = action.label.startsWith("Удалить")
                 val tint = if (isDestructive) NamiColors.Shu else NamiColors.Paper100

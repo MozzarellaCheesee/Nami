@@ -35,15 +35,21 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Album
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.PlaylistAdd
 import androidx.compose.material.icons.outlined.QueueMusic
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.Shuffle
 import androidx.compose.material.icons.outlined.Subject
+import androidx.compose.material.icons.outlined.VolumeDown
+import androidx.compose.material.icons.outlined.VolumeUp
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -102,6 +108,9 @@ fun NowPlayingScreen(
     onCollapse: () -> Unit,
     onQueueClick: () -> Unit,
     onLyricsClick: () -> Unit,
+    onOpenAlbum: (dev.nami.core.model.AlbumId) -> Unit,
+    onOpenArtist: (dev.nami.core.model.ArtistId) -> Unit,
+    onShowTrackInfo: (dev.nami.core.model.TrackId) -> Unit,
     viewModel: NowPlayingViewModel = hiltViewModel(),
 ) {
     val state by viewModel.playbackState.collectAsState()
@@ -119,6 +128,7 @@ fun NowPlayingScreen(
     var showEqualizerInSheet by remember { mutableStateOf(false) }
     var showSleepTimerSheet by remember { mutableStateOf(false) }
     var showLoopSheet by remember { mutableStateOf(false) }
+    var showAddToPlaylist by remember { mutableStateOf(false) }
     var pendingLoopStartMs by remember { mutableStateOf<Long?>(null) }
     // Local-only stub -- no "favorites" concept exists in the domain layer yet, so this doesn't
     // persist across tracks/sessions. Resets whenever the playing track changes.
@@ -211,17 +221,41 @@ fun NowPlayingScreen(
                 Icon(Icons.Outlined.MoreVert, contentDescription = "Ещё", tint = NamiColors.Paper100)
             }
         }
-        // Slide-up sheet instead of a dropdown -- this is the pattern requested for every
-        // "..." menu app-wide (track/album/playlist/artist, each with its own action set).
+        // Slide-up sheet instead of a dropdown -- same pattern as everywhere else's "..." menu,
+        // but with a header (cover/title/artist + a real system-volume slider) on top of the
+        // action list, same shape as a platform media output sheet.
         if (showOverflowMenu) {
+            val track = trackDetails
             ContextActionSheet(
                 onDismiss = { showOverflowMenu = false },
-                actions = listOf(
+                header = {
+                    if (track != null) {
+                        NowPlayingOverflowHeader(track = track)
+                        VolumeSlider(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp))
+                        androidx.compose.material3.HorizontalDivider(
+                            color = NamiColors.Ink700,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
+                    }
+                },
+                actions = listOfNotNull(
                     ContextAction("Аудиотракт", Icons.Outlined.QueueMusic) { showAudioTractSheet = true },
                     ContextAction("Таймер сна", Icons.Outlined.DarkMode) { showSleepTimerSheet = true },
                     ContextAction("A-B петля", Icons.Outlined.Repeat) { showLoopSheet = true },
+                    ContextAction("В плейлист", Icons.Outlined.PlaylistAdd) { showAddToPlaylist = true },
+                    track?.let { ContextAction("Информация о треке", Icons.Outlined.Info) { onShowTrackInfo(it.id) } },
+                    track?.artistId?.let { artistId -> ContextAction("Открыть исполнителя", Icons.Outlined.Person) { onOpenArtist(artistId) } },
+                    track?.albumId?.let { albumId -> ContextAction("Открыть альбом", Icons.Outlined.Album) { onOpenAlbum(albumId) } },
                 ),
             )
+        }
+        if (showAddToPlaylist) {
+            trackDetails?.let { track ->
+                dev.nami.feature.playlists.AddToPlaylistDialog(
+                    trackIds = setOf(track.id),
+                    onDismiss = { showAddToPlaylist = false },
+                )
+            }
         }
         // Аудиотракт (and, from inside it, Эквалайзер) appear right here as a sliding-up sheet
         // instead of navigating to a separate screen -- same content (AudioTractBody/
@@ -802,4 +836,51 @@ private fun AddMomentDialog(onSave: (label: String, colorArgb: Int, isChapter: B
             androidx.compose.material3.TextButton(onClick = onDismiss) { androidx.compose.material3.Text("Отмена", color = NamiColors.Paper70) }
         },
     )
+}
+
+/** Header for the "..." sheet's richer layout (cover + "Сейчас играет" + title/artist), same
+ * idea as a platform media output sheet's now-playing summary above its own action list. */
+@Composable
+private fun NowPlayingOverflowHeader(track: dev.nami.core.model.Track) {
+    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (track.albumArtworkPath != null) {
+            AsyncImage(
+                model = track.albumArtworkPath,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(48.dp).background(NamiColors.Ink700, RoundedCornerShape(8.dp)),
+            )
+        } else {
+            Box(modifier = Modifier.size(48.dp).background(NamiColors.Ink700, RoundedCornerShape(8.dp)))
+        }
+        Column(modifier = Modifier.padding(start = 14.dp)) {
+            Text("Сейчас играет", color = NamiColors.Paper40, style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
+            Text(track.title, color = NamiColors.Paper100, style = androidx.compose.material3.MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            track.artistName?.let { Text(it, color = NamiColors.Paper70, style = androidx.compose.material3.MaterialTheme.typography.bodySmall, maxLines = 1) }
+        }
+    }
+}
+
+/** Real system STREAM_MUSIC volume, same knob the hardware buttons control (VolumeController) --
+ * not a fake/local-only slider. */
+@Composable
+private fun VolumeSlider(modifier: Modifier = Modifier) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val controller = remember { VolumeController(context) }
+    var value by remember { mutableFloatStateOf(controller.current.toFloat()) }
+    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Outlined.VolumeDown, contentDescription = null, tint = NamiColors.Paper40)
+        androidx.compose.material3.Slider(
+            value = value,
+            onValueChange = { value = it; controller.set(it.roundToInt()) },
+            valueRange = 0f..controller.max.toFloat(),
+            modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+            colors = androidx.compose.material3.SliderDefaults.colors(
+                thumbColor = NamiColors.Paper100,
+                activeTrackColor = NamiColors.Paper100,
+                inactiveTrackColor = NamiColors.Ink700,
+            ),
+        )
+        Icon(Icons.Outlined.VolumeUp, contentDescription = null, tint = NamiColors.Paper40)
+    }
 }
