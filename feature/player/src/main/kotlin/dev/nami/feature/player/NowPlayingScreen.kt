@@ -173,20 +173,24 @@ fun NowPlayingScreen(
             if (backgroundArtworkPath != null) lastArtworkPath = backgroundArtworkPath
         }
         val displayArtworkPath = backgroundArtworkPath ?: lastArtworkPath
-        if (displayArtworkPath != null) {
-            // Coil's own crossfade (not an abrupt swap) between the old and new backdrop -- Coil
-            // caches the previous successful result for this ImageView-equivalent internally, so
-            // this alone is enough, no separate AnimatedContent/Crossfade wrapper needed.
-            val request = ImageRequest.Builder(LocalPlatformContext.current)
-                .data(displayArtworkPath)
-                .crossfade(400)
-                .build()
-            AsyncImage(
-                model = request,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize().blur(64.dp),
-            )
+        // Explicit Compose Crossfade, not Coil's own ImageRequest.crossfade() -- that one relies
+        // on Coil recognizing successive loads on the same AsyncImage as a transition, which in
+        // practice here (through Coil3's compose integration) never visibly cross-dissolved,
+        // always reading as an instant cut. A real two-layer alpha fade at the Compose level
+        // can't fail to animate regardless of what Coil's internals decide to do.
+        androidx.compose.animation.Crossfade(
+            targetState = displayArtworkPath,
+            animationSpec = tween(400),
+            label = "now-playing-background",
+        ) { path ->
+            if (path != null) {
+                AsyncImage(
+                    model = path,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().blur(64.dp),
+                )
+            }
         }
         Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900.copy(alpha = if (displayArtworkPath != null) 0.72f else 1f)))
 
@@ -366,7 +370,11 @@ fun NowPlayingScreen(
                     2 -> queue.upcoming.firstOrNull()?.track
                     else -> queue.nowPlaying
                 }
-                val accentColor = rememberArtworkAccentColor(track?.artworkPath)
+                // No track for this slot (start/end of queue) -- nothing to peek at all, not a
+                // gray placeholder square (combined with the edgeGuard above, which already stops
+                // the drag from ever settling here).
+                if (track == null) return@HorizontalPager
+                val accentColor = rememberArtworkAccentColor(track.artworkPath)
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                     // Soft accent glow behind the artwork, per Дизайн.md's "мягкое свечение
                     // цветом акцента" -- Compose has no CSS box-shadow, so a blurred radial
@@ -385,8 +393,8 @@ fun NowPlayingScreen(
                             .blur(32.dp),
                     )
                     NowPlayingArtwork(
-                        artworkPath = track?.artworkPath,
-                        contentDescription = track?.title,
+                        artworkPath = track.artworkPath,
+                        contentDescription = track.title,
                         modifier = Modifier
                             .fillMaxSize()
                             .background(NamiColors.Ink700, RoundedCornerShape(4.dp)),

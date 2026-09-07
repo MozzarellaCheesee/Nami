@@ -428,29 +428,28 @@ fun NamiNavHost(
         NamiBottomBar(
             currentRoute = currentRoute,
             onTabSelected = { route ->
-                if (route == ROUTE_LIBRARY) {
-                    // Pop the back stack directly down to Library, however deep the current
-                    // screen is nested (Artist -> Discography, Search -> Artist, etc.) and
-                    // whatever path was used to get there -- more direct than navigate()'s
-                    // popUpTo()/launchSingleTop/restoreState combo, which depends on "library"
-                    // being reachable via the exact args those options expect.
-                    navController.popBackStack(ROUTE_LIBRARY, inclusive = false)
-                    libraryViewModel.selectTab(LibraryTab.TRACKS)
-                    libraryTabResetSignal++
-                } else {
-                    // popUpTo(ROUTE_LIBRARY) already collapses whatever's nested under this tab
-                    // (playlist detail, a settings sub-screen, an artist reached from Search) back
-                    // to its own root -- Плейлисты/Настройки need nothing more than that. Search
-                    // additionally has live typed-query state that isn't part of the nav stack at
-                    // all (searchViewModel is hoisted, survives regardless of restoreState), so a
-                    // second tap on an already-empty root wouldn't otherwise clear it.
-                    if (route == ROUTE_SEARCH) searchViewModel.onQueryChange("")
+                // Pop the back stack directly down to this tab's own root, however deep the
+                // current screen is nested (playlist detail, a settings sub-screen, Search ->
+                // Artist, etc.) -- succeeds (returns true) only when `route` is actually already
+                // on the live stack, i.e. this tab is the one currently open. More direct and
+                // reliable than navigate()'s popUpTo()/launchSingleTop/restoreState combo (tried
+                // first here): that combo is meant for jumping BETWEEN independent nested graphs,
+                // and on this app's single flat stack it just navigated to the target route
+                // without actually clearing whatever was pushed on top of it, so re-tapping a tab
+                // while inside one of its sub-screens silently did nothing.
+                if (!navController.popBackStack(route, inclusive = false)) {
+                    // Not on the stack at all yet -- this is a real switch to a different tab.
                     navController.navigate(route) {
                         popUpTo(ROUTE_LIBRARY) { saveState = true }
                         launchSingleTop = true
                         restoreState = true
                     }
                 }
+                if (route == ROUTE_LIBRARY) {
+                    libraryViewModel.selectTab(LibraryTab.TRACKS)
+                    libraryTabResetSignal++
+                }
+                if (route == ROUTE_SEARCH) searchViewModel.onQueryChange("")
             },
             modifier = Modifier.navigationBarsPadding(),
         )

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
@@ -58,8 +59,11 @@ fun StatsScreen(onBack: () -> Unit, viewModel: StatsViewModel = hiltViewModel())
             Text("Статистика", color = NamiColors.Paper100, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 8.dp))
         }
 
+        // Fixed-height Column had no way to show everything on a shorter screen -- content below
+        // the fold was just clipped/squished instead of scrollable.
         Column(
             modifier = Modifier
+                .verticalScroll(rememberScrollState())
                 .padding(20.dp)
                 .background(NamiColors.Ink800, RoundedCornerShape(24.dp))
                 .padding(20.dp),
