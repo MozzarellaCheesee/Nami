@@ -119,7 +119,7 @@ class CrossfadeController(
 
     companion object {
         private const val TICK_MS = 150L
-        const val FADE_MS = 3000L
+        const val FADE_MS = 5000L
         private val HALF_PI = (PI / 2).toFloat()
 
         /** Equal-power pair: fadeIn(t)² + fadeOut(t)² == 1, so the summed power of the two
