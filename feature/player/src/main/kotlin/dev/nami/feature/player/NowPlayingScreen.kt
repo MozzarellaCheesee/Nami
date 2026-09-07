@@ -457,8 +457,9 @@ private fun TransportBlock(
     onClick: () -> Unit,
     filled: Boolean = false,
     active: Boolean = false,
-    // "1" badge for repeat-one -- reuses the plain Repeat icon instead of pulling in the
-    // material-icons-extended dependency just for a RepeatOne glyph nothing else in the app needs.
+    // "1" for repeat-one -- sits inside the Repeat icon's own loop (dead center, same spot the
+    // real RepeatOne glyph draws its digit) instead of a separate corner badge, reusing the plain
+    // Repeat icon rather than pulling in material-icons-extended for a glyph nothing else needs.
     badgeText: String? = null,
 ) {
     val shape = RoundedCornerShape(size / 3.5f)
@@ -482,13 +483,11 @@ private fun TransportBlock(
         if (badgeText != null) {
             androidx.compose.material3.Text(
                 text = badgeText,
-                color = NamiColors.Ink900,
-                style = androidx.compose.material3.MaterialTheme.typography.labelSmall.copy(fontSize = androidx.compose.ui.unit.TextUnit(9f, androidx.compose.ui.unit.TextUnitType.Sp)),
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .background(NamiColors.Shu, androidx.compose.foundation.shape.CircleShape)
-                    .size(size / 2.5f)
-                    .wrapContentSize(Alignment.Center),
+                color = if (filled) NamiColors.Ink900 else if (active) NamiColors.Shu else NamiColors.Paper100,
+                style = androidx.compose.material3.MaterialTheme.typography.labelSmall.copy(
+                    fontSize = androidx.compose.ui.unit.TextUnit(size.value / 4.2f, androidx.compose.ui.unit.TextUnitType.Sp),
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                ),
             )
         }
     }
