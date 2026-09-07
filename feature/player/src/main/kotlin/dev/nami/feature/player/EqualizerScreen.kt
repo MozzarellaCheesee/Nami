@@ -32,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -71,6 +72,22 @@ fun EqualizerBody(onBack: () -> Unit, viewModel: AudioTractViewModel = hiltViewM
     val eqEnabled = uiState.eqEnabled
     val gains = uiState.eqBandGains
     val activePreset = EqPreset.matching(gains)
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var autoEqError by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val pickAutoEq = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val text = context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
+        val parsed = text?.let { dev.nami.player.eq.AutoEqParser.parse(it) }
+        if (parsed != null) {
+            viewModel.setEqBandGains(parsed)
+            viewModel.setEqEnabled(true)
+            autoEqError = false
+        } else {
+            autoEqError = true
+        }
+    }
 
     Column {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
@@ -114,6 +131,23 @@ fun EqualizerBody(onBack: () -> Unit, viewModel: AudioTractViewModel = hiltViewM
                         }
                     }
                     PresetPill("Пользовательский", selected = activePreset == null, enabled = false, onClick = {})
+                }
+
+                Text(
+                    text = "Импорт AutoEQ (ParametricEQ.txt)",
+                    color = NamiColors.Shu,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier
+                        .padding(top = 16.dp)
+                        .clickable { pickAutoEq.launch(arrayOf("text/plain", "*/*")) },
+                )
+                if (autoEqError) {
+                    Text(
+                        text = "Не удалось распознать файл -- нужен ParametricEQ.txt из AutoEQ.",
+                        color = NamiColors.Paper40,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
                 }
 
                 gains.forEachIndexed { index, gainDb ->

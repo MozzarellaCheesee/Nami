@@ -19,12 +19,14 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FontDownload
 import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.compose.material.icons.outlined.GraphicEq
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PlayCircleOutline
 import androidx.compose.material.icons.outlined.School
 import androidx.compose.material.icons.outlined.Usb
@@ -52,38 +54,92 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
 
+/** Top-level Settings screen -- just categories, per План.md Часть VIII. Each row opens its own
+ * screen instead of everything living in one long scroll (that's what this replaced: one Column
+ * with every setting from every category inlined, which grew unreadable as categories were added). */
 @Composable
-fun SettingsScreen(onTrashClick: () -> Unit, onAudioTractClick: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
-    val autoOpenPlayer by viewModel.autoOpenPlayer.collectAsState()
-    val hideSystemBars by viewModel.hideSystemBars.collectAsState()
-    val karaokeEnabled by viewModel.karaokeEnabled.collectAsState()
-    val studyModeEnabled by viewModel.studyModeEnabled.collectAsState()
-    val lyricsFontPath by viewModel.lyricsFontPath.collectAsState()
-    val context = LocalContext.current
-    val pickLyricsFont = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
-    ) { uri -> uri?.let(viewModel::pickLyricsFont) }
-    var selectedIcon by remember { mutableStateOf(IconPicker.current(context)) }
-    var pendingIcon by remember { mutableStateOf<LauncherIcon?>(null) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(NamiColors.Ink900)
-            // Wasn't scrollable at all before -- the Tracks-tab NavHost area is a weighted
-            // Column child that shrinks when MiniPlayer appears below it, so with a fixed-height
-            // Column here the bottom section (Хранилище/Корзина) just got clipped off-screen
-            // with no way to reach it while something was playing.
-            .verticalScroll(androidx.compose.foundation.rememberScrollState())
-            .padding(bottom = 24.dp),
-    ) {
+fun SettingsScreen(
+    onTrashClick: () -> Unit,
+    onAudioTractClick: () -> Unit,
+    onAppearanceClick: () -> Unit,
+    onPlayerClick: () -> Unit,
+    onLyricsClick: () -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900).padding(bottom = 24.dp)) {
         Text(
             text = "Настройки",
             color = NamiColors.Paper100,
             style = MaterialTheme.typography.titleLarge,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
         )
+        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            SettingsRow(
+                icon = Icons.Outlined.PlayCircleOutline,
+                title = "Плеер",
+                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
+                onClick = onPlayerClick,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.School,
+                title = "Лирика",
+                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
+                onClick = onLyricsClick,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.GraphicEq,
+                title = "Аудиотракт (Beta)",
+                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
+                onClick = onAudioTractClick,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Palette,
+                title = "Внешний вид",
+                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
+                onClick = onAppearanceClick,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Delete,
+                title = "Хранилище",
+                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
+                onClick = onTrashClick,
+            )
+        }
+    }
+}
 
+@Composable
+private fun SettingsSubScreenScaffold(title: String, onBack: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(NamiColors.Ink900)
+            // Same reasoning as the old single-screen version: MiniPlayer can shrink this area,
+            // so the bottom of a long category (Аудиотракт especially) needs to stay reachable.
+            .verticalScroll(androidx.compose.foundation.rememberScrollState())
+            .padding(bottom = 24.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
+            androidx.compose.material3.IconButton(onClick = onBack) {
+                Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
+            }
+            Text(
+                text = title,
+                color = NamiColors.Paper100,
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(start = 8.dp),
+            )
+        }
+        content()
+    }
+}
+
+@Composable
+fun SettingsAppearanceScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    var selectedIcon by remember { mutableStateOf(IconPicker.current(context)) }
+    var pendingIcon by remember { mutableStateOf<LauncherIcon?>(null) }
+
+    SettingsSubScreenScaffold(title = "Внешний вид", onBack = onBack) {
         SettingsSectionLabel("Иконка приложения")
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
             LazyVerticalGrid(
@@ -100,78 +156,6 @@ fun SettingsScreen(onTrashClick: () -> Unit, onAudioTractClick: () -> Unit, view
                     )
                 }
             }
-        }
-
-        SettingsSectionLabel("Плеер")
-        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
-            SettingsRow(
-                icon = Icons.Outlined.PlayCircleOutline,
-                title = "Открывать плеер при выборе трека",
-                trailing = { NamiSwitch(checked = autoOpenPlayer, onCheckedChange = viewModel::setAutoOpenPlayer) },
-                onClick = { viewModel.setAutoOpenPlayer(!autoOpenPlayer) },
-            )
-            SettingsRow(
-                icon = Icons.Outlined.Fullscreen,
-                title = "Скрывать элементы управления телефона",
-                trailing = { NamiSwitch(checked = hideSystemBars, onCheckedChange = viewModel::setHideSystemBars) },
-                onClick = { viewModel.setHideSystemBars(!hideSystemBars) },
-            )
-            SettingsRow(
-                icon = Icons.Outlined.GraphicEq,
-                title = "Караоке-подсветка слов (Beta)",
-                trailing = { NamiSwitch(checked = karaokeEnabled, onCheckedChange = viewModel::setKaraokeEnabled) },
-                onClick = { viewModel.setKaraokeEnabled(!karaokeEnabled) },
-            )
-        }
-
-        SettingsSectionLabel("Лирика")
-        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
-            SettingsRow(
-                icon = Icons.Outlined.School,
-                title = "Режим изучения (Beta)",
-                trailing = { NamiSwitch(checked = studyModeEnabled, onCheckedChange = viewModel::setStudyModeEnabled) },
-                onClick = { viewModel.setStudyModeEnabled(!studyModeEnabled) },
-            )
-            SettingsRow(
-                icon = Icons.Outlined.FontDownload,
-                title = "Шрифт текста песни",
-                trailing = {
-                    Text(
-                        text = if (lyricsFontPath != null) "Свой" else "Стандартный",
-                        color = NamiColors.Paper40,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                },
-                onClick = { pickLyricsFont.launch(arrayOf("font/ttf", "font/otf", "*/*")) },
-            )
-            if (lyricsFontPath != null) {
-                SettingsRow(
-                    icon = Icons.Outlined.Close,
-                    title = "Сбросить шрифт",
-                    trailing = {},
-                    onClick = viewModel::clearLyricsFont,
-                )
-            }
-        }
-
-        SettingsSectionLabel("Аудиотракт (Beta)")
-        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
-            SettingsRow(
-                icon = Icons.Outlined.GraphicEq,
-                title = "Аудиотракт и эквалайзер",
-                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
-                onClick = onAudioTractClick,
-            )
-        }
-
-        SettingsSectionLabel("Хранилище")
-        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
-            SettingsRow(
-                icon = Icons.Outlined.Delete,
-                title = "Корзина",
-                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
-                onClick = onTrashClick,
-            )
         }
     }
 
@@ -202,6 +186,76 @@ fun SettingsScreen(onTrashClick: () -> Unit, onAudioTractClick: () -> Unit, view
                 }
             },
         )
+    }
+}
+
+@Composable
+fun SettingsPlayerScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
+    val autoOpenPlayer by viewModel.autoOpenPlayer.collectAsState()
+    val hideSystemBars by viewModel.hideSystemBars.collectAsState()
+    val karaokeEnabled by viewModel.karaokeEnabled.collectAsState()
+
+    SettingsSubScreenScaffold(title = "Плеер", onBack = onBack) {
+        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            SettingsRow(
+                icon = Icons.Outlined.PlayCircleOutline,
+                title = "Открывать плеер при выборе трека",
+                trailing = { NamiSwitch(checked = autoOpenPlayer, onCheckedChange = viewModel::setAutoOpenPlayer) },
+                onClick = { viewModel.setAutoOpenPlayer(!autoOpenPlayer) },
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Fullscreen,
+                title = "Скрывать элементы управления телефона",
+                trailing = { NamiSwitch(checked = hideSystemBars, onCheckedChange = viewModel::setHideSystemBars) },
+                onClick = { viewModel.setHideSystemBars(!hideSystemBars) },
+            )
+            SettingsRow(
+                icon = Icons.Outlined.GraphicEq,
+                title = "Караоке-подсветка слов (Beta)",
+                trailing = { NamiSwitch(checked = karaokeEnabled, onCheckedChange = viewModel::setKaraokeEnabled) },
+                onClick = { viewModel.setKaraokeEnabled(!karaokeEnabled) },
+            )
+        }
+    }
+}
+
+@Composable
+fun SettingsLyricsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
+    val studyModeEnabled by viewModel.studyModeEnabled.collectAsState()
+    val lyricsFontPath by viewModel.lyricsFontPath.collectAsState()
+    val pickLyricsFont = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+    ) { uri -> uri?.let(viewModel::pickLyricsFont) }
+
+    SettingsSubScreenScaffold(title = "Лирика", onBack = onBack) {
+        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            SettingsRow(
+                icon = Icons.Outlined.School,
+                title = "Режим изучения (Beta)",
+                trailing = { NamiSwitch(checked = studyModeEnabled, onCheckedChange = viewModel::setStudyModeEnabled) },
+                onClick = { viewModel.setStudyModeEnabled(!studyModeEnabled) },
+            )
+            SettingsRow(
+                icon = Icons.Outlined.FontDownload,
+                title = "Шрифт текста песни",
+                trailing = {
+                    Text(
+                        text = if (lyricsFontPath != null) "Свой" else "Стандартный",
+                        color = NamiColors.Paper40,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                },
+                onClick = { pickLyricsFont.launch(arrayOf("font/ttf", "font/otf", "*/*")) },
+            )
+            if (lyricsFontPath != null) {
+                SettingsRow(
+                    icon = Icons.Outlined.Close,
+                    title = "Сбросить шрифт",
+                    trailing = {},
+                    onClick = viewModel::clearLyricsFont,
+                )
+            }
+        }
     }
 }
 

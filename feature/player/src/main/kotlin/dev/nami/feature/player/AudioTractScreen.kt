@@ -2,6 +2,8 @@ package dev.nami.feature.player
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,6 +37,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -208,6 +211,28 @@ fun AudioTractBody(onOpenEqualizer: () -> Unit, viewModel: AudioTractViewModel =
                     GainPill("+3 дБ", selected = uiState.playbackGainDb == 3f) { viewModel.setPlaybackGainDb(3f) }
                     GainPill("+6 дБ", selected = uiState.playbackGainDb == 6f) { viewModel.setPlaybackGainDb(6f) }
                 }
+
+                Text(
+                    text = "Профили по устройству вывода",
+                    color = NamiColors.Paper40,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(top = 20.dp, bottom = 8.dp),
+                )
+                ToggleRow(
+                    "Профили по устройству (Beta)",
+                    "свой EQ и лимит громкости для проводного/BT/USB-ЦАП/динамика -- заменяет ручной EQ, пока активен",
+                    uiState.outputProfilesEnabled,
+                    viewModel::setOutputProfilesEnabled,
+                )
+                if (uiState.outputProfilesEnabled) {
+                    dev.nami.domain.OutputDeviceType.entries.forEach { type ->
+                        OutputProfileRow(
+                            type = type,
+                            profile = uiState.outputProfiles[type] ?: dev.nami.domain.OutputProfile.IDENTITY,
+                            onProfileChange = { viewModel.setOutputProfile(type, it) },
+                        )
+                    }
+                }
                 Spacer(modifier = Modifier.height(24.dp))
             }
 }
@@ -236,6 +261,92 @@ private fun ToggleRow(title: String, caption: String, checked: Boolean, onChecke
                 uncheckedTrackColor = NamiColors.Ink600,
                 uncheckedThumbColor = NamiColors.Paper70,
             ),
+        )
+    }
+}
+
+private fun deviceTypeLabel(type: dev.nami.domain.OutputDeviceType): String = when (type) {
+    dev.nami.domain.OutputDeviceType.WIRED -> "Проводные наушники"
+    dev.nami.domain.OutputDeviceType.BLUETOOTH -> "Bluetooth"
+    dev.nami.domain.OutputDeviceType.USB_DAC -> "USB-ЦАП"
+    dev.nami.domain.OutputDeviceType.SPEAKER -> "Динамик"
+}
+
+/** One collapsible per-device profile card: a preset picker (reusing the same fixed EqPreset set
+ * as the main equalizer -- a full 9-slider editor per device would be a lot of chrome for a
+ * feature most people set once and forget) plus a volume ceiling slider. */
+@Composable
+private fun OutputProfileRow(
+    type: dev.nami.domain.OutputDeviceType,
+    profile: dev.nami.domain.OutputProfile,
+    onProfileChange: (dev.nami.domain.OutputProfile) -> Unit,
+) {
+    var expanded by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val activePreset = dev.nami.player.eq.EqPreset.matching(profile.eqGainsDb)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp)
+            .background(NamiColors.Ink800, RoundedCornerShape(16.dp))
+            .clickable { expanded = !expanded }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(deviceTypeLabel(type), color = NamiColors.Paper100, style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    text = (activePreset?.label ?: "Пользовательский") + " · громкость ${profile.volumeLimitPercent}%",
+                    color = NamiColors.Paper40,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+        if (expanded) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp)
+                    .horizontalScroll(rememberScrollState()),
+            ) {
+                dev.nami.player.eq.EqPreset.entries.forEach { preset ->
+                    PresetPillCompact(preset.label, selected = activePreset == preset) {
+                        onProfileChange(profile.copy(eqGainsDb = preset.gainsDb))
+                    }
+                }
+            }
+            Text(
+                text = "Лимит громкости: ${profile.volumeLimitPercent}%",
+                color = NamiColors.Paper70,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+            androidx.compose.material3.Slider(
+                value = profile.volumeLimitPercent.toFloat(),
+                onValueChange = { onProfileChange(profile.copy(volumeLimitPercent = it.toInt())) },
+                valueRange = 10f..100f,
+                colors = androidx.compose.material3.SliderDefaults.colors(
+                    thumbColor = NamiColors.Shu,
+                    activeTrackColor = NamiColors.Shu,
+                    inactiveTrackColor = NamiColors.Ink600,
+                ),
+            )
+        }
+    }
+}
+
+@Composable
+private fun PresetPillCompact(label: String, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .background(if (selected) NamiColors.Paper100 else NamiColors.Ink700, RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+    ) {
+        Text(
+            text = label,
+            color = if (selected) NamiColors.Ink900 else NamiColors.Paper70,
+            style = MaterialTheme.typography.labelSmall,
         )
     }
 }

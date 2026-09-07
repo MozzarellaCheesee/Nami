@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.nami.domain.OutputDeviceType
+import dev.nami.domain.OutputProfile
 import dev.nami.domain.SettingsRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,6 +28,9 @@ private const val KEY_CROSSFADE_ENABLED = "crossfade_enabled"
 private const val KEY_PLAYBACK_GAIN_DB = "playback_gain_db"
 private const val KEY_HIFI_ENABLED = "hifi_enabled"
 private const val KEY_NIGHT_MODE_ENABLED = "night_mode_enabled"
+private const val KEY_OUTPUT_PROFILES_ENABLED = "output_profiles_enabled"
+// One "<CSV of 9 gains>|<volumeLimitPercent>" string per device type.
+private fun outputProfileKey(type: OutputDeviceType) = "output_profile_${type.name}"
 
 @Singleton
 class AppSettingsRepository @Inject constructor(@ApplicationContext context: Context) : SettingsRepository {
@@ -158,5 +163,37 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
     override fun setNightModeEnabled(value: Boolean) {
         prefs.edit { putBoolean(KEY_NIGHT_MODE_ENABLED, value) }
         _nightModeEnabled.value = value
+    }
+
+    private val _outputProfilesEnabled = MutableStateFlow(prefs.getBoolean(KEY_OUTPUT_PROFILES_ENABLED, false))
+    override val outputProfilesEnabled: StateFlow<Boolean> = _outputProfilesEnabled
+
+    override fun setOutputProfilesEnabled(value: Boolean) {
+        prefs.edit { putBoolean(KEY_OUTPUT_PROFILES_ENABLED, value) }
+        _outputProfilesEnabled.value = value
+    }
+
+    private val _outputProfiles = MutableStateFlow(
+        OutputDeviceType.entries.associateWith { readOutputProfile(it) },
+    )
+    override val outputProfiles: StateFlow<Map<OutputDeviceType, OutputProfile>> = _outputProfiles
+
+    override fun setOutputProfile(type: OutputDeviceType, profile: OutputProfile) {
+        require(profile.eqGainsDb.size == EQ_BAND_COUNT) { "expected $EQ_BAND_COUNT gains, got ${profile.eqGainsDb.size}" }
+        val serialized = profile.eqGainsDb.joinToString(",") + "|" + profile.volumeLimitPercent
+        prefs.edit { putString(outputProfileKey(type), serialized) }
+        _outputProfiles.value = _outputProfiles.value + (type to profile)
+    }
+
+    private fun readOutputProfile(type: OutputDeviceType): OutputProfile {
+        val raw = prefs.getString(outputProfileKey(type), null) ?: return OutputProfile.IDENTITY
+        val parts = raw.split("|")
+        val gains = parts.getOrNull(0)?.split(",")?.mapNotNull { it.toFloatOrNull() }
+        val limit = parts.getOrNull(1)?.toIntOrNull()
+        return if (gains?.size == EQ_BAND_COUNT && limit != null) {
+            OutputProfile(gains, limit)
+        } else {
+            OutputProfile.IDENTITY
+        }
     }
 }

@@ -15,11 +15,13 @@ import androidx.media3.session.MediaSessionService
 import dagger.hilt.android.AndroidEntryPoint
 import dev.nami.core.model.TrackId
 import dev.nami.domain.LibraryRepository
+import dev.nami.domain.OutputProfile
 import dev.nami.domain.PlaybackState
 import dev.nami.domain.SettingsRepository
 import dev.nami.player.dither.DitherAudioProcessor
 import dev.nami.player.eq.NamiRenderersFactory
 import dev.nami.player.eq.ParametricEqAudioProcessor
+import dev.nami.player.output.OutputDeviceDetector
 import dev.nami.player.replaygain.ReplayGainAudioProcessor
 import dev.nami.player.replaygain.ReplayGainScanner
 import kotlinx.coroutines.CoroutineScope
@@ -65,6 +67,7 @@ class PlaybackService : MediaSessionService() {
     // Last ReplayGain value scanned for the current track, so a chain built mid-track (crossfade,
     // sink swap) starts at the right gain instead of 0dB until the next track change.
     private var currentTrackGainDb: Float? = null
+    private lateinit var outputDeviceDetector: OutputDeviceDetector
 
     // Automatic audio-focus handling: pauses when another app starts playing audio/video
     // (transient or permanent focus loss), and resumes on its own once that app stops --
@@ -88,8 +91,25 @@ class PlaybackService : MediaSessionService() {
     @Inject lateinit var settingsRepository: SettingsRepository
     @Inject lateinit var libraryRepository: LibraryRepository
 
+    /** What the EQ chain and player volume should actually be right now -- either the user's own
+     * manual EQ, or (when Этап 4's per-device profiles are on) the profile matching the currently
+     * detected output route. Profiles fully replace the manual EQ while active rather than
+     * layering on top of it -- mixing "your own EQ" and "this device's EQ" would need the two to
+     * somehow compose, and there's no principled way to do that (a doubled bass boost isn't what
+     * either setting asked for). */
+    private data class EffectiveEq(val gainsDb: List<Float>, val enabled: Boolean, val volumeLimitPercent: Int)
+
+    private fun effectiveEq(): EffectiveEq =
+        if (settingsRepository.outputProfilesEnabled.value) {
+            val profile = settingsRepository.outputProfiles.value[outputDeviceDetector.current.value] ?: OutputProfile.IDENTITY
+            EffectiveEq(profile.eqGainsDb, enabled = true, volumeLimitPercent = profile.volumeLimitPercent)
+        } else {
+            EffectiveEq(settingsRepository.eqBandGains.value, enabled = settingsRepository.eqEnabled.value, volumeLimitPercent = 100)
+        }
+
     override fun onCreate() {
         super.onCreate()
+        outputDeviceDetector = OutputDeviceDetector(this)
         val needsCustomSink = currentNeedsCustomSink()
         player = buildPlayer(needsCustomSink)
         player.addListener(replayGainListener)
@@ -127,30 +147,45 @@ class PlaybackService : MediaSessionService() {
             settingsRepository.replayGainEnabled,
             settingsRepository.ditherEnabled,
             settingsRepository.playbackGainDb,
-            settingsRepository.hiFiEnabled,
-        ) { eq, replayGain, dither, boostDb, hiFi ->
-            !hiFi && (eq || replayGain || dither || boostDb != 0f)
+        ) { eq, replayGain, dither, boostDb ->
+            eq || replayGain || dither || boostDb != 0f
         }
+            .combine(settingsRepository.hiFiEnabled) { effectsOn, hiFi -> effectsOn to hiFi }
+            .combine(settingsRepository.outputProfilesEnabled) { (effectsOn, hiFi), profilesEnabled ->
+                !hiFi && (effectsOn || profilesEnabled)
+            }
             .distinctUntilChanged()
             .onEach { needed -> if (needed != usingCustomSink) swapPlayer(needed) }
             .launchIn(scope)
 
-        // Этап 4's parametric EQ (Beta): gains apply live (see ParametricEqAudioProcessor), but
-        // the on/off switch itself only takes effect on DefaultAudioSink's next pipeline rebuild
-        // -- force one via a same-position seek so flipping the Settings toggle is felt right
-        // away instead of "starting with the next track". swapPlayer() above already gives a
-        // fresh pipeline when the sink itself needed to change; this seek covers flips that don't
-        // (e.g. gains changing, or toggling EQ off while ReplayGain/dither keep the sink alive).
-        settingsRepository.eqBandGains
-            .onEach { gains -> dsp.eq.setGains(gains) }
-            .launchIn(scope)
-        settingsRepository.eqEnabled
-            .onEach { enabled ->
+        // Этап 4's parametric EQ (Beta) and per-device profiles (also Этап 4, Beta): gains apply
+        // live (see ParametricEqAudioProcessor), but the on/off switch itself only takes effect on
+        // DefaultAudioSink's next pipeline rebuild -- force one via a same-position seek so
+        // flipping a toggle (or the output route changing) is felt right away instead of "starting
+        // with the next track". swapPlayer() above already gives a fresh pipeline when the sink
+        // itself needed to change; this seek covers flips that don't (e.g. gains changing, or
+        // toggling EQ off while ReplayGain/dither keep the sink alive).
+        combine(
+            settingsRepository.eqEnabled,
+            settingsRepository.eqBandGains,
+            settingsRepository.outputProfilesEnabled,
+            settingsRepository.outputProfiles,
+            outputDeviceDetector.current,
+        ) { _, _, _, _, _ -> effectiveEq() }
+            .distinctUntilChanged()
+            .onEach { effective ->
+                dsp.eq.setGains(effective.gainsDb)
                 val wasEnabled = dsp.eq.enabled
-                dsp.eq.enabled = enabled
-                if (enabled != wasEnabled && player.playbackState != Player.STATE_IDLE) {
+                dsp.eq.enabled = effective.enabled
+                if (effective.enabled != wasEnabled && player.playbackState != Player.STATE_IDLE) {
                     player.seekTo(player.currentPosition)
                 }
+                // ponytail: sets `player.volume` directly as a hard ceiling, which can race a
+                // crossfade's own volume ramp on the same player if both fire in the same window
+                // (rare -- profile/route changes mid-crossfade). Full fix needs the volume limit
+                // threaded through CrossfadeController as a ceiling on its ramp target instead of
+                // written independently; not done here.
+                player.volume = effective.volumeLimitPercent / 100f
             }
             .launchIn(scope)
 
@@ -202,14 +237,16 @@ class PlaybackService : MediaSessionService() {
             settingsRepository.eqEnabled.value ||
                 settingsRepository.replayGainEnabled.value ||
                 settingsRepository.ditherEnabled.value ||
-                settingsRepository.playbackGainDb.value != 0f
+                settingsRepository.playbackGainDb.value != 0f ||
+                settingsRepository.outputProfilesEnabled.value
             )
 
     /** Fresh, correctly-seeded processors for one player. Seeding matters: a chain built mid-session
      * (crossfade, sink swap) must start at the settings the user already has, not at defaults. */
     private fun newDspChain(): DspChain = DspChain().apply {
-        eq.enabled = settingsRepository.eqEnabled.value
-        eq.setGains(settingsRepository.eqBandGains.value)
+        val effective = effectiveEq()
+        eq.enabled = effective.enabled
+        eq.setGains(effective.gainsDb)
         dither.enabled = settingsRepository.ditherEnabled.value
         replayGain.enabled = settingsRepository.replayGainEnabled.value
         replayGain.boostDb = settingsRepository.playbackGainDb.value
@@ -342,6 +379,7 @@ class PlaybackService : MediaSessionService() {
         mediaSession
 
     override fun onDestroy() {
+        outputDeviceDetector.release()
         crossfade?.cancel()
         mediaSession.run {
             player.release()

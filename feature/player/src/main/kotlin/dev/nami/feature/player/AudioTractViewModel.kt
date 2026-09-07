@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.nami.core.model.Track
 import dev.nami.domain.LibraryRepository
+import dev.nami.domain.OutputDeviceType
+import dev.nami.domain.OutputProfile
 import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerRepository
 import dev.nami.domain.SettingsRepository
@@ -27,6 +29,8 @@ data class AudioTractUiState(
     val crossfadeEnabled: Boolean = false,
     val playbackGainDb: Float = 0f,
     val hiFiEnabled: Boolean = false,
+    val outputProfilesEnabled: Boolean = false,
+    val outputProfiles: Map<OutputDeviceType, OutputProfile> = emptyMap(),
 )
 
 /** Feeds both План.md's 4.6 "Аудиотракт" and 4.7 "Эквалайзер" screens -- same underlying state,
@@ -57,6 +61,8 @@ class AudioTractViewModel @Inject constructor(
         settingsRepository.crossfadeEnabled,
         settingsRepository.playbackGainDb,
         settingsRepository.hiFiEnabled,
+        settingsRepository.outputProfilesEnabled,
+        settingsRepository.outputProfiles,
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         AudioTractUiState(
@@ -69,6 +75,8 @@ class AudioTractViewModel @Inject constructor(
             crossfadeEnabled = values[6] as Boolean,
             playbackGainDb = values[7] as Float,
             hiFiEnabled = values[8] as Boolean,
+            outputProfilesEnabled = values[9] as Boolean,
+            outputProfiles = values[10] as Map<OutputDeviceType, OutputProfile>,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AudioTractUiState())
 
@@ -87,4 +95,8 @@ class AudioTractViewModel @Inject constructor(
     fun setBitPerfectUsbEnabled(enabled: Boolean) = settingsRepository.setBitPerfectUsbEnabled(enabled)
 
     fun setHiFiEnabled(enabled: Boolean) = settingsRepository.setHiFiEnabled(enabled)
+
+    fun setOutputProfilesEnabled(enabled: Boolean) = settingsRepository.setOutputProfilesEnabled(enabled)
+
+    fun setOutputProfile(type: OutputDeviceType, profile: OutputProfile) = settingsRepository.setOutputProfile(type, profile)
 }

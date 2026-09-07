@@ -2,6 +2,22 @@ package dev.nami.domain
 
 import kotlinx.coroutines.flow.StateFlow
 
+/** Which output route is currently active -- drives per-device profiles (below). Priority when
+ * more than one is physically connected: USB_DAC > BLUETOOTH > WIRED > SPEAKER (a USB DAC or BT
+ * headset being connected is a much stronger signal of "this is what's playing" than a wired jack
+ * that might just be a charging cable's audio pins). */
+enum class OutputDeviceType { WIRED, BLUETOOTH, USB_DAC, SPEAKER }
+
+/** Per-device profile from План.md §16/§20: its own EQ and a volume ceiling, applied automatically
+ * when the routed output changes. Crossfeed/ReplayGain-mode aren't per-profile here -- crossfeed
+ * doesn't exist as a processor in this codebase yet, and ReplayGain mode is a single global
+ * on/off, not something that plausibly differs per output device. */
+data class OutputProfile(val eqGainsDb: List<Float>, val volumeLimitPercent: Int) {
+    companion object {
+        val IDENTITY = OutputProfile(eqGainsDb = List(9) { 0f }, volumeLimitPercent = 100)
+    }
+}
+
 /** App-wide preferences (SharedPreferences-backed) -- interface lives in :domain so feature
  * modules that need a setting (e.g. feature:player gating karaoke) don't have to depend on
  * :data directly. */
@@ -76,4 +92,15 @@ interface SettingsRepository {
      * background). Persisted so it's remembered across sessions like every other toggle here. */
     val nightModeEnabled: StateFlow<Boolean>
     fun setNightModeEnabled(value: Boolean)
+
+    /** Этап 4's "профили по устройству вывода" (Beta) -- off by default, same reasoning as EQ:
+     * auto-switching gains/volume the instant a route changes is exactly the kind of thing that
+     * needs to be opt-in, not something that surprises a user mid-listen. */
+    val outputProfilesEnabled: StateFlow<Boolean>
+    fun setOutputProfilesEnabled(value: Boolean)
+
+    /** One [OutputProfile] per [OutputDeviceType], defaulting to [OutputProfile.IDENTITY] (flat
+     * EQ, no volume limit) until the user edits one. */
+    val outputProfiles: StateFlow<Map<OutputDeviceType, OutputProfile>>
+    fun setOutputProfile(type: OutputDeviceType, profile: OutputProfile)
 }

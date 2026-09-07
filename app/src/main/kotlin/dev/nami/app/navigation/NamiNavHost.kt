@@ -32,6 +32,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import dev.nami.app.SettingsAppearanceScreen
+import dev.nami.app.SettingsLyricsScreen
+import dev.nami.app.SettingsPlayerScreen
 import dev.nami.app.SettingsScreen
 import dev.nami.app.SettingsViewModel
 import dev.nami.core.model.AlbumId
@@ -68,6 +71,9 @@ private const val ROUTE_ARTIST_DETAIL = "artist/{artistId}"
 private const val ROUTE_ARTIST_DISCOGRAPHY = "artist/{artistId}/discography"
 private const val ROUTE_ARTIST_ALL_TRACKS = "artist/{artistId}/tracks"
 private const val ROUTE_PLAYLIST_DETAIL = "playlist/{playlistId}"
+private const val ROUTE_SETTINGS_APPEARANCE = "settings/appearance"
+private const val ROUTE_SETTINGS_PLAYER = "settings/player"
+private const val ROUTE_SETTINGS_LYRICS = "settings/lyrics"
 private const val ROUTE_TRASH = "trash"
 private const val ROUTE_AUDIO_TRACT = "audio_tract"
 private const val ROUTE_EQUALIZER = "equalizer"
@@ -208,8 +214,20 @@ fun NamiNavHost(
                 SettingsScreen(
                     onTrashClick = { navController.navigate(ROUTE_TRASH) },
                     onAudioTractClick = { navController.navigate(ROUTE_AUDIO_TRACT) },
+                    onAppearanceClick = { navController.navigate(ROUTE_SETTINGS_APPEARANCE) },
+                    onPlayerClick = { navController.navigate(ROUTE_SETTINGS_PLAYER) },
+                    onLyricsClick = { navController.navigate(ROUTE_SETTINGS_LYRICS) },
                 )
                 }
+            }
+            composable(ROUTE_SETTINGS_APPEARANCE) {
+                SettingsAppearanceScreen(onBack = { navController.popBackStack() })
+            }
+            composable(ROUTE_SETTINGS_PLAYER) {
+                SettingsPlayerScreen(onBack = { navController.popBackStack() })
+            }
+            composable(ROUTE_SETTINGS_LYRICS) {
+                SettingsLyricsScreen(onBack = { navController.popBackStack() })
             }
             composable(ROUTE_TRASH) {
                 Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
