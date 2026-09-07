@@ -73,6 +73,7 @@ private const val ROUTE_ARTIST_ALL_TRACKS = "artist/{artistId}/tracks"
 private const val ROUTE_PLAYLIST_DETAIL = "playlist/{playlistId}"
 private const val ROUTE_SETTINGS_APPEARANCE = "settings/appearance"
 private const val ROUTE_SETTINGS_PLAYER = "settings/player"
+private const val ROUTE_SESSIONS = "settings/sessions"
 private const val ROUTE_SETTINGS_LYRICS = "settings/lyrics"
 private const val ROUTE_TRASH = "trash"
 private const val ROUTE_AUDIO_TRACT = "audio_tract"
@@ -224,10 +225,16 @@ fun NamiNavHost(
                 SettingsAppearanceScreen(onBack = { navController.popBackStack() })
             }
             composable(ROUTE_SETTINGS_PLAYER) {
-                SettingsPlayerScreen(onBack = { navController.popBackStack() })
+                SettingsPlayerScreen(
+                    onBack = { navController.popBackStack() },
+                    onSessionsClick = { navController.navigate(ROUTE_SESSIONS) },
+                )
             }
             composable(ROUTE_SETTINGS_LYRICS) {
                 SettingsLyricsScreen(onBack = { navController.popBackStack() })
+            }
+            composable(ROUTE_SESSIONS) {
+                dev.nami.app.SessionsScreen(onBack = { navController.popBackStack() })
             }
             composable(ROUTE_TRASH) {
                 Box(modifier = Modifier.fillMaxSize().clipToBounds()) {

@@ -6,8 +6,11 @@ import androidx.core.content.edit
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.nami.domain.OutputDeviceType
 import dev.nami.domain.OutputProfile
+import dev.nami.domain.Session
 import dev.nami.domain.SettingsRepository
 import dev.nami.domain.ShuffleMode
+import org.json.JSONArray
+import org.json.JSONObject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
@@ -34,6 +37,7 @@ private const val KEY_STANDS4_TOKEN = "stands4_token"
 private const val KEY_STANDS4_REQUEST_COUNT = "stands4_request_count"
 private const val KEY_STANDS4_REQUEST_DATE = "stands4_request_date" // yyyy-MM-dd, device-local
 private const val KEY_SHUFFLE_MODE = "shuffle_mode"
+private const val KEY_SESSIONS = "sessions" // JSON array, see AppSettingsRepository.readSessions
 private const val KEY_OUTPUT_PROFILES_ENABLED = "output_profiles_enabled"
 // One "<CSV of 9 gains>|<volumeLimitPercent>" string per device type.
 private fun outputProfileKey(type: OutputDeviceType) = "output_profile_${type.name}"
@@ -249,5 +253,50 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
     override fun setShuffleMode(mode: ShuffleMode) {
         prefs.edit { putString(KEY_SHUFFLE_MODE, mode.name) }
         _shuffleMode.value = mode
+    }
+
+    private val _sessions = MutableStateFlow(readSessions())
+    override val sessions: StateFlow<List<Session>> = _sessions
+
+    override fun saveSession(session: Session) {
+        val updated = _sessions.value.filterNot { it.name == session.name } + session
+        writeSessions(updated)
+    }
+
+    override fun deleteSession(name: String) {
+        writeSessions(_sessions.value.filterNot { it.name == name })
+    }
+
+    private fun writeSessions(sessions: List<Session>) {
+        val array = JSONArray()
+        sessions.forEach { session ->
+            array.put(
+                JSONObject().apply {
+                    put("name", session.name)
+                    put("eqGainsDb", JSONArray(session.eqGainsDb))
+                    put("crossfadeEnabled", session.crossfadeEnabled)
+                    put("sleepTimerMinutes", session.sleepTimerMinutes ?: JSONObject.NULL)
+                },
+            )
+        }
+        prefs.edit { putString(KEY_SESSIONS, array.toString()) }
+        _sessions.value = sessions
+    }
+
+    private fun readSessions(): List<Session> {
+        val raw = prefs.getString(KEY_SESSIONS, null) ?: return emptyList()
+        return runCatching {
+            val array = JSONArray(raw)
+            (0 until array.length()).mapNotNull { i ->
+                val obj = array.optJSONObject(i) ?: return@mapNotNull null
+                val gains = obj.optJSONArray("eqGainsDb") ?: return@mapNotNull null
+                Session(
+                    name = obj.optString("name"),
+                    eqGainsDb = (0 until gains.length()).map { gains.optDouble(it).toFloat() },
+                    crossfadeEnabled = obj.optBoolean("crossfadeEnabled"),
+                    sleepTimerMinutes = obj.opt("sleepTimerMinutes")?.takeIf { it != JSONObject.NULL } as? Int,
+                )
+            }
+        }.getOrDefault(emptyList())
     }
 }

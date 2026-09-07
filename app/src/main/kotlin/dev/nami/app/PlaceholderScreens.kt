@@ -191,7 +191,7 @@ fun SettingsAppearanceScreen(onBack: () -> Unit) {
 }
 
 @Composable
-fun SettingsPlayerScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
+fun SettingsPlayerScreen(onBack: () -> Unit, onSessionsClick: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
     val autoOpenPlayer by viewModel.autoOpenPlayer.collectAsState()
     val hideSystemBars by viewModel.hideSystemBars.collectAsState()
     val karaokeEnabled by viewModel.karaokeEnabled.collectAsState()
@@ -237,6 +237,12 @@ fun SettingsPlayerScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hilt
                     }
                     viewModel.setShuffleMode(next)
                 },
+            )
+            SettingsRow(
+                icon = Icons.Outlined.PlayCircleOutline,
+                title = "Сессии (Учёба/Дорога/Сон)",
+                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
+                onClick = onSessionsClick,
             )
         }
     }
@@ -402,4 +408,108 @@ private fun IconChoice(icon: LauncherIcon, selected: Boolean, onClick: () -> Uni
             modifier = Modifier.padding(top = 4.dp),
         )
     }
+}
+
+/** План.md §22.11 "Сессии" -- save the current EQ/crossfade state (plus an optional sleep timer)
+ * under a name, re-apply any saved one in one tap. Deliberately doesn't snapshot the queue itself
+ * -- see SessionsViewModel's own doc for why. */
+@Composable
+fun SessionsScreen(onBack: () -> Unit, viewModel: SessionsViewModel = hiltViewModel()) {
+    val sessions by viewModel.sessions.collectAsState()
+    var showSaveDialog by remember { mutableStateOf(false) }
+
+    SettingsSubScreenScaffold(title = "Сессии", onBack = onBack) {
+        Text(
+            text = "Сохраняет текущий EQ и кроссфейд под именем, опционально с таймером сна. " +
+                "Очередь и громкость плеера сессия не запоминает.",
+            color = NamiColors.Paper40,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 12.dp),
+        )
+        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            if (sessions.isEmpty()) {
+                Text(
+                    text = "Сессий пока нет",
+                    color = NamiColors.Paper40,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(16.dp),
+                )
+            }
+            sessions.forEach { session ->
+                SettingsRow(
+                    icon = Icons.Outlined.PlayCircleOutline,
+                    title = session.name,
+                    trailing = {
+                        androidx.compose.material3.IconButton(onClick = { viewModel.deleteSession(session.name) }) {
+                            Icon(Icons.Outlined.Close, contentDescription = "Удалить", tint = NamiColors.Paper40)
+                        }
+                    },
+                    onClick = { viewModel.applySession(session) },
+                )
+            }
+        }
+        Text(
+            text = "+ Сохранить текущие настройки как сессию",
+            color = NamiColors.Shu,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier
+                .padding(horizontal = 20.dp, vertical = 16.dp)
+                .clickable { showSaveDialog = true },
+        )
+    }
+
+    if (showSaveDialog) {
+        SaveSessionDialog(
+            onSave = { name, minutes ->
+                viewModel.saveCurrentAsSession(name, minutes)
+                showSaveDialog = false
+            },
+            onDismiss = { showSaveDialog = false },
+        )
+    }
+}
+
+@Composable
+private fun SaveSessionDialog(onSave: (name: String, sleepTimerMinutes: Int?) -> Unit, onDismiss: () -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var withTimer by remember { mutableStateOf(false) }
+    var minutesText by remember { mutableStateOf("30") }
+
+    dev.nami.core.designsystem.NamiAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Новая сессия") },
+        text = {
+            Column {
+                androidx.compose.material3.OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    placeholder = { Text("Например: Учёба") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 12.dp).clickable { withTimer = !withTimer },
+                ) {
+                    androidx.compose.material3.Checkbox(checked = withTimer, onCheckedChange = { withTimer = it })
+                    Text("Запускать таймер сна", color = NamiColors.Paper70)
+                }
+                if (withTimer) {
+                    androidx.compose.material3.OutlinedTextField(
+                        value = minutesText,
+                        onValueChange = { minutesText = it.filter { c -> c.isDigit() } },
+                        label = { Text("Минут") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = {
+                onSave(name.trim(), if (withTimer) minutesText.toIntOrNull() else null)
+            }) { Text("Сохранить") }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Отмена") } },
+    )
 }

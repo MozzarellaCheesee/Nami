@@ -25,6 +25,19 @@ data class OutputProfile(val eqGainsDb: List<Float>, val volumeLimitPercent: Int
     }
 }
 
+/** План.md §22.11 "Сессии" -- a named bundle of settings applied in one tap ("Учёба"/"Дорога"/
+ * "Сон", or the user's own). Deliberately doesn't snapshot the queue itself (that needs real
+ * playlist infra to restore reliably) -- covers what the plan explicitly calls out as the other
+ * half: "свой EQ, громкость и таймером". Applying one is orchestrated by whatever screen owns
+ * both this repository and PlayerRepository (the sleep timer lives on that one, not here). */
+data class Session(
+    val name: String,
+    val eqGainsDb: List<Float>,
+    val crossfadeEnabled: Boolean,
+    /** Null = don't touch/start a sleep timer when this session is applied. */
+    val sleepTimerMinutes: Int?,
+)
+
 /** App-wide preferences (SharedPreferences-backed) -- interface lives in :domain so feature
  * modules that need a setting (e.g. feature:player gating karaoke) don't have to depend on
  * :data directly. */
@@ -129,6 +142,11 @@ interface SettingsRepository {
     /** См. [ShuffleMode]. */
     val shuffleMode: StateFlow<ShuffleMode>
     fun setShuffleMode(mode: ShuffleMode)
+
+    /** См. [Session]. */
+    val sessions: StateFlow<List<Session>>
+    fun saveSession(session: Session)
+    fun deleteSession(name: String)
 
     companion object {
         const val STANDS4_DAILY_LIMIT = 100
