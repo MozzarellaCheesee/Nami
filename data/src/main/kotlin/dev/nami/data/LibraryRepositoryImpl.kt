@@ -116,6 +116,11 @@ class LibraryRepositoryImpl @Inject constructor(
         return AlbumId(id)
     }
 
+    override suspend fun deleteAlbum(id: AlbumId) {
+        albumDao.softDelete(id.value, deletedAt = System.currentTimeMillis())
+        trackDao.trackIdsForAlbum(id.value).forEach { deleteTrack(TrackId(it)) }
+    }
+
     override suspend fun renameAlbum(id: AlbumId, title: String) {
         albumDao.updateTitle(id.value, title)
     }

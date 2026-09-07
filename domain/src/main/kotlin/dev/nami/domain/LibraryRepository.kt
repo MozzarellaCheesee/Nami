@@ -29,6 +29,11 @@ interface LibraryRepository {
     suspend fun setTrackCover(id: TrackId, imageUri: String)
     /** New empty album, no tracks yet -- caller adds tracks to it afterwards via [addTrackToAlbum]. */
     suspend fun createAlbum(title: String, artistId: ArtistId?): AlbumId
+
+    /** Soft-deletes the album itself (not just a best-effort loop over its tracks) -- moves to
+     * trash for 30 days, restorable via TrashRepository.restoreAlbum. Also trashes every track in
+     * the album. */
+    suspend fun deleteAlbum(id: AlbumId)
     suspend fun renameAlbum(id: AlbumId, title: String)
     suspend fun setAlbumCover(id: AlbumId, imageUri: String)
     suspend fun setAlbumIsSingle(id: AlbumId, isSingle: Boolean)

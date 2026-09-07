@@ -94,8 +94,6 @@ class AlbumDetailViewModel @Inject constructor(
     }
 
     fun deleteAlbum() {
-        viewModelScope.launch {
-            libraryRepository.deleteTracks(_uiState.value.tracks.map { it.id })
-        }
+        viewModelScope.launch { libraryRepository.deleteAlbum(albumId) }
     }
 }

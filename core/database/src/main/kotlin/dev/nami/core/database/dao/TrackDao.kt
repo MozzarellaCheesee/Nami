@@ -169,6 +169,11 @@ interface TrackDao {
     @Query("SELECT * FROM tracks WHERE deletedAt IS NOT NULL ORDER BY deletedAt DESC")
     fun trashedTracksFlow(): Flow<List<TrackEntity>>
 
+    // Drives album-level trash cascade (LibraryRepositoryImpl.deleteAlbum/TrashRepositoryImpl.
+    // restoreAlbum) -- every track belonging to an album, trashed or not, id only.
+    @Query("SELECT id FROM tracks WHERE albumId = :albumId")
+    suspend fun trackIdsForAlbum(albumId: String): List<String>
+
     data class TrackWithArtwork(
         @Embedded val track: TrackEntity,
         val albumArtworkPath: String?,

@@ -35,10 +35,13 @@ class TrashViewModelTest {
 
         override fun trashedTracks() = tracksFlow
         override fun trashedPlaylists() = playlistsFlow
+        override fun trashedAlbums() = MutableStateFlow<List<dev.nami.domain.TrashedAlbum>>(emptyList())
         override suspend fun restoreTrack(id: TrackId) { restoredTrack = id }
         override suspend fun restorePlaylist(id: PlaylistId) {}
+        override suspend fun restoreAlbum(id: dev.nami.core.model.AlbumId) {}
         override suspend fun deleteTrackForever(id: TrackId) { deletedForeverTrack = id }
         override suspend fun deletePlaylistForever(id: PlaylistId) {}
+        override suspend fun deleteAlbumForever(id: dev.nami.core.model.AlbumId) {}
         override suspend fun purgeExpired() {}
     }
 

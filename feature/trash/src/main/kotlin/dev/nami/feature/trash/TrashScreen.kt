@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.domain.TRASH_RETENTION_MS
+import dev.nami.domain.TrashedAlbum
 import dev.nami.domain.TrashedPlaylist
 import dev.nami.domain.TrashedTrack
 import java.util.concurrent.TimeUnit
@@ -53,19 +54,29 @@ fun TrashScreen(onBack: () -> Unit, viewModel: TrashViewModel = hiltViewModel())
                 style = MaterialTheme.typography.headlineSmall,
                 modifier = Modifier.weight(1f),
             )
-            if (uiState.tracks.isNotEmpty() || uiState.playlists.isNotEmpty()) {
+            if (uiState.tracks.isNotEmpty() || uiState.playlists.isNotEmpty() || uiState.albums.isNotEmpty()) {
                 TextButton(onClick = { showClearAllConfirm = true }) {
                     Text(text = "Очистить всё", color = NamiColors.Paper70)
                 }
             }
         }
 
-        if (uiState.tracks.isEmpty() && uiState.playlists.isEmpty()) {
+        if (uiState.tracks.isEmpty() && uiState.playlists.isEmpty() && uiState.albums.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(text = "Корзина пуста", color = NamiColors.Paper70)
             }
         } else {
             LazyColumn {
+                if (uiState.albums.isNotEmpty()) {
+                    item { SectionHeader("Альбомы") }
+                    items(uiState.albums, key = { "album-${it.album.id.value}" }) { trashed ->
+                        TrashedAlbumRow(
+                            trashed = trashed,
+                            onRestore = { viewModel.restoreAlbum(trashed.album.id) },
+                            onDeleteForever = { viewModel.deleteAlbumForever(trashed.album.id) },
+                        )
+                    }
+                }
                 if (uiState.tracks.isNotEmpty()) {
                     item { SectionHeader("Треки") }
                     items(uiState.tracks, key = { "track-${it.track.id.value}" }) { trashed ->
@@ -130,6 +141,33 @@ private fun TrashedTrackRow(trashed: TrashedTrack, onRestore: () -> Unit, onDele
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(text = trashed.track.title, color = NamiColors.Paper100)
+            Text(
+                text = "Осталось дней: ${daysRemaining(trashed.deletedAt)}",
+                color = NamiColors.Paper70,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        IconButton(onClick = onRestore) {
+            Icon(Icons.Outlined.Restore, contentDescription = "Восстановить", tint = NamiColors.Paper70)
+        }
+        IconButton(onClick = { showConfirm = true }) {
+            Icon(Icons.Outlined.Delete, contentDescription = "Удалить навсегда", tint = NamiColors.Paper70)
+        }
+    }
+    if (showConfirm) {
+        DeleteForeverDialog(onConfirm = { onDeleteForever(); showConfirm = false }, onDismiss = { showConfirm = false })
+    }
+}
+
+@Composable
+private fun TrashedAlbumRow(trashed: TrashedAlbum, onRestore: () -> Unit, onDeleteForever: () -> Unit) {
+    var showConfirm by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = trashed.album.title, color = NamiColors.Paper100)
             Text(
                 text = "Осталось дней: ${daysRemaining(trashed.deletedAt)}",
                 color = NamiColors.Paper70,

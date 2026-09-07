@@ -192,6 +192,14 @@ val MIGRATION_16_17 = object : Migration(16, 17) {
     }
 }
 
+/** Real album-level trash -- see AlbumEntity.deletedAt's own doc for why the old
+ * EXISTS(non-deleted track)-only approach could leave a "deleted" album still visible. */
+val MIGRATION_17_18 = object : Migration(17, 18) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE albums ADD COLUMN deletedAt INTEGER")
+    }
+}
+
 val MIGRATION_14_15 = object : Migration(14, 15) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL(

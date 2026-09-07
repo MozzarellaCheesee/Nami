@@ -34,7 +34,8 @@ interface AlbumDao {
     @Query(
         """
         SELECT * FROM albums
-        WHERE EXISTS (SELECT 1 FROM album_artists WHERE album_artists.albumId = albums.id AND album_artists.artistId = :artistId)
+        WHERE albums.deletedAt IS NULL
+        AND EXISTS (SELECT 1 FROM album_artists WHERE album_artists.albumId = albums.id AND album_artists.artistId = :artistId)
         AND EXISTS (SELECT 1 FROM tracks WHERE tracks.albumId = albums.id AND tracks.deletedAt IS NULL)
         ORDER BY year DESC, title ASC
         """,
@@ -45,11 +46,40 @@ interface AlbumDao {
         """
         SELECT albums.id AS id, albums.title AS title, $ARTIST_NAMES_SUBQUERY AS artistName, albums.artworkPath AS artworkPath
         FROM albums
-        WHERE EXISTS (SELECT 1 FROM tracks WHERE tracks.albumId = albums.id AND tracks.deletedAt IS NULL)
+        WHERE albums.deletedAt IS NULL
+        AND EXISTS (SELECT 1 FROM tracks WHERE tracks.albumId = albums.id AND tracks.deletedAt IS NULL)
         ORDER BY albums.title ASC
         """,
     )
     fun pagingSource(): PagingSource<Int, AlbumListRow>
+
+    @Query("UPDATE albums SET deletedAt = :deletedAt WHERE id = :id")
+    suspend fun softDelete(id: String, deletedAt: Long)
+
+    @Query("UPDATE albums SET deletedAt = NULL WHERE id = :id")
+    suspend fun restore(id: String)
+
+    @Query("DELETE FROM albums WHERE id = :id")
+    suspend fun hardDelete(id: String)
+
+    @Query(
+        """
+        SELECT albums.id AS id, albums.title AS title, $ARTIST_NAMES_SUBQUERY AS artistName, albums.artworkPath AS artworkPath,
+               albums.deletedAt AS deletedAt
+        FROM albums
+        WHERE albums.deletedAt IS NOT NULL
+        ORDER BY albums.deletedAt DESC
+        """,
+    )
+    fun trashedAlbumsFlow(): Flow<List<TrashedAlbumRow>>
+
+    data class TrashedAlbumRow(
+        val id: String,
+        val title: String,
+        val artistName: String?,
+        val artworkPath: String?,
+        val deletedAt: Long,
+    )
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(album: AlbumEntity)
@@ -103,7 +133,8 @@ interface AlbumDao {
         """
         SELECT albums.id AS id, albums.title AS title, $ARTIST_NAMES_SUBQUERY AS artistName, albums.artworkPath AS artworkPath
         FROM albums
-        WHERE EXISTS (SELECT 1 FROM tracks WHERE tracks.albumId = albums.id AND tracks.deletedAt IS NULL)
+        WHERE albums.deletedAt IS NULL
+        AND EXISTS (SELECT 1 FROM tracks WHERE tracks.albumId = albums.id AND tracks.deletedAt IS NULL)
         ORDER BY albums.title DESC
         LIMIT :limit
         """,
@@ -114,7 +145,8 @@ interface AlbumDao {
         """
         SELECT albums.id AS id, albums.title AS title, $ARTIST_NAMES_SUBQUERY AS artistName, albums.artworkPath AS artworkPath
         FROM albums
-        WHERE EXISTS (SELECT 1 FROM tracks WHERE tracks.albumId = albums.id AND tracks.deletedAt IS NULL)
+        WHERE albums.deletedAt IS NULL
+        AND EXISTS (SELECT 1 FROM tracks WHERE tracks.albumId = albums.id AND tracks.deletedAt IS NULL)
         """,
     )
     suspend fun allForIndexing(): List<AlbumListRow>

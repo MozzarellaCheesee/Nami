@@ -32,6 +32,10 @@ class MetadataResolverTest {
             override suspend fun findByTitleAndArtist(title: String, artistId: String?): AlbumEntity? = null
             override suspend fun albumsByArtist(artistId: String): List<AlbumEntity> = error("unused")
             override suspend fun insert(album: AlbumEntity) = error("unused")
+            override suspend fun softDelete(id: String, deletedAt: Long) = error("unused")
+            override suspend fun restore(id: String) = error("unused")
+            override suspend fun hardDelete(id: String) = error("unused")
+            override fun trashedAlbumsFlow() = error("unused")
             override suspend fun setArtworkPath(id: String, path: String) = error("unused")
             override suspend fun updateTitle(id: String, title: String) = error("unused")
             override suspend fun updateArtworkPath(id: String, path: String) = error("unused")
@@ -75,6 +79,10 @@ class MetadataResolverTest {
             override suspend fun findByTitleAndArtist(title: String, artistId: String?): AlbumEntity? = null
             override suspend fun albumsByArtist(artistId: String): List<AlbumEntity> = error("unused")
             override suspend fun insert(album: AlbumEntity) = error("unused")
+            override suspend fun softDelete(id: String, deletedAt: Long) = error("unused")
+            override suspend fun restore(id: String) = error("unused")
+            override suspend fun hardDelete(id: String) = error("unused")
+            override fun trashedAlbumsFlow() = error("unused")
             override suspend fun setArtworkPath(id: String, path: String) = error("unused")
             override suspend fun updateTitle(id: String, title: String) = error("unused")
             override suspend fun updateArtworkPath(id: String, path: String) = error("unused")
@@ -119,6 +127,10 @@ class MetadataResolverTest {
             override suspend fun findByTitleAndArtist(title: String, artistId: String?): AlbumEntity? = null
             override suspend fun albumsByArtist(artistId: String): List<AlbumEntity> = error("unused")
             override suspend fun insert(album: AlbumEntity) = error("unused")
+            override suspend fun softDelete(id: String, deletedAt: Long) = error("unused")
+            override suspend fun restore(id: String) = error("unused")
+            override suspend fun hardDelete(id: String) = error("unused")
+            override fun trashedAlbumsFlow() = error("unused")
             override suspend fun setArtworkPath(id: String, path: String) = error("unused")
             override suspend fun updateTitle(id: String, title: String) = error("unused")
             override suspend fun updateArtworkPath(id: String, path: String) = error("unused")
@@ -163,6 +175,10 @@ class MetadataResolverTest {
             override suspend fun findByTitleAndArtist(title: String, artistId: String?): AlbumEntity? = null
             override suspend fun albumsByArtist(artistId: String): List<AlbumEntity> = error("unused")
             override suspend fun insert(album: AlbumEntity) = error("unused")
+            override suspend fun softDelete(id: String, deletedAt: Long) = error("unused")
+            override suspend fun restore(id: String) = error("unused")
+            override suspend fun hardDelete(id: String) = error("unused")
+            override fun trashedAlbumsFlow() = error("unused")
             override suspend fun setArtworkPath(id: String, path: String) = error("unused")
             override suspend fun updateTitle(id: String, title: String) = error("unused")
             override suspend fun updateArtworkPath(id: String, path: String) = error("unused")
@@ -204,6 +220,10 @@ class MetadataResolverTest {
             override suspend fun findByTitleAndArtist(title: String, artistId: String?): AlbumEntity? = null
             override suspend fun albumsByArtist(artistId: String): List<AlbumEntity> = error("unused")
             override suspend fun insert(album: AlbumEntity) { inserted = album }
+            override suspend fun softDelete(id: String, deletedAt: Long) = error("unused")
+            override suspend fun restore(id: String) = error("unused")
+            override suspend fun hardDelete(id: String) = error("unused")
+            override fun trashedAlbumsFlow() = error("unused")
             override suspend fun setArtworkPath(id: String, path: String) = error("unused")
             override suspend fun updateTitle(id: String, title: String) = error("unused")
             override suspend fun updateArtworkPath(id: String, path: String) = error("unused")

@@ -33,7 +33,7 @@ class TrashRepositoryImplTest {
         db = Room.inMemoryDatabaseBuilder(context, NamiDatabase::class.java)
             .allowMainThreadQueries().build()
         trashFileStore = TrashFileStore(context)
-        repo = TrashRepositoryImpl(db.trackDao(), db.playlistDao(), trashFileStore)
+        repo = TrashRepositoryImpl(db.trackDao(), db.playlistDao(), db.albumDao(), trashFileStore)
     }
 
     @After

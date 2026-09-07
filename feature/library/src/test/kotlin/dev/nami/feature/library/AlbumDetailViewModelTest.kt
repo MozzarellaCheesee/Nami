@@ -59,6 +59,7 @@ class AlbumDetailViewModelTest {
             override suspend fun setTrackCover(id: TrackId, imageUri: String) = error("unused")
             override suspend fun renameAlbum(id: AlbumId, title: String) = error("unused")
             override suspend fun createAlbum(title: String, artistId: ArtistId?): AlbumId = error("unused")
+            override suspend fun deleteAlbum(id: AlbumId) = error("unused")
             override suspend fun setAlbumCover(id: AlbumId, imageUri: String) = error("unused")
             override suspend fun setAlbumIsSingle(id: AlbumId, isSingle: Boolean) = error("unused")
             override suspend fun setAlbumYear(id: AlbumId, year: Int?) = error("unused")
