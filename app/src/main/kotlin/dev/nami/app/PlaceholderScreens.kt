@@ -223,6 +223,9 @@ fun SettingsPlayerScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hilt
 fun SettingsLyricsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
     val studyModeEnabled by viewModel.studyModeEnabled.collectAsState()
     val lyricsFontPath by viewModel.lyricsFontPath.collectAsState()
+    val stands4Uid by viewModel.stands4Uid.collectAsState()
+    val stands4Token by viewModel.stands4Token.collectAsState()
+    val stands4RequestsToday by viewModel.stands4RequestsToday.collectAsState()
     val pickLyricsFont = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
     ) { uri -> uri?.let(viewModel::pickLyricsFont) }
@@ -253,6 +256,38 @@ fun SettingsLyricsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hilt
                     title = "Сбросить шрифт",
                     trailing = {},
                     onClick = viewModel::clearLyricsFont,
+                )
+            }
+        }
+
+        SettingsSectionLabel("STANDS4 (резервный источник текстов)")
+        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Text(
+                    text = "Используется только если LRCLIB не нашёл текст. Свой ключ - " +
+                        "получить на stands4.com/api.php, бесплатный лимит 100 запросов в день.",
+                    color = NamiColors.Paper40,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                androidx.compose.material3.OutlinedTextField(
+                    value = stands4Uid,
+                    onValueChange = viewModel::setStands4Uid,
+                    label = { Text("UID") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                )
+                androidx.compose.material3.OutlinedTextField(
+                    value = stands4Token,
+                    onValueChange = viewModel::setStands4Token,
+                    label = { Text("Token") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                )
+                Text(
+                    text = "Запросов сегодня: $stands4RequestsToday / ${dev.nami.domain.SettingsRepository.STANDS4_DAILY_LIMIT}",
+                    color = NamiColors.Paper70,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 12.dp),
                 )
             }
         }

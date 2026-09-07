@@ -1,5 +1,3 @@
-import java.util.Properties
-
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
@@ -7,29 +5,10 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-// STANDS4 lyrics fallback keys -- checked in this order: local.properties (stands4.uid/
-// stands4.token, gitignored, lives at the repo root) first, then the STANDS4_UID/STANDS4_TOKEN
-// env vars as a fallback for CI-style setups with no local.properties. Never committed either way.
-val localProperties = Properties().apply {
-    val file = rootProject.file("local.properties")
-    if (file.exists()) file.inputStream().use { load(it) }
-}
-fun stands4Key(propertyName: String, envName: String): String =
-    localProperties.getProperty(propertyName) ?: System.getenv(envName) ?: ""
-
 android {
     namespace = "dev.nami.data"
     compileSdk = 35
-    defaultConfig {
-        minSdk = 26
-        // Empty string (not found) just means Stands4Client's own isConfigured() stays false and
-        // that fallback silently no-ops -- LRCLIB keeps working regardless.
-        buildConfigField("String", "STANDS4_UID", "\"${stands4Key("stands4.uid", "STANDS4_UID")}\"")
-        buildConfigField("String", "STANDS4_TOKEN", "\"${stands4Key("stands4.token", "STANDS4_TOKEN")}\"")
-    }
-    buildFeatures {
-        buildConfig = true
-    }
+    defaultConfig { minSdk = 26 }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21

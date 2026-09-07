@@ -28,6 +28,10 @@ private const val KEY_CROSSFADE_ENABLED = "crossfade_enabled"
 private const val KEY_PLAYBACK_GAIN_DB = "playback_gain_db"
 private const val KEY_HIFI_ENABLED = "hifi_enabled"
 private const val KEY_NIGHT_MODE_ENABLED = "night_mode_enabled"
+private const val KEY_STANDS4_UID = "stands4_uid"
+private const val KEY_STANDS4_TOKEN = "stands4_token"
+private const val KEY_STANDS4_REQUEST_COUNT = "stands4_request_count"
+private const val KEY_STANDS4_REQUEST_DATE = "stands4_request_date" // yyyy-MM-dd, device-local
 private const val KEY_OUTPUT_PROFILES_ENABLED = "output_profiles_enabled"
 // One "<CSV of 9 gains>|<volumeLimitPercent>" string per device type.
 private fun outputProfileKey(type: OutputDeviceType) = "output_profile_${type.name}"
@@ -195,5 +199,42 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
         } else {
             OutputProfile.IDENTITY
         }
+    }
+
+    private val _stands4Uid = MutableStateFlow(prefs.getString(KEY_STANDS4_UID, "") ?: "")
+    override val stands4Uid: StateFlow<String> = _stands4Uid
+
+    override fun setStands4Uid(value: String) {
+        prefs.edit { putString(KEY_STANDS4_UID, value) }
+        _stands4Uid.value = value
+    }
+
+    private val _stands4Token = MutableStateFlow(prefs.getString(KEY_STANDS4_TOKEN, "") ?: "")
+    override val stands4Token: StateFlow<String> = _stands4Token
+
+    override fun setStands4Token(value: String) {
+        prefs.edit { putString(KEY_STANDS4_TOKEN, value) }
+        _stands4Token.value = value
+    }
+
+    private fun today(): String = java.time.LocalDate.now().toString()
+
+    private val _stands4RequestsToday = MutableStateFlow(
+        if (prefs.getString(KEY_STANDS4_REQUEST_DATE, null) == today()) {
+            prefs.getInt(KEY_STANDS4_REQUEST_COUNT, 0)
+        } else {
+            0
+        },
+    )
+    override val stands4RequestsToday: StateFlow<Int> = _stands4RequestsToday
+
+    override fun recordStands4Request() {
+        val isNewDay = prefs.getString(KEY_STANDS4_REQUEST_DATE, null) != today()
+        val newCount = if (isNewDay) 1 else prefs.getInt(KEY_STANDS4_REQUEST_COUNT, 0) + 1
+        prefs.edit {
+            putString(KEY_STANDS4_REQUEST_DATE, today())
+            putInt(KEY_STANDS4_REQUEST_COUNT, newCount)
+        }
+        _stands4RequestsToday.value = newCount
     }
 }

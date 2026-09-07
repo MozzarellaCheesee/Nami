@@ -103,4 +103,23 @@ interface SettingsRepository {
      * EQ, no volume limit) until the user edits one. */
     val outputProfiles: StateFlow<Map<OutputDeviceType, OutputProfile>>
     fun setOutputProfile(type: OutputDeviceType, profile: OutputProfile)
+
+    /** STANDS4 lyrics fallback credentials -- each user's own (Settings -> Лирика), not a key
+     * shared across every install: the free tier is 100 requests/day per account. Blank means
+     * "not configured", the fallback silently no-ops (LRCLIB keeps working regardless). */
+    val stands4Uid: StateFlow<String>
+    fun setStands4Uid(value: String)
+    val stands4Token: StateFlow<String>
+    fun setStands4Token(value: String)
+
+    /** How many STANDS4 requests have gone out today (device-local calendar day), and the fixed
+     * free-tier ceiling. Every actual HTTP call increments this (hit or miss both count against
+     * STANDS4's own quota) via [recordStands4Request]; resets automatically the first time either
+     * is read/written on a new day. */
+    val stands4RequestsToday: StateFlow<Int>
+    fun recordStands4Request()
+
+    companion object {
+        const val STANDS4_DAILY_LIMIT = 100
+    }
 }

@@ -25,6 +25,9 @@ class SettingsViewModel @Inject constructor(
     val karaokeEnabled: StateFlow<Boolean> = appSettingsRepository.karaokeEnabled
     val studyModeEnabled: StateFlow<Boolean> = appSettingsRepository.studyModeEnabled
     val lyricsFontPath: StateFlow<String?> = appSettingsRepository.lyricsFontPath
+    val stands4Uid: StateFlow<String> = appSettingsRepository.stands4Uid
+    val stands4Token: StateFlow<String> = appSettingsRepository.stands4Token
+    val stands4RequestsToday: StateFlow<Int> = appSettingsRepository.stands4RequestsToday
 
     fun setAutoOpenPlayer(value: Boolean) {
         appSettingsRepository.setAutoOpenPlayer(value)
@@ -60,5 +63,13 @@ class SettingsViewModel @Inject constructor(
 
     fun clearLyricsFont() {
         appSettingsRepository.setLyricsFontPath(null)
+    }
+
+    fun setStands4Uid(value: String) {
+        appSettingsRepository.setStands4Uid(value)
+    }
+
+    fun setStands4Token(value: String) {
+        appSettingsRepository.setStands4Token(value)
     }
 }

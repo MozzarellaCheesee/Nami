@@ -5,6 +5,7 @@ import dev.nami.core.model.LyricLine
 import dev.nami.core.model.WordTiming
 import dev.nami.core.model.WordToken
 import dev.nami.domain.LyricsRepository
+import dev.nami.domain.SettingsRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -12,7 +13,9 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
 
-class LyricsRepositoryImpl @Inject constructor() : LyricsRepository {
+class LyricsRepositoryImpl @Inject constructor(
+    private val settingsRepository: SettingsRepository,
+) : LyricsRepository {
 
     private fun lrcFile(path: String) = File(sibling(path, ".lrc"))
 
@@ -49,8 +52,19 @@ class LyricsRepositoryImpl @Inject constructor() : LyricsRepository {
     override suspend fun fetchFromLrcLib(title: String, artistName: String?, durationMs: Long): Lyrics? =
         withContext(Dispatchers.IO) {
             LrcLibClient.findSyncedLyrics(title, artistName, durationMs)?.let { LrcParser.parse(it) }
-                ?: Stands4Client.findPlainLyrics(title, artistName)?.let { plainLyricsToApproxSynced(it, durationMs) }
+                ?: fetchFromStands4(title, artistName, durationMs)
         }
+
+    private fun fetchFromStands4(title: String, artistName: String?, durationMs: Long): Lyrics? {
+        val uid = settingsRepository.stands4Uid.value
+        val token = settingsRepository.stands4Token.value
+        if (uid.isBlank() || token.isBlank()) return null
+        if (settingsRepository.stands4RequestsToday.value >= SettingsRepository.STANDS4_DAILY_LIMIT) return null
+        // Counts the attempt regardless of hit/miss -- STANDS4 bills the request either way.
+        settingsRepository.recordStands4Request()
+        return Stands4Client.findPlainLyrics(title, artistName, uid, token)
+            ?.let { plainLyricsToApproxSynced(it, durationMs) }
+    }
 
     /** STANDS4 has no per-line timestamps -- spreads non-blank lines evenly across [durationMs]
      * (or 3s/line if the duration isn't known) so the existing synced-lyrics screen still has
