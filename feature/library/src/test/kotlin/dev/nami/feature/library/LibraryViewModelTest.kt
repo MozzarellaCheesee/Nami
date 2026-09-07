@@ -69,6 +69,7 @@ class LibraryViewModelTest {
         override val queue: StateFlow<PlayerQueue> = MutableStateFlow(PlayerQueue.EMPTY)
             override val autoAdvanceSignal: StateFlow<Int> = MutableStateFlow(0)
             override val shuffleEnabled: StateFlow<Boolean> = MutableStateFlow(false)
+            override val repeatMode: StateFlow<dev.nami.domain.RepeatMode> = MutableStateFlow(dev.nami.domain.RepeatMode.OFF)
         override suspend fun play(tracks: List<PlayableTrack>, startIndex: Int, startMs: Long) {}
         override suspend fun toggle() {}
         override suspend fun seek(ms: Long) {}
@@ -80,6 +81,7 @@ class LibraryViewModelTest {
         override suspend fun removeQueueItem(index: Int) {}
         override suspend fun removeTracks(ids: Set<TrackId>) { removedTracks = ids }
         override suspend fun setShuffleEnabled(enabled: Boolean) {}
+        override suspend fun setRepeatMode(mode: dev.nami.domain.RepeatMode) {}
         override suspend fun stop() {}
     }
 

@@ -14,6 +14,10 @@ data class PlayableTrack(
 
 enum class QueueOrigin { MANUAL, CONTEXT }
 
+/** OFF: play through the queue once and stop. ALL: loop the whole queue. ONE: loop just the
+ * current track. Maps 1:1 to ExoPlayer's own REPEAT_MODE_* constants. */
+enum class RepeatMode { OFF, ALL, ONE }
+
 data class QueueTrack(
     val id: TrackId,
     val title: String,
@@ -52,6 +56,8 @@ interface PlayerRepository {
      * order right now -- real, not a UI stub: [setShuffleEnabled] actually reorders the live
      * playback queue and can restore the exact pre-shuffle order. */
     val shuffleEnabled: StateFlow<Boolean>
+    /** Real ExoPlayer repeat mode -- see [RepeatMode]. */
+    val repeatMode: StateFlow<RepeatMode>
     suspend fun play(tracks: List<PlayableTrack>, startIndex: Int, startMs: Long = 0)
     suspend fun toggle()
     suspend fun seek(ms: Long)
@@ -76,4 +82,5 @@ interface PlayerRepository {
      * the moment it was last shuffled. A no-op if [enabled] already matches the current state, or
      * if false is requested with nothing to restore (shuffle was never turned on this queue). */
     suspend fun setShuffleEnabled(enabled: Boolean)
+    suspend fun setRepeatMode(mode: RepeatMode)
 }

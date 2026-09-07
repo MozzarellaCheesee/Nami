@@ -16,6 +16,7 @@ import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerQueue
 import dev.nami.domain.PlayerRepository
 import dev.nami.domain.QueueOrigin
+import dev.nami.domain.RepeatMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -47,6 +48,9 @@ class PlayerRepositoryImpl @Inject constructor(
     // turns on -- what setShuffleEnabled(false) restores. Null whenever shuffle is off (nothing
     // to restore) or after play() starts a fresh context.
     private var preShuffleOrder: MutableList<MediaItem>? = null
+
+    private val _repeatMode = MutableStateFlow(RepeatMode.OFF)
+    override val repeatMode: StateFlow<RepeatMode> = _repeatMode
 
     private var controller: MediaController? = null
     // Known limitation: keyed by mediaId, not by queue position — if the same track
@@ -91,6 +95,7 @@ class PlayerRepositoryImpl @Inject constructor(
                         override fun onEvents(player: Player, events: Player.Events) {
                             publishState(player)
                             publishQueue(player)
+                            _repeatMode.value = player.repeatMode.toDomainRepeatMode()
                         }
 
                         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -340,5 +345,22 @@ class PlayerRepositoryImpl @Inject constructor(
             player.moveMediaItem(j, i)
             current.add(i, current.removeAt(j))
         }
+    }
+
+    override suspend fun setRepeatMode(mode: RepeatMode) {
+        controller?.repeatMode = mode.toPlayerRepeatMode()
+        _repeatMode.value = mode
+    }
+
+    private fun Int.toDomainRepeatMode(): RepeatMode = when (this) {
+        Player.REPEAT_MODE_ALL -> RepeatMode.ALL
+        Player.REPEAT_MODE_ONE -> RepeatMode.ONE
+        else -> RepeatMode.OFF
+    }
+
+    private fun RepeatMode.toPlayerRepeatMode(): Int = when (this) {
+        RepeatMode.OFF -> Player.REPEAT_MODE_OFF
+        RepeatMode.ALL -> Player.REPEAT_MODE_ALL
+        RepeatMode.ONE -> Player.REPEAT_MODE_ONE
     }
 }

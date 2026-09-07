@@ -12,6 +12,7 @@ import dev.nami.domain.PlayableTrack
 import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerQueue
 import dev.nami.domain.PlayerRepository
+import dev.nami.domain.RepeatMode
 import dev.nami.player.waveform.WaveformCache
 import dev.nami.player.waveform.WaveformScanner
 import kotlinx.coroutines.Dispatchers
@@ -47,6 +48,7 @@ class NowPlayingViewModel @Inject constructor(
     val queue: StateFlow<PlayerQueue> = playerRepository.queue
     val autoAdvanceSignal: StateFlow<Int> = playerRepository.autoAdvanceSignal
     val shuffleEnabled: StateFlow<Boolean> = playerRepository.shuffleEnabled
+    val repeatMode: StateFlow<RepeatMode> = playerRepository.repeatMode
 
     /** Full Track for the "Аудиотракт"-style file details (bitrate/size/etc.) shown near the
      * format badge -- QueueTrack only carries what the mini/full player needs for display, not
@@ -159,6 +161,17 @@ class NowPlayingViewModel @Inject constructor(
 
     fun toggleShuffle() {
         viewModelScope.launch { playerRepository.setShuffleEnabled(!playerRepository.shuffleEnabled.value) }
+    }
+
+    /** OFF -> ALL -> ONE -> OFF, the standard three-state cycle every music player's repeat
+     * button uses. */
+    fun cycleRepeatMode() {
+        val next = when (playerRepository.repeatMode.value) {
+            RepeatMode.OFF -> RepeatMode.ALL
+            RepeatMode.ALL -> RepeatMode.ONE
+            RepeatMode.ONE -> RepeatMode.OFF
+        }
+        viewModelScope.launch { playerRepository.setRepeatMode(next) }
     }
 
     fun addToQueue(track: Track, artistName: String?) {

@@ -15,6 +15,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -109,8 +110,8 @@ fun NowPlayingScreen(
     // Real, not a stub: viewModel.shuffleEnabled reflects the live queue's actual order (see
     // PlayerRepository.setShuffleEnabled) -- toggling this really reorders/restores the queue.
     val shuffleEnabled by viewModel.shuffleEnabled.collectAsState()
-    // Repeat stays a visual-only stub -- no playback-loop behavior wired yet, out of scope here.
-    var isRepeatOn by remember { mutableStateOf(false) }
+    // Real ExoPlayer repeat mode -- OFF/ALL/ONE, cycled by cycleRepeatMode().
+    val repeatMode by viewModel.repeatMode.collectAsState()
 
     // Shared by the swipe gesture and the chevron button so both dismiss paths always finish
     // the slide-down themselves before popping -- see the comment on the swipe branch below.
@@ -373,9 +374,14 @@ fun NowPlayingScreen(
             TransportBlock(
                 icon = Icons.Outlined.Repeat,
                 size = 44.dp,
-                active = isRepeatOn,
-                contentDescription = "Зациклить",
-                onClick = { isRepeatOn = !isRepeatOn },
+                active = repeatMode != dev.nami.domain.RepeatMode.OFF,
+                badgeText = if (repeatMode == dev.nami.domain.RepeatMode.ONE) "1" else null,
+                contentDescription = when (repeatMode) {
+                    dev.nami.domain.RepeatMode.OFF -> "Зациклить очередь"
+                    dev.nami.domain.RepeatMode.ALL -> "Зациклить один трек"
+                    dev.nami.domain.RepeatMode.ONE -> "Выключить цикл"
+                },
+                onClick = { viewModel.cycleRepeatMode() },
             )
         }
         // Format badge sits below the transport controls per Дизайн.md §4.3 (mockup order:
@@ -451,6 +457,9 @@ private fun TransportBlock(
     onClick: () -> Unit,
     filled: Boolean = false,
     active: Boolean = false,
+    // "1" badge for repeat-one -- reuses the plain Repeat icon instead of pulling in the
+    // material-icons-extended dependency just for a RepeatOne glyph nothing else in the app needs.
+    badgeText: String? = null,
 ) {
     val shape = RoundedCornerShape(size / 3.5f)
     Box(
@@ -470,6 +479,18 @@ private fun TransportBlock(
             },
             modifier = Modifier.fillMaxSize().padding(size / 4),
         )
+        if (badgeText != null) {
+            androidx.compose.material3.Text(
+                text = badgeText,
+                color = NamiColors.Ink900,
+                style = androidx.compose.material3.MaterialTheme.typography.labelSmall.copy(fontSize = androidx.compose.ui.unit.TextUnit(9f, androidx.compose.ui.unit.TextUnitType.Sp)),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .background(NamiColors.Shu, androidx.compose.foundation.shape.CircleShape)
+                    .size(size / 2.5f)
+                    .wrapContentSize(Alignment.Center),
+            )
+        }
     }
 }
 
