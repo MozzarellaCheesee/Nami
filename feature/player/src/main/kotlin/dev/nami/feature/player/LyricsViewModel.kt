@@ -345,10 +345,20 @@ class LyricsViewModel @Inject constructor(
     }
 
     /** "В словарик" from the word lookup popup -- saved with the line/track it came from, per
-     * План.md's "слова из песен с контекстной строкой и ссылкой на трек". */
+     * План.md's "слова из песен с контекстной строкой и ссылкой на трек".
+     *
+     * JMdict (the only bundled dictionary) is Japanese-ENGLISH, not Japanese-Russian -- there's no
+     * free offline JA-RU dictionary to bundle instead. [meaning] arrives in English; translate it
+     * to Russian through the same DeepL/MLKit pipeline lyrics translation already uses (DeepL if
+     * the user configured a key, MLKit offline otherwise) before saving, so the vocabulary itself
+     * doesn't stay English. Falls back to the English gloss if translation fails -- still useful,
+     * just not translated. */
     fun addToVocabulary(word: String, reading: String, meaning: String, contextLine: String) {
         val trackTitle = uiState.value.trackTitle ?: return
-        viewModelScope.launch { vocabularyRepository.add(word, reading, meaning, contextLine, trackTitle) }
+        viewModelScope.launch {
+            val translatedMeaning = lyricsRepository.translateToRussian(listOf(meaning))?.firstOrNull()?.takeIf { it.isNotBlank() } ?: meaning
+            vocabularyRepository.add(word, reading, translatedMeaning, contextLine, trackTitle)
+        }
     }
 
     fun seekTo(ms: Long) {
