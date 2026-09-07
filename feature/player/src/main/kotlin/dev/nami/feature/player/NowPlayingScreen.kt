@@ -74,6 +74,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.launch
@@ -329,7 +330,26 @@ fun NowPlayingScreen(
         // is still a perfect square instead of a square-container's worth of height stuffed into
         // a narrower page.
         val peekDp = 28.dp
-        androidx.compose.foundation.layout.BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 24.dp)) {
+        val hasPreviousTrack = queue.previousTrack != null
+        val hasNextTrack = queue.upcoming.isNotEmpty()
+        // Blocks the drag itself (not just re-snapping after) when there's nothing on that side --
+        // without this, swiping revealed a blank gray square for a page that has no real track,
+        // since the pager is a fixed 3-slot window even when a neighbor doesn't exist.
+        val edgeGuard = remember(hasPreviousTrack, hasNextTrack) {
+            object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
+                override fun onPreScroll(
+                    available: androidx.compose.ui.geometry.Offset,
+                    source: androidx.compose.ui.input.nestedscroll.NestedScrollSource,
+                ): androidx.compose.ui.geometry.Offset {
+                    val revealingMissingPrevious = !hasPreviousTrack && available.x > 0f
+                    val revealingMissingNext = !hasNextTrack && available.x < 0f
+                    return if (revealingMissingPrevious || revealingMissingNext) available else androidx.compose.ui.geometry.Offset.Zero
+                }
+            }
+        }
+        androidx.compose.foundation.layout.BoxWithConstraints(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 24.dp).nestedScroll(edgeGuard),
+        ) {
             val pageWidth = maxWidth - peekDp * 2
             HorizontalPager(
                 state = pagerState,

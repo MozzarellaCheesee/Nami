@@ -591,7 +591,7 @@ private fun WordLookupDialog(lookup: WordLookup, onDismiss: () -> Unit, onAddToV
                 Text("Ничего не нашлось в словаре", color = NamiColors.Paper70)
             } else {
                 Column {
-                    lookup.entries.take(5).forEach { entry ->
+                    lookup.entries.take(5).forEachIndexed { index, entry ->
                         Column(modifier = Modifier.padding(bottom = 10.dp)) {
                             if (entry.partsOfSpeech.isNotEmpty()) {
                                 Text(
@@ -601,6 +601,9 @@ private fun WordLookupDialog(lookup: WordLookup, onDismiss: () -> Unit, onAddToV
                                 )
                             }
                             Text(entry.glosses.joinToString("; "), color = NamiColors.Paper100)
+                            lookup.translatedGlosses.getOrNull(index)?.takeIf { it.isNotBlank() }?.let { translated ->
+                                Text(translated, color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall)
+                            }
                         }
                     }
                 }

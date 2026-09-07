@@ -38,7 +38,16 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
-data class WordLookup(val token: WordToken, val entries: List<DictionaryEntry>, val contextLine: String)
+data class WordLookup(
+    val token: WordToken,
+    val entries: List<DictionaryEntry>,
+    val contextLine: String,
+    // Same index as entries -- JMdict's own glosses are English, translated to Russian through
+    // the same DeepL/MLKit pipeline the vocabulary save already uses (see addToVocabulary's own
+    // doc for why). Empty until the translation call returns -- the popup shows the English gloss
+    // immediately rather than blocking on it.
+    val translatedGlosses: List<String> = emptyList(),
+)
 
 data class LyricsUiState(
     val trackId: TrackId? = null,
@@ -337,6 +346,13 @@ class LyricsViewModel @Inject constructor(
         viewModelScope.launch {
             val entries = dictionaryRepository.lookup(token.baseForm)
             _wordLookup.value = WordLookup(token, entries, contextLine)
+            if (entries.isEmpty()) return@launch
+            val glossLines = entries.take(5).map { it.glosses.joinToString("; ") }
+            val translated = lyricsRepository.translateToRussian(glossLines)
+            // Only apply if the user hasn't already moved on to a different word/dismissed.
+            if (_wordLookup.value?.token == token) {
+                _wordLookup.value = _wordLookup.value?.copy(translatedGlosses = translated ?: emptyList())
+            }
         }
     }
 
