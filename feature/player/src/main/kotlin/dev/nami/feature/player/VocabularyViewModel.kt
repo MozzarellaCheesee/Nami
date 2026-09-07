@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.nami.domain.SettingsRepository
 import dev.nami.domain.VocabularyRepository
 import dev.nami.domain.VocabularyWord
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,11 +21,14 @@ import javax.inject.Inject
 @HiltViewModel
 class VocabularyViewModel @Inject constructor(
     private val vocabularyRepository: VocabularyRepository,
+    settingsRepository: SettingsRepository,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
     val words: StateFlow<List<VocabularyWord>> =
         vocabularyRepository.words().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val studyModeEnabled: StateFlow<Boolean> = settingsRepository.studyModeEnabled
 
     private val _exportedMessage = MutableStateFlow<String?>(null)
     val exportedMessage: StateFlow<String?> = _exportedMessage

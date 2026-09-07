@@ -131,7 +131,7 @@ class LyricsViewModel @Inject constructor(
     val uiState: StateFlow<LyricsUiState> = combine(
         trackAndLyrics, _positionMs, _isFetchingOnline, _showTranslation, _isTranslating,
         _showFurigana, _showRomaji, _isGeneratingRomaji, _wordLookup, _isPreciseSyncing, _preciseSyncProgress,
-        settingsRepository.karaokeEnabled,
+        settingsRepository.karaokeEnabled, settingsRepository.studyModeEnabled, settingsRepository.lyricsFontPath,
     ) { values ->
         val tl = values[0] as TrackAndLyrics?
         val pos = values[1] as Long
@@ -146,6 +146,8 @@ class LyricsViewModel @Inject constructor(
         val preciseSyncing = values[9] as Boolean
         val preciseSyncProgress = values[10] as Float
         val karaokeEnabled = values[11] as Boolean
+        val studyModeEnabled = values[12] as Boolean
+        val lyricsFontPath = values[13] as String?
         LyricsUiState(
             trackId = tl?.trackId,
             trackPath = tl?.path,
@@ -166,6 +168,8 @@ class LyricsViewModel @Inject constructor(
             isPreciseSyncing = preciseSyncing,
             preciseSyncProgress = preciseSyncProgress,
             karaokeEnabled = karaokeEnabled,
+            studyModeEnabled = studyModeEnabled,
+            lyricsFontPath = lyricsFontPath,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LyricsUiState())
 

@@ -60,6 +60,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.withFrameMillis
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -76,6 +77,7 @@ import androidx.compose.ui.unit.sp
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.outlined.FileOpen
+import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.model.Lyrics
 import dev.nami.core.designsystem.NamiColors
@@ -118,6 +120,12 @@ fun LyricsScreen(
     var showEditor by remember { mutableStateOf(false) }
     var showVocabulary by remember { mutableStateOf(false) }
     val lyricsFileImportFailed by viewModel.lyricsFileImportFailed.collectAsState()
+    // Loaded once per path, not on every recomposition -- Font(File) does real I/O/parsing.
+    val lyricsFontFamily = remember(uiState.lyricsFontPath) {
+        uiState.lyricsFontPath?.let {
+            androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(java.io.File(it)))
+        }
+    }
     val pickLyricsFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(viewModel::importLyricsFile)
     }
@@ -127,6 +135,7 @@ fun LyricsScreen(
     var wordSelectMode by remember { mutableStateOf(false) }
     var showToolsMenu by remember { mutableStateOf(false) }
     var showPreciseSyncConfirm by remember { mutableStateOf(false) }
+    var fullscreenMode by remember { mutableStateOf(false) }
     val isPlaying = (playbackState as? dev.nami.domain.PlaybackState.Playing)?.isPlaying == true
     // The karaoke sweep needs frame-smooth position, not just "however often the player was
     // last polled" (100ms polling still visibly stepped). Interpolate between polls using real
@@ -274,6 +283,8 @@ fun LyricsScreen(
                     romaji = uiState.romaji.takeIf { uiState.showRomaji },
                     wordTimings = uiState.wordTimings,
                     karaokeEnabled = uiState.karaokeEnabled,
+                    studyModeEnabled = uiState.studyModeEnabled,
+                    fontFamily = lyricsFontFamily,
                     positionMs = smoothPositionMs,
                     onLineClick = { viewModel.seekTo(it) },
                     tokenizeLine = { viewModel.tokenizeLine(it) },
@@ -380,6 +391,9 @@ fun LyricsScreen(
             IconButton(onClick = { pickLyricsFile.launch(arrayOf("*/*")) }) {
                 Icon(Icons.Outlined.FileOpen, contentDescription = "Загрузить .lrc из файла", tint = NamiColors.Paper70)
             }
+            IconButton(onClick = { fullscreenMode = true; showToolsMenu = false }) {
+                Icon(Icons.Outlined.Fullscreen, contentDescription = "Полноэкранный режим", tint = NamiColors.Paper70)
+            }
             // Real per-word timing (on-device whisper.cpp) instead of the linear-interpolation
             // karaoke sweep -- arm64-v8a only, and a ~500MB one-time model download, so this is
             // opt-in and hidden entirely when unsupported rather than failing at runtime.
@@ -460,6 +474,81 @@ fun LyricsScreen(
     if (showVocabulary) {
         VocabularyScreen(onBack = { showVocabulary = false })
     }
+
+    if (fullscreenMode) {
+        val fsLyrics = uiState.lyrics
+        if (fsLyrics != null && fsLyrics.lines.isNotEmpty()) {
+            FullscreenLyricsOverlay(
+                lyrics = fsLyrics,
+                positionMs = smoothPositionMs,
+                fontFamily = lyricsFontFamily,
+                onDismiss = { fullscreenMode = false },
+            )
+        } else {
+            fullscreenMode = false
+        }
+    }
+}
+
+/** План.md's "полноэкранный режим с крупным шрифтом и обратным отсчётом до следующей строки --
+ * телефон на стол, можно петь". Tap anywhere to exit. */
+@Composable
+private fun FullscreenLyricsOverlay(
+    lyrics: Lyrics,
+    positionMs: Long,
+    fontFamily: androidx.compose.ui.text.font.FontFamily?,
+    onDismiss: () -> Unit,
+) {
+    val rawIndex = if (positionMs < (lyrics.lines.firstOrNull()?.timeMs ?: 0L)) {
+        -1
+    } else {
+        lyrics.lines.indexOfLast { it.timeMs <= positionMs }
+    }
+    val currentLine = lyrics.lines.getOrNull(rawIndex)
+    val nextLine = lyrics.lines.getOrNull(rawIndex + 1)
+    val secondsToNext = nextLine?.let { ((it.timeMs - positionMs) / 1000f).coerceAtLeast(0f) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(NamiColors.Ink900)
+            .clickable(
+                indication = null,
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                onClick = onDismiss,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = currentLine?.text?.ifBlank { "…" } ?: "…",
+                color = NamiColors.Paper100,
+                style = MaterialTheme.typography.displaySmall,
+                fontWeight = FontWeight.Bold,
+                fontFamily = fontFamily,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 24.dp),
+            )
+            nextLine?.let { next ->
+                Text(
+                    text = next.text.ifBlank { "…" },
+                    color = NamiColors.Paper70,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontFamily = fontFamily,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.padding(top = 24.dp, start = 24.dp, end = 24.dp),
+                )
+                if (secondsToNext != null && secondsToNext in 0f..9.5f) {
+                    Text(
+                        text = "%.0f с".format(secondsToNext),
+                        color = NamiColors.Shu,
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -514,12 +603,18 @@ private fun SyncedLyricsList(
     romaji: List<String>?,
     wordTimings: List<List<dev.nami.core.model.WordTiming>>?,
     karaokeEnabled: Boolean,
+    studyModeEnabled: Boolean,
+    fontFamily: androidx.compose.ui.text.font.FontFamily?,
     positionMs: Long,
     onLineClick: (Long) -> Unit,
     tokenizeLine: suspend (String) -> List<dev.nami.core.model.WordToken>,
     wordSelectMode: Boolean,
     onWordTap: (dev.nami.core.model.WordToken, String) -> Unit,
 ) {
+    // Study mode (Beta): translation hidden per line until tapped -- forces actually recalling
+    // the meaning instead of passively reading it alongside the original every time. Resets
+    // per track (new remember key) rather than persisting across tracks/sessions.
+    val revealedTranslations = remember(lyrics) { mutableStateMapOf<Int, Boolean>() }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     // Plain recomputation, not derivedStateOf -- derivedStateOf's lambda was captured once (by
@@ -619,6 +714,7 @@ private fun SyncedLyricsList(
                             text = romajiText,
                             color = NamiColors.Paper70.copy(alpha = alpha),
                             style = MaterialTheme.typography.bodyMedium,
+                            fontFamily = fontFamily,
                             modifier = Modifier.padding(bottom = 2.dp),
                         )
                     }
@@ -647,6 +743,7 @@ private fun SyncedLyricsList(
                         sungColor = NamiColors.Shu.copy(alpha = alpha),
                         karaokeProgress = if (isCurrent && karaokeEnabled) karaokeProgress else null,
                         fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                        fontFamily = fontFamily,
                         tokenizeLine = tokenizeLine,
                         // Off: words aren't individually clickable at all, so the line's own
                         // clickable (seek) is the only thing that can react to the tap -- no
@@ -659,11 +756,28 @@ private fun SyncedLyricsList(
                         },
                     )
                     translation?.getOrNull(index)?.let { translatedText ->
+                        val revealed = !studyModeEnabled || revealedTranslations[index] == true
                         Text(
-                            text = translatedText,
+                            text = if (revealed) translatedText else "・・・ тап, чтобы открыть перевод",
                             color = NamiColors.Paper70.copy(alpha = alpha),
                             style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(top = 2.dp),
+                            fontStyle = if (revealed) androidx.compose.ui.text.font.FontStyle.Normal else androidx.compose.ui.text.font.FontStyle.Italic,
+                            fontFamily = fontFamily,
+                            modifier = Modifier
+                                .padding(top = 2.dp)
+                                .then(
+                                    if (studyModeEnabled && !revealed) {
+                                        // Also seeks (like the word-tap case above) -- this Text
+                                        // sits inside the line's own clickable, which would
+                                        // otherwise never see the tap at all.
+                                        Modifier.clickable {
+                                            revealedTranslations[index] = true
+                                            onLineClick(line.timeMs)
+                                        }
+                                    } else {
+                                        Modifier
+                                    },
+                                ),
                         )
                     }
                 }
@@ -690,6 +804,7 @@ private fun TappableLine(
     sungColor: androidx.compose.ui.graphics.Color,
     karaokeProgress: Float?,
     fontWeight: FontWeight,
+    fontFamily: androidx.compose.ui.text.font.FontFamily?,
     tokenizeLine: suspend (String) -> List<dev.nami.core.model.WordToken>,
     wordSelectMode: Boolean,
     onWordTap: (dev.nami.core.model.WordToken) -> Unit,
@@ -698,7 +813,7 @@ private fun TappableLine(
         value = tokenizeLine(line)
     }
     if (tokens.isEmpty()) {
-        Text(text = line.ifBlank { "…" }, color = color, style = MaterialTheme.typography.headlineMedium, fontWeight = fontWeight)
+        Text(text = line.ifBlank { "…" }, color = color, style = MaterialTheme.typography.headlineMedium, fontWeight = fontWeight, fontFamily = fontFamily)
         return
     }
     val totalLen = tokens.sumOf { it.surface.length }.coerceAtLeast(1)
@@ -724,6 +839,7 @@ private fun TappableLine(
                     color = if (karaokeProgress != null && isSung) sungColor else color,
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = fontWeight,
+                    fontFamily = fontFamily,
                 )
             }
         }
