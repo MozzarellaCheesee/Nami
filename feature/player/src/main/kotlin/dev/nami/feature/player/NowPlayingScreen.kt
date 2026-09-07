@@ -173,6 +173,11 @@ fun NowPlayingScreen(
             if (backgroundArtworkPath != null) lastArtworkPath = backgroundArtworkPath
         }
         val displayArtworkPath = backgroundArtworkPath ?: lastArtworkPath
+        // Solid backing UNDER the crossfading art -- Crossfade fades the old layer's alpha down
+        // while fading the new one up, so mid-transition both are partially transparent at once;
+        // without an opaque backer behind them, whatever's actually behind this screen (Library,
+        // MiniPlayer) briefly showed through the gap.
+        Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900))
         // Explicit Compose Crossfade, not Coil's own ImageRequest.crossfade() -- that one relies
         // on Coil recognizing successive loads on the same AsyncImage as a transition, which in
         // practice here (through Coil3's compose integration) never visibly cross-dissolved,

@@ -130,11 +130,15 @@ class PlayerRepositoryImpl @Inject constructor(
                                 val now = System.currentTimeMillis()
                                 pausedAtMs = now
                                 // Persisted, not just in-memory -- see SettingsRepository.
-                                // lastPlaybackTrackId's doc for why (a paused, backgrounded
+                                // lastPlaybackQueueTrackIds's doc for why (a paused, backgrounded
                                 // service is killable, wiping pausedAtMs along with everything
-                                // else in-memory).
-                                controller?.currentMediaItem?.mediaId?.takeIf { it.isNotEmpty() }?.let { mediaId ->
-                                    settingsRepository.setLastPlayback(mediaId, controller?.currentPosition ?: 0L, now)
+                                // else in-memory). The WHOLE queue, not just the current track --
+                                // restoring only the one playing track silently dropped the rest
+                                // of the queue on a cold-start restore.
+                                controller?.let { player ->
+                                    if (player.mediaItemCount == 0) return@let
+                                    val ids = (0 until player.mediaItemCount).map { player.getMediaItemAt(it).mediaId }
+                                    settingsRepository.setLastPlayback(ids, player.currentMediaItemIndex, player.currentPosition, now)
                                 }
                             }
                         }
@@ -247,25 +251,39 @@ class PlayerRepositoryImpl @Inject constructor(
 
     // Cold start only -- fires once, right after the controller connects, and only if the player
     // actually has nothing loaded (a live/backgrounded-but-alive service already has its own real
-    // queue, restoring over that would be wrong). See SettingsRepository.lastPlaybackTrackId.
+    // queue, restoring over that would be wrong). See SettingsRepository.lastPlaybackQueueTrackIds.
     private suspend fun restoreLastPlaybackIfAny() {
         val player = controller ?: return
         if (player.mediaItemCount != 0) return
-        val trackId = settingsRepository.lastPlaybackTrackId.value?.takeIf { it.isNotBlank() } ?: return
+        val queueIds = settingsRepository.lastPlaybackQueueTrackIds.value
+        if (queueIds.isEmpty()) return
         val pausedAt = settingsRepository.lastPlaybackPausedAt.value
         if (System.currentTimeMillis() - pausedAt >= SMART_RESUME_THRESHOLD_MS) return
-        val track = libraryRepository.track(TrackId(trackId)).first() ?: return
-        val playable = PlayableTrack(
-            id = track.id,
-            title = track.title,
-            artistName = track.artistName,
-            path = track.path,
-            artworkPath = track.albumArtworkPath,
-            format = track.format,
-        )
-        trackInfoByMediaId[playable.id.value] = playable.toMediaItemInfo()
+        val savedIndex = settingsRepository.lastPlaybackQueueIndex.value
+        // Tracks can vanish between the pause and this restore (deleted, moved) -- resolve what's
+        // still there and keep going, rather than aborting the whole restore over one missing
+        // track. The saved index has to shift to match every track dropped before it.
+        var resolvedIndex = savedIndex
+        val playables = queueIds.mapIndexedNotNull { i, id ->
+            val track = libraryRepository.track(TrackId(id)).first()
+            if (track == null) {
+                if (i < savedIndex) resolvedIndex--
+                return@mapIndexedNotNull null
+            }
+            PlayableTrack(
+                id = track.id,
+                title = track.title,
+                artistName = track.artistName,
+                path = track.path,
+                artworkPath = track.albumArtworkPath,
+                format = track.format,
+            )
+        }
+        if (playables.isEmpty()) return
+        val startIndex = resolvedIndex.coerceIn(0, playables.lastIndex)
+        playables.forEach { trackInfoByMediaId[it.id.value] = it.toMediaItemInfo() }
         val positionMs = settingsRepository.lastPlaybackPositionMs.value
-        player.setMediaItems(listOf(playable.toMediaItem()), 0, positionMs)
+        player.setMediaItems(playables.map { it.toMediaItem() }, startIndex, positionMs)
         player.prepare()
         // Deliberately no play() -- restores paused, ready for the user's own tap to resume.
     }

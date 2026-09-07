@@ -38,7 +38,8 @@ private const val KEY_STANDS4_TOKEN = "stands4_token"
 private const val KEY_DEEPL_API_KEY = "deepl_api_key"
 private const val KEY_STANDS4_REQUEST_COUNT = "stands4_request_count"
 private const val KEY_STANDS4_REQUEST_DATE = "stands4_request_date" // yyyy-MM-dd, device-local
-private const val KEY_LAST_PLAYBACK_TRACK_ID = "last_playback_track_id"
+private const val KEY_LAST_PLAYBACK_QUEUE = "last_playback_queue"
+private const val KEY_LAST_PLAYBACK_QUEUE_INDEX = "last_playback_queue_index"
 private const val KEY_LAST_PLAYBACK_POSITION_MS = "last_playback_position_ms"
 private const val KEY_LAST_PLAYBACK_PAUSED_AT = "last_playback_paused_at"
 private const val KEY_SHUFFLE_MODE = "shuffle_mode"
@@ -244,8 +245,15 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
         _deeplApiKey.value = value
     }
 
-    private val _lastPlaybackTrackId = MutableStateFlow(prefs.getString(KEY_LAST_PLAYBACK_TRACK_ID, null))
-    override val lastPlaybackTrackId: StateFlow<String?> = _lastPlaybackTrackId
+    // Comma-joined track ids -- they're UUID-shaped (no commas of their own), same "plain
+    // delimited string" pattern already used elsewhere in this class, no JSON needed for a flat list.
+    private val _lastPlaybackQueueTrackIds = MutableStateFlow(
+        prefs.getString(KEY_LAST_PLAYBACK_QUEUE, "")?.split(",")?.filter { it.isNotBlank() } ?: emptyList(),
+    )
+    override val lastPlaybackQueueTrackIds: StateFlow<List<String>> = _lastPlaybackQueueTrackIds
+
+    private val _lastPlaybackQueueIndex = MutableStateFlow(prefs.getInt(KEY_LAST_PLAYBACK_QUEUE_INDEX, 0))
+    override val lastPlaybackQueueIndex: StateFlow<Int> = _lastPlaybackQueueIndex
 
     private val _lastPlaybackPositionMs = MutableStateFlow(prefs.getLong(KEY_LAST_PLAYBACK_POSITION_MS, 0L))
     override val lastPlaybackPositionMs: StateFlow<Long> = _lastPlaybackPositionMs
@@ -253,13 +261,15 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
     private val _lastPlaybackPausedAt = MutableStateFlow(prefs.getLong(KEY_LAST_PLAYBACK_PAUSED_AT, 0L))
     override val lastPlaybackPausedAt: StateFlow<Long> = _lastPlaybackPausedAt
 
-    override fun setLastPlayback(trackId: String, positionMs: Long, pausedAt: Long) {
+    override fun setLastPlayback(queueTrackIds: List<String>, queueIndex: Int, positionMs: Long, pausedAt: Long) {
         prefs.edit {
-            putString(KEY_LAST_PLAYBACK_TRACK_ID, trackId)
+            putString(KEY_LAST_PLAYBACK_QUEUE, queueTrackIds.joinToString(","))
+            putInt(KEY_LAST_PLAYBACK_QUEUE_INDEX, queueIndex)
             putLong(KEY_LAST_PLAYBACK_POSITION_MS, positionMs)
             putLong(KEY_LAST_PLAYBACK_PAUSED_AT, pausedAt)
         }
-        _lastPlaybackTrackId.value = trackId
+        _lastPlaybackQueueTrackIds.value = queueTrackIds
+        _lastPlaybackQueueIndex.value = queueIndex
         _lastPlaybackPositionMs.value = positionMs
         _lastPlaybackPausedAt.value = pausedAt
     }

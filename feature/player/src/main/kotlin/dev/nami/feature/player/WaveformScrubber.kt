@@ -86,22 +86,30 @@ fun WaveformScrubber(
         animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Reverse),
         label = "waveform-loading-pulse-alpha",
     )
-    // Starts at 1f (not 0f) when the real waveform is already there on the very first composition
-    // for this track (cache hit -- the common case after NowPlayingViewModel's synchronous disk-
-    // cache read) -- otherwise every track switch replayed the "still loading" crossfade even
-    // though nothing was ever actually loading, animating a shape that was correct from frame one.
-    val crossfade = remember(seedKey) { Animatable(if (isReal) 1f else 0f) }
-    LaunchedEffect(seedKey, isReal) {
-        if (isReal) {
-            if (crossfade.value != 1f) crossfade.animateTo(1f, animationSpec = tween(500))
-        } else {
-            crossfade.snapTo(0f)
-        }
+    val targetHeights = if (isReal) realHeights!! else placeholder
+
+    // Bars actually drawn morph from whatever was PREVIOUSLY on screen to targetHeights, whether
+    // that's the same track's placeholder finishing its scan or a totally different track's shape
+    // (switching tracks used to just hard-cut to the next track's bars, even when its real
+    // waveform was already cached and ready). Not keyed by seedKey -- it has to survive a track
+    // change to have something to morph FROM. Captures the animation's own current interpolated
+    // position as the new start point (not the old target) so an overlapping second change
+    // doesn't jump backward.
+    var fromHeights by remember { mutableStateOf(targetHeights) }
+    var toHeights by remember { mutableStateOf(targetHeights) }
+    val morphProgress = remember { Animatable(1f) }
+    LaunchedEffect(targetHeights) {
+        if (targetHeights == toHeights) return@LaunchedEffect
+        val t = morphProgress.value
+        fromHeights = List(toHeights.size) { i -> fromHeights.getOrElse(i) { toHeights[i] } + (toHeights[i] - fromHeights.getOrElse(i) { toHeights[i] }) * t }
+        toHeights = targetHeights
+        morphProgress.snapTo(0f)
+        morphProgress.animateTo(1f, animationSpec = tween(500))
     }
-    val heights = if (isReal) {
-        placeholder.indices.map { i -> placeholder[i] + (realHeights!![i] - placeholder[i]) * crossfade.value }
+    val heights = if (fromHeights.size == toHeights.size) {
+        List(toHeights.size) { i -> fromHeights[i] + (toHeights[i] - fromHeights[i]) * morphProgress.value }
     } else {
-        placeholder
+        toHeights
     }
     val barAlpha = if (isReal) 1f else loadingPulse
 
