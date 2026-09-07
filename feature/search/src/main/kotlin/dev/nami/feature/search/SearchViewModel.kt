@@ -39,10 +39,13 @@ class SearchViewModel @Inject constructor(
 
     // Shown while the query is blank, so the screen isn't just an empty prompt -- same data the
     // Library tab already previews (recentAlbums/featuredArtists), just browsable from Search too.
-    val browseAlbums: StateFlow<List<AlbumSummary>> =
-        libraryRepository.recentAlbums(12).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val browseArtists: StateFlow<List<Artist>> =
-        libraryRepository.featuredArtists(12).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    // null (not emptyList()) until the DB actually answers -- otherwise the "empty" initial value
+    // of a StateFlow reads as "library has nothing", flashing the "Начните вводить" placeholder
+    // for one frame before the real (non-empty) list arrives.
+    val browseAlbums: StateFlow<List<AlbumSummary>?> =
+        libraryRepository.recentAlbums(12).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    val browseArtists: StateFlow<List<Artist>?> =
+        libraryRepository.featuredArtists(12).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     private val queryFlow = MutableStateFlow("")
 

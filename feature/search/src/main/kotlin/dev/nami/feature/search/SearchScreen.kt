@@ -95,8 +95,10 @@ fun SearchScreen(
     val albums = uiState.results.filterIsInstance<SearchResult.AlbumResult>()
     val artists = uiState.results.filterIsInstance<SearchResult.ArtistResult>()
 
-    val browseAlbums by viewModel.browseAlbums.collectAsState()
-    val browseArtists by viewModel.browseArtists.collectAsState()
+    val browseAlbumsState by viewModel.browseAlbums.collectAsState()
+    val browseArtistsState by viewModel.browseArtists.collectAsState()
+    val browseAlbums = browseAlbumsState
+    val browseArtists = browseArtistsState
 
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900).imePadding()) {
         CompactSearchField(
@@ -130,7 +132,7 @@ fun SearchScreen(
                 }
                 // Same recentAlbums/featuredArtists data the Library tab already previews with --
                 // browsable straight from Search instead of an empty "start typing" prompt.
-                if (browseAlbums.isNotEmpty()) {
+                if (!browseAlbums.isNullOrEmpty()) {
                     item { SectionHeader("Альбомы") }
                     item {
                         LazyRow(
@@ -148,7 +150,7 @@ fun SearchScreen(
                         }
                     }
                 }
-                if (browseArtists.isNotEmpty()) {
+                if (!browseArtists.isNullOrEmpty()) {
                     item { SectionHeader("Артисты") }
                     items(browseArtists, key = { "browse-artist-${it.id.value}" }) { artist ->
                         ArtistRow(
@@ -158,7 +160,11 @@ fun SearchScreen(
                         )
                     }
                 }
-                if (uiState.recentQueries.isEmpty() && browseAlbums.isEmpty() && browseArtists.isEmpty()) {
+                // Only the real empty-library case, not "still loading" -- both flows have
+                // reported back (non-null) and came back empty.
+                if (uiState.recentQueries.isEmpty() && browseAlbums != null && browseAlbums.isEmpty() &&
+                    browseArtists != null && browseArtists.isEmpty()
+                ) {
                     item {
                         Box(modifier = Modifier.fillMaxWidth().padding(top = 80.dp), contentAlignment = Alignment.Center) {
                             Text(text = "Начните вводить, чтобы искать", color = NamiColors.Paper40)
