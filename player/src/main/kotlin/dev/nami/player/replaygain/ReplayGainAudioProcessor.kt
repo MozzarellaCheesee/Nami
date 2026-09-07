@@ -12,13 +12,22 @@ import kotlin.math.pow
 class ReplayGainAudioProcessor : BaseAudioProcessor() {
 
     @Volatile var enabled: Boolean = false
-    @Volatile private var gainLinear: Float = 1f
+    @Volatile private var trackGainDb: Float? = null
+    // "Усиление воспроизведения" (Выкл/+3dB/+6dB) -- a flat library-wide boost, independent of
+    // ReplayGain's per-track measured gain. Applies even when ReplayGain itself is off, since it's
+    // a manual "make everything louder" knob, not a loudness-matching one.
+    @Volatile var boostDb: Float = 0f
     private var configured = false
 
-    /** null (no scan result yet, or scan failed) means unity gain -- never silently distorts a
-     * track we couldn't measure. */
+    /** null (no scan result yet, or scan failed) means the ReplayGain term contributes 0dB --
+     * never silently distorts a track we couldn't measure. */
     fun setGainDb(gainDb: Float?) {
-        gainLinear = dbToLinear(gainDb)
+        trackGainDb = gainDb
+    }
+
+    private fun totalGainLinear(): Float {
+        val trackDb = if (enabled) (trackGainDb ?: 0f) else 0f
+        return dbToLinear(trackDb + boostDb)
     }
 
     companion object {
@@ -33,7 +42,7 @@ class ReplayGainAudioProcessor : BaseAudioProcessor() {
         return inputAudioFormat
     }
 
-    override fun isActive(): Boolean = enabled && configured
+    override fun isActive(): Boolean = configured && (enabled || boostDb != 0f)
 
     override fun queueInput(inputBuffer: ByteBuffer) {
         val remaining = inputBuffer.remaining()
@@ -41,7 +50,7 @@ class ReplayGainAudioProcessor : BaseAudioProcessor() {
         val output = replaceOutputBuffer(remaining)
         val inFloats = inputBuffer.asFloatBuffer()
         val outFloats = output.asFloatBuffer()
-        val gain = gainLinear
+        val gain = totalGainLinear()
         while (inFloats.hasRemaining()) {
             outFloats.put((inFloats.get() * gain).coerceIn(-1f, 1f))
         }

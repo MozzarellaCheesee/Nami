@@ -70,23 +70,11 @@ class PlaybackService : MediaSessionService() {
             .setUsage(C.USAGE_MEDIA)
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
             .build()
-        // The custom RenderersFactory (needed to splice ParametricEqAudioProcessor into
-        // DefaultAudioSink) is itself unverified on real hardware -- only actually used once the
-        // user has explicitly turned EQ on themselves at least once before this cold start.
-        // Default (EQ off) keeps the exact plain ExoPlayer.Builder(this) path that was already
-        // working, so nothing about ordinary playback changes for anyone who hasn't opted in.
-        // Known limitation: turning EQ on for the first time needs an app restart to actually
-        // engage (this decision is made once, here, not re-checked per track) -- an acceptable
-        // cost for keeping every other playback session on the already-proven path.
-        val needsCustomSink = settingsRepository.eqEnabled.value ||
-            settingsRepository.replayGainEnabled.value ||
-            settingsRepository.ditherEnabled.value
-        val playerBuilder = if (needsCustomSink) {
-            ExoPlayer.Builder(this, NamiRenderersFactory(this, replayGainProcessor, eqProcessor, ditherProcessor))
-        } else {
-            ExoPlayer.Builder(this)
-        }
-        player = playerBuilder
+        // Custom RenderersFactory always used (not gated behind any setting being on already) --
+        // every processor defaults to enabled=false/isActive()==false, so with everything off
+        // this is a no-op passthrough identical to the plain path. Building it unconditionally is
+        // what makes every toggle below take effect immediately instead of needing a cold start.
+        player = ExoPlayer.Builder(this, NamiRenderersFactory(this, replayGainProcessor, eqProcessor, ditherProcessor))
             .setLoadControl(loadControl)
             .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ true)
             .build()
@@ -116,10 +104,7 @@ class PlaybackService : MediaSessionService() {
         // Этап 4's parametric EQ (Beta): gains apply live (see ParametricEqAudioProcessor), but
         // the on/off switch itself only takes effect on DefaultAudioSink's next pipeline rebuild
         // -- force one via a same-position seek so flipping the Settings toggle is felt right
-        // away instead of "starting with the next track". Only meaningful when this session's
-        // player was actually built with NamiRenderersFactory (eqEnabled.value was already true
-        // at onCreate, see playerBuilder above) -- otherwise there's no EQ processor in the
-        // pipeline for these to activate at all, and the seek is a harmless no-op.
+        // away instead of "starting with the next track".
         combine(settingsRepository.eqBassDb, settingsRepository.eqMidDb, settingsRepository.eqTrebleDb) { b, m, t -> Triple(b, m, t) }
             .onEach { (b, m, t) -> eqProcessor.setGains(b, m, t) }
             .launchIn(scope)
@@ -145,9 +130,21 @@ class PlaybackService : MediaSessionService() {
 
         settingsRepository.replayGainEnabled
             .onEach { enabled ->
-                val wasEnabled = replayGainProcessor.enabled
+                val wasActive = replayGainProcessor.isActive()
                 replayGainProcessor.enabled = enabled
-                if (enabled != wasEnabled && player.playbackState != Player.STATE_IDLE) {
+                if (replayGainProcessor.isActive() != wasActive && player.playbackState != Player.STATE_IDLE) {
+                    player.seekTo(player.currentPosition)
+                }
+            }
+            .launchIn(scope)
+
+        // "Усиление воспроизведения" -- flat library-wide boost, live regardless of ReplayGain's
+        // own toggle (see ReplayGainAudioProcessor.isActive()).
+        settingsRepository.playbackGainDb
+            .onEach { boostDb ->
+                val wasActive = replayGainProcessor.isActive()
+                replayGainProcessor.boostDb = boostDb
+                if (replayGainProcessor.isActive() != wasActive && player.playbackState != Player.STATE_IDLE) {
                     player.seekTo(player.currentPosition)
                 }
             }

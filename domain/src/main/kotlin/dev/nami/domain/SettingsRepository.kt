@@ -57,4 +57,9 @@ interface SettingsRepository {
      * see CrossfadeController's own doc for why. Off by default. */
     val crossfadeEnabled: StateFlow<Boolean>
     fun setCrossfadeEnabled(value: Boolean)
+
+    /** "Усиление воспроизведения" -- flat library-wide boost (0/3/6 dB), independent of
+     * per-track ReplayGain. */
+    val playbackGainDb: StateFlow<Float>
+    fun setPlaybackGainDb(value: Float)
 }

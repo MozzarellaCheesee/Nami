@@ -26,6 +26,7 @@ data class AudioTractUiState(
     val replayGainEnabled: Boolean = false,
     val ditherEnabled: Boolean = false,
     val crossfadeEnabled: Boolean = false,
+    val playbackGainDb: Float = 0f,
 )
 
 /** Feeds both План.md's 4.6 "Аудиотракт" and 4.7 "Эквалайзер" screens -- same underlying state,
@@ -51,6 +52,7 @@ class AudioTractViewModel @Inject constructor(
         settingsRepository.replayGainEnabled,
         settingsRepository.ditherEnabled,
         settingsRepository.crossfadeEnabled,
+        settingsRepository.playbackGainDb,
     ) { values ->
         AudioTractUiState(
             track = values[0] as Track?,
@@ -62,6 +64,7 @@ class AudioTractViewModel @Inject constructor(
             replayGainEnabled = values[6] as Boolean,
             ditherEnabled = values[7] as Boolean,
             crossfadeEnabled = values[8] as Boolean,
+            playbackGainDb = values[9] as Float,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AudioTractUiState())
 
@@ -75,4 +78,6 @@ class AudioTractViewModel @Inject constructor(
     fun setDitherEnabled(enabled: Boolean) = settingsRepository.setDitherEnabled(enabled)
 
     fun setCrossfadeEnabled(enabled: Boolean) = settingsRepository.setCrossfadeEnabled(enabled)
+
+    fun setPlaybackGainDb(gainDb: Float) = settingsRepository.setPlaybackGainDb(gainDb)
 }

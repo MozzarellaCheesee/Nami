@@ -1,14 +1,15 @@
 package dev.nami.feature.player
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.displayCutoutPadding
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,6 +20,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.CompareArrows
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Memory
+import androidx.compose.material.icons.outlined.Speaker
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -31,7 +37,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -40,7 +45,7 @@ import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.model.Track
 import dev.nami.player.bluetooth.BluetoothCodecReader
 
-private data class ChainNode(val name: String, val detail: String)
+private data class ChainNode(val name: String, val detail: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
 
 /** План.md §4.6 -- one screen, a vertical chain diagram of exactly what's happening to the
  * audio right now (файл -> декодер -> обработка -> ресемплинг -> вывод), plus a status card
@@ -65,11 +70,11 @@ fun AudioTractScreen(onBack: () -> Unit, onOpenEqualizer: () -> Unit, viewModel:
     }
 
     val nodes = buildList {
-        add(ChainNode("Файл", track?.let { formatFileDetail(it) } ?: "ничего не играет"))
-        add(ChainNode("Декодер", "нативный, без потерь"))
-        add(ChainNode("Обработка", processingParts.takeIf { it.isNotEmpty() }?.joinToString(" · ") ?: "нет"))
-        add(ChainNode("Ресемплинг", "нет"))
-        add(ChainNode("Вывод", outputDetail))
+        add(ChainNode("Файл", track?.let { formatFileDetail(it) } ?: "ничего не играет", Icons.Outlined.Description))
+        add(ChainNode("Декодер", "нативный, без потерь", Icons.Outlined.Memory))
+        add(ChainNode("Обработка", processingParts.takeIf { it.isNotEmpty() }?.joinToString(" · ") ?: "нет", Icons.Outlined.Tune))
+        add(ChainNode("Ресемплинг", "нет", Icons.Outlined.CompareArrows))
+        add(ChainNode("Вывод", outputDetail, Icons.Outlined.Speaker))
     }
 
     val bitPerfectBlockedByEq = uiState.bitPerfectUsbEnabled && uiState.eqEnabled
@@ -104,12 +109,7 @@ fun AudioTractScreen(onBack: () -> Unit, onOpenEqualizer: () -> Unit, viewModel:
                                 .padding(horizontal = 16.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(20.dp)
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .border(1.5.dp, NamiColors.Ai, RoundedCornerShape(4.dp)),
-                            )
+                            Icon(node.icon, contentDescription = null, tint = NamiColors.Ai, modifier = Modifier.size(20.dp))
                             Column(modifier = Modifier.padding(start = 12.dp)) {
                                 Text(text = node.name, color = NamiColors.Paper100, style = MaterialTheme.typography.bodyMedium)
                                 Text(
@@ -122,7 +122,15 @@ fun AudioTractScreen(onBack: () -> Unit, onOpenEqualizer: () -> Unit, viewModel:
                             }
                         }
                         if (index != nodes.lastIndex) {
-                            Box(modifier = Modifier.width(1.dp).height(16.dp).background(NamiColors.Ink600).padding(start = 27.dp))
+                            Box(modifier = Modifier.fillMaxWidth().height(16.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .padding(start = 16.dp)
+                                        .width(1.dp)
+                                        .fillMaxHeight()
+                                        .background(NamiColors.Ink600),
+                                )
+                            }
                         }
                     }
                 }
@@ -154,15 +162,17 @@ fun AudioTractScreen(onBack: () -> Unit, onOpenEqualizer: () -> Unit, viewModel:
                     ToggleRow("Dither (Beta)", "сглаживает шум квантования при обработке", uiState.ditherEnabled, viewModel::setDitherEnabled)
                     ToggleRow("Кроссфейд (Beta)", "плавный переход между треками, не настоящее смешивание", uiState.crossfadeEnabled, viewModel::setCrossfadeEnabled)
                 }
-                if (uiState.eqEnabled || uiState.replayGainEnabled || uiState.ditherEnabled) {
-                    Text(
-                        text = "EQ, ReplayGain и dither включаются только с перезапуском приложения " +
-                            "(закройте его полностью через список приложений и откройте заново) -- " +
-                            "кроссфейд и bit-perfect работают сразу.",
-                        color = NamiColors.Paper40,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(top = 12.dp),
-                    )
+
+                Text(
+                    text = "Усиление воспроизведения",
+                    color = NamiColors.Paper40,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(top = 20.dp, bottom = 8.dp),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    GainPill("Выкл", selected = uiState.playbackGainDb == 0f) { viewModel.setPlaybackGainDb(0f) }
+                    GainPill("+3 дБ", selected = uiState.playbackGainDb == 3f) { viewModel.setPlaybackGainDb(3f) }
+                    GainPill("+6 дБ", selected = uiState.playbackGainDb == 6f) { viewModel.setPlaybackGainDb(6f) }
                 }
                 Spacer(modifier = Modifier.height(24.dp))
             }
@@ -189,6 +199,22 @@ private fun ToggleRow(title: String, caption: String, checked: Boolean, onChecke
             checked = checked,
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(checkedTrackColor = NamiColors.Shu, uncheckedTrackColor = NamiColors.Ink600),
+        )
+    }
+}
+
+@Composable
+private fun GainPill(label: String, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .background(if (selected) NamiColors.Paper100 else NamiColors.Ink800, RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+    ) {
+        Text(
+            text = label,
+            color = if (selected) NamiColors.Ink900 else NamiColors.Paper70,
+            style = MaterialTheme.typography.labelLarge,
         )
     }
 }

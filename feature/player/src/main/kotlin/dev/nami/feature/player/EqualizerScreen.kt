@@ -140,14 +140,6 @@ fun EqualizerScreen(onBack: () -> Unit, viewModel: AudioTractViewModel = hiltVie
                         )
                     }
                 }
-                if (eqEnabled) {
-                    Text(
-                        text = "Если только что включили EQ -- перезапустите приложение, чтобы он реально заработал",
-                        color = NamiColors.Paper40,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                }
                 Spacer(modifier = Modifier.height(24.dp))
             }
         }
