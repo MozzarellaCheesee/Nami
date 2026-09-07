@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,7 +34,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.material3.OutlinedTextField
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.model.AlbumId
+import dev.nami.domain.HealthAlbumRef
+import dev.nami.domain.HealthArtistRef
 import dev.nami.domain.HealthTrackRef
 import dev.nami.domain.LibraryHealthReport
 
@@ -74,21 +79,15 @@ fun LibraryHealthScreen(onBack: () -> Unit, viewModel: LibraryHealthViewModel = 
                     title = "Без текста песни",
                     count = current.tracksWithoutLyrics.size,
                     items = current.tracksWithoutLyrics.map { it.title },
+                    onFixItem = { index -> viewModel.fetchMissingLyrics(current.tracksWithoutLyrics[index].id) },
+                    fixLabel = "Найти текст",
                 )
             }
             item {
-                HealthCategory(
-                    title = "Альбомы без года выпуска",
-                    count = current.albumsWithoutYear.size,
-                    items = current.albumsWithoutYear,
-                )
+                YearlessAlbumsCategory(current.albumsWithoutYear, onSave = viewModel::setAlbumYear)
             }
             item {
-                HealthCategory(
-                    title = "Несогласованные имена артистов",
-                    count = current.inconsistentArtistNameGroups.size,
-                    items = current.inconsistentArtistNameGroups.map { it.joinToString(" / ") },
-                )
+                InconsistentArtistNamesCategory(current.inconsistentArtistNameGroups, onMerge = viewModel::mergeArtistNames)
             }
             item {
                 HealthCategory(
@@ -106,7 +105,14 @@ fun LibraryHealthScreen(onBack: () -> Unit, viewModel: LibraryHealthViewModel = 
 }
 
 @Composable
-private fun HealthCategory(title: String, count: Int, items: List<String>, onDeleteItem: ((Int) -> Unit)? = null) {
+private fun HealthCategory(
+    title: String,
+    count: Int,
+    items: List<String>,
+    onDeleteItem: ((Int) -> Unit)? = null,
+    onFixItem: ((Int) -> Unit)? = null,
+    fixLabel: String = "Вылечить",
+) {
     var expanded by remember { mutableStateOf(false) }
     Column(modifier = Modifier.padding(top = 8.dp).background(NamiColors.Ink800, RoundedCornerShape(12.dp)).clickable(enabled = count > 0) { expanded = !expanded }) {
         Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -127,11 +133,91 @@ private fun HealthCategory(title: String, count: Int, items: List<String>, onDel
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(label, color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                    if (onFixItem != null) {
+                        Text(
+                            fixLabel,
+                            color = NamiColors.Shu,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.clickable { onFixItem(index) }.padding(end = 8.dp),
+                        )
+                    }
                     if (onDeleteItem != null) {
                         IconButton(onClick = { onDeleteItem(index) }) {
                             Icon(Icons.Outlined.Delete, contentDescription = "Удалить", tint = NamiColors.Paper40)
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun YearlessAlbumsCategory(albums: List<HealthAlbumRef>, onSave: (AlbumId, Int) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Column(modifier = Modifier.padding(top = 8.dp).background(NamiColors.Ink800, RoundedCornerShape(12.dp)).clickable(enabled = albums.isNotEmpty()) { expanded = !expanded }) {
+        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                if (albums.isEmpty()) Icons.Outlined.CheckCircle else Icons.Outlined.Warning,
+                contentDescription = null,
+                tint = if (albums.isEmpty()) NamiColors.Paper40 else NamiColors.Kin,
+            )
+            Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+                Text("Альбомы без года выпуска", color = NamiColors.Paper100, style = MaterialTheme.typography.bodyMedium)
+                Text("${albums.size}", color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        if (expanded) {
+            albums.forEach { album ->
+                var year by remember(album.id) { mutableStateOf("") }
+                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(album.title, color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                    OutlinedTextField(
+                        value = year,
+                        onValueChange = { year = it.filter { c -> c.isDigit() }.take(4) },
+                        placeholder = { Text("Год") },
+                        singleLine = true,
+                        modifier = Modifier.width(80.dp),
+                    )
+                    Text(
+                        "Сохранить",
+                        color = NamiColors.Shu,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.clickable(enabled = year.toIntOrNull() != null) {
+                            onSave(album.id, year.toInt())
+                        }.padding(start = 8.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InconsistentArtistNamesCategory(groups: List<List<HealthArtistRef>>, onMerge: (List<dev.nami.core.model.ArtistId>, String) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Column(modifier = Modifier.padding(top = 8.dp).background(NamiColors.Ink800, RoundedCornerShape(12.dp)).clickable(enabled = groups.isNotEmpty()) { expanded = !expanded }) {
+        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                if (groups.isEmpty()) Icons.Outlined.CheckCircle else Icons.Outlined.Warning,
+                contentDescription = null,
+                tint = if (groups.isEmpty()) NamiColors.Paper40 else NamiColors.Kin,
+            )
+            Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+                Text("Несогласованные имена артистов", color = NamiColors.Paper100, style = MaterialTheme.typography.bodyMedium)
+                Text("${groups.size}", color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        if (expanded) {
+            groups.forEach { group ->
+                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(group.joinToString(" / ") { it.name }, color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                    Text(
+                        "Объединить",
+                        color = NamiColors.Shu,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.clickable { onMerge(group.map { it.id }, group.first().name) },
+                    )
                 }
             }
         }

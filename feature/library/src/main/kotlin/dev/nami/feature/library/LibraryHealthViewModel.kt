@@ -3,18 +3,23 @@ package dev.nami.feature.library
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.nami.core.model.AlbumId
+import dev.nami.core.model.ArtistId
 import dev.nami.core.model.TrackId
 import dev.nami.domain.LibraryHealthReport
 import dev.nami.domain.LibraryRepository
+import dev.nami.domain.LyricsRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class LibraryHealthViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
+    private val lyricsRepository: LyricsRepository,
 ) : ViewModel() {
 
     private val _report = MutableStateFlow<LibraryHealthReport?>(null)
@@ -48,6 +53,33 @@ class LibraryHealthViewModel @Inject constructor(
     fun resolveDuplicateGroup(keepId: TrackId, group: List<TrackId>) {
         viewModelScope.launch {
             group.filterNot { it == keepId }.forEach { libraryRepository.deleteTrack(it) }
+            refresh()
+        }
+    }
+
+    /** Same LRCLIB-then-STANDS4 lookup LyricsScreen already uses for the manual "search" action --
+     * no-op (silently) if neither source has anything, same as everywhere else that calls it. */
+    fun fetchMissingLyrics(id: TrackId) {
+        viewModelScope.launch {
+            val track = libraryRepository.track(id).first() ?: return@launch
+            val lyrics = lyricsRepository.fetchFromLrcLib(track.title, track.artistName, track.durationMs) ?: return@launch
+            lyricsRepository.saveLyrics(track.path, lyrics)
+            refresh()
+        }
+    }
+
+    fun setAlbumYear(id: AlbumId, year: Int) {
+        viewModelScope.launch {
+            libraryRepository.setAlbumYear(id, year)
+            refresh()
+        }
+    }
+
+    /** Renames every artist row in the group to [canonicalName] (the group's first, already-
+     * displayed name) so they collapse back into one Artist. */
+    fun mergeArtistNames(group: List<ArtistId>, canonicalName: String) {
+        viewModelScope.launch {
+            group.forEach { libraryRepository.renameArtist(it, canonicalName) }
             refresh()
         }
     }

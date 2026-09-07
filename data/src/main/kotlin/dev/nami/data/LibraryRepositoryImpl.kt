@@ -66,7 +66,7 @@ class LibraryRepositoryImpl @Inject constructor(
         val yearById = albumDao.allIdsAndYears().associate { it.id to it.year }
         val albumsWithoutYear = albumDao.allForIndexing()
             .filter { yearById[it.id] == null }
-            .map { it.title }
+            .map { dev.nami.domain.HealthAlbumRef(dev.nami.core.model.AlbumId(it.id), it.title) }
 
         // Heuristic grouping, not a real audio fingerprint (none exists in this codebase) --
         // same title/artist/duration-rounded-to-5s is the same signal LibraryRepositoryImpl's
@@ -82,7 +82,7 @@ class LibraryRepositoryImpl @Inject constructor(
             .groupBy { it.name.trim().lowercase() }
             .values
             .filter { group -> group.map { it.name }.distinct().size > 1 }
-            .map { group -> group.map { it.name } }
+            .map { group -> group.map { dev.nami.domain.HealthArtistRef(dev.nami.core.model.ArtistId(it.id), it.name) } }
 
         return LibraryHealthReport(
             tracksWithoutArtwork = withoutArtwork,
