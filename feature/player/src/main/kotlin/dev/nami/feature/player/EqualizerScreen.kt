@@ -191,7 +191,10 @@ private fun EqCurve(gains: List<Float>, modifier: Modifier = Modifier) {
             return w * (ln(freqHz) - logMin) / (logMax - logMin)
         }
 
-        fun yFor(gainDb: Float): Float = midY - (gainDb / maxDb) * midY
+        // Clamped -- gainAt() sums ALL bands' bell contributions at a point, which can exceed
+        // +-12dB where two boosted neighbors overlap even though no single band goes past that,
+        // and an unclamped y would draw the curve past the canvas's own top/bottom edge.
+        fun yFor(gainDb: Float): Float = (midY - (gainDb / maxDb) * midY).coerceIn(0f, h)
 
         listOf(0.25f, 0.5f, 0.75f).forEach { fraction ->
             drawLine(NamiColors.Ink700, Offset(0f, h * fraction), Offset(w, h * fraction), strokeWidth = 1.5f)
@@ -226,9 +229,13 @@ private fun EqCurve(gains: List<Float>, modifier: Modifier = Modifier) {
         drawPath(fillPath, color = NamiColors.Shu.copy(alpha = 0.10f))
         drawPath(path, color = NamiColors.Shu, style = Stroke(width = 4f, cap = StrokeCap.Round))
 
+        // yFor(gainAt(freqHz)) -- the same COMBINED value the line itself is drawn from at that x,
+        // not yFor(gains[i]) (that band's own raw gain alone) -- those two only match when every
+        // other band is at 0dB. With neighbors set, the line sits at the sum of all bells at this
+        // frequency while the dot used to sit at just this one band's value, visibly off the line.
         BAND_FREQS_HZ.forEachIndexed { i, freqHz ->
             val x = xFor(freqHz)
-            val y = yFor(gains[i])
+            val y = yFor(gainAt(freqHz))
             drawCircle(NamiColors.Paper100, radius = 6f, center = Offset(x, y))
             drawCircle(NamiColors.Ink900, radius = 6f, center = Offset(x, y), style = Stroke(width = 2.5f))
         }

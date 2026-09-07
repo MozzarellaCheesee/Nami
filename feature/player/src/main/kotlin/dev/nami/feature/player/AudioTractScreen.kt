@@ -43,7 +43,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.model.Track
-import dev.nami.player.bluetooth.BluetoothCodecReader
 import dev.nami.player.output.AudioOutputInfo
 
 private data class ChainNode(val name: String, val detail: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
@@ -56,7 +55,7 @@ fun AudioTractScreen(onBack: () -> Unit, onOpenEqualizer: () -> Unit, viewModel:
     val uiState by viewModel.uiState.collectAsState()
     val track = uiState.track
     val context = LocalContext.current
-    val isBluetoothOutput = remember { BluetoothCodecReader.isBluetoothOutputActive(context) }
+    val isBluetoothOutput by rememberBluetoothOutputActive()
     val outputSampleRateHz = remember { AudioOutputInfo.outputSampleRateHz(context) }
 
     // Hi-Fi keeps the DSP sink out of the path entirely (PlaybackService.currentNeedsCustomSink),
