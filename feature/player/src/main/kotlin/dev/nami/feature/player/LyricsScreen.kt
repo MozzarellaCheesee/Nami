@@ -263,6 +263,15 @@ fun LyricsScreen(
                         modifier = Modifier.padding(top = 12.dp).clickable { viewModel.retryOnlineFetch() },
                     )
                 }
+                // STANDS4's terms require crediting them wherever their lyrics data is used --
+                // shown here (the one place this app actually queries them) rather than tracking
+                // per-track provenance through save/reload just to show it conditionally.
+                Text(
+                    text = "Источники текста: LRCLIB (lrclib.net), STANDS4 (stands4.com)",
+                    color = NamiColors.Paper40,
+                    style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(top = 16.dp),
+                )
                 Text(
                     text = "Добавить и синхронизировать вручную",
                     color = NamiColors.Paper70,

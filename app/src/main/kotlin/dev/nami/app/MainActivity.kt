@@ -7,11 +7,18 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.Image
 import androidx.activity.viewModels
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
@@ -65,8 +72,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // Two pickers per cover/photo target -- system Files (SAF, arbitrary storage/providers) and
+    // the system Photo Picker (gallery-style grid, no storage permission needed) -- so "Изменить
+    // обложку" always offers both instead of jumping straight into just one of them. Both ends of
+    // a pair call the exact same ViewModel callback (it only cares about the resulting Uri), so
+    // adding the gallery half didn't need touching PlaylistActionsViewModel/MetadataActionsViewModel.
     private val pickCoverImage = registerForActivityResult(
         ActivityResultContracts.OpenDocument(),
+    ) { uri -> uri?.let(playlistActionsViewModel::onCoverPicked) }
+
+    private val pickCoverImageFromGallery = registerForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
     ) { uri -> uri?.let(playlistActionsViewModel::onCoverPicked) }
 
     private val pickExportDestination = registerForActivityResult(
@@ -81,8 +97,16 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.OpenDocument(),
     ) { uri -> uri?.let(metadataActionsViewModel::onAlbumCoverPicked) }
 
+    private val pickAlbumCoverImageFromGallery = registerForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri -> uri?.let(metadataActionsViewModel::onAlbumCoverPicked) }
+
     private val pickArtistPhotoImage = registerForActivityResult(
         ActivityResultContracts.OpenDocument(),
+    ) { uri -> uri?.let(metadataActionsViewModel::onArtistPhotoPicked) }
+
+    private val pickArtistPhotoImageFromGallery = registerForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
     ) { uri -> uri?.let(metadataActionsViewModel::onArtistPhotoPicked) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -102,6 +126,10 @@ class MainActivity : ComponentActivity() {
             .map { it.importProgress }
             .stateIn(lifecycleScope, SharingStarted.Eagerly, libraryViewModel.uiState.value.importProgress)
         setContent {
+            // Which pair of (Files, Gallery) launchers "Изменить обложку" should use once the
+            // user picks a source in the chooser below -- set by the onPickXxx callback that
+            // fired, read/cleared once the chooser dialog resolves.
+            var pendingImagePickSource by remember { mutableStateOf<ImagePickSource?>(null) }
             val hideSystemBars by appSettingsRepository.hideSystemBars.collectAsState()
             val nightModeEnabled by appSettingsRepository.nightModeEnabled.collectAsState()
             // Dims the actual screen backlight (not just an on-screen overlay) to its minimum --
@@ -130,7 +158,7 @@ class MainActivity : ComponentActivity() {
                     importProgress = importProgress,
                     onPickPlaylistCover = { playlistId ->
                         playlistActionsViewModel.requestCoverPick(playlistId)
-                        pickCoverImage.launch(arrayOf("image/*"))
+                        pendingImagePickSource = ImagePickSource.PLAYLIST_COVER
                     },
                     onExportPlaylist = { playlistId ->
                         playlistActionsViewModel.requestExport(playlistId)
@@ -144,15 +172,40 @@ class MainActivity : ComponentActivity() {
                     onImportResultShown = playlistActionsViewModel::onImportResultShown,
                     onPickAlbumCover = { albumId ->
                         metadataActionsViewModel.requestAlbumCoverPick(albumId)
-                        pickAlbumCoverImage.launch(arrayOf("image/*"))
+                        pendingImagePickSource = ImagePickSource.ALBUM_COVER
                     },
                     onPickArtistPhoto = { artistId ->
                         metadataActionsViewModel.requestArtistPhotoPick(artistId)
-                        pickArtistPhotoImage.launch(arrayOf("image/*"))
+                        pendingImagePickSource = ImagePickSource.ARTIST_PHOTO
                     },
                     openPlayerSignal = openPlayerSignal,
                 )
+                pendingImagePickSource?.let { source ->
+                    dev.nami.core.designsystem.ContextActionSheet(
+                        onDismiss = { pendingImagePickSource = null },
+                        actions = listOf(
+                            dev.nami.core.designsystem.ContextAction("Галерея", Icons.Outlined.Image) {
+                                when (source) {
+                                    ImagePickSource.PLAYLIST_COVER -> pickCoverImageFromGallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                    ImagePickSource.ALBUM_COVER -> pickAlbumCoverImageFromGallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                    ImagePickSource.ARTIST_PHOTO -> pickArtistPhotoImageFromGallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                }
+                                pendingImagePickSource = null
+                            },
+                            dev.nami.core.designsystem.ContextAction("Файлы", Icons.Outlined.Folder) {
+                                when (source) {
+                                    ImagePickSource.PLAYLIST_COVER -> pickCoverImage.launch(arrayOf("image/*"))
+                                    ImagePickSource.ALBUM_COVER -> pickAlbumCoverImage.launch(arrayOf("image/*"))
+                                    ImagePickSource.ARTIST_PHOTO -> pickArtistPhotoImage.launch(arrayOf("image/*"))
+                                }
+                                pendingImagePickSource = null
+                            },
+                        ),
+                    )
+                }
             }
         }
     }
+
+    private enum class ImagePickSource { PLAYLIST_COVER, ALBUM_COVER, ARTIST_PHOTO }
 }

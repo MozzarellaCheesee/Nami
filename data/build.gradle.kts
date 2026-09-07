@@ -8,7 +8,17 @@ plugins {
 android {
     namespace = "dev.nami.data"
     compileSdk = 35
-    defaultConfig { minSdk = 26 }
+    defaultConfig {
+        minSdk = 26
+        // STANDS4 lyrics fallback (used only when lrclib.net has nothing) -- keys come from env
+        // vars set before running Gradle, never committed. Empty string (not found) just means
+        // Stands4Client's own isConfigured() stays false and that fallback silently no-ops.
+        buildConfigField("String", "STANDS4_UID", "\"${System.getenv("STANDS4_UID") ?: ""}\"")
+        buildConfigField("String", "STANDS4_TOKEN", "\"${System.getenv("STANDS4_TOKEN") ?: ""}\"")
+    }
+    buildFeatures {
+        buildConfig = true
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21

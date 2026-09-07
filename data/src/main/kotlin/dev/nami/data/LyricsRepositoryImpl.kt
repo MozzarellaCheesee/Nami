@@ -1,6 +1,7 @@
 package dev.nami.data
 
 import dev.nami.core.model.Lyrics
+import dev.nami.core.model.LyricLine
 import dev.nami.core.model.WordTiming
 import dev.nami.core.model.WordToken
 import dev.nami.domain.LyricsRepository
@@ -48,7 +49,20 @@ class LyricsRepositoryImpl @Inject constructor() : LyricsRepository {
     override suspend fun fetchFromLrcLib(title: String, artistName: String?, durationMs: Long): Lyrics? =
         withContext(Dispatchers.IO) {
             LrcLibClient.findSyncedLyrics(title, artistName, durationMs)?.let { LrcParser.parse(it) }
+                ?: Stands4Client.findPlainLyrics(title, artistName)?.let { plainLyricsToApproxSynced(it, durationMs) }
         }
+
+    /** STANDS4 has no per-line timestamps -- spreads non-blank lines evenly across [durationMs]
+     * (or 3s/line if the duration isn't known) so the existing synced-lyrics screen still has
+     * something to highlight/autoscroll to, instead of needing a whole separate "plain lyrics"
+     * rendering path just for this one fallback source. Approximate, not real sync -- documented
+     * on [dev.nami.domain.LyricsRepository.fetchFromLrcLib]. */
+    private fun plainLyricsToApproxSynced(rawText: String, durationMs: Long): Lyrics? {
+        val textLines = rawText.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        if (textLines.isEmpty()) return null
+        val stepMs = if (durationMs > 0) durationMs / textLines.size else 3_000L
+        return Lyrics(textLines.mapIndexed { index, text -> LyricLine(timeMs = index * stepMs, text = text) })
+    }
 
     private fun translationFile(path: String) = File(sibling(path, ".ru.txt"))
 
