@@ -2,6 +2,7 @@ package dev.nami.feature.library
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -205,18 +207,54 @@ fun AlbumDetailScreen(
                         ),
                     )
                 }
+                // Группировка версий (План.md §23.21) -- remix/live/instrumental/acoustic of the
+                // same track collapse into one row with a "+N версий" expand toggle, instead of
+                // each cluttering the list as its own separate entry.
+                val versionGroups = remember(uiState.tracks) { dev.nami.domain.TrackVersionGrouper.group(uiState.tracks) }
+                val expandedGroups = remember { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
                 LazyColumn(state = listState) {
-                    itemsIndexed(uiState.tracks, key = { _, track -> track.id.value }) { index, track ->
-                        TrackListItem(
-                            track = track,
-                            onClick = { onPlayTracks(uiState.tracks, index) },
-                            onAddToQueue = if (nowPlaying != null) { { onAddToQueue(track) } } else null,
-                            onAddToPlaylist = { addToPlaylistTrackId = track.id },
-                            onLikeTrack = { viewModel.likeTrack(track.id) },
-                            onRemoveFromAlbum = { viewModel.removeTrackFromAlbum(track.id) },
-                            isCurrentTrack = track.id == nowPlaying?.trackId,
-                            isPlaying = track.id == nowPlaying?.trackId && nowPlaying?.isPlaying == true,
-                        )
+                    versionGroups.forEach { group ->
+                        val groupKey = group.first().id.value
+                        val isExpanded = group.size == 1 || expandedGroups[groupKey] == true
+                        item(key = groupKey) {
+                            val track = group.first()
+                            val index = uiState.tracks.indexOf(track)
+                            TrackListItem(
+                                track = track,
+                                onClick = { onPlayTracks(uiState.tracks, index) },
+                                onAddToQueue = if (nowPlaying != null) { { onAddToQueue(track) } } else null,
+                                onAddToPlaylist = { addToPlaylistTrackId = track.id },
+                                onLikeTrack = { viewModel.likeTrack(track.id) },
+                                onRemoveFromAlbum = { viewModel.removeTrackFromAlbum(track.id) },
+                                isCurrentTrack = track.id == nowPlaying?.trackId,
+                                isPlaying = track.id == nowPlaying?.trackId && nowPlaying?.isPlaying == true,
+                            )
+                            if (group.size > 1) {
+                                Text(
+                                    text = if (isExpanded) "Свернуть версии" else "+${group.size - 1} версии",
+                                    color = NamiColors.Shu,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier
+                                        .padding(start = 68.dp, top = 2.dp, bottom = 4.dp)
+                                        .clickable { expandedGroups[groupKey] = !isExpanded },
+                                )
+                            }
+                        }
+                        if (isExpanded && group.size > 1) {
+                            items(group.drop(1), key = { it.id.value }) { track ->
+                                val index = uiState.tracks.indexOf(track)
+                                TrackListItem(
+                                    track = track,
+                                    onClick = { onPlayTracks(uiState.tracks, index) },
+                                    onAddToQueue = if (nowPlaying != null) { { onAddToQueue(track) } } else null,
+                                    onAddToPlaylist = { addToPlaylistTrackId = track.id },
+                                    onLikeTrack = { viewModel.likeTrack(track.id) },
+                                    onRemoveFromAlbum = { viewModel.removeTrackFromAlbum(track.id) },
+                                    isCurrentTrack = track.id == nowPlaying?.trackId,
+                                    isPlaying = track.id == nowPlaying?.trackId && nowPlaying?.isPlaying == true,
+                                )
+                            }
+                        }
                     }
                 }
             }
