@@ -120,9 +120,9 @@ fun AudioTractBody(onOpenEqualizer: () -> Unit, viewModel: AudioTractViewModel =
 
     val bitPerfectBlockedByEq = uiState.bitPerfectUsbEnabled && uiState.eqEnabled && !uiState.hiFiEnabled
     val statusText = when {
-        bitPerfectBlockedByEq -> "BIT-PERFECT недоступен -- включён EQ, а bit-perfect отключает любую обработку в приложении."
-        uiState.hiFiEnabled -> "HI-FI включён -- Nami не трогает сэмплы: EQ/ReplayGain/dither/усиление обходятся, декодированный поток идёт в AudioTrack как есть. Системный микшер (и его ресемплинг) это не отменяет -- за это отвечает только bit-perfect по USB, и только если железо его тянет."
-        uiState.bitPerfectUsbEnabled -> "BIT-PERFECT включён -- если ЦАП и его драйвер это реально поддерживают, микширование/ресемплинг/громкость системы для него сейчас пропускаются."
+        bitPerfectBlockedByEq -> "BIT-PERFECT недоступен - включён EQ, а bit-perfect отключает любую обработку в приложении."
+        uiState.hiFiEnabled -> "HI-FI включён - Nami не трогает сэмплы: EQ/ReplayGain/dither/усиление обходятся, декодированный поток идёт в AudioTrack как есть. Системный микшер (и его ресемплинг) это не отменяет - за это отвечает только bit-perfect по USB, и только если железо его тянет."
+        uiState.bitPerfectUsbEnabled -> "BIT-PERFECT включён - если ЦАП и его драйвер это реально поддерживают, микширование/ресемплинг/громкость системы для него сейчас пропускаются."
         else -> "Обычный вывод через системный микшер. Bit-perfect и EQ включаются в Настройках."
     }
 
@@ -220,7 +220,7 @@ fun AudioTractBody(onOpenEqualizer: () -> Unit, viewModel: AudioTractViewModel =
                 )
                 ToggleRow(
                     "Профили по устройству (Beta)",
-                    "свой EQ и лимит громкости для проводного/BT/USB-ЦАП/динамика -- заменяет ручной EQ, пока активен",
+                    "свой EQ и лимит громкости для проводного/BT/USB-ЦАП/динамика - заменяет ручной EQ, пока активен",
                     uiState.outputProfilesEnabled,
                     viewModel::setOutputProfilesEnabled,
                 )

@@ -53,7 +53,7 @@ fun QuizScreen(onBack: () -> Unit, viewModel: QuizViewModel = hiltViewModel()) {
             when {
                 uiState.notEnoughWords -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
-                        text = "Нужно хотя бы 4 слова в словарике -- тапай слова в тексте песни",
+                        text = "Нужно хотя бы 4 слова в словарике - тапай слова в тексте песни",
                         color = NamiColors.Paper70,
                         modifier = Modifier.padding(horizontal = 32.dp),
                     )

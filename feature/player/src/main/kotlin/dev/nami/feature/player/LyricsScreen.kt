@@ -380,7 +380,7 @@ fun LyricsScreen(
                 ) {
                     Icon(
                         Icons.Outlined.Translate,
-                        contentDescription = "Перевод (долгое нажатие -- пересчитать заново)",
+                        contentDescription = "Перевод (долгое нажатие - пересчитать заново)",
                         tint = if (uiState.showTranslation) NamiColors.Shu else NamiColors.Paper70,
                     )
                 }

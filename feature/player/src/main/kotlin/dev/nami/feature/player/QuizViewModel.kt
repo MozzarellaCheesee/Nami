@@ -60,7 +60,7 @@ class QuizViewModel @Inject constructor(
         val prompt = if (target.contextLine.contains(target.word)) {
             target.contextLine.replace(target.word, "___")
         } else {
-            "${target.word} (${target.reading}) -- что это значит?"
+            "${target.word} (${target.reading}) - что это значит?"
         }
         val distractors = pool.filter { it.id != target.id }.shuffled().take(3).map { it.meaning }
         val choices = (distractors + target.meaning).shuffled()

@@ -75,7 +75,7 @@ fun VocabularyScreen(
             }
             if (words.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(text = "Словарик пуст -- тапай слова в тексте песни", color = NamiColors.Paper70)
+                    Text(text = "Словарик пуст - тапай слова в тексте песни", color = NamiColors.Paper70)
                 }
             } else {
                 LazyColumn {
@@ -98,7 +98,7 @@ fun VocabularyScreen(
                                     Text(text = word.meaning, color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall)
                                 }
                                 Text(
-                                    text = "${word.contextLine} -- ${word.trackTitle}",
+                                    text = "${word.contextLine} - ${word.trackTitle}",
                                     color = NamiColors.Paper40,
                                     style = MaterialTheme.typography.bodySmall,
                                     maxLines = 1,

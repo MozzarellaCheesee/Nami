@@ -143,7 +143,7 @@ fun EqualizerBody(onBack: () -> Unit, viewModel: AudioTractViewModel = hiltViewM
                 )
                 if (autoEqError) {
                     Text(
-                        text = "Не удалось распознать файл -- нужен ParametricEQ.txt из AutoEQ.",
+                        text = "Не удалось распознать файл - нужен ParametricEQ.txt из AutoEQ.",
                         color = NamiColors.Paper40,
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(top = 4.dp),
