@@ -59,6 +59,11 @@ interface LibraryRepository {
     suspend fun incrementPlayCount(id: TrackId)
     suspend fun recordPlayHistory(id: TrackId, playedAt: Long, durationMs: Long)
     suspend fun dailyListeningMinutes(days: Int): List<DayActivity>
+    suspend fun listeningSummary(days: Int): ListeningSummary
+    /** 24 buckets, index = hour of day (device-local), value = minutes listened in that hour
+     * across the whole window -- "По времени суток" (Design mock 4.8). */
+    suspend fun hourOfDayMinutes(days: Int): List<Int>
+    suspend fun topTracks(days: Int, limit: Int): List<TopTrackStat>
     suspend fun setTrackReplayGain(id: TrackId, gainDb: Float)
 
     /** План.md §22.17 "Заметки к треку" -- free-text personal comment, null clears it. */

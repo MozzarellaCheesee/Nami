@@ -98,6 +98,9 @@ class NowPlayingViewModelTest {
         override suspend fun incrementPlayCount(id: dev.nami.core.model.TrackId) {}
         override suspend fun recordPlayHistory(id: dev.nami.core.model.TrackId, playedAt: Long, durationMs: Long) {}
         override suspend fun dailyListeningMinutes(days: Int) = emptyList<dev.nami.domain.DayActivity>()
+            override suspend fun listeningSummary(days: Int) = dev.nami.domain.ListeningSummary(0, 0, 0)
+            override suspend fun hourOfDayMinutes(days: Int) = List(24) { 0 }
+            override suspend fun topTracks(days: Int, limit: Int) = emptyList<dev.nami.domain.TopTrackStat>()
         override suspend fun setTrackReplayGain(id: dev.nami.core.model.TrackId, gainDb: Float) {}
         override suspend fun setTrackNote(id: dev.nami.core.model.TrackId, note: String?) {}
         override suspend fun incrementSkipCount(id: dev.nami.core.model.TrackId) {}

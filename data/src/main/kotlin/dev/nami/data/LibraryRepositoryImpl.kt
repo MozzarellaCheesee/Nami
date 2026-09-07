@@ -261,6 +261,36 @@ class LibraryRepositoryImpl @Inject constructor(
             .map { (epochDay, rows) -> dev.nami.domain.DayActivity(epochDay, (rows.sumOf { it.durationMs } / 60_000).toInt()) }
     }
 
+    // Header numbers on the Статистика screen -- actually-listened, not library totals (see
+    // ListeningSummary's own doc for why).
+    override suspend fun listeningSummary(days: Int): dev.nami.domain.ListeningSummary {
+        val since = System.currentTimeMillis() - days * 24L * 60 * 60 * 1000
+        val rows = playHistoryDao.since(since)
+        val totalMinutes = (rows.sumOf { it.durationMs } / 60_000).toInt()
+        val distinctTrackIds = rows.map { it.trackId }.distinct()
+        val artistIds = distinctTrackIds.mapNotNull { trackDao.findById(it)?.artistId }.distinct()
+        return dev.nami.domain.ListeningSummary(totalMinutes, distinctTrackIds.size, artistIds.size)
+    }
+
+    override suspend fun hourOfDayMinutes(days: Int): List<Int> {
+        val since = System.currentTimeMillis() - days * 24L * 60 * 60 * 1000
+        val buckets = IntArray(24)
+        playHistoryDao.since(since).forEach { row ->
+            val hour = java.time.Instant.ofEpochMilli(row.playedAt).atZone(java.time.ZoneId.systemDefault()).hour
+            buckets[hour] += (row.durationMs / 60_000).toInt()
+        }
+        return buckets.toList()
+    }
+
+    override suspend fun topTracks(days: Int, limit: Int): List<dev.nami.domain.TopTrackStat> {
+        val since = System.currentTimeMillis() - days * 24L * 60 * 60 * 1000
+        val counts = playHistoryDao.since(since).groupingBy { it.trackId }.eachCount()
+        return counts.entries.sortedByDescending { it.value }.take(limit).mapNotNull { (trackId, count) ->
+            val entity = trackDao.findByIdWithArtwork(trackId) ?: return@mapNotNull null
+            dev.nami.domain.TopTrackStat(TrackId(trackId), entity.track.title, entity.artistName, count)
+        }
+    }
+
     override suspend fun setTrackReplayGain(id: TrackId, gainDb: Float) {
         trackDao.updateReplayGain(id.value, gainDb)
     }

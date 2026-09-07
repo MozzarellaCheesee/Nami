@@ -112,7 +112,7 @@ fun VocabularyScreen(
                 }
             }
         }
-        SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
+        dev.nami.core.designsystem.NamiSnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
     }
 
     if (showQuiz) {

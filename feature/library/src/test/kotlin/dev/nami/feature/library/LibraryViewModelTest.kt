@@ -133,6 +133,9 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun incrementPlayCount(id: TrackId) {}
             override suspend fun recordPlayHistory(id: TrackId, playedAt: Long, durationMs: Long) {}
             override suspend fun dailyListeningMinutes(days: Int) = emptyList<dev.nami.domain.DayActivity>()
+            override suspend fun listeningSummary(days: Int) = dev.nami.domain.ListeningSummary(0, 0, 0)
+            override suspend fun hourOfDayMinutes(days: Int) = List(24) { 0 }
+            override suspend fun topTracks(days: Int, limit: Int) = emptyList<dev.nami.domain.TopTrackStat>()
             override suspend fun setTrackReplayGain(id: TrackId, gainDb: Float) {}
             override suspend fun setTrackNote(id: TrackId, note: String?) {}
             override suspend fun incrementSkipCount(id: TrackId) {}
@@ -188,6 +191,9 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun incrementPlayCount(id: TrackId) {}
             override suspend fun recordPlayHistory(id: TrackId, playedAt: Long, durationMs: Long) {}
             override suspend fun dailyListeningMinutes(days: Int) = emptyList<dev.nami.domain.DayActivity>()
+            override suspend fun listeningSummary(days: Int) = dev.nami.domain.ListeningSummary(0, 0, 0)
+            override suspend fun hourOfDayMinutes(days: Int) = List(24) { 0 }
+            override suspend fun topTracks(days: Int, limit: Int) = emptyList<dev.nami.domain.TopTrackStat>()
             override suspend fun setTrackReplayGain(id: TrackId, gainDb: Float) {}
             override suspend fun setTrackNote(id: TrackId, note: String?) {}
             override suspend fun incrementSkipCount(id: TrackId) {}
@@ -245,6 +251,9 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun incrementPlayCount(id: TrackId) {}
             override suspend fun recordPlayHistory(id: TrackId, playedAt: Long, durationMs: Long) {}
             override suspend fun dailyListeningMinutes(days: Int) = emptyList<dev.nami.domain.DayActivity>()
+            override suspend fun listeningSummary(days: Int) = dev.nami.domain.ListeningSummary(0, 0, 0)
+            override suspend fun hourOfDayMinutes(days: Int) = List(24) { 0 }
+            override suspend fun topTracks(days: Int, limit: Int) = emptyList<dev.nami.domain.TopTrackStat>()
             override suspend fun setTrackReplayGain(id: TrackId, gainDb: Float) {}
             override suspend fun setTrackNote(id: TrackId, note: String?) {}
             override suspend fun incrementSkipCount(id: TrackId) {}
@@ -304,6 +313,9 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun incrementPlayCount(id: TrackId) {}
             override suspend fun recordPlayHistory(id: TrackId, playedAt: Long, durationMs: Long) {}
             override suspend fun dailyListeningMinutes(days: Int) = emptyList<dev.nami.domain.DayActivity>()
+            override suspend fun listeningSummary(days: Int) = dev.nami.domain.ListeningSummary(0, 0, 0)
+            override suspend fun hourOfDayMinutes(days: Int) = List(24) { 0 }
+            override suspend fun topTracks(days: Int, limit: Int) = emptyList<dev.nami.domain.TopTrackStat>()
             override suspend fun setTrackReplayGain(id: TrackId, gainDb: Float) {}
             override suspend fun setTrackNote(id: TrackId, note: String?) {}
             override suspend fun incrementSkipCount(id: TrackId) {}
@@ -364,6 +376,9 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun incrementPlayCount(id: TrackId) {}
             override suspend fun recordPlayHistory(id: TrackId, playedAt: Long, durationMs: Long) {}
             override suspend fun dailyListeningMinutes(days: Int) = emptyList<dev.nami.domain.DayActivity>()
+            override suspend fun listeningSummary(days: Int) = dev.nami.domain.ListeningSummary(0, 0, 0)
+            override suspend fun hourOfDayMinutes(days: Int) = List(24) { 0 }
+            override suspend fun topTracks(days: Int, limit: Int) = emptyList<dev.nami.domain.TopTrackStat>()
             override suspend fun setTrackReplayGain(id: TrackId, gainDb: Float) {}
             override suspend fun setTrackNote(id: TrackId, note: String?) {}
             override suspend fun incrementSkipCount(id: TrackId) {}
@@ -419,6 +434,9 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun incrementPlayCount(id: TrackId) {}
             override suspend fun recordPlayHistory(id: TrackId, playedAt: Long, durationMs: Long) {}
             override suspend fun dailyListeningMinutes(days: Int) = emptyList<dev.nami.domain.DayActivity>()
+            override suspend fun listeningSummary(days: Int) = dev.nami.domain.ListeningSummary(0, 0, 0)
+            override suspend fun hourOfDayMinutes(days: Int) = List(24) { 0 }
+            override suspend fun topTracks(days: Int, limit: Int) = emptyList<dev.nami.domain.TopTrackStat>()
             override suspend fun setTrackReplayGain(id: TrackId, gainDb: Float) {}
             override suspend fun setTrackNote(id: TrackId, note: String?) {}
             override suspend fun incrementSkipCount(id: TrackId) {}
@@ -474,6 +492,9 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun incrementPlayCount(id: TrackId) {}
             override suspend fun recordPlayHistory(id: TrackId, playedAt: Long, durationMs: Long) {}
             override suspend fun dailyListeningMinutes(days: Int) = emptyList<dev.nami.domain.DayActivity>()
+            override suspend fun listeningSummary(days: Int) = dev.nami.domain.ListeningSummary(0, 0, 0)
+            override suspend fun hourOfDayMinutes(days: Int) = List(24) { 0 }
+            override suspend fun topTracks(days: Int, limit: Int) = emptyList<dev.nami.domain.TopTrackStat>()
             override suspend fun setTrackReplayGain(id: TrackId, gainDb: Float) {}
             override suspend fun setTrackNote(id: TrackId, note: String?) {}
             override suspend fun incrementSkipCount(id: TrackId) {}
@@ -531,6 +552,9 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun incrementPlayCount(id: TrackId) {}
             override suspend fun recordPlayHistory(id: TrackId, playedAt: Long, durationMs: Long) {}
             override suspend fun dailyListeningMinutes(days: Int) = emptyList<dev.nami.domain.DayActivity>()
+            override suspend fun listeningSummary(days: Int) = dev.nami.domain.ListeningSummary(0, 0, 0)
+            override suspend fun hourOfDayMinutes(days: Int) = List(24) { 0 }
+            override suspend fun topTracks(days: Int, limit: Int) = emptyList<dev.nami.domain.TopTrackStat>()
             override suspend fun setTrackReplayGain(id: TrackId, gainDb: Float) {}
             override suspend fun setTrackNote(id: TrackId, note: String?) {}
             override suspend fun incrementSkipCount(id: TrackId) {}
@@ -588,6 +612,9 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun incrementPlayCount(id: TrackId) {}
             override suspend fun recordPlayHistory(id: TrackId, playedAt: Long, durationMs: Long) {}
             override suspend fun dailyListeningMinutes(days: Int) = emptyList<dev.nami.domain.DayActivity>()
+            override suspend fun listeningSummary(days: Int) = dev.nami.domain.ListeningSummary(0, 0, 0)
+            override suspend fun hourOfDayMinutes(days: Int) = List(24) { 0 }
+            override suspend fun topTracks(days: Int, limit: Int) = emptyList<dev.nami.domain.TopTrackStat>()
             override suspend fun setTrackReplayGain(id: TrackId, gainDb: Float) {}
             override suspend fun setTrackNote(id: TrackId, note: String?) {}
             override suspend fun incrementSkipCount(id: TrackId) {}
@@ -646,6 +673,9 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun incrementPlayCount(id: TrackId) {}
             override suspend fun recordPlayHistory(id: TrackId, playedAt: Long, durationMs: Long) {}
             override suspend fun dailyListeningMinutes(days: Int) = emptyList<dev.nami.domain.DayActivity>()
+            override suspend fun listeningSummary(days: Int) = dev.nami.domain.ListeningSummary(0, 0, 0)
+            override suspend fun hourOfDayMinutes(days: Int) = List(24) { 0 }
+            override suspend fun topTracks(days: Int, limit: Int) = emptyList<dev.nami.domain.TopTrackStat>()
             override suspend fun setTrackReplayGain(id: TrackId, gainDb: Float) {}
             override suspend fun setTrackNote(id: TrackId, note: String?) {}
             override suspend fun incrementSkipCount(id: TrackId) {}

@@ -162,7 +162,7 @@ fun LibraryScreen(
         LibraryTab.ARTISTS -> artistListScrollingDown
     }
 
-    Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
+    Scaffold(snackbarHost = { dev.nami.core.designsystem.NamiSnackbarHost(snackbarHostState) }) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding).background(NamiColors.Ink900)) {
             Column {
                 if (selectionMode) {
@@ -505,7 +505,11 @@ private fun TrackListContent(
     nowPlaying: NowPlayingRow?,
 ) {
     if (tracks.itemCount == 0) {
-        EmptyLibraryMessage()
+        if (tracks.loadState.refresh is androidx.paging.LoadState.Loading) {
+            LibrarySkeleton()
+        } else {
+            EmptyLibraryMessage()
+        }
         return
     }
 

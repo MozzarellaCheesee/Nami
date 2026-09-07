@@ -70,7 +70,7 @@ fun PlaylistsScreen(
 
     Scaffold(
         containerColor = NamiColors.Ink900,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = { dev.nami.core.designsystem.NamiSnackbarHost(snackbarHostState) },
     ) { padding ->
     Column(modifier = Modifier.fillMaxSize().padding(padding).background(NamiColors.Ink900)) {
         Text(
