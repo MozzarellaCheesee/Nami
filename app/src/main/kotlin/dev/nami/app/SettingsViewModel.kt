@@ -12,8 +12,18 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
 
     val autoOpenPlayer: StateFlow<Boolean> = appSettingsRepository.autoOpenPlayer
+    val hideSystemBars: StateFlow<Boolean> = appSettingsRepository.hideSystemBars
+    val karaokeEnabled: StateFlow<Boolean> = appSettingsRepository.karaokeEnabled
 
     fun setAutoOpenPlayer(value: Boolean) {
         appSettingsRepository.setAutoOpenPlayer(value)
+    }
+
+    fun setHideSystemBars(value: Boolean) {
+        appSettingsRepository.setHideSystemBars(value)
+    }
+
+    fun setKaraokeEnabled(value: Boolean) {
+        appSettingsRepository.setKaraokeEnabled(value)
     }
 }

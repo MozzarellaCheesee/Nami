@@ -87,7 +87,11 @@ private const val GAP_MS = 5000L
 // for any line whose actual sung duration didn't match the guess, cutting the highlight before
 // the line was finished. Scaling with the gap's own size adapts to lines of very different length
 // without needing per-line duration data.
-private const val GAP_FRACTION_BEFORE_SILENT = 0.7f
+private const val GAP_FRACTION_BEFORE_SILENT = 0.85f
+// Extra grace period after a line's own last known word ends (real word timings only) before
+// calling it silence -- singing that trails slightly past the last detected word shouldn't
+// instantly dim the line and pop the note icon in.
+private const val WORD_TIMING_GAP_GRACE_MS = 2000L
 
 /** Three of План.md's four "18. Экран лирики" modes (furigana, romaji triplet, karaoke word
  * highlight) and its dictionary/Anki/LRCLIB pieces aren't here -- this is the load-bearing first
@@ -256,6 +260,7 @@ fun LyricsScreen(
                     showFurigana = uiState.showFurigana,
                     romaji = uiState.romaji.takeIf { uiState.showRomaji },
                     wordTimings = uiState.wordTimings,
+                    karaokeEnabled = uiState.karaokeEnabled,
                     positionMs = smoothPositionMs,
                     onLineClick = { viewModel.seekTo(it) },
                     tokenizeLine = { viewModel.tokenizeLine(it) },
@@ -481,6 +486,7 @@ private fun SyncedLyricsList(
     showFurigana: Boolean,
     romaji: List<String>?,
     wordTimings: List<List<dev.nami.core.model.WordTiming>>?,
+    karaokeEnabled: Boolean,
     positionMs: Long,
     onLineClick: (Long) -> Unit,
     tokenizeLine: suspend (String) -> List<dev.nami.core.model.WordToken>,
@@ -514,7 +520,7 @@ private fun SyncedLyricsList(
     val inGap = currentLine != null && nextLine != null &&
         (nextLine.timeMs - currentLine.timeMs) > GAP_MS &&
         if (!currentLineWords.isNullOrEmpty()) {
-            positionMs > currentLineWords.last().endMs
+            positionMs > currentLineWords.last().endMs + WORD_TIMING_GAP_GRACE_MS
         } else {
             positionMs > currentLine.timeMs + ((nextLine.timeMs - currentLine.timeMs) * GAP_FRACTION_BEFORE_SILENT).toLong()
         }
@@ -612,7 +618,7 @@ private fun SyncedLyricsList(
                         showFurigana = showFurigana,
                         color = NamiColors.Paper100.copy(alpha = alpha),
                         sungColor = NamiColors.Shu.copy(alpha = alpha),
-                        karaokeProgress = if (isCurrent) karaokeProgress else null,
+                        karaokeProgress = if (isCurrent && karaokeEnabled) karaokeProgress else null,
                         fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
                         tokenizeLine = tokenizeLine,
                         // Off: words aren't individually clickable at all, so the line's own

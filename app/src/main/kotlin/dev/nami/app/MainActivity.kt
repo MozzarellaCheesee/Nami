@@ -9,19 +9,27 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
 import dev.nami.app.navigation.NamiNavHost
 import dev.nami.core.designsystem.NamiTheme
+import dev.nami.data.AppSettingsRepository
 import dev.nami.feature.library.LibraryViewModel
 import dev.nami.player.EXTRA_OPEN_PLAYER
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject lateinit var appSettingsRepository: AppSettingsRepository
 
     private val libraryViewModel: LibraryViewModel by viewModels()
     private val playlistActionsViewModel: PlaylistActionsViewModel by viewModels()
@@ -89,6 +97,16 @@ class MainActivity : ComponentActivity() {
             .map { it.importProgress }
             .stateIn(lifecycleScope, SharingStarted.Eagerly, libraryViewModel.uiState.value.importProgress)
         setContent {
+            val hideSystemBars by appSettingsRepository.hideSystemBars.collectAsState()
+            LaunchedEffect(hideSystemBars) {
+                val controller = WindowInsetsControllerCompat(window, window.decorView)
+                if (hideSystemBars) {
+                    controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                } else {
+                    controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                }
+            }
             NamiTheme {
                 NamiNavHost(
                     onImportRequested = { pickFiles.launch(arrayOf("audio/*")) },

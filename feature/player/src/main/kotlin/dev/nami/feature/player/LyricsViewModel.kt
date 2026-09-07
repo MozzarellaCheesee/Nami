@@ -14,6 +14,7 @@ import dev.nami.domain.LibraryRepository
 import dev.nami.domain.LyricsRepository
 import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerRepository
+import dev.nami.domain.SettingsRepository
 import dev.nami.domain.VocabularyRepository
 import dev.nami.domain.WhisperAligner
 import dev.nami.domain.WordTimingMatcher
@@ -53,6 +54,7 @@ data class LyricsUiState(
     val preciseSyncSupported: Boolean = false,
     val isPreciseSyncing: Boolean = false,
     val preciseSyncProgress: Float = 0f,
+    val karaokeEnabled: Boolean = false,
 )
 
 @HiltViewModel
@@ -63,6 +65,7 @@ class LyricsViewModel @Inject constructor(
     private val dictionaryRepository: DictionaryRepository,
     private val vocabularyRepository: VocabularyRepository,
     private val whisperAligner: WhisperAligner,
+    private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
     private data class TrackAndLyrics(
@@ -120,6 +123,7 @@ class LyricsViewModel @Inject constructor(
     val uiState: StateFlow<LyricsUiState> = combine(
         trackAndLyrics, _positionMs, _isFetchingOnline, _showTranslation, _isTranslating,
         _showFurigana, _showRomaji, _isGeneratingRomaji, _wordLookup, _isPreciseSyncing, _preciseSyncProgress,
+        settingsRepository.karaokeEnabled,
     ) { values ->
         val tl = values[0] as TrackAndLyrics?
         val pos = values[1] as Long
@@ -133,6 +137,7 @@ class LyricsViewModel @Inject constructor(
         val wordLookup = values[8] as WordLookup?
         val preciseSyncing = values[9] as Boolean
         val preciseSyncProgress = values[10] as Float
+        val karaokeEnabled = values[11] as Boolean
         LyricsUiState(
             trackId = tl?.trackId,
             trackPath = tl?.path,
@@ -148,10 +153,11 @@ class LyricsViewModel @Inject constructor(
             showRomaji = showRomaji,
             isGeneratingRomaji = generatingRomaji,
             wordLookup = wordLookup,
-            wordTimings = tl?.wordTimings,
-            preciseSyncSupported = whisperAligner.isSupported(),
+            wordTimings = tl?.wordTimings.takeIf { karaokeEnabled },
+            preciseSyncSupported = whisperAligner.isSupported() && karaokeEnabled,
             isPreciseSyncing = preciseSyncing,
             preciseSyncProgress = preciseSyncProgress,
+            karaokeEnabled = karaokeEnabled,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LyricsUiState())
 

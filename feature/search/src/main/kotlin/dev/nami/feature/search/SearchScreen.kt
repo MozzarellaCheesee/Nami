@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
@@ -37,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +48,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -73,6 +77,19 @@ fun SearchScreen(
     val uiState by viewModel.uiState.collectAsState()
     var addToPlaylistTrackId by remember { mutableStateOf<TrackId?>(null) }
     var expandedSection by remember { mutableStateOf<SearchSection?>(null) }
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    fun unfocusSearchField() {
+        focusManager.clearFocus()
+        keyboardController?.hide()
+    }
+    val resultsListState = rememberLazyListState()
+    // Defocusing (and hiding the keyboard) as soon as the list starts scrolling, same as most
+    // search screens -- tapping a result also defocuses (each result's onClick below), but a
+    // scroll with no tap needs its own trigger.
+    LaunchedEffect(resultsListState.isScrollInProgress) {
+        if (resultsListState.isScrollInProgress) unfocusSearchField()
+    }
 
     val tracks = uiState.results.filterIsInstance<SearchResult.TrackResult>()
     val albums = uiState.results.filterIsInstance<SearchResult.AlbumResult>()
@@ -126,7 +143,7 @@ fun SearchScreen(
                 Text(text = "Ничего не нашлось", color = NamiColors.Paper40)
             }
         } else {
-            LazyColumn {
+            LazyColumn(state = resultsListState) {
                 if (tracks.isNotEmpty()) {
                     item {
                         SectionHeader(
@@ -137,7 +154,7 @@ fun SearchScreen(
                     items(tracks.take(TRACKS_PREVIEW), key = { "track-${it.id.value}" }) { track ->
                         TrackResultRow(
                             track = track,
-                            onClick = { onTrackClick(track.id) },
+                            onClick = { unfocusSearchField(); onTrackClick(track.id) },
                             onAddToPlaylist = { addToPlaylistTrackId = track.id },
                         )
                     }
@@ -155,7 +172,7 @@ fun SearchScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
                             items(albums.take(ALBUMS_PREVIEW), key = { "album-${it.id.value}" }) { album ->
-                                AlbumResultCard(album = album, onClick = { onAlbumClick(album.id) })
+                                AlbumResultCard(album = album, onClick = { unfocusSearchField(); onAlbumClick(album.id) })
                             }
                         }
                     }
@@ -168,7 +185,7 @@ fun SearchScreen(
                         )
                     }
                     items(artists.take(ARTISTS_PREVIEW), key = { "artist-${it.id.value}" }) { artist ->
-                        ArtistResultRow(artist = artist, onClick = { onArtistClick(artist.id) })
+                        ArtistResultRow(artist = artist, onClick = { unfocusSearchField(); onArtistClick(artist.id) })
                     }
                 }
                 item { Spacer(Modifier.height(24.dp)) }

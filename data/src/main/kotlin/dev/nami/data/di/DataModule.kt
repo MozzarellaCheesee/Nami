@@ -7,6 +7,7 @@ import dagger.hilt.components.SingletonComponent
 import dev.nami.data.DictionaryRepositoryImpl
 import dev.nami.data.LibraryRepositoryImpl
 import dev.nami.data.LyricsRepositoryImpl
+import dev.nami.data.AppSettingsRepository
 import dev.nami.data.PlaylistRepositoryImpl
 import dev.nami.data.TrashRepositoryImpl
 import dev.nami.data.VocabularyRepositoryImpl
@@ -16,6 +17,7 @@ import dev.nami.domain.LibraryRepository
 import dev.nami.domain.LyricsRepository
 import dev.nami.domain.PlaylistRepository
 import dev.nami.domain.SearchRepository
+import dev.nami.domain.SettingsRepository
 import dev.nami.domain.TrashRepository
 import dev.nami.domain.VocabularyRepository
 import javax.inject.Singleton
@@ -50,4 +52,8 @@ abstract class DataModule {
     @Binds
     @Singleton
     abstract fun bindVocabularyRepository(impl: VocabularyRepositoryImpl): VocabularyRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSettingsRepository(impl: AppSettingsRepository): SettingsRepository
 }

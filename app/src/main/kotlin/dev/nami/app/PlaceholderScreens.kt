@@ -20,6 +20,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Fullscreen
+import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.PlayCircleOutline
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -46,6 +48,8 @@ import dev.nami.core.designsystem.NamiColors
 @Composable
 fun SettingsScreen(onTrashClick: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
     val autoOpenPlayer by viewModel.autoOpenPlayer.collectAsState()
+    val hideSystemBars by viewModel.hideSystemBars.collectAsState()
+    val karaokeEnabled by viewModel.karaokeEnabled.collectAsState()
     val context = LocalContext.current
     var selectedIcon by remember { mutableStateOf(IconPicker.current(context)) }
 
@@ -83,19 +87,20 @@ fun SettingsScreen(onTrashClick: () -> Unit, viewModel: SettingsViewModel = hilt
             SettingsRow(
                 icon = Icons.Outlined.PlayCircleOutline,
                 title = "Открывать плеер при выборе трека",
-                trailing = {
-                    Switch(
-                        checked = autoOpenPlayer,
-                        onCheckedChange = viewModel::setAutoOpenPlayer,
-                        colors = SwitchDefaults.colors(
-                            checkedTrackColor = NamiColors.Shu,
-                            checkedThumbColor = NamiColors.Paper100,
-                            uncheckedTrackColor = NamiColors.Ink600,
-                            uncheckedThumbColor = NamiColors.Paper70,
-                        ),
-                    )
-                },
+                trailing = { NamiSwitch(checked = autoOpenPlayer, onCheckedChange = viewModel::setAutoOpenPlayer) },
                 onClick = { viewModel.setAutoOpenPlayer(!autoOpenPlayer) },
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Fullscreen,
+                title = "Скрывать элементы управления телефона",
+                trailing = { NamiSwitch(checked = hideSystemBars, onCheckedChange = viewModel::setHideSystemBars) },
+                onClick = { viewModel.setHideSystemBars(!hideSystemBars) },
+            )
+            SettingsRow(
+                icon = Icons.Outlined.GraphicEq,
+                title = "Караоке-подсветка слов (Beta)",
+                trailing = { NamiSwitch(checked = karaokeEnabled, onCheckedChange = viewModel::setKaraokeEnabled) },
+                onClick = { viewModel.setKaraokeEnabled(!karaokeEnabled) },
             )
         }
 
@@ -129,6 +134,20 @@ private fun SettingsCard(modifier: Modifier = Modifier, content: @Composable Col
             .background(NamiColors.Ink800, RoundedCornerShape(16.dp))
             .padding(4.dp),
         content = content,
+    )
+}
+
+@Composable
+private fun NamiSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Switch(
+        checked = checked,
+        onCheckedChange = onCheckedChange,
+        colors = SwitchDefaults.colors(
+            checkedTrackColor = NamiColors.Shu,
+            checkedThumbColor = NamiColors.Paper100,
+            uncheckedTrackColor = NamiColors.Ink600,
+            uncheckedThumbColor = NamiColors.Paper70,
+        ),
     )
 }
 
