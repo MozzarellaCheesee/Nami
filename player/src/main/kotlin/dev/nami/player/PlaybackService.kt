@@ -69,11 +69,25 @@ class PlaybackService : MediaSessionService() {
             .setUsage(C.USAGE_MEDIA)
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
             .build()
-        // Custom RenderersFactory always used (not gated behind any setting being on already) --
-        // every processor defaults to enabled=false/isActive()==false, so with everything off
-        // this is a no-op passthrough identical to the plain path. Building it unconditionally is
-        // what makes every toggle below take effect immediately instead of needing a cold start.
-        player = ExoPlayer.Builder(this, NamiRenderersFactory(this, replayGainProcessor, eqProcessor, ditherProcessor))
+        // Reverted from "always build the custom sink" -- on real hardware, forcing
+        // setEnableFloatOutput(true) unconditionally (inside NamiRenderersFactory) made every
+        // track play back sped-up and pitched-up, a known class of Media3/vendor-HAL bug with
+        // float PCM output on some devices. Confirmed the instant it went live for 100% of
+        // playback (not just the Beta effects users). Correctness beats convenience here: back to
+        // only using the custom sink when the user has actually turned an effect on before this
+        // cold start -- means EQ/ReplayGain/dither still need one app restart to engage for the
+        // very first time, but ordinary playback (the vast majority of sessions) stays on the
+        // exact plain, proven path.
+        val needsCustomSink = settingsRepository.eqEnabled.value ||
+            settingsRepository.replayGainEnabled.value ||
+            settingsRepository.ditherEnabled.value ||
+            settingsRepository.playbackGainDb.value != 0f
+        val playerBuilder = if (needsCustomSink) {
+            ExoPlayer.Builder(this, NamiRenderersFactory(this, replayGainProcessor, eqProcessor, ditherProcessor))
+        } else {
+            ExoPlayer.Builder(this)
+        }
+        player = playerBuilder
             .setLoadControl(loadControl)
             .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ true)
             .build()
