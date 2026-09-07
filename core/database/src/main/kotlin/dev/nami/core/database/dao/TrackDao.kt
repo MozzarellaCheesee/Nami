@@ -149,6 +149,12 @@ interface TrackDao {
     @Query("UPDATE tracks SET note = :note WHERE id = :id")
     suspend fun updateNote(id: String, note: String?)
 
+    @Query("UPDATE tracks SET skipCount = skipCount + 1 WHERE id = :id")
+    suspend fun incrementSkipCount(id: String)
+
+    @Query("UPDATE tracks SET bpm = :bpm, musicalKey = :musicalKey WHERE id = :id")
+    suspend fun updateBpmKey(id: String, bpm: Float?, musicalKey: String?)
+
     // Unconditional -- unlike setArtworkPath (import's "only if null" writer), this is for the
     // user explicitly replacing a track's own (albumless) cover.
     @Query("UPDATE tracks SET artworkPath = :path WHERE id = :id")

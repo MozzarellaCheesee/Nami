@@ -25,4 +25,7 @@ data class Track(
     val channels: Int? = null,
     val replayGainDb: Float? = null,
     val note: String? = null,
+    val skipCount: Int = 0,
+    val bpm: Float? = null,
+    val musicalKey: String? = null,
 )

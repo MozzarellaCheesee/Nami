@@ -200,6 +200,21 @@ val MIGRATION_17_18 = object : Migration(17, 18) {
     }
 }
 
+/** Этап 6's "правила автоочереди" (План.md §22.13) -- tracks how often a track gets skipped. */
+val MIGRATION_18_19 = object : Migration(18, 19) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE tracks ADD COLUMN skipCount INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
+/** BPM/тональность (План.md §3) -- BpmKeyAnalyzer's cached result per track. */
+val MIGRATION_19_20 = object : Migration(19, 20) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE tracks ADD COLUMN bpm REAL")
+        db.execSQL("ALTER TABLE tracks ADD COLUMN musicalKey TEXT")
+    }
+}
+
 val MIGRATION_14_15 = object : Migration(14, 15) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL(

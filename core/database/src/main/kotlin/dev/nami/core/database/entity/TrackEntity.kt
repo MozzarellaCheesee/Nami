@@ -57,4 +57,12 @@ data class TrackEntity(
     /** "Заметки к треку" (План.md §22.17) -- free-text personal comment, null until the user
      * writes one. */
     val note: String? = null,
+    /** План.md §22.13 "правила автоочереди" ("избегать треков, скипнутых 3+ раз") -- incremented
+     * when the user skips away from this track before it's played substantially (see
+     * PlayerRepositoryImpl.skipNext), not on every skipNext call regardless of position. */
+    val skipCount: Int = 0,
+    /** BPM/key (План.md §3's Track.bpm/musicalKey) -- scanned once via BpmKeyAnalyzer, cached
+     * here like replayGainDb. Null until scanned or on a decode/analysis failure. */
+    val bpm: Float? = null,
+    val musicalKey: String? = null,
 )

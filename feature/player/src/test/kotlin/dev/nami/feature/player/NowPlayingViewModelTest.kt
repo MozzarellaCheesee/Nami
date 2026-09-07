@@ -95,12 +95,15 @@ class NowPlayingViewModelTest {
         override suspend fun incrementPlayCount(id: dev.nami.core.model.TrackId) {}
         override suspend fun setTrackReplayGain(id: dev.nami.core.model.TrackId, gainDb: Float) {}
         override suspend fun setTrackNote(id: dev.nami.core.model.TrackId, note: String?) {}
+        override suspend fun incrementSkipCount(id: dev.nami.core.model.TrackId) {}
+        override suspend fun setTrackBpmKey(id: dev.nami.core.model.TrackId, bpm: Float?, musicalKey: String?) {}
         override suspend fun import(source: ImportSource): Flow<dev.nami.domain.ImportProgress> = throw NotImplementedError()
         override suspend fun deleteTrack(id: TrackId) = throw NotImplementedError()
         override suspend fun deleteTracks(ids: List<TrackId>) {}
         override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
         override suspend fun setTrackCover(id: TrackId, imageUri: String) = error("unused")
         override suspend fun createAlbum(title: String, artistId: ArtistId?): AlbumId = error("unused")
+        override suspend fun deleteAlbum(id: AlbumId) = error("unused")
         override suspend fun renameAlbum(id: dev.nami.core.model.AlbumId, title: String) = error("unused")
         override suspend fun setAlbumCover(id: dev.nami.core.model.AlbumId, imageUri: String) = error("unused")
         override suspend fun setAlbumIsSingle(id: dev.nami.core.model.AlbumId, isSingle: Boolean) = error("unused")

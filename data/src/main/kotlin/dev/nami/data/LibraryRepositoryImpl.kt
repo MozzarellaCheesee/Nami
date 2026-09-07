@@ -212,6 +212,14 @@ class LibraryRepositoryImpl @Inject constructor(
         trackDao.updateNote(id.value, note?.takeIf { it.isNotBlank() })
     }
 
+    override suspend fun incrementSkipCount(id: TrackId) {
+        trackDao.incrementSkipCount(id.value)
+    }
+
+    override suspend fun setTrackBpmKey(id: TrackId, bpm: Float?, musicalKey: String?) {
+        trackDao.updateBpmKey(id.value, bpm, musicalKey)
+    }
+
     override suspend fun deleteTrack(id: TrackId) {
         val track = trackDao.findById(id.value) ?: return
         val trashedPath = trashFileStore.moveToTrash(id.value, track.path) ?: track.path

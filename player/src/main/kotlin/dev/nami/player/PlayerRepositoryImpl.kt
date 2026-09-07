@@ -266,7 +266,18 @@ class PlayerRepositoryImpl @Inject constructor(
     }
 
     override suspend fun skipNext() {
-        controller?.seekToNext()
+        // "Избегать треков, скипнутых 3+ раз" (План.md §22.13) -- only counts as a skip when the
+        // user moves on well before the track would've ended naturally; skipping in the last few
+        // percent is just "the track is basically over", not "I don't want to hear this".
+        controller?.let { player ->
+            val mediaId = player.currentMediaItem?.mediaId
+            val duration = player.duration
+            val position = player.currentPosition
+            if (mediaId != null && duration > 0 && position < duration * 0.9) {
+                scope.launch { libraryRepository.incrementSkipCount(TrackId(mediaId)) }
+            }
+            player.seekToNext()
+        }
     }
 
     override suspend fun skipPrevious() {
@@ -372,10 +383,11 @@ class PlayerRepositoryImpl @Inject constructor(
             val snapshot = (0 until player.mediaItemCount).mapTo(mutableListOf()) { player.getMediaItemAt(it) }
             preShuffleOrder = snapshot
             val restItems = snapshot.filterNot { it.mediaId == currentItem.mediaId }
-            val rest = when (settingsRepository.shuffleMode.value) {
+            val shuffled = when (settingsRepository.shuffleMode.value) {
                 ShuffleMode.TRUE_RANDOM -> restItems.shuffled()
                 ShuffleMode.WEIGHTED_BY_STALENESS -> weightedByStaleness(restItems)
             }
+            val rest = applyAutoQueueRulesToMediaItems(shuffled)
             reorderTo(player, listOf(currentItem) + rest)
         } else {
             val original = preShuffleOrder ?: return
@@ -391,6 +403,20 @@ class PlayerRepositoryImpl @Inject constructor(
      * track that hasn't played in ~30 days, so new imports surface early without dominating
      * every shuffle forever). Falls back to a flat weight (behaves like plain random) for any
      * track this couldn't look up. */
+    /** Runs the already-shuffled order through QueueBuilder's applyAutoQueueRules -- needs the
+     * real Track per item (artistId/albumId/bpm/skipCount live there, not on MediaItem), then maps
+     * the rule-adjusted Track order back to MediaItems by id. Falls back to the untouched order
+     * for any item whose Track couldn't be looked up, rather than dropping it from the queue. */
+    private suspend fun applyAutoQueueRulesToMediaItems(items: List<MediaItem>): List<MediaItem> {
+        if (items.size < 2) return items
+        val tracksById = items.associate { it.mediaId to libraryRepository.track(TrackId(it.mediaId)).first() }
+        val knownTracks = items.mapNotNull { tracksById[it.mediaId] }
+        if (knownTracks.size != items.size) return items
+        val reordered = applyAutoQueueRules(knownTracks)
+        val itemsById = items.associateBy { it.mediaId }
+        return reordered.mapNotNull { itemsById[it.id.value] }
+    }
+
     private suspend fun weightedByStaleness(items: List<MediaItem>): List<MediaItem> {
         val now = System.currentTimeMillis()
         val thirtyDaysMs = 30L * 24 * 60 * 60 * 1000

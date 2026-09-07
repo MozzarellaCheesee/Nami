@@ -95,6 +95,7 @@ class PlaybackService : MediaSessionService() {
             val trackId = mediaItem?.mediaId?.let(::TrackId) ?: return
             scope.launch { updateReplayGainForCurrentTrack(trackId) }
             scope.launch { updateEndingFadeForCurrentTrack(trackId) }
+            scope.launch { scanBpmKeyIfMissing(trackId) }
         }
     }
 
@@ -407,6 +408,22 @@ class PlaybackService : MediaSessionService() {
         if (endingFadeCache.size >= 30) endingFadeCache.remove(endingFadeCache.keys.first())
         endingFadeCache[trackId.value] = naturalFade
         currentEndsWithNaturalFade = naturalFade
+    }
+
+    /** BPM/key (План.md §3), cached on the track once scanned -- never re-scanned. Runs
+     * unconditionally on every play (not gated behind a setting like the other two scans) since
+     * QueueBuilder's autoQueue rules (План.md §22.13) need it available for any track without a
+     * separate "did you enable this" toggle -- it's cheap to skip once cached, same file already
+     * gets fully decoded once for ReplayGain regardless. */
+    private suspend fun scanBpmKeyIfMissing(trackId: TrackId) {
+        val track = libraryRepository.track(trackId).first() ?: return
+        if (track.bpm != null || track.musicalKey != null) return
+        val result = kotlinx.coroutines.withContext(Dispatchers.Default) {
+            dev.nami.player.analysis.BpmKeyAnalyzer.scan(track.path)
+        }
+        if (result.bpm != null || result.musicalKey != null) {
+            libraryRepository.setTrackBpmKey(trackId, result.bpm, result.musicalKey)
+        }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession =

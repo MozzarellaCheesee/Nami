@@ -58,6 +58,12 @@ interface LibraryRepository {
 
     /** План.md §22.17 "Заметки к треку" -- free-text personal comment, null clears it. */
     suspend fun setTrackNote(id: TrackId, note: String?)
+
+    /** См. TrackEntity.skipCount -- "правила автоочереди" (План.md §22.13). */
+    suspend fun incrementSkipCount(id: TrackId)
+
+    /** См. BpmKeyAnalyzer -- caches its result on the track. */
+    suspend fun setTrackBpmKey(id: TrackId, bpm: Float?, musicalKey: String?)
     fun albumsByArtist(id: ArtistId): Flow<List<AlbumSummary>>
     suspend fun import(source: ImportSource): Flow<ImportProgress>
     suspend fun deleteTrack(id: TrackId)
