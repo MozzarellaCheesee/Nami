@@ -38,6 +38,9 @@ class PlayerRepositoryImpl @Inject constructor(
     private val _queue = MutableStateFlow(PlayerQueue.EMPTY)
     override val queue: StateFlow<PlayerQueue> = _queue
 
+    private val _autoAdvanceSignal = MutableStateFlow(0)
+    override val autoAdvanceSignal: StateFlow<Int> = _autoAdvanceSignal
+
     private var controller: MediaController? = null
     // Known limitation: keyed by mediaId, not by queue position — if the same track
     // appears twice in the queue (e.g. added manually while already present from
@@ -71,6 +74,12 @@ class PlayerRepositoryImpl @Inject constructor(
                         override fun onEvents(player: Player, events: Player.Events) {
                             publishState(player)
                             publishQueue(player)
+                        }
+
+                        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                                _autoAdvanceSignal.value++
+                            }
                         }
                     },
                 )

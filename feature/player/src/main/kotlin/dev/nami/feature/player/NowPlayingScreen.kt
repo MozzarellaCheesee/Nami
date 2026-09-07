@@ -204,7 +204,10 @@ fun NowPlayingScreen(
         // and keeps neighbor pages composed via beyondViewportPageCount so their artwork is
         // already loading well before a swipe reaches them.
         val pagerState = rememberPagerState(initialPage = 1) { 3 }
-        LaunchedEffectSettlePage(pagerState, queue.previousTrack != null, queue.upcoming.isNotEmpty(), viewModel)
+        val autoAdvanceSignal by viewModel.autoAdvanceSignal.collectAsState()
+        val suppressSkip = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+        LaunchedEffectSettlePage(pagerState, queue.previousTrack != null, queue.upcoming.isNotEmpty(), viewModel, suppressSkip = { suppressSkip.value })
+        LaunchedEffectAutoAdvance(pagerState, autoAdvanceSignal, queue.previousTrack != null, suppressSkip)
 
         // Peek: pages are narrower than the pager itself (contentPadding), so the previous/next
         // cover's edge shows at rest, not just once you start dragging. The pager's own height is
@@ -332,7 +335,7 @@ fun NowPlayingScreen(
                     // actual previous track). Nothing to show -> fall back to the button's own
                     // restart-if-elapsed semantics with no animation (nothing to slide to).
                     if (queue.previousTrack != null) {
-                        scope.launch { pagerState.animateScrollToPage(0) }
+                        scope.launch { pagerState.animateScrollToPage(0, animationSpec = TRACK_SLIDE_SPEC) }
                     } else {
                         viewModel.skipPrevious()
                     }
@@ -351,7 +354,7 @@ fun NowPlayingScreen(
                 contentDescription = "Следующий",
                 onClick = {
                     if (queue.upcoming.isNotEmpty()) {
-                        scope.launch { pagerState.animateScrollToPage(2) }
+                        scope.launch { pagerState.animateScrollToPage(2, animationSpec = TRACK_SLIDE_SPEC) }
                     } else {
                         viewModel.skipNext()
                     }
@@ -460,30 +463,68 @@ private fun TransportBlock(
     }
 }
 
+// A slower, explicitly-eased spec for every programmatic page transition (skip buttons, the
+// auto-advance replay below) -- the default animateScrollToPage spec reads as an abrupt snap at
+// this page size, distinct from the naturally-smooth motion a real finger drag already gets from
+// the pager's own fling physics.
+internal val TRACK_SLIDE_SPEC = tween<Float>(durationMillis = 420, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+
 // Fires the actual track change once the pager settles on the previous/next page (0/2), then
 // snaps it back to the center page (1) with no animation -- page 1 now shows the NEW current
 // track, so nothing visibly moves. Landing on 0/2 with nothing to show there (start/end of
-// queue) just snaps back without skipping.
+// queue) just snaps back without skipping. suppressSkip is true while
+// LaunchedEffectAutoAdvance below is doing its own page-0-to-1 replay for a track that ALREADY
+// changed on its own -- that replay's own scrollToPage(0) would otherwise be misread as a manual
+// swipe-to-previous and trigger a real (wrong, double) skip.
 @Composable
 internal fun LaunchedEffectSettlePage(
     pagerState: PagerState,
     hasPrevious: Boolean,
     hasNext: Boolean,
     viewModel: NowPlayingViewModel,
+    suppressSkip: () -> Boolean = { false },
 ) {
     androidx.compose.runtime.LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.settledPage }.collect { page ->
             when (page) {
                 0 -> {
-                    if (hasPrevious) viewModel.skipToPreviousTrack()
+                    if (hasPrevious && !suppressSkip()) viewModel.skipToPreviousTrack()
                     pagerState.scrollToPage(1)
                 }
                 2 -> {
-                    if (hasNext) viewModel.skipNext()
+                    if (hasNext && !suppressSkip()) viewModel.skipNext()
                     pagerState.scrollToPage(1)
                 }
             }
         }
+    }
+}
+
+/** Replays the same slide the pager plays for a manual swipe/skip, but for a track that just
+ * ended and auto-advanced on its own -- otherwise the cover just silently jumps to the next
+ * track with no motion at all. By the time this fires, queue.previousTrack/nowPlaying already
+ * hold the right data for the "just finished" and "now playing" tracks (the transition already
+ * happened for real) -- page 0 already shows exactly what page 1 used to show, so jumping there
+ * instantly and animating back to 1 IS the transition, no second real skip involved. */
+@Composable
+internal fun LaunchedEffectAutoAdvance(
+    pagerState: PagerState,
+    autoAdvanceSignal: Int,
+    hasPrevious: Boolean,
+    suppressSkip: androidx.compose.runtime.MutableState<Boolean>,
+) {
+    var seenInitial by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(autoAdvanceSignal) {
+        if (!seenInitial) {
+            // Skip the value this StateFlow starts with -- only react to it actually changing.
+            seenInitial = true
+            return@LaunchedEffect
+        }
+        if (!hasPrevious) return@LaunchedEffect
+        suppressSkip.value = true
+        pagerState.scrollToPage(0)
+        pagerState.animateScrollToPage(1, animationSpec = TRACK_SLIDE_SPEC)
+        suppressSkip.value = false
     }
 }
 

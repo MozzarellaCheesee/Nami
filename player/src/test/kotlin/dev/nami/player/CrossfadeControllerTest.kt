@@ -18,14 +18,17 @@ class CrossfadeControllerTest {
     @Test
     fun `just after track start ramps up from zero`() {
         assertEquals(0f, CrossfadeController.volumeFor(positionMs = 0, durationMs = 180_000))
-        assertEquals(0.5f, CrossfadeController.volumeFor(positionMs = CrossfadeController.FADE_MS / 2, durationMs = 180_000))
+        // Equal-power curve: sin(0.5 * pi/2) ~= 0.707, not the 0.5 a linear ramp would give.
+        val mid = CrossfadeController.volumeFor(positionMs = CrossfadeController.FADE_MS / 2, durationMs = 180_000)
+        assert(mid in 0.7f..0.71f) { "expected ~0.707, got $mid" }
     }
 
     @Test
     fun `just before track end ramps down to zero`() {
         val duration = 180_000L
         assertEquals(0f, CrossfadeController.volumeFor(positionMs = duration, durationMs = duration))
-        assertEquals(0.5f, CrossfadeController.volumeFor(positionMs = duration - CrossfadeController.FADE_MS / 2, durationMs = duration))
+        val mid = CrossfadeController.volumeFor(positionMs = duration - CrossfadeController.FADE_MS / 2, durationMs = duration)
+        assert(mid in 0.7f..0.71f) { "expected ~0.707, got $mid" }
     }
 
     @Test

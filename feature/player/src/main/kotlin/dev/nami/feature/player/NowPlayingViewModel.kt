@@ -29,6 +29,7 @@ class NowPlayingViewModel @Inject constructor(
 
     val playbackState: StateFlow<PlaybackState> = playerRepository.state
     val queue: StateFlow<PlayerQueue> = playerRepository.queue
+    val autoAdvanceSignal: StateFlow<Int> = playerRepository.autoAdvanceSignal
 
     /** Full Track for the "Аудиотракт"-style file details (bitrate/size/etc.) shown near the
      * format badge -- QueueTrack only carries what the mini/full player needs for display, not

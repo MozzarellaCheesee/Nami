@@ -43,6 +43,7 @@ class NowPlayingViewModelTest {
     private class RecordingPlayerRepository : PlayerRepository {
         override val state: StateFlow<PlaybackState> = MutableStateFlow(PlaybackState.Idle)
         override val queue: StateFlow<PlayerQueue> = MutableStateFlow(PlayerQueue.EMPTY)
+            override val autoAdvanceSignal: StateFlow<Int> = MutableStateFlow(0)
         var playedTracks: List<PlayableTrack>? = null
         var addedTrack: PlayableTrack? = null
         var movedFromTo: Pair<Int, Int>? = null

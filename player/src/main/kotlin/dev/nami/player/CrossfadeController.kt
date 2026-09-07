@@ -6,6 +6,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.math.sin
+import kotlin.math.PI
 
 /** Этап 4's crossfade -- NOT a true overlapping mix of two tracks (Media3's ExoPlayer decodes one
  * item at a time; a real overlap needs two players sharing one AudioTrack, out of scope for the
@@ -44,15 +46,21 @@ class CrossfadeController(
 
         /** Pure so it's testable without an ExoPlayer -- 1.0 outside the fade windows, ramping
          * near the very start (fade-in after a transition) and very end (fade-out before one) of
-         * the current item. durationMs <= 0 (unknown/live) always returns full volume. */
+         * the current item. durationMs <= 0 (unknown/live) always returns full volume.
+         *
+         * Equal-power taper (sin of the linear progress, not the linear progress itself) --
+         * human loudness perception is roughly logarithmic, so a straight linear ramp reads as a
+         * dip toward silence in the middle of the fade instead of a smooth blend (this is the
+         * standard reason DAWs default crossfades to an equal-power curve, not linear). */
         fun volumeFor(positionMs: Long, durationMs: Long): Float {
             if (durationMs <= 0) return 1f
             val remainingMs = durationMs - positionMs
-            return when {
+            val linear = when {
                 positionMs < FADE_MS -> (positionMs.toFloat() / FADE_MS).coerceIn(0f, 1f)
                 remainingMs < FADE_MS -> (remainingMs.toFloat() / FADE_MS).coerceIn(0f, 1f)
-                else -> 1f
+                else -> return 1f
             }
+            return sin(linear * (PI / 2).toFloat())
         }
     }
 }

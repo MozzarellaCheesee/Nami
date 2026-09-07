@@ -43,6 +43,11 @@ data class PlayerQueue(
 interface PlayerRepository {
     val state: StateFlow<PlaybackState>
     val queue: StateFlow<PlayerQueue>
+    /** Bumped when ExoPlayer advances to the next track on its own (the current one simply ended)
+     * -- as opposed to a skip button, a swipe, or a list tap, which the UI already animates for
+     * itself. Lets Now Playing/MiniPlayer play the same slide transition for a natural track
+     * change instead of the cover just silently jumping to the next one. */
+    val autoAdvanceSignal: StateFlow<Int>
     suspend fun play(tracks: List<PlayableTrack>, startIndex: Int, startMs: Long = 0)
     suspend fun toggle()
     suspend fun seek(ms: Long)

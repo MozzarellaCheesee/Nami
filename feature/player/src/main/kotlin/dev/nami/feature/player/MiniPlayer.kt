@@ -34,6 +34,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -77,7 +78,10 @@ fun MiniPlayer(
     // 3-page window: 0 = previous, 1 = current, 2 = next -- see the matching comment in
     // NowPlayingScreen for why this replaced a hand-rolled offset carousel.
     val pagerState = rememberPagerState(initialPage = 1) { 3 }
-    LaunchedEffectSettlePage(pagerState, queue.previousTrack != null, queue.upcoming.isNotEmpty(), viewModel)
+    val autoAdvanceSignal by viewModel.autoAdvanceSignal.collectAsState()
+    val suppressSkip = remember { mutableStateOf(false) }
+    LaunchedEffectSettlePage(pagerState, queue.previousTrack != null, queue.upcoming.isNotEmpty(), viewModel, suppressSkip = { suppressSkip.value })
+    LaunchedEffectAutoAdvance(pagerState, autoAdvanceSignal, queue.previousTrack != null, suppressSkip)
 
     if (queue.nowPlaying == null) return
 

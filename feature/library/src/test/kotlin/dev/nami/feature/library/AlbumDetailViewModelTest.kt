@@ -82,6 +82,7 @@ class AlbumDetailViewModelTest {
         val fakePlayerRepo = object : PlayerRepository {
             override val state: StateFlow<PlaybackState> = MutableStateFlow(PlaybackState.Idle)
             override val queue: StateFlow<PlayerQueue> = MutableStateFlow(PlayerQueue.EMPTY)
+            override val autoAdvanceSignal: StateFlow<Int> = MutableStateFlow(0)
             override suspend fun play(tracks: List<PlayableTrack>, startIndex: Int, startMs: Long) {}
             override suspend fun toggle() {}
             override suspend fun seek(ms: Long) {}
