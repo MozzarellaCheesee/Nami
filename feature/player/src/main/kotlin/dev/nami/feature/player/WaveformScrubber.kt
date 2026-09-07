@@ -67,6 +67,9 @@ fun WaveformScrubber(
     moments: List<MomentMarker> = emptyList(),
     onLongPress: (Float) -> Unit = {},
     onMomentClick: (Long) -> Unit = {},
+    // Design mock 4.22 "Моменты и петли" -- the active A-B loop drawn as a translucent region on
+    // the waveform itself, not just described in text above it. Null when no loop is active.
+    loopRange: ClosedFloatingPointRange<Float>? = null,
 ) {
     val placeholder = remember(seedKey) { barHeights(seedKey) }
     val isReal = realHeights != null && realHeights.size == placeholder.size
@@ -162,6 +165,22 @@ fun WaveformScrubber(
         // a fixed step (BAR_COUNT * (barWidth+gap)) rarely equals the real measured width,
         // leaving the bars stuck to one side with a gap on the other, and desyncing the played
         // portion (computed from the real width) from where the bars themselves are drawn.
+        loopRange?.let { range ->
+            val startX = range.start.coerceIn(0f, 1f) * size.width
+            val endX = range.endInclusive.coerceIn(0f, 1f) * size.width
+            drawRect(
+                color = NamiColors.Wakaba.copy(alpha = 0.16f),
+                topLeft = Offset(startX, 0f),
+                size = androidx.compose.ui.geometry.Size(endX - startX, size.height),
+            )
+            val dash = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx()))
+            drawRect(
+                color = NamiColors.Wakaba,
+                topLeft = Offset(startX, 0f),
+                size = androidx.compose.ui.geometry.Size(endX - startX, size.height),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5.dp.toPx(), pathEffect = dash),
+            )
+        }
         val step = size.width / BAR_COUNT
         val barWidthPx = step * (BAR_WIDTH_DP.toFloat() / (BAR_WIDTH_DP + BAR_GAP_DP))
         val playedBars = (heights.size * displayedProgress).roundToInt()

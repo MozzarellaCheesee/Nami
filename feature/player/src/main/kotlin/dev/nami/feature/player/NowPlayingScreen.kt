@@ -261,7 +261,7 @@ fun NowPlayingScreen(
                 actions = listOfNotNull(
                     ContextAction("Аудиотракт", Icons.Outlined.QueueMusic) { showAudioTractSheet = true },
                     ContextAction("Таймер сна", Icons.Outlined.DarkMode) { showSleepTimerSheet = true },
-                    ContextAction("A-B петля", Icons.Outlined.Repeat) { showLoopSheet = true },
+                    ContextAction("Моменты и петли", Icons.Outlined.Repeat) { showLoopSheet = true },
                     ContextAction("В плейлист", Icons.Outlined.PlaylistAdd) { showAddToPlaylist = true },
                     track?.let { ContextAction("Информация о треке", Icons.Outlined.Info) { onShowTrackInfo(it.id) } },
                     track?.artistId?.let { artistId -> ContextAction("Открыть исполнителя", Icons.Outlined.Person) { onOpenArtist(artistId) } },
@@ -303,22 +303,56 @@ fun NowPlayingScreen(
             )
         }
         if (showLoopSheet) {
-            LoopSheet(
-                currentPositionMs = playing?.positionMs ?: 0L,
-                pendingStartMs = pendingLoopStartMs,
-                onMarkStart = { pendingLoopStartMs = playing?.positionMs ?: 0L },
+            val sheetMoments by viewModel.currentTrackMoments.collectAsState()
+            val sheetDurationMs = playing?.durationMs ?: 0L
+            val sheetPositionMs = playing?.positionMs ?: 0L
+            val sheetProgress = if (sheetDurationMs > 0) (sheetPositionMs.toFloat() / sheetDurationMs).coerceIn(0f, 1f) else 0f
+            var sheetPendingMomentPosition by remember { mutableStateOf<Long?>(null) }
+            var sheetSelectedMoment by remember { mutableStateOf<dev.nami.domain.Moment?>(null) }
+            MomentsAndLoopsSheet(
+                trackTitle = trackDetails?.title ?: queue.nowPlaying?.title.orEmpty(),
+                artistName = trackDetails?.artistName ?: queue.nowPlaying?.artistName,
+                waveformHeights = viewModel.waveform.collectAsState().value,
+                progress = sheetProgress,
+                positionMs = sheetPositionMs,
+                durationMs = sheetDurationMs,
+                moments = sheetMoments,
                 activeLoop = viewModel.activeLoop.collectAsState().value,
-                savedLoops = viewModel.currentTrackSavedLoops.collectAsState().value,
-                onMarkEndAndActivate = { start ->
-                    viewModel.setLoopRange(start, playing?.positionMs ?: 0L)
+                pendingLoopStartMs = pendingLoopStartMs,
+                onSeek = { fraction -> viewModel.seek((fraction * sheetDurationMs).toLong()) },
+                onAddMomentHere = { sheetPendingMomentPosition = sheetPositionMs },
+                onMomentClick = { moment -> sheetSelectedMoment = moment },
+                onMarkLoopStart = { pendingLoopStartMs = sheetPositionMs },
+                onMarkLoopEnd = { start ->
+                    viewModel.setLoopRange(start, sheetPositionMs)
                     pendingLoopStartMs = null
                 },
-                onClearActive = { viewModel.clearLoop() },
-                onSave = { start, end, name -> viewModel.saveLoop(start, end, name) },
-                onActivateSaved = { loop -> viewModel.setLoopRange(loop.startMs, loop.endMs) },
-                onDeleteSaved = { id -> viewModel.removeSavedLoop(id) },
                 onDismiss = { showLoopSheet = false },
             )
+            sheetPendingMomentPosition?.let { positionMsAt ->
+                AddMomentDialog(
+                    onSave = { label, colorArgb, isChapter ->
+                        viewModel.addMoment(positionMsAt, label, colorArgb, isChapter)
+                        sheetPendingMomentPosition = null
+                    },
+                    onDismiss = { sheetPendingMomentPosition = null },
+                )
+            }
+            sheetSelectedMoment?.let { moment ->
+                ContextActionSheet(
+                    onDismiss = { sheetSelectedMoment = null },
+                    actions = listOf(
+                        ContextAction("Перейти: ${moment.label}", Icons.Rounded.PlayArrow) {
+                            viewModel.seek(moment.positionMs)
+                            sheetSelectedMoment = null
+                        },
+                        ContextAction("Удалить метку", Icons.Outlined.Delete) {
+                            viewModel.removeMoment(moment.id)
+                            sheetSelectedMoment = null
+                        },
+                    ),
+                )
+            }
         }
         androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))
         // No scroll: everything must fit on-screen at once. Reduced top gap before the artwork
