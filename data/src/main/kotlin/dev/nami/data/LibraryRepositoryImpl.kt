@@ -26,6 +26,7 @@ import dev.nami.data.mapper.toDomain
 import dev.nami.domain.ImportProgress
 import dev.nami.domain.ImportSource
 import dev.nami.domain.LibraryRepository
+import dev.nami.domain.LyricsRepository
 import dev.nami.domain.NativeBridge
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -47,6 +48,7 @@ class LibraryRepositoryImpl @Inject constructor(
     private val artworkStore: ArtworkStore,
     private val trashFileStore: TrashFileStore,
     private val folderImportScanner: FolderImportScanner,
+    private val lyricsRepository: LyricsRepository,
 ) : LibraryRepository {
 
     override fun tracks(): Flow<PagingData<Track>> =
@@ -296,6 +298,14 @@ class LibraryRepositoryImpl @Inject constructor(
         }
 
         val tags = nativeBridge.readTags(destination.path)
+
+        // Only when a sidecar wasn't already copied above (a real file next to the track wins
+        // over whatever's embedded). Plan's source order is local .lrc -> tag -> LRCLIB -> manual.
+        val embeddedLyrics = tags?.lyrics
+        if (lyricsDoc == null && embeddedLyrics != null) {
+            lyricsRepository.importLyricsFile(destination.path, embeddedLyrics)
+        }
+
         val artistId = metadataResolver.resolveArtist(tags?.artist ?: tags?.albumArtist ?: fallbackArtist)
         val albumId = metadataResolver.resolveAlbum(tags?.album ?: fallbackAlbum, artistId, tags?.year)
         val fallbackTitle = (queryDisplayName(resolver, uri) ?: uri.lastPathSegment ?: "unknown")

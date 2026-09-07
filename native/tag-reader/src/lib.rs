@@ -17,6 +17,11 @@ pub struct TagResult {
     pub duration_ms: u64,
     pub artwork: Option<Vec<u8>>,
     pub artwork_mime: Option<String>,
+    /// Embedded USLT (ID3v2) / LYRICS (Vorbis comment) / \xa9lyr (MP4) tag, raw text -- often a
+    /// full LRC-formatted synced blob pasted into the tag by whoever ripped the file, sometimes
+    /// just plain unsynced text. Caller decides what to do with it (LrcParser only keeps synced
+    /// lines, so plain text quietly yields nothing rather than crashing).
+    pub lyrics: Option<String>,
 }
 
 fn map_tag(tag: &Tag, duration_ms: u64) -> TagResult {
@@ -33,6 +38,7 @@ fn map_tag(tag: &Tag, duration_ms: u64) -> TagResult {
         duration_ms,
         artwork: picture.map(|p| p.data().to_vec()),
         artwork_mime: picture.and_then(|p| p.mime_type()).map(|m| m.to_string()),
+        lyrics: tag.get_string(&lofty::tag::ItemKey::Lyrics).map(|s| s.to_string()),
     }
 }
 

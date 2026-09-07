@@ -94,6 +94,7 @@ class SearchRepositoryImplTest {
         override suspend fun findById(id: String): ArtistEntity? = error("unused")
         override suspend fun findByName(name: String): ArtistEntity? = error("unused")
         override fun pagingSource(): PagingSource<Int, ArtistDao.ArtistWithPhoto> = error("unused")
+        override fun observeFeaturedArtists(limit: Int) = error("unused")
         override suspend fun findByIdWithPhoto(id: String): ArtistDao.ArtistWithPhoto? = null
         override suspend fun insert(artist: ArtistEntity) = error("unused")
         override suspend fun allForIndexing(): List<ArtistEntity> = rows

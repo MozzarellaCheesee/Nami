@@ -12,4 +12,6 @@ data class TagResult(
     val durationMs: Long,
     val artwork: ByteArray?,
     val artworkMime: String?,
+    /** Embedded USLT/LYRICS/©lyr tag text, raw -- may be a full LRC blob or plain unsynced text. */
+    val lyrics: String? = null,
 )

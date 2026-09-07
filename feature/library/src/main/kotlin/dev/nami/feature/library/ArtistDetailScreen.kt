@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -139,42 +142,15 @@ fun ArtistDetailScreen(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.fillMaxWidth().basicMarquee(iterations = Int.MAX_VALUE),
                     )
-                    Row(
-                        modifier = Modifier.padding(top = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        // Empty slot: the real image is the floating element above, drawn on top
-                        // of this reserved space once it slides all the way in. Its width grows
-                        // from 0 to AVATAR_SIZE with progress instead of always reserving the
-                        // full 40dp -- reserving it at rest (progress 0, avatar not there yet)
-                        // just left an empty gap in front of the play/overflow buttons for no
-                        // reason. The slot's own top-left position doesn't move as it grows
-                        // (it's the Row's first child), so the landing target stays stable.
-                        Spacer(
-                            modifier = Modifier
-                                .size(width = with(density) { (avatarSizePx * progress).toDp() }, height = AVATAR_SIZE)
-                                .onGloballyPositioned { avatarSlotOffset = it.positionInRoot() - rootOffset },
-                        )
-                        Spacer(modifier = Modifier.padding(start = with(density) { (12.dp.toPx() * progress).toDp() }))
-                        // Always fully visible (an alpha tied to collapseFraction previously made
-                        // these invisible at rest until the user scrolled, which meant tapping
-                        // play required scrolling first). They already shift right as the slot
-                        // above grows, no separate translation needed.
-                        if (uiState.tracks.isNotEmpty()) {
-                            IconButton(
-                                onClick = { onPlayTracks(uiState.tracks, artistName, 0) },
-                                modifier = Modifier
-                                    .size(56.dp)
-                                    .background(NamiColors.Paper100, RoundedCornerShape(18.dp)),
-                            ) {
-                                Icon(Icons.Filled.PlayArrow, contentDescription = "Играть всё", tint = NamiColors.Ink900)
-                            }
-                        }
-                        Spacer(modifier = Modifier.padding(start = 8.dp))
-                        IconButton(onClick = { showArtistMenu = true }) {
-                            Icon(Icons.Outlined.MoreVert, contentDescription = "Действия с артистом", tint = NamiColors.Paper100)
-                        }
-                    }
+                    // Just the slide-target anchor now -- play/overflow moved onto the cover image
+                    // itself (see the floating image below), so this Row no longer reserves a
+                    // whole extra row of vertical space under the title for buttons.
+                    Spacer(
+                        modifier = Modifier
+                            .padding(top = 12.dp)
+                            .size(width = with(density) { (avatarSizePx * progress).toDp() }, height = AVATAR_SIZE)
+                            .onGloballyPositioned { avatarSlotOffset = it.positionInRoot() - rootOffset },
+                    )
                 }
                 if (showArtistMenu) {
                     ContextActionSheet(
@@ -262,10 +238,18 @@ fun ArtistDetailScreen(
         // would otherwise paint over the image the moment it slides down past the header line,
         // which is exactly where its landing slot lives.
         run {
+            // Bleeds the fully-expanded cover up into the status bar/cutout inset instead of
+            // leaving Ink900 background showing through there -- with system bars hidden,
+            // statusBarsPadding() (applied once, up in NamiNavHost) collapses to 0 but
+            // displayCutoutPadding() doesn't, so that gap alone used to show as a grey strip
+            // above the image. Tapers to 0 as the cover collapses into the avatar slot, since at
+            // that point it's meant to sit inside the padded content, not bleed past it.
+            val cutoutInsetPx = with(density) { WindowInsets.statusBars.getTop(this) + WindowInsets.displayCutout.getTop(this) }.toFloat()
+            val bleed = cutoutInsetPx * (1f - progress)
             val currentWidthPx = lerp(screenWidthPx, avatarSizePx, progress)
-            val currentHeightPx = lerp(headerMaxHeightPx, avatarSizePx, progress)
+            val currentHeightPx = lerp(headerMaxHeightPx, avatarSizePx, progress) + bleed
             val offsetX = lerp(0f, avatarSlotOffset.x, progress)
-            val offsetY = lerp(0f, avatarSlotOffset.y, progress)
+            val offsetY = lerp(0f, avatarSlotOffset.y, progress) - bleed
             val cornerRadiusDp = lerp(4f, with(density) { (minOf(currentWidthPx, currentHeightPx) / 2f).toDp().value }, progress)
             val slideModifier = Modifier
                 .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
@@ -307,11 +291,42 @@ fun ArtistDetailScreen(
                 // the reserved slot isn't left visually empty.
                 Box(modifier = slideModifier.background(NamiColors.Ink700))
             }
+
+            // Play/overflow live on the cover itself now instead of a dedicated row under the
+            // title -- fade out as the cover collapses into the small avatar, where they
+            // wouldn't fit anyway.
+            Box(modifier = slideModifier, contentAlignment = Alignment.BottomEnd) {
+                Row(
+                    modifier = Modifier.graphicsLayer { alpha = 1f - progress }.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (uiState.tracks.isNotEmpty()) {
+                        IconButton(
+                            onClick = { onPlayTracks(uiState.tracks, artistName, 0) },
+                            modifier = Modifier
+                                .size(56.dp)
+                                .background(NamiColors.Paper100, RoundedCornerShape(18.dp)),
+                        ) {
+                            Icon(Icons.Filled.PlayArrow, contentDescription = "Играть всё", tint = NamiColors.Ink900)
+                        }
+                    }
+                    Spacer(modifier = Modifier.padding(start = 8.dp))
+                    IconButton(
+                        onClick = { showArtistMenu = true },
+                        modifier = Modifier.background(NamiColors.Ink900.copy(alpha = 0.4f), androidx.compose.foundation.shape.CircleShape),
+                    ) {
+                        Icon(Icons.Outlined.MoreVert, contentDescription = "Действия с артистом", tint = NamiColors.Paper100)
+                    }
+                }
+            }
         }
 
         IconButton(
             onClick = onBack,
-            modifier = Modifier.align(Alignment.TopStart).padding(top = 12.dp, start = 12.dp),
+            modifier = Modifier.align(Alignment.TopStart).padding(
+                top = 12.dp + with(density) { WindowInsets.statusBars.getTop(this).toDp() } + with(density) { WindowInsets.displayCutout.getTop(this).toDp() },
+                start = 12.dp,
+            ),
         ) {
             Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
         }

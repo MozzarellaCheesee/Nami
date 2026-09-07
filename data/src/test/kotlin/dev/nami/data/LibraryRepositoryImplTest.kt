@@ -10,6 +10,7 @@ import dev.nami.core.database.entity.TrackEntity
 import dev.nami.core.model.TagResult
 import dev.nami.core.model.TrackId
 import dev.nami.domain.ImportSource
+import dev.nami.domain.LyricsRepository
 import dev.nami.domain.NativeBridge
 import kotlinx.coroutines.flow.last
 import kotlinx.coroutines.flow.toList
@@ -40,6 +41,24 @@ class LibraryRepositoryImplTest {
     @After
     fun tearDown() = db.close()
 
+    // Only import()'s embedded-lyrics fallback ever calls this from LibraryRepositoryImpl;
+    // no test here exercises that path, so a no-op stub is enough.
+    private val fakeLyricsRepository = object : LyricsRepository {
+        override fun lyricsForPath(path: String) = error("unused")
+        override suspend fun saveLyrics(path: String, lyrics: dev.nami.core.model.Lyrics) = error("unused")
+        override suspend fun importLyricsFile(path: String, rawText: String) = false
+        override fun translationForPath(path: String) = error("unused")
+        override suspend fun saveTranslation(path: String, lines: List<String>) = error("unused")
+        override suspend fun translateToRussian(lines: List<String>) = error("unused")
+        override fun romajiForPath(path: String) = error("unused")
+        override suspend fun saveRomaji(path: String, lines: List<String>) = error("unused")
+        override suspend fun generateRomaji(lines: List<String>) = error("unused")
+        override suspend fun fetchFromLrcLib(title: String, artistName: String?, durationMs: Long) = error("unused")
+        override suspend fun tokenizeLine(line: String) = error("unused")
+        override fun wordTimingsForPath(path: String) = error("unused")
+        override suspend fun saveWordTimings(path: String, perLine: List<List<dev.nami.core.model.WordTiming>>) = error("unused")
+    }
+
     @Test
     fun `import populates artist and album from tag data`() = runTest {
         val fakeBridge = object : NativeBridge {
@@ -53,7 +72,7 @@ class LibraryRepositoryImplTest {
         val artworkStore = ArtworkStore(context)
         val repo = LibraryRepositoryImpl(
             context, db.trackDao(), db.artistDao(), db.albumDao(), fakeBridge, resolver, artworkStore, TrashFileStore(context),
-            FolderImportScanner(context),
+            FolderImportScanner(context), fakeLyricsRepository,
         )
 
         // Register the stream directly instead of a file:// URI: Robolectric's real
@@ -84,7 +103,7 @@ class LibraryRepositoryImplTest {
         val artworkStore = ArtworkStore(context)
         val repo = LibraryRepositoryImpl(
             context, db.trackDao(), db.artistDao(), db.albumDao(), fakeBridge, resolver, artworkStore, TrashFileStore(context),
-            FolderImportScanner(context),
+            FolderImportScanner(context), fakeLyricsRepository,
         )
 
         val sourceUri = android.net.Uri.parse("content://fake/source2.flac")
@@ -120,7 +139,7 @@ class LibraryRepositoryImplTest {
             context, db.trackDao(), db.artistDao(), db.albumDao(), object : NativeBridge {
                 override suspend fun readTags(path: String) = null
             }, MetadataResolver(db.artistDao(), db.albumDao()), ArtworkStore(context), TrashFileStore(context),
-            FolderImportScanner(context),
+            FolderImportScanner(context), fakeLyricsRepository,
         )
 
         repo.deleteTracks(listOf(TrackId("t1"), TrackId("t2")))
@@ -139,7 +158,7 @@ class LibraryRepositoryImplTest {
         val repo = LibraryRepositoryImpl(
             context, db.trackDao(), db.artistDao(), db.albumDao(), fakeBridge,
             MetadataResolver(db.artistDao(), db.albumDao()), ArtworkStore(context), TrashFileStore(context),
-            FolderImportScanner(context),
+            FolderImportScanner(context), fakeLyricsRepository,
         )
 
         val root = File(context.cacheDir, "Farewell225").apply { mkdirs() }
@@ -188,7 +207,7 @@ class LibraryRepositoryImplTest {
         val repo = LibraryRepositoryImpl(
             context, db.trackDao(), db.artistDao(), db.albumDao(), fakeBridge,
             MetadataResolver(db.artistDao(), db.albumDao()), ArtworkStore(context), TrashFileStore(context),
-            FolderImportScanner(context),
+            FolderImportScanner(context), fakeLyricsRepository,
         )
 
         val albumDir = File(context.cacheDir, "Album").apply { mkdirs() }

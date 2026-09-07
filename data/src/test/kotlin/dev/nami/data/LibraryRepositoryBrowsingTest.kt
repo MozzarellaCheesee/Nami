@@ -10,6 +10,7 @@ import dev.nami.core.database.entity.ArtistEntity
 import dev.nami.core.database.entity.TrackEntity
 import dev.nami.core.model.AlbumId
 import dev.nami.core.model.ArtistId
+import dev.nami.domain.LyricsRepository
 import dev.nami.domain.NativeBridge
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -34,10 +35,25 @@ class LibraryRepositoryBrowsingTest {
         val fakeBridge = object : NativeBridge {
             override suspend fun readTags(path: String) = null
         }
+        val fakeLyricsRepository = object : LyricsRepository {
+            override fun lyricsForPath(path: String) = error("unused")
+            override suspend fun saveLyrics(path: String, lyrics: dev.nami.core.model.Lyrics) = error("unused")
+            override suspend fun importLyricsFile(path: String, rawText: String) = false
+            override fun translationForPath(path: String) = error("unused")
+            override suspend fun saveTranslation(path: String, lines: List<String>) = error("unused")
+            override suspend fun translateToRussian(lines: List<String>) = error("unused")
+            override fun romajiForPath(path: String) = error("unused")
+            override suspend fun saveRomaji(path: String, lines: List<String>) = error("unused")
+            override suspend fun generateRomaji(lines: List<String>) = error("unused")
+            override suspend fun fetchFromLrcLib(title: String, artistName: String?, durationMs: Long) = error("unused")
+            override suspend fun tokenizeLine(line: String) = error("unused")
+            override fun wordTimingsForPath(path: String) = error("unused")
+            override suspend fun saveWordTimings(path: String, perLine: List<List<dev.nami.core.model.WordTiming>>) = error("unused")
+        }
         repo = LibraryRepositoryImpl(
             context, db.trackDao(), db.artistDao(), db.albumDao(), fakeBridge,
             MetadataResolver(db.artistDao(), db.albumDao()), ArtworkStore(context), TrashFileStore(context),
-            FolderImportScanner(context),
+            FolderImportScanner(context), fakeLyricsRepository,
         )
     }
 
