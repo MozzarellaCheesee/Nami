@@ -8,6 +8,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.nami.core.model.Track
 import dev.nami.core.model.TrackId
 import dev.nami.domain.LibraryRepository
+import dev.nami.domain.LoopRange
+import dev.nami.domain.LoopsRepository
 import dev.nami.domain.Moment
 import dev.nami.domain.MomentsRepository
 import dev.nami.domain.PlayableTrack
@@ -16,6 +18,7 @@ import dev.nami.domain.PlayerQueue
 import dev.nami.domain.PlayerRepository
 import dev.nami.domain.PlaylistRepository
 import dev.nami.domain.RepeatMode
+import dev.nami.domain.SavedLoop
 import dev.nami.domain.SettingsRepository
 import dev.nami.player.waveform.WaveformCache
 import dev.nami.player.waveform.WaveformScanner
@@ -51,6 +54,8 @@ class NowPlayingViewModel @Inject constructor(
     private val playlistRepository: PlaylistRepository? = null,
     // Same reasoning -- only used for the waveform's Moments markers.
     private val momentsRepository: MomentsRepository? = null,
+    // Same reasoning -- only used for saved A-B loops.
+    private val loopsRepository: LoopsRepository? = null,
 ) : ViewModel() {
 
     private val waveformDiskCache = WaveformCache(context)
@@ -97,6 +102,38 @@ class NowPlayingViewModel @Inject constructor(
 
     fun removeMoment(id: Long) {
         val repo = momentsRepository ?: return
+        viewModelScope.launch { repo.remove(id) }
+    }
+
+    /** A-B loop (План.md §22.2) -- [activeLoop] is the live "looping right now" state
+     * (PlayerRepository enforces it on its own 100ms position tick); [currentTrackSavedLoops] are
+     * named presets the user saved earlier for this track. */
+    val activeLoop: StateFlow<LoopRange?> = playerRepository.activeLoop
+
+    fun setLoopRange(startMs: Long, endMs: Long) {
+        if (endMs <= startMs) return
+        viewModelScope.launch { playerRepository.setActiveLoop(LoopRange(startMs, endMs)) }
+    }
+
+    fun clearLoop() {
+        viewModelScope.launch { playerRepository.setActiveLoop(null) }
+    }
+
+    val currentTrackSavedLoops: StateFlow<List<SavedLoop>> = playerRepository.state
+        .filterIsInstance<PlaybackState.Playing>()
+        .map { it.trackId }
+        .distinctUntilChanged()
+        .flatMapLatest { trackId -> loopsRepository?.loopsForTrack(trackId) ?: kotlinx.coroutines.flow.flowOf(emptyList()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun saveLoop(startMs: Long, endMs: Long, name: String) {
+        val trackId = (playbackState.value as? PlaybackState.Playing)?.trackId ?: return
+        val repo = loopsRepository ?: return
+        viewModelScope.launch { repo.save(trackId, startMs, endMs, name) }
+    }
+
+    fun removeSavedLoop(id: Long) {
+        val repo = loopsRepository ?: return
         viewModelScope.launch { repo.remove(id) }
     }
 

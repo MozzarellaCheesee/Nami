@@ -18,6 +18,10 @@ enum class QueueOrigin { MANUAL, CONTEXT }
  * current track. Maps 1:1 to ExoPlayer's own REPEAT_MODE_* constants. */
 enum class RepeatMode { OFF, ALL, ONE }
 
+/** A-B loop range (План.md §22.2) -- while set, [PlayerRepository] seeks back to [startMs] the
+ * moment playback reaches [endMs], on the current track only. */
+data class LoopRange(val startMs: Long, val endMs: Long)
+
 data class QueueTrack(
     val id: TrackId,
     val title: String,
@@ -89,4 +93,9 @@ interface PlayerRepository {
     /** Starts (replacing any running one) a timer that pauses playback after [durationMs]. */
     suspend fun startSleepTimer(durationMs: Long)
     suspend fun cancelSleepTimer()
+
+    /** A-B loop currently in effect, null when off. Cleared automatically on track change (an A-B
+     * range only makes sense for the track it was set on). */
+    val activeLoop: StateFlow<LoopRange?>
+    suspend fun setActiveLoop(loop: LoopRange?)
 }

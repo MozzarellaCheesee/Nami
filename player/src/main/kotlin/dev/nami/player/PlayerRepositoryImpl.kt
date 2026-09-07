@@ -11,6 +11,7 @@ import com.google.common.util.concurrent.MoreExecutors
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.nami.core.model.TrackId
 import dev.nami.domain.LibraryRepository
+import dev.nami.domain.LoopRange
 import dev.nami.domain.PlayableTrack
 import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerQueue
@@ -52,6 +53,13 @@ class PlayerRepositoryImpl @Inject constructor(
 
     private val _repeatMode = MutableStateFlow(RepeatMode.OFF)
     override val repeatMode: StateFlow<RepeatMode> = _repeatMode
+
+    private val _activeLoop = MutableStateFlow<LoopRange?>(null)
+    override val activeLoop: StateFlow<LoopRange?> = _activeLoop
+
+    override suspend fun setActiveLoop(loop: LoopRange?) {
+        _activeLoop.value = loop
+    }
 
     private val _sleepTimerRemainingMs = MutableStateFlow<Long?>(null)
     override val sleepTimerRemainingMs: StateFlow<Long?> = _sleepTimerRemainingMs
@@ -107,6 +115,10 @@ class PlayerRepositoryImpl @Inject constructor(
                             if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
                                 _autoAdvanceSignal.value++
                             }
+                            // An A-B range only makes sense for the track it was drawn on --
+                            // carrying it into the next track would silently loop the wrong
+                            // section (or one past that track's own duration).
+                            _activeLoop.value = null
                         }
                     },
                 )
@@ -130,6 +142,13 @@ class PlayerRepositoryImpl @Inject constructor(
         val trackId = mediaId?.let(::TrackId)
         val durationMs = player.duration.coerceAtLeast(0)
         val positionMs = player.currentPosition
+
+        // A-B loop (План.md §22.2): checked on the same 100ms tick that already polls position
+        // for the scrubber -- no separate timer. Only re-seeks once actually past the end (not
+        // continuously), so it can't fight a manual seek/drag the user is mid-gesture on.
+        _activeLoop.value?.let { loop ->
+            if (positionMs >= loop.endMs) player.seekTo(loop.startMs)
+        }
         _state.value = toPlaybackState(
             trackId = trackId,
             positionMs = positionMs,

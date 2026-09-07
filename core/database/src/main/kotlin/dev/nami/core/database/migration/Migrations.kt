@@ -176,3 +176,21 @@ val MIGRATION_13_14 = object : Migration(13, 14) {
         )
     }
 }
+
+/** Этап 6's "A-B петли с сохранением" (План.md §22.2) -- a new table, no existing columns touched. */
+val MIGRATION_14_15 = object : Migration(14, 15) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS loops (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                trackId TEXT NOT NULL,
+                startMs INTEGER NOT NULL,
+                endMs INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                createdAt INTEGER NOT NULL
+            )
+            """,
+        )
+    }
+}

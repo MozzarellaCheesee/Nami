@@ -113,6 +113,8 @@ fun NowPlayingScreen(
     var showAudioTractSheet by remember { mutableStateOf(false) }
     var showEqualizerInSheet by remember { mutableStateOf(false) }
     var showSleepTimerSheet by remember { mutableStateOf(false) }
+    var showLoopSheet by remember { mutableStateOf(false) }
+    var pendingLoopStartMs by remember { mutableStateOf<Long?>(null) }
     // Local-only stub -- no "favorites" concept exists in the domain layer yet, so this doesn't
     // persist across tracks/sessions. Resets whenever the playing track changes.
     // Real, not a stub: backed by the Любимые треки system playlist (PlaylistRepository.
@@ -212,6 +214,7 @@ fun NowPlayingScreen(
                 actions = listOf(
                     ContextAction("Аудиотракт", Icons.Outlined.QueueMusic) { showAudioTractSheet = true },
                     ContextAction("Таймер сна", Icons.Outlined.DarkMode) { showSleepTimerSheet = true },
+                    ContextAction("A-B петля", Icons.Outlined.Repeat) { showLoopSheet = true },
                 ),
             )
         }
@@ -238,6 +241,24 @@ fun NowPlayingScreen(
                 onDismiss = { showSleepTimerSheet = false },
                 onStart = { minutes -> viewModel.startSleepTimer(minutes * 60_000L) },
                 onCancel = { viewModel.cancelSleepTimer() },
+            )
+        }
+        if (showLoopSheet) {
+            LoopSheet(
+                currentPositionMs = playing?.positionMs ?: 0L,
+                pendingStartMs = pendingLoopStartMs,
+                onMarkStart = { pendingLoopStartMs = playing?.positionMs ?: 0L },
+                activeLoop = viewModel.activeLoop.collectAsState().value,
+                savedLoops = viewModel.currentTrackSavedLoops.collectAsState().value,
+                onMarkEndAndActivate = { start ->
+                    viewModel.setLoopRange(start, playing?.positionMs ?: 0L)
+                    pendingLoopStartMs = null
+                },
+                onClearActive = { viewModel.clearLoop() },
+                onSave = { start, end, name -> viewModel.saveLoop(start, end, name) },
+                onActivateSaved = { loop -> viewModel.setLoopRange(loop.startMs, loop.endMs) },
+                onDeleteSaved = { id -> viewModel.removeSavedLoop(id) },
+                onDismiss = { showLoopSheet = false },
             )
         }
         androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))
