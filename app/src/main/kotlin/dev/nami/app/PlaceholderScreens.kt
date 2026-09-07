@@ -310,8 +310,7 @@ fun SettingsLyricsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hilt
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                 Text(
-                    text = "Используется только если LRCLIB не нашёл текст. Свой ключ - " +
-                        "получить на stands4.com/api.php, бесплатный лимит 100 запросов в день.",
+                    text = "Используется только если LRCLIB не нашёл текст. Бесплатный лимит -- 100 запросов в день.",
                     color = NamiColors.Paper40,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -320,6 +319,7 @@ fun SettingsLyricsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hilt
                     onValueChange = viewModel::setStands4Uid,
                     label = { Text("UID") },
                     singleLine = true,
+                    supportingText = { ApiKeyHint("Получить UID и Token: stands4.com/api.php", "https://www.stands4.com/api.php") },
                     modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                 )
                 androidx.compose.material3.OutlinedTextField(
@@ -343,8 +343,8 @@ fun SettingsLyricsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hilt
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                 Text(
                     text = "Заметно лучше переводит с японского, чем встроенный офлайн-переводчик. " +
-                        "Свой ключ -- на deepl.com/pro-api, бесплатный лимит 500 000 символов в месяц. " +
-                        "Пусто -- перевод остаётся офлайн (хуже качеством, но без ключа и сети).",
+                        "Бесплатный лимит -- 500 000 символов в месяц. Пусто -- перевод остаётся " +
+                        "офлайн (хуже качеством, но без ключа и сети).",
                     color = NamiColors.Paper40,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -353,11 +353,27 @@ fun SettingsLyricsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hilt
                     onValueChange = viewModel::setDeeplApiKey,
                     label = { Text("API-ключ") },
                     singleLine = true,
+                    supportingText = { ApiKeyHint("Получить ключ: deepl.com/pro-api", "https://www.deepl.com/pro-api") },
                     modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                 )
             }
         }
     }
+}
+
+/** Clickable "where to get this key" line -- goes in an OutlinedTextField's supportingText, right
+ * under the field it belongs to, instead of one combined paragraph above a whole group of fields
+ * (STANDS4's UID+Token used to share one, which didn't say which field the link was even for). */
+@Composable
+private fun ApiKeyHint(text: String, url: String) {
+    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+    Text(
+        text = text,
+        color = NamiColors.Ai,
+        style = MaterialTheme.typography.bodySmall,
+        textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
+        modifier = Modifier.clickable { uriHandler.openUri(url) },
+    )
 }
 
 @Composable
