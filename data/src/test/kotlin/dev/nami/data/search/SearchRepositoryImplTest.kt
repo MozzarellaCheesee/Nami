@@ -99,6 +99,7 @@ class SearchRepositoryImplTest {
         override fun observeArtistsForAlbum(albumId: String) = error("unused")
         override fun observeRecentAlbums(limit: Int) = error("unused")
         override suspend fun allForIndexing(): List<AlbumDao.AlbumListRow> = rows
+        override suspend fun allIdsAndYears() = error("unused")
     }
 
     private fun fakeArtistDao(rows: List<ArtistEntity> = emptyList()) = object : ArtistDao {

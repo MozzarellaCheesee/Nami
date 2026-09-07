@@ -45,6 +45,7 @@ class AlbumDetailViewModelTest {
             durationMs = 180_000, path = "/music/t1.flac", format = "flac", sizeBytes = 1, dateAdded = 0,
         )
         val fakeRepo = object : LibraryRepository {
+            override suspend fun libraryHealthReport() = error("unused")
             override fun tracks() = throw NotImplementedError()
             override suspend fun allTracksOrdered(): List<Track> = emptyList()
             override fun track(id: TrackId) = throw NotImplementedError()

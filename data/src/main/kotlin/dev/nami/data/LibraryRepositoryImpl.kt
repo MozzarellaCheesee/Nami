@@ -25,6 +25,7 @@ import dev.nami.core.model.TrackId
 import dev.nami.data.mapper.toDomain
 import dev.nami.domain.ImportProgress
 import dev.nami.domain.ImportSource
+import dev.nami.domain.LibraryHealthReport
 import dev.nami.domain.LibraryRepository
 import dev.nami.domain.LyricsRepository
 import dev.nami.domain.NativeBridge
@@ -32,6 +33,7 @@ import dev.nami.player.dsd.DsfToDopWav
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
@@ -51,6 +53,45 @@ class LibraryRepositoryImpl @Inject constructor(
     private val folderImportScanner: FolderImportScanner,
     private val lyricsRepository: LyricsRepository,
 ) : LibraryRepository {
+
+    override suspend fun libraryHealthReport(): LibraryHealthReport {
+        val tracks = trackDao.allOrderedWithArtwork().map { it.toDomain() }
+        fun Track.ref() = dev.nami.domain.HealthTrackRef(id, title)
+
+        val withoutArtwork = tracks.filter { it.albumArtworkPath == null }.map { it.ref() }
+        val withoutLyrics = tracks.filter { lyricsRepository.lyricsForPath(it.path).first() == null }.map { it.ref() }
+        val missingFiles = tracks.filter { !File(it.path).exists() }.map { it.ref() }
+
+        val yearById = albumDao.allIdsAndYears().associate { it.id to it.year }
+        val albumsWithoutYear = albumDao.allForIndexing()
+            .filter { yearById[it.id] == null }
+            .map { it.title }
+
+        // Heuristic grouping, not a real audio fingerprint (none exists in this codebase) --
+        // same title/artist/duration-rounded-to-5s is the same signal LibraryRepositoryImpl's
+        // own import-time dedup (findDuplicate) already uses, just applied after the fact
+        // instead of only at import.
+        val duplicateGroups = tracks
+            .groupBy { Triple(it.title.trim().lowercase(), it.artistId, it.durationMs / 5000) }
+            .values
+            .filter { it.size > 1 }
+            .map { group -> group.map { it.ref() } }
+
+        val inconsistentArtistNameGroups = artistDao.allForIndexing()
+            .groupBy { it.name.trim().lowercase() }
+            .values
+            .filter { group -> group.map { it.name }.distinct().size > 1 }
+            .map { group -> group.map { it.name } }
+
+        return LibraryHealthReport(
+            tracksWithoutArtwork = withoutArtwork,
+            tracksWithoutLyrics = withoutLyrics,
+            albumsWithoutYear = albumsWithoutYear,
+            duplicateGroups = duplicateGroups,
+            missingFiles = missingFiles,
+            inconsistentArtistNameGroups = inconsistentArtistNameGroups,
+        )
+    }
 
     override fun tracks(): Flow<PagingData<Track>> =
         Pager(PagingConfig(pageSize = 50)) { trackDao.pagingSource() }

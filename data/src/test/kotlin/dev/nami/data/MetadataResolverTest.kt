@@ -51,6 +51,7 @@ class MetadataResolverTest {
             override fun observeArtistIdsForAlbum(albumId: String) = error("unused")
             override fun observeArtistsForAlbum(albumId: String) = error("unused")
             override suspend fun allForIndexing(): List<AlbumDao.AlbumListRow> = error("unused")
+            override suspend fun allIdsAndYears() = error("unused")
         }
         val resolver = MetadataResolver(artistDao, albumDao)
 
@@ -98,6 +99,7 @@ class MetadataResolverTest {
             override fun observeArtistIdsForAlbum(albumId: String) = error("unused")
             override fun observeArtistsForAlbum(albumId: String) = error("unused")
             override suspend fun allForIndexing(): List<AlbumDao.AlbumListRow> = error("unused")
+            override suspend fun allIdsAndYears() = error("unused")
         }
         val resolver = MetadataResolver(artistDao, albumDao)
 
@@ -146,6 +148,7 @@ class MetadataResolverTest {
             override fun observeArtistIdsForAlbum(albumId: String) = error("unused")
             override fun observeArtistsForAlbum(albumId: String) = error("unused")
             override suspend fun allForIndexing(): List<AlbumDao.AlbumListRow> = error("unused")
+            override suspend fun allIdsAndYears() = error("unused")
         }
         val resolver = MetadataResolver(artistDao, albumDao)
 
@@ -194,6 +197,7 @@ class MetadataResolverTest {
             override fun observeArtistIdsForAlbum(albumId: String) = error("unused")
             override fun observeArtistsForAlbum(albumId: String) = error("unused")
             override suspend fun allForIndexing(): List<AlbumDao.AlbumListRow> = error("unused")
+            override suspend fun allIdsAndYears() = error("unused")
         }
         val resolver = MetadataResolver(artistDao, albumDao)
 
@@ -239,6 +243,7 @@ class MetadataResolverTest {
             override fun observeArtistIdsForAlbum(albumId: String) = error("unused")
             override fun observeArtistsForAlbum(albumId: String) = error("unused")
             override suspend fun allForIndexing(): List<AlbumDao.AlbumListRow> = error("unused")
+            override suspend fun allIdsAndYears() = error("unused")
         }
         val resolver = MetadataResolver(artistDao, albumDao)
 

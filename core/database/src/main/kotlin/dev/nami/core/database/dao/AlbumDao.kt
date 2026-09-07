@@ -151,6 +151,12 @@ interface AlbumDao {
     )
     suspend fun allForIndexing(): List<AlbumListRow>
 
+    // Здоровье библиотеки (П.md §23.18) -- needs `year`, which AlbumListRow doesn't carry.
+    @Query("SELECT id, year FROM albums WHERE deletedAt IS NULL")
+    suspend fun allIdsAndYears(): List<AlbumIdYearRow>
+
+    data class AlbumIdYearRow(val id: String, val year: Int?)
+
     data class AlbumListRow(
         val id: String,
         val title: String,

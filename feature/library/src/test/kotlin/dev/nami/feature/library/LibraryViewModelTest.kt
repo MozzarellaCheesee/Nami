@@ -97,6 +97,7 @@ class LibraryViewModelTest {
     @Test
     fun `importing clears progress once finished`() = runTest {
         val fakeRepo = object : LibraryRepository {
+            override suspend fun libraryHealthReport() = error("unused")
             override fun tracks(): Flow<PagingData<Track>> = flowOf(PagingData.empty())
             override suspend fun allTracksOrdered(): List<Track> = emptyList()
             override fun track(id: TrackId): Flow<Track?> = flowOf(null)
@@ -147,6 +148,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
     @Test
     fun `importFolder clears progress once finished`() = runTest {
         val fakeRepo = object : LibraryRepository {
+            override suspend fun libraryHealthReport() = error("unused")
             override fun tracks() = flowOf(PagingData.empty<Track>())
             override suspend fun allTracksOrdered(): List<Track> = emptyList()
             override fun track(id: TrackId) = flowOf<Track?>(null)
@@ -199,6 +201,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
     @Test
     fun `selectTab updates uiState selectedTab`() = runTest {
         val fakeRepo = object : LibraryRepository {
+            override suspend fun libraryHealthReport() = error("unused")
             override fun tracks() = flowOf(PagingData.empty<Track>())
             override suspend fun allTracksOrdered(): List<Track> = emptyList()
             override fun track(id: TrackId) = flowOf<Track?>(null)
@@ -253,6 +256,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun rebuildIndex() { rebuildCalled = true }
         }
         val fakeRepo = object : LibraryRepository {
+            override suspend fun libraryHealthReport() = error("unused")
             override fun tracks() = flowOf(PagingData.empty<Track>())
             override suspend fun allTracksOrdered(): List<Track> = emptyList()
             override fun track(id: TrackId) = flowOf<Track?>(null)
@@ -308,6 +312,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun rebuildIndex() { rebuildCalled = true }
         }
         val fakeRepo = object : LibraryRepository {
+            override suspend fun libraryHealthReport() = error("unused")
             override fun tracks() = flowOf(PagingData.empty<Track>())
             override suspend fun allTracksOrdered(): List<Track> = emptyList()
             override fun track(id: TrackId) = flowOf<Track?>(null)
@@ -358,6 +363,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
     @Test
     fun `deleteTrack sets lastDeletedTrackIds after repository call`() = runTest {
         val fakeLibraryRepository = object : LibraryRepository {
+            override suspend fun libraryHealthReport() = error("unused")
             override fun tracks() = flowOf(PagingData.empty<Track>())
             override suspend fun allTracksOrdered(): List<Track> = emptyList()
             override fun track(id: TrackId) = flowOf<Track?>(null)
@@ -408,6 +414,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
     @Test
     fun `undoLastDelete restores the track and clears state`() = runTest {
         val fakeLibraryRepository = object : LibraryRepository {
+            override suspend fun libraryHealthReport() = error("unused")
             override fun tracks() = flowOf(PagingData.empty<Track>())
             override suspend fun allTracksOrdered(): List<Track> = emptyList()
             override fun track(id: TrackId) = flowOf<Track?>(null)
@@ -460,6 +467,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
     @Test
     fun `toggleTrackSelection adds then removes an id`() = runTest {
         val fakeLibraryRepository = object : LibraryRepository {
+            override suspend fun libraryHealthReport() = error("unused")
             override fun tracks() = flowOf(PagingData.empty<Track>())
             override suspend fun allTracksOrdered(): List<Track> = emptyList()
             override fun track(id: TrackId) = flowOf<Track?>(null)
@@ -512,6 +520,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
     fun `deleteSelectedTracks deletes all selected ids and clears selection`() = runTest {
         val deletedIds = mutableListOf<TrackId>()
         val fakeLibraryRepository = object : LibraryRepository {
+            override suspend fun libraryHealthReport() = error("unused")
             override fun tracks() = flowOf(PagingData.empty<Track>())
             override suspend fun allTracksOrdered(): List<Track> = emptyList()
             override fun track(id: TrackId) = flowOf<Track?>(null)
@@ -565,6 +574,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
     @Test
     fun `clearSelection empties selectedTrackIds`() = runTest {
         val fakeLibraryRepository = object : LibraryRepository {
+            override suspend fun libraryHealthReport() = error("unused")
             override fun tracks() = flowOf(PagingData.empty<Track>())
             override suspend fun allTracksOrdered(): List<Track> = emptyList()
             override fun track(id: TrackId) = flowOf<Track?>(null)

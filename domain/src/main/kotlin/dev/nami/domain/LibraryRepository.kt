@@ -11,6 +11,9 @@ import dev.nami.core.model.TrackId
 import kotlinx.coroutines.flow.Flow
 
 interface LibraryRepository {
+    /** См. LibraryHealthReport -- пробегает по всей библиотеке, не для частого вызова. */
+    suspend fun libraryHealthReport(): LibraryHealthReport
+
     fun tracks(): Flow<PagingData<Track>>
     /** Snapshot of every non-deleted track, same order as [tracks], for building a full playback queue. */
     suspend fun allTracksOrdered(): List<Track>
