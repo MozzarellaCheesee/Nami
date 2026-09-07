@@ -33,6 +33,7 @@ import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Notes
 import androidx.compose.material.icons.outlined.PlaylistAdd
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.IconButton
@@ -71,6 +72,7 @@ fun TrackListItem(
     onLikeTrack: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
     onRename: (() -> Unit)? = null,
+    onEditNote: (() -> Unit)? = null,
     onRemoveFromAlbum: (() -> Unit)? = null,
     onRemoveFromArtist: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
@@ -192,7 +194,7 @@ fun TrackListItem(
         }
         if (selectionMode) {
             Checkbox(checked = isSelected, onCheckedChange = null)
-        } else if (onAddToPlaylist != null || onAddToQueue != null || onDelete != null || onRename != null || onRemoveFromAlbum != null || onRemoveFromArtist != null || onLikeTrack != null) {
+        } else if (onAddToPlaylist != null || onAddToQueue != null || onDelete != null || onRename != null || onRemoveFromAlbum != null || onRemoveFromArtist != null || onLikeTrack != null || onEditNote != null) {
             IconButton(onClick = { showMenu = true }) {
                 Icon(Icons.Outlined.MoreVert, contentDescription = "Ещё", tint = NamiColors.Paper40)
             }
@@ -204,6 +206,7 @@ fun TrackListItem(
                         onAddToPlaylist?.let { ContextAction("В плейлист", Icons.Outlined.LibraryAdd, it) },
                         onAddToQueue?.let { ContextAction("В очередь", Icons.Outlined.PlaylistAdd, it) },
                         onRename?.let { ContextAction("Переименовать", Icons.Outlined.Edit, it) },
+                        onEditNote?.let { ContextAction("Заметка", Icons.Outlined.Notes, it) },
                         onRemoveFromAlbum?.let { ContextAction("Убрать из альбома", Icons.Outlined.Delete, it) },
                         onRemoveFromArtist?.let { ContextAction("Убрать у артиста", Icons.Outlined.Delete, it) },
                         onDelete?.let { ContextAction("Удалить", Icons.Outlined.Delete, it) },

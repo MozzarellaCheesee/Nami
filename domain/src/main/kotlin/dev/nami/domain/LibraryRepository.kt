@@ -50,6 +50,9 @@ interface LibraryRepository {
      * not on every skip -- live everywhere that reads Track.playCount via a Flow. */
     suspend fun incrementPlayCount(id: TrackId)
     suspend fun setTrackReplayGain(id: TrackId, gainDb: Float)
+
+    /** План.md §22.17 "Заметки к треку" -- free-text personal comment, null clears it. */
+    suspend fun setTrackNote(id: TrackId, note: String?)
     fun albumsByArtist(id: ArtistId): Flow<List<AlbumSummary>>
     suspend fun import(source: ImportSource): Flow<ImportProgress>
     suspend fun deleteTrack(id: TrackId)

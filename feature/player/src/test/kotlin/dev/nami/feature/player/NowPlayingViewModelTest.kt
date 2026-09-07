@@ -94,6 +94,7 @@ class NowPlayingViewModelTest {
         override fun albumsByArtist(id: dev.nami.core.model.ArtistId) = throw NotImplementedError()
         override suspend fun incrementPlayCount(id: dev.nami.core.model.TrackId) {}
         override suspend fun setTrackReplayGain(id: dev.nami.core.model.TrackId, gainDb: Float) {}
+        override suspend fun setTrackNote(id: dev.nami.core.model.TrackId, note: String?) {}
         override suspend fun import(source: ImportSource): Flow<dev.nami.domain.ImportProgress> = throw NotImplementedError()
         override suspend fun deleteTrack(id: TrackId) = throw NotImplementedError()
         override suspend fun deleteTracks(ids: List<TrackId>) {}

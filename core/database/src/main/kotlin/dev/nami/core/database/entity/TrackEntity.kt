@@ -54,4 +54,7 @@ data class TrackEntity(
      * Null until scanned (or if scanning failed) -- not true EBU R128 (no true-peak/gating), just
      * simple RMS over the decoded track. */
     val replayGainDb: Float? = null,
+    /** "Заметки к треку" (План.md §22.17) -- free-text personal comment, null until the user
+     * writes one. */
+    val note: String? = null,
 )

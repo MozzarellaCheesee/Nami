@@ -203,6 +203,10 @@ class LibraryRepositoryImpl @Inject constructor(
         trackDao.updateReplayGain(id.value, gainDb)
     }
 
+    override suspend fun setTrackNote(id: TrackId, note: String?) {
+        trackDao.updateNote(id.value, note?.takeIf { it.isNotBlank() })
+    }
+
     override suspend fun deleteTrack(id: TrackId) {
         val track = trackDao.findById(id.value) ?: return
         val trashedPath = trashFileStore.moveToTrash(id.value, track.path) ?: track.path

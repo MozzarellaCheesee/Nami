@@ -63,6 +63,7 @@ class SearchViewModelTest {
         override fun tracksByArtist(id: ArtistId): Flow<List<Track>> = error("unused")
         override suspend fun incrementPlayCount(id: TrackId) = error("unused")
         override suspend fun setTrackReplayGain(id: TrackId, gainDb: Float) = error("unused")
+        override suspend fun setTrackNote(id: TrackId, note: String?) = error("unused")
         override fun albumsByArtist(id: ArtistId): Flow<List<AlbumSummary>> = error("unused")
         override suspend fun import(source: ImportSource): Flow<ImportProgress> = error("unused")
         override suspend fun deleteTrack(id: TrackId) = error("unused")

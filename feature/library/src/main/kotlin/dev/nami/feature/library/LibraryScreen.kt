@@ -110,6 +110,7 @@ fun LibraryScreen(
     var addToPlaylistTrackId by remember { mutableStateOf<TrackId?>(null) }
     var showAddSelectedToPlaylist by remember { mutableStateOf(false) }
     var renameTrack by remember { mutableStateOf<Track?>(null) }
+    var noteTrack by remember { mutableStateOf<Track?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val selectionMode = uiState.selectedTrackIds.isNotEmpty()
     val albumSelectionMode = uiState.selectedAlbumIds.isNotEmpty()
@@ -197,6 +198,7 @@ fun LibraryScreen(
                         onToggleSelection = { trackId -> viewModel.toggleTrackSelection(trackId) },
                         onSetSelection = { ids -> viewModel.setSelectedTracks(ids) },
                         onRenameTrack = { track -> renameTrack = track },
+                        onEditNoteTrack = { track -> noteTrack = track },
                         nowPlaying = nowPlaying,
                     )
                     LibraryTab.ALBUMS -> AlbumGridContent(
@@ -265,6 +267,15 @@ fun LibraryScreen(
             title = "Переименовать трек",
             onRename = { newTitle -> viewModel.renameTrack(track.id, newTitle) },
             onDismiss = { renameTrack = null },
+        )
+    }
+
+    noteTrack?.let { track ->
+        NoteDialog(
+            trackTitle = track.title,
+            currentNote = track.note ?: "",
+            onSave = { note -> viewModel.setTrackNote(track.id, note) },
+            onDismiss = { noteTrack = null },
         )
     }
 
@@ -452,6 +463,7 @@ private fun TrackListContent(
     onToggleSelection: (TrackId) -> Unit,
     onSetSelection: (Set<TrackId>) -> Unit,
     onRenameTrack: (Track) -> Unit,
+    onEditNoteTrack: (Track) -> Unit,
     nowPlaying: NowPlayingRow?,
 ) {
     if (tracks.itemCount == 0) {
@@ -576,6 +588,7 @@ private fun TrackListContent(
                         onAddToQueue = if (selectionMode || nowPlaying == null) null else { { onAddToQueueTrack(track) } },
                         onDelete = if (selectionMode) null else { { onDelete(track.id) } },
                         onRename = if (selectionMode) null else { { onRenameTrack(track) } },
+                        onEditNote = if (selectionMode) null else { { onEditNoteTrack(track) } },
                         isCurrentTrack = track.id == nowPlaying?.trackId,
                         isPlaying = track.id == nowPlaying?.trackId && nowPlaying.isPlaying,
                     )
@@ -727,4 +740,32 @@ private fun EmptyLibraryMessage() {
             modifier = Modifier.align(Alignment.CenterHorizontally),
         )
     }
+}
+
+/** План.md §22.17 "Заметки к треку" -- free-text personal comment. Multiline OutlinedTextField
+ * (RenameDialog's is deliberately singleLine, wrong shape for this), otherwise same
+ * NamiAlertDialog styling as every other text-entry dialog in the app. */
+@Composable
+private fun NoteDialog(trackTitle: String, currentNote: String, onSave: (String?) -> Unit, onDismiss: () -> Unit) {
+    var note by remember { mutableStateOf(currentNote) }
+    dev.nami.core.designsystem.NamiAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Заметка: $trackTitle") },
+        text = {
+            androidx.compose.material3.OutlinedTextField(
+                value = note,
+                onValueChange = { note = it },
+                placeholder = { Text("Например: когда впервые услышал, кто посоветовал...") },
+                minLines = 3,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = {
+                onSave(note.trim().ifBlank { null })
+                onDismiss()
+            }) { Text("Сохранить") }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Отмена") } },
+    )
 }

@@ -192,6 +192,10 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch { libraryRepository.renameTrack(id, title) }
     }
 
+    fun setTrackNote(id: TrackId, note: String?) {
+        viewModelScope.launch { libraryRepository.setTrackNote(id, note) }
+    }
+
     fun toggleAlbumSelection(id: AlbumId) {
         val current = _uiState.value.selectedAlbumIds
         _uiState.value = _uiState.value.copy(

@@ -178,6 +178,13 @@ val MIGRATION_13_14 = object : Migration(13, 14) {
 }
 
 /** Этап 6's "A-B петли с сохранением" (План.md §22.2) -- a new table, no existing columns touched. */
+/** Этап 6's "заметки к треку" (План.md §22.17). */
+val MIGRATION_15_16 = object : Migration(15, 16) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE tracks ADD COLUMN note TEXT")
+    }
+}
+
 val MIGRATION_14_15 = object : Migration(14, 15) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL(

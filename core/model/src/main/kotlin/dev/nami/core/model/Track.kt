@@ -24,4 +24,5 @@ data class Track(
     val bitDepth: Int? = null,
     val channels: Int? = null,
     val replayGainDb: Float? = null,
+    val note: String? = null,
 )

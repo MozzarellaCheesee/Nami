@@ -30,6 +30,7 @@ fun TrackEntity.toDomain(albumArtworkPath: String? = null, artistName: String? =
     bitDepth = bitDepth,
     channels = channels,
     replayGainDb = replayGainDb,
+    note = note,
 )
 
 fun TrackDao.TrackWithArtwork.toDomain(): Track = track.toDomain(albumArtworkPath = albumArtworkPath, artistName = artistName)
