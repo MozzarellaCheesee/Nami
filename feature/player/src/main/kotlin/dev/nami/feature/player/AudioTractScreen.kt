@@ -74,7 +74,7 @@ fun AudioTractScreen(onBack: () -> Unit, onOpenEqualizer: () -> Unit, viewModel:
 
     val nodes = buildList {
         add(ChainNode("Файл", track?.let { formatFileDetail(it) } ?: "ничего не играет", Icons.Outlined.Description))
-        add(ChainNode("Декодер", "нативный, без потерь", Icons.Outlined.Memory))
+        add(ChainNode("Декодер", track?.let { decoderDetail(it) } ?: "нативный", Icons.Outlined.Memory))
         add(ChainNode("Обработка", processingParts.takeIf { it.isNotEmpty() }?.joinToString(" · ") ?: "нет", Icons.Outlined.Tune))
         add(ChainNode("Ресемплинг", "нет", Icons.Outlined.CompareArrows))
         add(ChainNode("Вывод", outputDetail, Icons.Outlined.Speaker))
@@ -226,6 +226,16 @@ private fun GainPill(label: String, selected: Boolean, onClick: () -> Unit) {
             style = MaterialTheme.typography.labelLarge,
         )
     }
+}
+
+// Real per-format info, not a static label -- codec name (from the file's own format) plus
+// whether it's lossless, both actually true facts about what's playing right now.
+private val LOSSLESS_FORMATS = setOf("flac", "wav", "alac", "ape", "wv", "tak", "aiff", "dsf", "dff")
+
+private fun decoderDetail(track: Track): String {
+    val format = track.format.lowercase()
+    val codecName = track.format.uppercase()
+    return if (format in LOSSLESS_FORMATS) "$codecName, нативный, без потерь" else "$codecName, нативный, с потерями"
 }
 
 private fun formatFileDetail(track: Track): String {

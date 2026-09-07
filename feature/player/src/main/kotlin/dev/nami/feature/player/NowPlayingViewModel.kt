@@ -11,9 +11,13 @@ import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerQueue
 import dev.nami.domain.PlayerRepository
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -25,6 +29,15 @@ class NowPlayingViewModel @Inject constructor(
 
     val playbackState: StateFlow<PlaybackState> = playerRepository.state
     val queue: StateFlow<PlayerQueue> = playerRepository.queue
+
+    /** Full Track for the "Аудиотракт"-style file details (bitrate/size/etc.) shown near the
+     * format badge -- QueueTrack only carries what the mini/full player needs for display, not
+     * the byte-level stuff, so this looks the real Track back up by id instead of growing
+     * QueueTrack for one screen's use. */
+    val currentTrackDetails: StateFlow<Track?> = playerRepository.state
+        .filterIsInstance<PlaybackState.Playing>()
+        .flatMapLatest { playing -> libraryRepository.track(playing.trackId) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     private val _externalTrackChangeSignal = MutableStateFlow(0)
     /** Bumped by playTrack/playFromLibrary/playTracks -- the "a track was selected from a list tap"

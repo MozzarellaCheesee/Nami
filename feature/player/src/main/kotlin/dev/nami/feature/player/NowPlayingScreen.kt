@@ -92,6 +92,7 @@ fun NowPlayingScreen(
 ) {
     val state by viewModel.playbackState.collectAsState()
     val queue by viewModel.queue.collectAsState()
+    val trackDetails by viewModel.currentTrackDetails.collectAsState()
     val playing = state as? PlaybackState.Playing
     val density = LocalDensity.current
     val dismissThresholdPx = with(density) { DISMISS_THRESHOLD_DP.dp.toPx() }
@@ -366,9 +367,12 @@ fun NowPlayingScreen(
         }
         // Format badge sits below the transport controls per Дизайн.md §4.3 (mockup order:
         // controls, then format badge row, then the pill row) -- was above the scrubber before.
+        // Detail string (bitrate/sample-rate-bit-depth/size) needs the full Track (byte size,
+        // duration), not just QueueTrack's format string -- falls back to just the format badge
+        // until currentTrackDetails' lookup resolves, and stays format-only if it never does.
         queue.nowPlaying?.format?.let { format ->
             Text(
-                text = format.uppercase(),
+                text = formatBadgeDetail(format, trackDetails),
                 color = NamiColors.Ai,
                 style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
                 modifier = Modifier
@@ -502,4 +506,25 @@ private fun formatDuration(ms: Long): String {
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
     return "%d:%02d".format(minutes, seconds)
+}
+
+/** "FLAC · 24 бит · 96 кГц · 1411 кбит/с · 42.3 МБ" -- as much as we actually know about the
+ * file, not guessed. Bitrate is average (fileSize*8/duration), same approximation любой player
+ * uses for a non-VBR-analyzed file; container overhead makes it a slight overestimate, close
+ * enough to be useful. */
+private fun formatBadgeDetail(format: String, track: dev.nami.core.model.Track?): String {
+    val parts = buildList {
+        add(format.uppercase())
+        track?.bitDepth?.let { add("$it бит") }
+        track?.sampleRateHz?.let { add("${it / 1000} кГц") }
+        if (track != null && track.durationMs > 0) {
+            val kbps = (track.sizeBytes * 8) / track.durationMs
+            add("$kbps кбит/с")
+        }
+        track?.sizeBytes?.let { bytes ->
+            val mb = bytes / 1024.0 / 1024.0
+            add("%.1f МБ".format(mb))
+        }
+    }
+    return parts.joinToString(" · ")
 }
