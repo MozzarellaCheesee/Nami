@@ -3,6 +3,8 @@ package dev.nami.feature.player
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -73,7 +75,13 @@ fun EqualizerScreen(onBack: () -> Unit, viewModel: AudioTractViewModel = hiltVie
                     modifier = Modifier.padding(end = 16.dp),
                 )
             }
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 24.dp),
+            ) {
                 EqCurve(bands = bands, modifier = Modifier.fillMaxWidth().height(180.dp).padding(top = 8.dp))
                 Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
                     Text("20 Гц", color = NamiColors.Paper40, style = MaterialTheme.typography.labelSmall)

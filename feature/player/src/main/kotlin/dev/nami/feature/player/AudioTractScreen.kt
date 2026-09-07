@@ -3,6 +3,7 @@ package dev.nami.feature.player
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -85,7 +86,13 @@ fun AudioTractScreen(onBack: () -> Unit, onOpenEqualizer: () -> Unit, viewModel:
                     Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
                 }
             }
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(androidx.compose.foundation.rememberScrollState())
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 24.dp),
+            ) {
                 Text(text = "Аудиотракт", color = NamiColors.Paper100, style = MaterialTheme.typography.headlineSmall)
                 Column(modifier = Modifier.padding(top = 24.dp)) {
                     nodes.forEachIndexed { index, node ->
@@ -146,6 +153,16 @@ fun AudioTractScreen(onBack: () -> Unit, onOpenEqualizer: () -> Unit, viewModel:
                     ToggleRow("ReplayGain (Beta)", "выравнивает громкость треков, не EBU R128", uiState.replayGainEnabled, viewModel::setReplayGainEnabled)
                     ToggleRow("Dither (Beta)", "сглаживает шум квантования при обработке", uiState.ditherEnabled, viewModel::setDitherEnabled)
                     ToggleRow("Кроссфейд (Beta)", "плавный переход между треками, не настоящее смешивание", uiState.crossfadeEnabled, viewModel::setCrossfadeEnabled)
+                }
+                if (uiState.eqEnabled || uiState.replayGainEnabled || uiState.ditherEnabled) {
+                    Text(
+                        text = "EQ, ReplayGain и dither включаются только с перезапуском приложения " +
+                            "(закройте его полностью через список приложений и откройте заново) -- " +
+                            "кроссфейд и bit-perfect работают сразу.",
+                        color = NamiColors.Paper40,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
                 }
                 Spacer(modifier = Modifier.height(24.dp))
             }
