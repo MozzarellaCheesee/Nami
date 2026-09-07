@@ -38,6 +38,13 @@ class LyricsRepositoryImpl @Inject constructor() : LyricsRepository {
         }
     }
 
+    override suspend fun importLyricsFile(path: String, rawText: String): Boolean {
+        val lyrics = LrcParser.parse(rawText)
+        if (lyrics.lines.isEmpty()) return false
+        saveLyrics(path, lyrics)
+        return true
+    }
+
     override suspend fun fetchFromLrcLib(title: String, artistName: String?, durationMs: Long): Lyrics? =
         withContext(Dispatchers.IO) {
             LrcLibClient.findSyncedLyrics(title, artistName, durationMs)?.let { LrcParser.parse(it) }

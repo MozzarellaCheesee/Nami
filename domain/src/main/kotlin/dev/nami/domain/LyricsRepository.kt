@@ -17,6 +17,11 @@ interface LyricsRepository {
     fun lyricsForPath(path: String): Flow<Lyrics?>
     suspend fun saveLyrics(path: String, lyrics: Lyrics)
 
+    /** Manual "load from file" -- [rawText] is a user-picked .lrc file's content (standard
+     * `[mm:ss.xx]text` synced format). Parses and saves it as [path]'s lyrics; returns false
+     * (nothing saved) if it parsed to zero lines (wrong format, or truly empty). */
+    suspend fun importLyricsFile(path: String, rawText: String): Boolean
+
     /** LRCLIB (lrclib.net) -- free, keyless, exists specifically for synced lyrics lookup by
      * title/artist/duration. Null on no match, instrumental track, or any network/parse failure;
      * callers treat that the same as "nothing found" and fall through to manual entry. */

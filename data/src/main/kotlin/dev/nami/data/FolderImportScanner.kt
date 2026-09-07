@@ -93,6 +93,21 @@ class FolderImportScanner @Inject constructor(@ApplicationContext private val co
         return extension in AUDIO_EXTENSIONS
     }
 
+    /** Sibling .lrc next to an audio file (same folder, same basename) -- picked up automatically
+     * so a track imported from a folder that already has synced lyrics next to it doesn't need
+     * the "Загрузить .lrc из файла" button at all. */
+    fun findLyrics(doc: DocumentFile): DocumentFile? {
+        val parent = doc.parentFile ?: return null
+        val stem = doc.name?.substringBeforeLast('.', missingDelimiterValue = "") ?: return null
+        if (stem.isEmpty()) return null
+        return parent.listFiles().firstOrNull { candidate ->
+            if (candidate.isDirectory) return@firstOrNull false
+            val name = candidate.name ?: return@firstOrNull false
+            name.substringBeforeLast('.', missingDelimiterValue = name).equals(stem, ignoreCase = true) &&
+                name.substringAfterLast('.', missingDelimiterValue = "").equals("lrc", ignoreCase = true)
+        }
+    }
+
     fun findFolderCover(dir: DocumentFile): DocumentFile? {
         return dir.listFiles().firstOrNull { doc ->
             if (doc.isDirectory) return@firstOrNull false

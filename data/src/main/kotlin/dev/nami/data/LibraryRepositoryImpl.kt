@@ -5,6 +5,7 @@ import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import androidx.core.net.toUri
+import androidx.documentfile.provider.DocumentFile
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
@@ -238,6 +239,7 @@ class LibraryRepositoryImpl @Inject constructor(
                     resolver, doc.uri, musicDir,
                     fallbackArtist = group.artistFolderName,
                     fallbackAlbum = group.albumFolderName,
+                    lyricsDoc = folderImportScanner.findLyrics(doc),
                 )
                 if (albumIdForGroup == null) albumIdForGroup = result?.albumId
                 done++
@@ -275,6 +277,7 @@ class LibraryRepositoryImpl @Inject constructor(
         musicDir: File,
         fallbackArtist: String? = null,
         fallbackAlbum: String? = null,
+        lyricsDoc: DocumentFile? = null,
     ): CopyAndIndexResult? {
         val extension = resolver.getType(uri)?.substringAfterLast('/') ?: "audio"
         val destination = File(musicDir, "${UUID.randomUUID()}.$extension")
@@ -282,6 +285,15 @@ class LibraryRepositoryImpl @Inject constructor(
         resolver.openInputStream(uri)?.use { input ->
             destination.outputStream().use { output -> input.copyTo(output) }
         } ?: return null
+
+        // Same basename convention LyricsRepositoryImpl reads from (sibling .lrc next to the
+        // audio file) -- copied alongside so a folder import with lyrics already sitting next to
+        // the tracks doesn't need a separate manual "load from file" step.
+        if (lyricsDoc != null) {
+            resolver.openInputStream(lyricsDoc.uri)?.use { input ->
+                File(musicDir, "${destination.nameWithoutExtension}.lrc").outputStream().use { output -> input.copyTo(output) }
+            }
+        }
 
         val tags = nativeBridge.readTags(destination.path)
         val artistId = metadataResolver.resolveArtist(tags?.artist ?: tags?.albumArtist ?: fallbackArtist)

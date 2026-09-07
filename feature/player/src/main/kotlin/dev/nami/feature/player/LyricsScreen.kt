@@ -73,6 +73,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.outlined.FileOpen
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.model.Lyrics
 import dev.nami.core.designsystem.NamiColors
@@ -88,7 +91,7 @@ private const val GAP_MS = 5000L
 // for any line whose actual sung duration didn't match the guess, cutting the highlight before
 // the line was finished. Scaling with the gap's own size adapts to lines of very different length
 // without needing per-line duration data.
-private const val GAP_FRACTION_BEFORE_SILENT = 0.85f
+private const val GAP_FRACTION_BEFORE_SILENT = 1.00f
 // Extra grace period after a line's own last known word ends (real word timings only) before
 // calling it silence -- singing that trails slightly past the last detected word shouldn't
 // instantly dim the line and pop the note icon in.
@@ -114,6 +117,10 @@ fun LyricsScreen(
     var dragOffsetY by remember { mutableStateOf(0f) }
     var showEditor by remember { mutableStateOf(false) }
     var showVocabulary by remember { mutableStateOf(false) }
+    val lyricsFileImportFailed by viewModel.lyricsFileImportFailed.collectAsState()
+    val pickLyricsFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let(viewModel::importLyricsFile)
+    }
     // Off by default: tapping a line just seeks to it, same as everywhere else in the app --
     // dictionary lookup only kicks in once this is switched on, so casually tapping through the
     // lyrics to seek around doesn't keep popping up word definitions.
@@ -252,6 +259,11 @@ fun LyricsScreen(
                     color = NamiColors.Paper70,
                     modifier = Modifier.padding(top = 12.dp).clickable { showEditor = true },
                 )
+                Text(
+                    text = "Загрузить .lrc из файла",
+                    color = NamiColors.Paper70,
+                    modifier = Modifier.padding(top = 12.dp).clickable { pickLyricsFile.launch(arrayOf("*/*")) },
+                )
             }
         } else {
             Box(modifier = Modifier.weight(1f)) {
@@ -365,6 +377,9 @@ fun LyricsScreen(
             IconButton(onClick = { showEditor = true }) {
                 Icon(Icons.Outlined.Edit, contentDescription = "Синхронизировать вручную", tint = NamiColors.Paper70)
             }
+            IconButton(onClick = { pickLyricsFile.launch(arrayOf("*/*")) }) {
+                Icon(Icons.Outlined.FileOpen, contentDescription = "Загрузить .lrc из файла", tint = NamiColors.Paper70)
+            }
             // Real per-word timing (on-device whisper.cpp) instead of the linear-interpolation
             // karaoke sweep -- arm64-v8a only, and a ~500MB one-time model download, so this is
             // opt-in and hidden entirely when unsupported rather than failing at runtime.
@@ -417,6 +432,17 @@ fun LyricsScreen(
                 showEditor = false
             },
             onDismiss = { showEditor = false },
+        )
+    }
+
+    if (lyricsFileImportFailed) {
+        dev.nami.core.designsystem.NamiAlertDialog(
+            onDismissRequest = viewModel::dismissLyricsFileImportFailed,
+            title = { Text("Не получилось", color = NamiColors.Paper100) },
+            text = { Text("Файл не читается как .lrc (нужен формат [mm:ss.xx]текст)", color = NamiColors.Paper70) },
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissLyricsFileImportFailed) { Text("ОК") }
+            },
         )
     }
 

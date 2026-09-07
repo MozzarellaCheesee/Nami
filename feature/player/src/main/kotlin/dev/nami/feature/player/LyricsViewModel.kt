@@ -1,8 +1,11 @@
 package dev.nami.feature.player
 
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.nami.core.model.DictionaryEntry
 import dev.nami.core.model.LyricLine
 import dev.nami.core.model.Lyrics
@@ -30,7 +33,9 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 data class WordLookup(val token: WordToken, val entries: List<DictionaryEntry>, val contextLine: String)
@@ -59,6 +64,7 @@ data class LyricsUiState(
 
 @HiltViewModel
 class LyricsViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val playerRepository: PlayerRepository,
     private val libraryRepository: LibraryRepository,
     private val lyricsRepository: LyricsRepository,
@@ -355,5 +361,28 @@ class LyricsViewModel @Inject constructor(
             lyricsRepository.saveLyrics(path, Lyrics(lines))
             reloadSignal.value++
         }
+    }
+
+    private val _lyricsFileImportFailed = MutableStateFlow(false)
+    val lyricsFileImportFailed: StateFlow<Boolean> = _lyricsFileImportFailed
+
+    /** "Загрузить из файла" -- [uri] is whatever the user picked via the system file picker. */
+    fun importLyricsFile(uri: Uri) {
+        val path = uiState.value.trackPath ?: return
+        viewModelScope.launch {
+            val text = withContext(Dispatchers.IO) {
+                context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+            }
+            val imported = text != null && lyricsRepository.importLyricsFile(path, text)
+            if (imported) {
+                reloadSignal.value++
+            } else {
+                _lyricsFileImportFailed.value = true
+            }
+        }
+    }
+
+    fun dismissLyricsFileImportFailed() {
+        _lyricsFileImportFailed.value = false
     }
 }
