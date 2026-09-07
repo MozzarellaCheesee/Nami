@@ -62,6 +62,16 @@ interface LibraryRepository {
     /** План.md §22.17 "Заметки к треку" -- free-text personal comment, null clears it. */
     suspend fun setTrackNote(id: TrackId, note: String?)
 
+    /** П.md §23.20 "Встроенный редактор тегов с батч-режимом" -- applies whichever of
+     * [artistName]/[albumName]/[year]/[genre] is non-null to every track in [ids]. Artist/album
+     * resolve through the same MetadataResolver import already uses (find-or-create by name, so
+     * batch-editing 50 tracks to "Farewell225" doesn't create 50 new Artist rows). [year] with no
+     * [albumName] applies to each track's EXISTING album (if it has one) rather than creating one. */
+    suspend fun batchEditTracks(ids: List<TrackId>, artistName: String?, albumName: String?, year: Int?, genre: String?)
+
+    /** П.md §23.20 "автозаполнение из MusicBrainz". */
+    suspend fun searchMusicBrainz(title: String, artistName: String?): List<MusicBrainzCandidate>
+
     /** См. TrackEntity.skipCount -- "правила автоочереди" (План.md §22.13). */
     suspend fun incrementSkipCount(id: TrackId)
 

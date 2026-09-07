@@ -61,6 +61,15 @@ class LibraryViewModel @Inject constructor(
         clearSelection()
     }
 
+    fun batchEditSelectedTracks(artistName: String?, albumName: String?, year: Int?, genre: String?) {
+        val ids = uiState.value.selectedTrackIds.toList()
+        clearSelection()
+        viewModelScope.launch { libraryRepository.batchEditTracks(ids, artistName, albumName, year, genre) }
+    }
+
+    suspend fun searchMusicBrainz(title: String, artistName: String?) =
+        libraryRepository.searchMusicBrainz(title, artistName)
+
     val tracks: Flow<PagingData<Track>> =
         libraryRepository.tracks().cachedIn(viewModelScope)
 

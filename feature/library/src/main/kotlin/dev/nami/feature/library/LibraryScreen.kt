@@ -32,10 +32,12 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Done
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -56,6 +58,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -85,6 +88,7 @@ import dev.nami.feature.playlists.AddToPlaylistDialog
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 @Composable
 fun LibraryScreen(
@@ -109,6 +113,7 @@ fun LibraryScreen(
     val tracks = viewModel.tracks.collectAsLazyPagingItems()
     var addToPlaylistTrackId by remember { mutableStateOf<TrackId?>(null) }
     var showAddSelectedToPlaylist by remember { mutableStateOf(false) }
+    var showBatchEditDialog by remember { mutableStateOf(false) }
     var renameTrack by remember { mutableStateOf<Track?>(null) }
     var noteTrack by remember { mutableStateOf<Track?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -168,6 +173,7 @@ fun LibraryScreen(
                         onDelete = viewModel::deleteSelectedTracks,
                         onAddToPlaylist = { showAddSelectedToPlaylist = true },
                         onLikeSelected = viewModel::likeSelectedTracks,
+                        onEditTags = { showBatchEditDialog = true },
                     )
                 } else if (albumSelectionMode) {
                     AlbumSelectionTopBar(
@@ -288,6 +294,110 @@ fun LibraryScreen(
             },
         )
     }
+
+    if (showBatchEditDialog) {
+        BatchEditDialog(
+            trackCount = uiState.selectedTrackIds.size,
+            onSearchMusicBrainz = { title, artist -> viewModel.searchMusicBrainz(title, artist) },
+            onSave = { artistName, albumName, year, genre ->
+                viewModel.batchEditSelectedTracks(artistName, albumName, year, genre)
+                showBatchEditDialog = false
+            },
+            onDismiss = { showBatchEditDialog = false },
+        )
+    }
+}
+
+/** A3 "Редактор тегов batch" (П.md §23.20) -- artist/album/year/genre fields, blank = leave
+ * unchanged for that field across every selected track (see LibraryRepositoryImpl.batchEditTracks
+ * for exact per-field semantics, e.g. year with no album name applies to each track's existing
+ * album). "Найти в MusicBrainz" searches by a manually typed title/artist and prefills the form
+ * from the first result on tap -- no per-track auto-detection, this batch-edits many tracks at
+ * once so there's no single "the" title to derive a search from. */
+@Composable
+private fun BatchEditDialog(
+    trackCount: Int,
+    onSearchMusicBrainz: suspend (title: String, artist: String?) -> List<dev.nami.domain.MusicBrainzCandidate>,
+    onSave: (artistName: String?, albumName: String?, year: Int?, genre: String?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var artistName by remember { mutableStateOf("") }
+    var albumName by remember { mutableStateOf("") }
+    var year by remember { mutableStateOf("") }
+    var genre by remember { mutableStateOf("") }
+    var searchTitle by remember { mutableStateOf("") }
+    var searching by remember { mutableStateOf(false) }
+    var candidates by remember { mutableStateOf<List<dev.nami.domain.MusicBrainzCandidate>>(emptyList()) }
+    val scope = rememberCoroutineScope()
+
+    dev.nami.core.designsystem.NamiAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Редактировать теги ($trackCount)") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Пустое поле -- не менять.", style = MaterialTheme.typography.bodySmall)
+                androidx.compose.material3.OutlinedTextField(
+                    value = artistName, onValueChange = { artistName = it },
+                    label = { Text("Исполнитель") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                )
+                androidx.compose.material3.OutlinedTextField(
+                    value = albumName, onValueChange = { albumName = it },
+                    label = { Text("Альбом") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                )
+                androidx.compose.material3.OutlinedTextField(
+                    value = year, onValueChange = { year = it.filter { c -> c.isDigit() } },
+                    label = { Text("Год") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                )
+                androidx.compose.material3.OutlinedTextField(
+                    value = genre, onValueChange = { genre = it },
+                    label = { Text("Жанр") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                )
+                Text("Поиск в MusicBrainz:", style = MaterialTheme.typography.bodySmall)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.OutlinedTextField(
+                        value = searchTitle, onValueChange = { searchTitle = it },
+                        label = { Text("Название трека") }, singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(
+                        enabled = searchTitle.isNotBlank() && !searching,
+                        onClick = {
+                            searching = true
+                            scope.launch {
+                                candidates = onSearchMusicBrainz(searchTitle, artistName.ifBlank { null })
+                                searching = false
+                            }
+                        },
+                    ) { Icon(Icons.Outlined.Search, contentDescription = "Искать") }
+                }
+                candidates.forEach { candidate ->
+                    Text(
+                        text = listOfNotNull(candidate.artistName, candidate.title, candidate.albumName, candidate.year?.toString())
+                            .joinToString(" — "),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            candidate.artistName?.let { artistName = it }
+                            candidate.albumName?.let { albumName = it }
+                            candidate.year?.let { year = it.toString() }
+                            candidate.genre?.let { genre = it }
+                            candidates = emptyList()
+                        },
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = {
+                onSave(
+                    artistName.trim().ifBlank { null },
+                    albumName.trim().ifBlank { null },
+                    year.trim().toIntOrNull(),
+                    genre.trim().ifBlank { null },
+                )
+            }) { Text("Сохранить") }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Отмена") } },
+    )
 }
 
 @Composable
@@ -316,6 +426,7 @@ private fun SelectionTopBar(
     onDelete: () -> Unit,
     onAddToPlaylist: () -> Unit,
     onLikeSelected: () -> Unit,
+    onEditTags: () -> Unit,
 ) {
     var showMenu by remember { mutableStateOf(false) }
     Row(
@@ -344,6 +455,7 @@ private fun SelectionTopBar(
             actions = listOf(
                 ContextAction("В плейлист", Icons.Outlined.LibraryAdd, onAddToPlaylist),
                 ContextAction("Отметить любимым", Icons.Outlined.FavoriteBorder, onLikeSelected),
+                ContextAction("Редактировать теги", Icons.Outlined.Edit, onEditTags),
                 ContextAction("Удалить", Icons.Outlined.Delete, onDelete),
             ),
         )

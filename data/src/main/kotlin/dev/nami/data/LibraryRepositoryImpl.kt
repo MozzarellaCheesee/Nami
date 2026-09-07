@@ -31,6 +31,7 @@ import dev.nami.domain.LyricsRepository
 import dev.nami.domain.NativeBridge
 import dev.nami.player.dsd.DsfToDopWav
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
@@ -251,6 +252,27 @@ class LibraryRepositoryImpl @Inject constructor(
     override suspend fun setTrackNote(id: TrackId, note: String?) {
         trackDao.updateNote(id.value, note?.takeIf { it.isNotBlank() })
     }
+
+    override suspend fun batchEditTracks(ids: List<TrackId>, artistName: String?, albumName: String?, year: Int?, genre: String?) {
+        // Resolved once for the whole batch, not per track -- otherwise "same artist name" would
+        // still risk create-then-find races across tracks (find-or-create isn't atomic here).
+        val resolvedArtistId = artistName?.takeIf { it.isNotBlank() }?.let { metadataResolver.resolveArtist(it) }
+        val resolvedAlbumId = albumName?.takeIf { it.isNotBlank() }?.let { metadataResolver.resolveAlbum(it, resolvedArtistId, year) }
+
+        for (id in ids) {
+            if (resolvedArtistId != null) trackDao.setArtistId(id.value, resolvedArtistId)
+            if (resolvedAlbumId != null) {
+                trackDao.setAlbumId(id.value, resolvedAlbumId)
+            } else if (year != null) {
+                // No new album named -- apply the year to whatever album this track is already on.
+                trackDao.findById(id.value)?.albumId?.let { albumDao.setYear(it, year) }
+            }
+            if (genre != null) trackDao.updateGenre(id.value, genre.takeIf { it.isNotBlank() })
+        }
+    }
+
+    override suspend fun searchMusicBrainz(title: String, artistName: String?): List<dev.nami.domain.MusicBrainzCandidate> =
+        withContext(Dispatchers.IO) { MusicBrainzClient.search(title, artistName) }
 
     override suspend fun incrementSkipCount(id: TrackId) {
         trackDao.incrementSkipCount(id.value)

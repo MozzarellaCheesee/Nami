@@ -165,6 +165,9 @@ interface TrackDao {
     @Query("UPDATE tracks SET note = :note WHERE id = :id")
     suspend fun updateNote(id: String, note: String?)
 
+    @Query("UPDATE tracks SET genre = :genre WHERE id = :id")
+    suspend fun updateGenre(id: String, genre: String?)
+
     @Query("UPDATE tracks SET skipCount = skipCount + 1 WHERE id = :id")
     suspend fun incrementSkipCount(id: String)
 

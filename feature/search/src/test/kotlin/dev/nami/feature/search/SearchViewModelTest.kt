@@ -34,6 +34,8 @@ class SearchViewModelTest {
     // errors loudly if a test path ever ends up calling it, instead of silently returning junk.
     private val fakeLibraryRepository = object : LibraryRepository {
         override suspend fun libraryHealthReport() = error("unused")
+            override suspend fun batchEditTracks(ids: List<dev.nami.core.model.TrackId>, artistName: String?, albumName: String?, year: Int?, genre: String?) = error("unused")
+            override suspend fun searchMusicBrainz(title: String, artistName: String?) = error("unused")
         override fun tracks() = error("unused")
         override suspend fun allTracksOrdered(): List<Track> = error("unused")
         override fun track(id: TrackId) = error("unused")

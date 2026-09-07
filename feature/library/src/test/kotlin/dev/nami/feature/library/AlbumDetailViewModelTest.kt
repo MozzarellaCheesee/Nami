@@ -46,6 +46,8 @@ class AlbumDetailViewModelTest {
         )
         val fakeRepo = object : LibraryRepository {
             override suspend fun libraryHealthReport() = error("unused")
+            override suspend fun batchEditTracks(ids: List<dev.nami.core.model.TrackId>, artistName: String?, albumName: String?, year: Int?, genre: String?) = error("unused")
+            override suspend fun searchMusicBrainz(title: String, artistName: String?) = error("unused")
             override fun tracks() = throw NotImplementedError()
             override suspend fun allTracksOrdered(): List<Track> = emptyList()
             override fun track(id: TrackId) = throw NotImplementedError()
