@@ -3,8 +3,7 @@ package dev.nami.player.waveform
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
-import kotlin.math.abs
-import kotlin.math.pow
+import kotlin.math.sqrt
 
 /** Real per-track waveform for the Now Playing scrubber -- decodes the whole file once (same
  * MediaCodec/MediaExtractor approach as ReplayGainScanner) and reduces it to [BAR_COUNT] bucket
@@ -14,10 +13,12 @@ object WaveformScanner {
 
     const val BAR_COUNT = 120
 
-    /** One peak-amplitude value per bucket (0f..1f, gamma-compressed so quiet passages are still
-     * visible instead of reading as flat silence next to a few loud peaks), [BAR_COUNT] of them
-     * spanning the whole track. Null on any decode failure -- fails closed, caller falls back to
-     * a placeholder shape rather than showing nothing. */
+    /** One RMS-loudness value per bucket (0f..1f, normalized to the track's own loudest bucket),
+     * [BAR_COUNT] of them spanning the whole track. RMS, not peak: most modern masters sit at or
+     * near full-scale peak almost everywhere (the loudness-war look), which made a peak-based
+     * scan draw a near-flat "brick" -- RMS tracks perceived loudness instead, which actually
+     * varies through a track's quiet/loud sections and looks like a real waveform. Null on any
+     * decode failure -- fails closed, caller falls back to a placeholder shape. */
     fun scan(path: String): List<Float>? {
         val extractor = MediaExtractor()
         return try {
@@ -35,7 +36,8 @@ object WaveformScanner {
             codec.configure(format, null, null, 0)
             codec.start()
 
-            val buckets = FloatArray(BAR_COUNT)
+            val bucketSumSquares = DoubleArray(BAR_COUNT)
+            val bucketSampleCounts = LongArray(BAR_COUNT)
             val bufferInfo = MediaCodec.BufferInfo()
             var inputDone = false
             var outputDone = false
@@ -67,12 +69,11 @@ object WaveformScanner {
                             val fraction = (bufferInfo.presentationTimeUs.toDouble() / durationUs).coerceIn(0.0, 1.0)
                             val bucket = (fraction * (BAR_COUNT - 1)).toInt().coerceIn(0, BAR_COUNT - 1)
                             val shortBuffer = outputBuffer.asShortBuffer()
-                            var peak = 0f
                             while (shortBuffer.hasRemaining()) {
-                                val amplitude = abs(shortBuffer.get() / 32768f)
-                                if (amplitude > peak) peak = amplitude
+                                val sample = shortBuffer.get() / 32768.0
+                                bucketSumSquares[bucket] += sample * sample
+                                bucketSampleCounts[bucket]++
                             }
-                            if (peak > buckets[bucket]) buckets[bucket] = peak
                         }
                     }
                     codec.releaseOutputBuffer(outputIndex, false)
@@ -84,12 +85,16 @@ object WaveformScanner {
             codec.stop()
             codec.release()
 
-            val maxPeak = buckets.max()
-            if (maxPeak <= 0f) return null
-            // Normalize to the track's own loudest moment (not absolute 0dBFS) so a quiet track
-            // still fills the scrubber, then gamma-compress (sqrt) so quiet passages stay visible
-            // instead of reading as a flat line next to a handful of loud peaks.
-            buckets.map { (it / maxPeak).toDouble().pow(0.5).toFloat().coerceIn(0.05f, 1f) }
+            val rms = DoubleArray(BAR_COUNT) { i ->
+                if (bucketSampleCounts[i] > 0) sqrt(bucketSumSquares[i] / bucketSampleCounts[i]) else 0.0
+            }
+            val maxRms = rms.max()
+            if (maxRms <= 0.0) return null
+            // Normalize to the track's own loudest bucket (not absolute 0dBFS) so a quiet track
+            // still fills the scrubber. No extra gamma curve on top -- RMS values already span a
+            // real range track-to-track (unlike peak), a further compression here just flattens
+            // that range back out the same way the old sqrt() did.
+            rms.map { (it / maxRms).toFloat().coerceIn(0.05f, 1f) }
         } catch (e: Exception) {
             null
         } finally {
