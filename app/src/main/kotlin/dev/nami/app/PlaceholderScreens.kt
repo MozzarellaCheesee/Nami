@@ -1,6 +1,7 @@
 package dev.nami.app
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -54,7 +55,17 @@ fun SettingsScreen(onTrashClick: () -> Unit, viewModel: SettingsViewModel = hilt
     var selectedIcon by remember { mutableStateOf(IconPicker.current(context)) }
     var pendingIcon by remember { mutableStateOf<LauncherIcon?>(null) }
 
-    Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(NamiColors.Ink900)
+            // Wasn't scrollable at all before -- the Tracks-tab NavHost area is a weighted
+            // Column child that shrinks when MiniPlayer appears below it, so with a fixed-height
+            // Column here the bottom section (Хранилище/Корзина) just got clipped off-screen
+            // with no way to reach it while something was playing.
+            .verticalScroll(androidx.compose.foundation.rememberScrollState())
+            .padding(bottom = 24.dp),
+    ) {
         Text(
             text = "Настройки",
             color = NamiColors.Paper100,
