@@ -10,15 +10,22 @@ import dev.nami.domain.PlayableTrack
 import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerQueue
 import dev.nami.domain.PlayerRepository
+import dev.nami.player.waveform.WaveformScanner
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
@@ -39,6 +46,46 @@ class NowPlayingViewModel @Inject constructor(
         .filterIsInstance<PlaybackState.Playing>()
         .flatMapLatest { playing -> libraryRepository.track(playing.trackId) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    // Real per-track waveform for the scrubber (see WaveformScanner) -- a full-track decode, so
+    // it's scanned lazily off the main thread and cached (path -> bars) in memory for the
+    // session, not persisted; re-decoding on every open of the same track this session would be
+    // wasteful, but there's no DB column for it (would need a migration for a purely visual, easy
+    // -to-recompute value). Null while loading/on failure -- WaveformScrubber falls back to its
+    // own placeholder shape rather than showing nothing.
+    private val waveformCache = LinkedHashMap<String, List<Float>>()
+    private val _waveform = MutableStateFlow<List<Float>?>(null)
+    val waveform: StateFlow<List<Float>?> = _waveform.asStateFlow()
+
+    init {
+        currentTrackDetails
+            .map { it?.path }
+            .distinctUntilChanged()
+            .onEach { path -> loadWaveform(path) }
+            .launchIn(viewModelScope)
+    }
+
+    private fun loadWaveform(path: String?) {
+        if (path == null) {
+            _waveform.value = null
+            return
+        }
+        val cached = waveformCache[path]
+        if (cached != null) {
+            _waveform.value = cached
+            return
+        }
+        _waveform.value = null
+        viewModelScope.launch {
+            val bars = withContext(Dispatchers.Default) { WaveformScanner.scan(path) } ?: return@launch
+            // Cap the cache so a long listening session doesn't grow this unbounded -- each
+            // track's own bar list is small (120 floats), but no reason to keep every track ever
+            // played this session.
+            if (waveformCache.size >= 30) waveformCache.remove(waveformCache.keys.first())
+            waveformCache[path] = bars
+            if (currentTrackDetails.value?.path == path) _waveform.value = bars
+        }
+    }
 
     private val _externalTrackChangeSignal = MutableStateFlow(0)
     /** Bumped by playTrack/playFromLibrary/playTracks -- the "a track was selected from a list tap"

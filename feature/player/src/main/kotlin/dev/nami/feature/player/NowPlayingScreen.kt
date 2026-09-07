@@ -298,6 +298,7 @@ fun NowPlayingScreen(
         var previewProgress by remember { mutableStateOf<Float?>(null) }
         val progress = previewProgress ?: actualProgress
         val positionMs = (progress * durationMs).toLong()
+        val waveform by viewModel.waveform.collectAsState()
         WaveformScrubber(
             seedKey = queue.nowPlaying?.id?.value ?: "",
             progress = actualProgress,
@@ -305,6 +306,7 @@ fun NowPlayingScreen(
             onProgressPreview = { fraction -> previewProgress = fraction },
             onPreviewEnd = { previewProgress = null },
             modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
+            realHeights = waveform,
         )
         Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(

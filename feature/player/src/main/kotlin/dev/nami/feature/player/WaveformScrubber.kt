@@ -21,9 +21,9 @@ private const val BAR_COUNT = 120
 private const val BAR_WIDTH_DP = 2
 private const val BAR_GAP_DP = 1
 
-/** Deterministic per-track bar heights (0f..1f) -- no real amplitude data is available, so
- * this reads as a plausible waveform shape rather than a flat EQ ladder, seeded so the same
- * track always draws the same shape. */
+/** Placeholder shape shown before the real scan (see WaveformScanner/NowPlayingViewModel.waveform)
+ * finishes, or if it fails -- deterministic per-track so it doesn't visibly jitter between
+ * recompositions while loading, but NOT real amplitude data. */
 private fun barHeights(seedKey: String): List<Float> {
     val random = Random(seedKey.hashCode())
     // A few sine-ish "phrases" layered with noise so it doesn't look uniformly random.
@@ -42,8 +42,13 @@ fun WaveformScrubber(
     modifier: Modifier = Modifier,
     onProgressPreview: (Float) -> Unit = {},
     onPreviewEnd: () -> Unit = {},
+    // Real per-track amplitude (WaveformScanner), one value per bar, same size as the placeholder
+    // -- null while it's still decoding or if the scan failed, in which case the placeholder
+    // shape below is what's actually drawn.
+    realHeights: List<Float>? = null,
 ) {
-    val heights = remember(seedKey) { barHeights(seedKey) }
+    val placeholder = remember(seedKey) { barHeights(seedKey) }
+    val heights = if (realHeights != null && realHeights.size == placeholder.size) realHeights else placeholder
     var dragProgress by remember(seedKey) { mutableStateOf<Float?>(null) }
     val displayedProgress = dragProgress ?: progress
 
