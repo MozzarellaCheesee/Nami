@@ -156,14 +156,6 @@ fun NowPlayingScreen(
             )
         }
         Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900.copy(alpha = if (backgroundArtworkPath != null) 0.72f else 1f)))
-        // Real night-mode effect, not decorative -- a warmer, dimmer overlay for late-night
-        // listening (screen-scoped, not an app-wide theme switch): a near-black scrim plus a
-        // faint amber tint, the same idea as a blue-light filter but for the player's own
-        // ambient backdrop specifically.
-        if (nightModeEnabled) {
-            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)))
-            Box(modifier = Modifier.fillMaxSize().background(Color(0xFFFF8A00).copy(alpha = 0.06f)))
-        }
 
     Column(
         modifier = Modifier
@@ -224,6 +216,7 @@ fun NowPlayingScreen(
         // which body the ONE sheet shows instead of stacking a second ModalBottomSheet on top.
         if (showAudioTractSheet) {
             ModalBottomSheet(onDismissRequest = { showAudioTractSheet = false; showEqualizerInSheet = false }) {
+                dev.nami.core.designsystem.ImmersiveSheetEffect()
                 Column(modifier = Modifier.padding(horizontal = 4.dp)) {
                     if (showEqualizerInSheet) {
                         EqualizerBody(onBack = { showEqualizerInSheet = false })
@@ -460,6 +453,15 @@ fun NowPlayingScreen(
             )
             NowPlayingPill(text = "Текст", icon = Icons.Outlined.Subject, onClick = onLyricsClick, modifier = Modifier.weight(1f))
         }
+    }
+    // Real night-mode effect, drawn LAST so it dims everything -- cover art, transport controls,
+    // text -- not just the ambient backdrop peeking around the edges (that was the previous,
+    // barely-visible version: a scrim placed under the foreground content only tinted what showed
+    // through the gaps). No pointerInput/clickable here, so touches still pass straight through
+    // to the buttons underneath.
+    if (nightModeEnabled) {
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)))
+        Box(modifier = Modifier.fillMaxSize().background(Color(0xFFFF8A00).copy(alpha = 0.10f)))
     }
     }
 }

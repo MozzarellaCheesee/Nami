@@ -16,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import dev.nami.core.designsystem.ImmersiveSheetEffect
 import dev.nami.core.designsystem.NamiColors
 
 private val PRESET_MINUTES = listOf(15, 30, 45, 60)
@@ -32,6 +33,7 @@ fun SleepTimerSheet(
     onCancel: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
+        ImmersiveSheetEffect()
         Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
             Text(text = "Таймер сна", color = NamiColors.Paper100, style = MaterialTheme.typography.titleLarge)
             if (remainingMs != null) {
