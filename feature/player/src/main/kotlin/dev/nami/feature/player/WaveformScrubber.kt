@@ -1,10 +1,18 @@
 package dev.nami.feature.player
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,9 +56,33 @@ fun WaveformScrubber(
     realHeights: List<Float>? = null,
 ) {
     val placeholder = remember(seedKey) { barHeights(seedKey) }
-    val heights = if (realHeights != null && realHeights.size == placeholder.size) realHeights else placeholder
+    val isReal = realHeights != null && realHeights.size == placeholder.size
     var dragProgress by remember(seedKey) { mutableStateOf<Float?>(null) }
     val displayedProgress = dragProgress ?: progress
+
+    // Without this, the placeholder shape (deliberately made to look like a plausible waveform,
+    // so it isn't a flat boring bar) silently morphs into the real one the instant the scan
+    // finishes -- indistinguishable from a random unexplained UI change, since nothing marked
+    // the placeholder as "still loading" in the first place. Two cues instead: a slow alpha pulse
+    // on the not-yet-real shape (this bar is a stand-in, not final data), and a smooth animated
+    // crossfade -- not an instant swap -- once the real one arrives, so the transition itself
+    // reads as "this finished loading" rather than "something just changed".
+    val loadingPulse by rememberInfiniteTransition(label = "waveform-loading-pulse").animateFloat(
+        initialValue = 0.35f,
+        targetValue = 0.7f,
+        animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Reverse),
+        label = "waveform-loading-pulse-alpha",
+    )
+    val crossfade = remember(seedKey) { Animatable(0f) }
+    LaunchedEffect(seedKey, isReal) {
+        if (isReal) crossfade.animateTo(1f, animationSpec = tween(500)) else crossfade.snapTo(0f)
+    }
+    val heights = if (isReal) {
+        placeholder.indices.map { i -> placeholder[i] + (realHeights!![i] - placeholder[i]) * crossfade.value }
+    } else {
+        placeholder
+    }
+    val barAlpha = if (isReal) 1f else loadingPulse
 
     Canvas(
         modifier = modifier
@@ -97,7 +129,7 @@ fun WaveformScrubber(
             val barHeightPx = size.height * heightFraction
             val x = index * step
             drawLine(
-                color = if (index < playedBars) NamiColors.Shu else NamiColors.Ink500,
+                color = (if (index < playedBars) NamiColors.Shu else NamiColors.Ink500).copy(alpha = barAlpha),
                 start = Offset(x, (size.height - barHeightPx) / 2f),
                 end = Offset(x, (size.height + barHeightPx) / 2f),
                 strokeWidth = barWidthPx,
