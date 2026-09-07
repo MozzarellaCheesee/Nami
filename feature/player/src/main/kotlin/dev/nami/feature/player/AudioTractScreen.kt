@@ -178,17 +178,6 @@ fun AudioTractScreen(onBack: () -> Unit, onOpenEqualizer: () -> Unit, viewModel:
                     GainPill("+3 дБ", selected = uiState.playbackGainDb == 3f) { viewModel.setPlaybackGainDb(3f) }
                     GainPill("+6 дБ", selected = uiState.playbackGainDb == 6f) { viewModel.setPlaybackGainDb(6f) }
                 }
-                if (uiState.eqEnabled || uiState.replayGainEnabled || uiState.ditherEnabled || uiState.playbackGainDb != 0f) {
-                    Text(
-                        text = "EQ, ReplayGain, dither и усиление воспроизведения включаются только с " +
-                            "перезапуском приложения (закройте его полностью через список приложений и " +
-                            "откройте заново), один раз при первом включении -- потом изменения живые. " +
-                            "Кроссфейд и bit-perfect работают сразу.",
-                        color = NamiColors.Paper40,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(top = 12.dp),
-                    )
-                }
                 Spacer(modifier = Modifier.height(24.dp))
             }
         }

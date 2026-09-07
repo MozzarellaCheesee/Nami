@@ -14,7 +14,9 @@ import kotlinx.coroutines.launch
  * `player.volume` -- no custom AudioSink/RenderersFactory, so unlike EQ/ReplayGain/dither it needs
  * no restart to take effect and can't destabilize decoding at all. */
 class CrossfadeController(
-    private val player: ExoPlayer,
+    // Lambda, not a fixed instance -- PlaybackService can swap out the live ExoPlayer (see
+    // swapPlayer()) when EQ/ReplayGain/dither toggle, and this always needs the CURRENT one.
+    private val player: () -> ExoPlayer,
     private val settingsRepository: SettingsRepository,
     scope: CoroutineScope,
 ) {
@@ -28,11 +30,12 @@ class CrossfadeController(
     }
 
     private fun tick() {
+        val p = player()
         if (!settingsRepository.crossfadeEnabled.value) {
-            if (player.volume != 1f) player.volume = 1f
+            if (p.volume != 1f) p.volume = 1f
             return
         }
-        player.volume = volumeFor(player.currentPosition, player.duration)
+        p.volume = volumeFor(p.currentPosition, p.duration)
     }
 
     companion object {

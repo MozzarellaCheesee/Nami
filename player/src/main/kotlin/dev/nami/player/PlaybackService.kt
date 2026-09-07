@@ -24,6 +24,8 @@ import dev.nami.player.replaygain.ReplayGainScanner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -42,55 +44,27 @@ class PlaybackService : MediaSessionService() {
     private val replayGainProcessor = ReplayGainAudioProcessor()
     private val ditherProcessor = DitherAudioProcessor()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var usingCustomSink = false
+
+    // Per-track ReplayGain scan lives on the player instance's own listener list, re-attached to
+    // whichever ExoPlayer is current after a swapPlayer() -- kept as a field so it's the exact
+    // same listener object both times, not a fresh one that'd be easy to double-add by accident.
+    private val replayGainListener = object : Player.Listener {
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            val trackId = mediaItem?.mediaId?.let(::TrackId) ?: return
+            scope.launch { updateReplayGainForCurrentTrack(trackId) }
+        }
+    }
 
     @Inject lateinit var settingsRepository: SettingsRepository
     @Inject lateinit var libraryRepository: LibraryRepository
 
     override fun onCreate() {
         super.onCreate()
-        // Local files only, no network wait -- widen the buffer window so several tracks
-        // ahead/behind the current one stay decoded and ready, instead of ExoPlayer's default
-        // which only keeps a small window and drops the back buffer entirely (causing a visible
-        // stall on skipNext/skipPrevious).
-        val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(
-                /* minBufferMs = */ 30_000,
-                /* maxBufferMs = */ 120_000,
-                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
-                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
-            )
-            .setBackBuffer(/* backBufferDurationMs = */ 60_000, /* retainBackBufferFromKeyframe = */ true)
-            .build()
-        // Automatic audio-focus handling: pauses when another app starts playing audio/video
-        // (transient or permanent focus loss), and resumes on its own once that app stops --
-        // but only if playback was still going when focus was lost (a manual pause beforehand
-        // stays paused, ExoPlayer tracks this itself).
-        val audioAttributes = AudioAttributes.Builder()
-            .setUsage(C.USAGE_MEDIA)
-            .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-            .build()
-        // Reverted from "always build the custom sink" -- on real hardware, forcing
-        // setEnableFloatOutput(true) unconditionally (inside NamiRenderersFactory) made every
-        // track play back sped-up and pitched-up, a known class of Media3/vendor-HAL bug with
-        // float PCM output on some devices. Confirmed the instant it went live for 100% of
-        // playback (not just the Beta effects users). Correctness beats convenience here: back to
-        // only using the custom sink when the user has actually turned an effect on before this
-        // cold start -- means EQ/ReplayGain/dither still need one app restart to engage for the
-        // very first time, but ordinary playback (the vast majority of sessions) stays on the
-        // exact plain, proven path.
-        val needsCustomSink = settingsRepository.eqEnabled.value ||
-            settingsRepository.replayGainEnabled.value ||
-            settingsRepository.ditherEnabled.value ||
-            settingsRepository.playbackGainDb.value != 0f
-        val playerBuilder = if (needsCustomSink) {
-            ExoPlayer.Builder(this, NamiRenderersFactory(this, replayGainProcessor, eqProcessor, ditherProcessor))
-        } else {
-            ExoPlayer.Builder(this)
-        }
-        player = playerBuilder
-            .setLoadControl(loadControl)
-            .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ true)
-            .build()
+        val needsCustomSink = currentNeedsCustomSink()
+        player = buildPlayer(needsCustomSink)
+        player.addListener(replayGainListener)
+
         // Without a session activity, the system media notification/status-bar chip has nothing
         // to launch on tap. EXTRA_OPEN_PLAYER tells MainActivity to open Now Playing directly
         // instead of just the last screen the user left.
@@ -114,10 +88,28 @@ class PlaybackService : MediaSessionService() {
         notificationProvider.setSmallIcon(R.drawable.ic_notification)
         setMediaNotificationProvider(notificationProvider)
 
+        // Whether ANY effect that needs the custom float-output sink is on right now. Forcing
+        // float output unconditionally caused sped-up/pitched-up playback on real hardware (a
+        // Media3/vendor-HAL bug class), so the sink is only ever built when actually needed --
+        // but the user still shouldn't have to restart the app to feel a toggle, so instead of
+        // gating this once at cold start, swapPlayer() rebuilds the live ExoPlayer instance
+        // (mediaSession.setPlayer, preserving queue/position/playWhenReady) the moment this flips.
+        combine(
+            settingsRepository.eqEnabled,
+            settingsRepository.replayGainEnabled,
+            settingsRepository.ditherEnabled,
+            settingsRepository.playbackGainDb,
+        ) { eq, replayGain, dither, boostDb -> eq || replayGain || dither || boostDb != 0f }
+            .distinctUntilChanged()
+            .onEach { needed -> if (needed != usingCustomSink) swapPlayer(needed) }
+            .launchIn(scope)
+
         // Этап 4's parametric EQ (Beta): gains apply live (see ParametricEqAudioProcessor), but
         // the on/off switch itself only takes effect on DefaultAudioSink's next pipeline rebuild
         // -- force one via a same-position seek so flipping the Settings toggle is felt right
-        // away instead of "starting with the next track".
+        // away instead of "starting with the next track". swapPlayer() above already gives a
+        // fresh pipeline when the sink itself needed to change; this seek covers flips that don't
+        // (e.g. gains changing, or toggling EQ off while ReplayGain/dither keep the sink alive).
         settingsRepository.eqBandGains
             .onEach { gains -> eqProcessor.setGains(gains) }
             .launchIn(scope)
@@ -163,18 +155,77 @@ class PlaybackService : MediaSessionService() {
             }
             .launchIn(scope)
 
-        // ReplayGain scan happens lazily, once per track, on first play -- not during import
-        // (would stall the whole folder scan on decoding every file). Cheap after the first time:
-        // the result is cached on the track (see ReplayGainScanner/replayGainDb).
-        player.addListener(object : Player.Listener {
-            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                val trackId = mediaItem?.mediaId?.let(::TrackId) ?: return
-                scope.launch { updateReplayGainForCurrentTrack(trackId) }
-            }
-        })
-
         BitPerfectUsbController(this, player, settingsRepository, scope)
-        CrossfadeController(player, settingsRepository, scope)
+        CrossfadeController({ player }, settingsRepository, scope)
+    }
+
+    private fun currentNeedsCustomSink(): Boolean =
+        settingsRepository.eqEnabled.value ||
+            settingsRepository.replayGainEnabled.value ||
+            settingsRepository.ditherEnabled.value ||
+            settingsRepository.playbackGainDb.value != 0f
+
+    private fun buildPlayer(useCustomSink: Boolean): ExoPlayer {
+        usingCustomSink = useCustomSink
+        // Local files only, no network wait -- widen the buffer window so several tracks
+        // ahead/behind the current one stay decoded and ready, instead of ExoPlayer's default
+        // which only keeps a small window and drops the back buffer entirely (causing a visible
+        // stall on skipNext/skipPrevious).
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                /* minBufferMs = */ 30_000,
+                /* maxBufferMs = */ 120_000,
+                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
+                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
+            )
+            .setBackBuffer(/* backBufferDurationMs = */ 60_000, /* retainBackBufferFromKeyframe = */ true)
+            .build()
+        // Automatic audio-focus handling: pauses when another app starts playing audio/video
+        // (transient or permanent focus loss), and resumes on its own once that app stops --
+        // but only if playback was still going when focus was lost (a manual pause beforehand
+        // stays paused, ExoPlayer tracks this itself).
+        val audioAttributes = AudioAttributes.Builder()
+            .setUsage(C.USAGE_MEDIA)
+            .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+            .build()
+        val builder = if (useCustomSink) {
+            ExoPlayer.Builder(this, NamiRenderersFactory(this, replayGainProcessor, eqProcessor, ditherProcessor))
+        } else {
+            ExoPlayer.Builder(this)
+        }
+        return builder
+            .setLoadControl(loadControl)
+            .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ true)
+            .build()
+    }
+
+    /** Swaps the live ExoPlayer for one built with (or without) the custom float-output sink,
+     * carrying the queue/position/playback state across so the listener never hears a gap or a
+     * restart -- this is what lets EQ/ReplayGain/dither/playback-gain engage immediately instead
+     * of needing an app restart, without going back to forcing float output unconditionally
+     * (that's what caused the chipmunk-pitch regression). */
+    private fun swapPlayer(useCustomSink: Boolean) {
+        val old = player
+        val mediaItems = (0 until old.mediaItemCount).map { old.getMediaItemAt(it) }
+        val currentIndex = old.currentMediaItemIndex
+        val currentPosition = old.currentPosition
+        val wasPlaying = old.playWhenReady
+        val repeatMode = old.repeatMode
+        val shuffleModeEnabled = old.shuffleModeEnabled
+
+        val fresh = buildPlayer(useCustomSink)
+        fresh.addListener(replayGainListener)
+        if (mediaItems.isNotEmpty()) {
+            fresh.setMediaItems(mediaItems, currentIndex, currentPosition)
+            fresh.repeatMode = repeatMode
+            fresh.shuffleModeEnabled = shuffleModeEnabled
+            fresh.prepare()
+            fresh.playWhenReady = wasPlaying
+        }
+
+        mediaSession.player = fresh
+        player = fresh
+        old.release()
     }
 
     private suspend fun updateReplayGainForCurrentTrack(trackId: TrackId) {
