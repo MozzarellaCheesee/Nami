@@ -1,7 +1,12 @@
 package dev.nami.feature.player
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
@@ -480,15 +485,29 @@ fun NowPlayingScreen(
         // duration), not just QueueTrack's format string -- falls back to just the format badge
         // until currentTrackDetails' lookup resolves, and stays format-only if it never does.
         queue.nowPlaying?.format?.let { format ->
-            Text(
-                text = formatBadgeDetail(format, trackDetails),
-                color = NamiColors.Ai,
-                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+            // BPM/key (BpmKeyAnalyzer) land here live once a background scan finishes, sometimes
+            // well after the badge is already on screen -- an instant text swap would read as the
+            // chip randomly resizing/changing under the user. animateContentSize smooths the
+            // width change, AnimatedContent crossfades the text itself instead of a hard cut.
+            Box(
                 modifier = Modifier
                     .padding(top = 40.dp)
                     .background(NamiColors.Ai.copy(alpha = 0.14f), RoundedCornerShape(4.dp))
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
-            )
+                    .animateContentSize(animationSpec = tween(200)),
+            ) {
+                AnimatedContent(
+                    targetState = formatBadgeDetail(format, trackDetails),
+                    transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(150)) },
+                    label = "format-badge",
+                ) { text ->
+                    Text(
+                        text = text,
+                        color = NamiColors.Ai,
+                        style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
+                }
+            }
         }
         // Bottom pill row per Дизайн.md §4.3: Очередь, night mode, and lyrics ("Текст") --
         // night mode is real (see NowPlayingViewModel.nightModeEnabled/toggleNightMode), not a
