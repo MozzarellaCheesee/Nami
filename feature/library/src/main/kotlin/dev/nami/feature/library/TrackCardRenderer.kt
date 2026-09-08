@@ -25,7 +25,7 @@ object TrackCardRenderer {
     private const val COVER_TOP = 100f
     private const val CORNER_RADIUS = 24f
 
-    fun render(track: Track): Bitmap {
+    fun render(context: Context, track: Track): Bitmap {
         val bitmap = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         canvas.drawColor(Color.parseColor("#0C0D0F")) // NamiColors.Ink900
@@ -82,7 +82,14 @@ object TrackCardRenderer {
         val scrubberY = COVER_TOP + COVER_SIZE + 210f
         val scrubberLeft = coverLeft
         val scrubberRight = coverLeft + COVER_SIZE
-        val waveform = runCatching { dev.nami.player.waveform.WaveformScanner.scan(track.path) }.getOrNull()
+        // Reuses the live scrubber's own on-disk cache (dev.nami.player.waveform.WaveformCache) -
+        // scanning a track from scratch is a real full decode (real seconds, not free), which is
+        // exactly why the live scrubber caches it too. Only scans fresh if this track was never
+        // opened in Now Playing before; either way the result is cached for next time.
+        val waveformCache = dev.nami.player.waveform.WaveformCache(context)
+        val waveform = waveformCache.read(track.path) ?: runCatching { dev.nami.player.waveform.WaveformScanner.scan(track.path) }
+            .getOrNull()
+            ?.also { waveformCache.write(track.path, it) }
         val wavePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#9B9A97") }
         if (waveform != null && waveform.isNotEmpty()) {
             val maxBarHeight = 70f
@@ -108,13 +115,16 @@ object TrackCardRenderer {
         timePaint.textAlign = Paint.Align.RIGHT
         canvas.drawText(durationText, scrubberRight, scrubberY + 190f, timePaint)
 
-        // Те же контролы что в Now Playing - реальный контур skip-prev/next (полоса+
-        // треугольник), не абстрактные треугольники.
+        // Те же контролы что в Now Playing - Icons.Rounded.* (не Outlined) скругляют каждый
+        // угол треугольника/полосы, а не только сам корпус иконки. CornerPathEffect делает то
+        // же самое на любом Path/Rect без ручной геометрии под скруглённые вершины.
         val controlsY = scrubberY + 270f
-        val controlPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#EDEAE4") }
+        val cornerEffect = android.graphics.CornerPathEffect(10f)
+        val controlPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#EDEAE4"); pathEffect = cornerEffect }
         drawSkipGlyph(canvas, WIDTH / 2f - 140f, controlsY, 34f, isNext = false, paint = controlPaint)
         canvas.drawCircle(WIDTH / 2f, controlsY, 64f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#C24A34") })
-        drawTriangle(canvas, WIDTH / 2f + 10f, controlsY, 30f, pointsRight = true, paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#EDEAE4") })
+        val playPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#EDEAE4"); pathEffect = cornerEffect }
+        drawTriangle(canvas, WIDTH / 2f + 10f, controlsY, 30f, pointsRight = true, paint = playPaint)
         drawSkipGlyph(canvas, WIDTH / 2f + 140f, controlsY, 34f, isNext = true, paint = controlPaint)
 
         var detailsY = controlsY + 130f

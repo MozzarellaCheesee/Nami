@@ -27,7 +27,7 @@ class TrackQuickActionsViewModel @Inject constructor(
     fun shareCard(track: Track) {
         viewModelScope.launch {
             val uri = withContext(Dispatchers.Default) {
-                val bitmap = TrackCardRenderer.render(track)
+                val bitmap = TrackCardRenderer.render(context, track)
                 TrackCardRenderer.saveAndGetShareUri(context, bitmap)
             }
             _shareCardUri.value = uri
