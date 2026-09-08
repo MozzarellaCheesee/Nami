@@ -224,6 +224,18 @@ class NowPlayingViewModel @Inject constructor(
         }
     }
 
+    /** Хвост группы C "офлайн-радио от трека" -- см. RadioBuilder для того, что на самом деле
+     * считается похожестью (локальная эвристика, не рекомендатель). */
+    fun startRadio(trackId: TrackId) {
+        viewModelScope.launch {
+            val seed = libraryRepository.track(trackId).first() ?: return@launch
+            val library = libraryRepository.allTracksOrdered()
+            val queue = dev.nami.domain.RadioBuilder.build(seed, library)
+            playerRepository.play(queue.map { it.toPlayableTrack(artistName = null) }, startIndex = 0)
+            _externalTrackChangeSignal.value++
+        }
+    }
+
     /**
      * Plays [trackId] as if it were tapped from the full "all tracks" library list: the queue is
      * every track in that list, positioned at [trackId], so skipPrevious/skipNext traverse the

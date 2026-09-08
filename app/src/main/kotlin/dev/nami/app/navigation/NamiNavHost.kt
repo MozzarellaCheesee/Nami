@@ -282,7 +282,13 @@ fun NamiNavHost(
                 ROUTE_TRACK_INFO,
                 arguments = listOf(navArgument("trackId") { type = NavType.StringType }),
             ) {
-                dev.nami.feature.library.TrackInfoScreen(onBack = { navController.popBackStack() })
+                dev.nami.feature.library.TrackInfoScreen(
+                    onBack = { navController.popBackStack() },
+                    onStartRadio = { trackId ->
+                        nowPlayingViewModel.startRadio(trackId)
+                        if (autoOpenPlayer) showNowPlaying = true
+                    },
+                )
             }
             composable(
                 ROUTE_AB_COMPARE,

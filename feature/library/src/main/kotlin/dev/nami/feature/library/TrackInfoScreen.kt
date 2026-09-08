@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiAlertDialog
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.model.TrackId
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -50,7 +51,7 @@ import java.util.Locale
  * диалог и сохраняет сразу же (см. TrackInfoViewModel). Поля без источника правки (формат,
  * битрейт, размер, даты) -- только для чтения. */
 @Composable
-fun TrackInfoScreen(onBack: () -> Unit, viewModel: TrackInfoViewModel = hiltViewModel()) {
+fun TrackInfoScreen(onBack: () -> Unit, onStartRadio: (TrackId) -> Unit = {}, viewModel: TrackInfoViewModel = hiltViewModel()) {
     val track by viewModel.track.collectAsState()
     val album by viewModel.album.collectAsState()
 
@@ -85,6 +86,15 @@ fun TrackInfoScreen(onBack: () -> Unit, viewModel: TrackInfoViewModel = hiltView
                 InfoRow("Заметка", current.note ?: "—", onClick = { editField = TrackInfoField.Note })
                 RatingRow(current.rating, onRate = viewModel::setRating)
             }
+            Text(
+                text = "▶ Начать радио от этого трека",
+                color = NamiColors.Shu,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onStartRadio(current.id) }
+                    .padding(vertical = 12.dp),
+            )
             TagsSection(
                 trackTags = trackTags,
                 onRemove = viewModel::removeTag,
