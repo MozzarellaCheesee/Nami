@@ -44,6 +44,8 @@ import androidx.compose.material.icons.outlined.Album
 import androidx.compose.material.icons.outlined.Cast
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.DirectionsCar
+import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Tune
@@ -133,6 +135,11 @@ fun NowPlayingScreen(
     onOpenPlayerSettings: () -> Unit = {},
     onOpenThemeEditor: () -> Unit = {},
     onOpenAllSettings: () -> Unit = {},
+    // "Поделиться треком" и "Слушать со мной" - оба ведут на группу G "сеть" (Wi-Fi Drop/
+    // Wi-Fi Direct/слушать вместе), только с разным заранее включённым режимом - см. вызывающую
+    // сторону (NamiNavHost), которая заводит раздачу/хост-режим сама на входе в экран.
+    onShareTrackOverNetwork: () -> Unit = {},
+    onStartListenTogether: () -> Unit = {},
     viewModel: NowPlayingViewModel = hiltViewModel(),
 ) {
     val state by viewModel.playbackState.collectAsState()
@@ -309,13 +316,21 @@ fun NowPlayingScreen(
                     ContextAction("В плейлист", Icons.Outlined.PlaylistAdd, keepParentOpen = true) { showAddToPlaylist = true },
                     ContextAction("Дорожный режим", Icons.Outlined.DirectionsCar, keepParentOpen = true, onClick = onOpenDriveMode),
                     ContextAction("Аудиотракт", Icons.Outlined.QueueMusic, keepParentOpen = true) { showAudioTractSheet = true },
-                    // Третий ряд: таймер сна и моменты/петли по частоте использования это быстрые
-                    // действия, а не второстепенные пункты - подняты из плоского списка в сетку.
                     ContextAction("Таймер сна", Icons.Outlined.DarkMode, keepParentOpen = true) { showSleepTimerSheet = true },
-                    ContextAction("Моменты и петли", Icons.Outlined.Repeat, keepParentOpen = true) { showLoopSheet = true },
                 ),
                 list = listOfNotNull(
                     track?.let { ContextAction("Поделиться", Icons.Outlined.Share) { shareTrackText(sheetContext, it) } },
+                    // По сети (Wi-Fi Drop/Wi-Fi Direct - что сейчас доступнее, решает сам экран) -
+                    // не Google Cast (та же "Трансляция" выше) и не текстовая ссылка (та же
+                    // "Поделиться" строкой выше), а реальная передача файла трека другому телефону.
+                    ContextAction("Поделиться треком по сети", Icons.Outlined.Send, keepParentOpen = true, onClick = onShareTrackOverNetwork),
+                    // Названо не "Джем" - это не серверная синхронизация как у Spotify (каждый
+                    // качает свой же трек из общего облака, сервер только дирижирует таймингом),
+                    // а P2P-раздача байтов трека по LAN/Wi-Fi Direct. Настоящий Jam-аналог -
+                    // отдельная задача поверх self-host сервера пользователя (см. заметки по
+                    // серверу), не то, что реализовано здесь сейчас.
+                    ContextAction("Слушать со мной", Icons.Outlined.Groups, keepParentOpen = true, onClick = onStartListenTogether),
+                    ContextAction("Моменты и петли", Icons.Outlined.Repeat, keepParentOpen = true) { showLoopSheet = true },
                     track?.let { ContextAction("Информация о треке", Icons.Outlined.Info, keepParentOpen = true) { onShowTrackInfo(it.id) } },
                     track?.artistId?.let { artistId -> ContextAction("Открыть исполнителя", Icons.Outlined.Person, keepParentOpen = true) { onOpenArtist(artistId) } },
                     track?.albumId?.let { albumId -> ContextAction("Открыть альбом", Icons.Outlined.Album, keepParentOpen = true) { onOpenAlbum(albumId) } },

@@ -80,8 +80,19 @@ fun LocalShareScreen(
     onScanRequested: () -> Unit,
     scannedAddress: String? = null,
     onScannedAddressConsumed: () -> Unit = {},
+    // Вход с двух кнопок в меню "Ещё" Now Playing ("Поделиться треком"/"Слушать со мной") -
+    // экран открывается сразу в нужном режиме, а не заставляет искать те же переключатели
+    // руками второй раз после захода с плеера.
+    autoShareCurrentTrack: Boolean = false,
+    autoStartListenTogether: Boolean = false,
+    onAutoActionsConsumed: () -> Unit = {},
     viewModel: LocalShareViewModel = hiltViewModel(),
 ) {
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        if (autoShareCurrentTrack) viewModel.setDropCurrentTrack()
+        if (autoStartListenTogether) viewModel.setListenTogetherHost(true)
+        if (autoShareCurrentTrack || autoStartListenTogether) onAutoActionsConsumed()
+    }
     val serverRunning by viewModel.serverRunning.collectAsState()
     val serverAddress by viewModel.serverAddress.collectAsState()
     val devices by viewModel.discoveredDevices.collectAsState()
