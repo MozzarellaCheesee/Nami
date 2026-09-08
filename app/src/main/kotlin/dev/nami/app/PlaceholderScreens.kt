@@ -30,6 +30,7 @@ import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.BatteryChargingFull
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Cast
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DarkMode
@@ -410,6 +411,7 @@ fun SettingsPlayerScreen(
     val nowPlayingLineProgress by viewModel.nowPlayingLineProgress.collectAsState()
     val miniPlayerSideSwipe by viewModel.miniPlayerSideSwipeAction.collectAsState()
     val layoutPreset by viewModel.nowPlayingLayoutPreset.collectAsState()
+    val airPlayEnabled by viewModel.airPlayEnabled.collectAsState()
 
     SettingsSubScreenScaffold(title = "Плеер", onBack = onBack) {
         NowPlayingPresetRow(
@@ -551,6 +553,24 @@ fun SettingsPlayerScreen(
                 title = "Порядок блоков плеера",
                 trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
                 onClick = onBlockOrderClick,
+            )
+        }
+        // Трансляция отдельной карточкой: Google Cast и DLNA работают всегда и настройки не
+        // требуют, а эти два пути неофициальные - явный opt-in, а не тумблер среди прочих.
+        Text(
+            text = "Трансляция",
+            color = NamiColors.Paper70,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(start = 20.dp, top = 20.dp, bottom = 8.dp),
+        )
+        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            SettingsRow(
+                icon = Icons.Outlined.Cast,
+                title = "Передача на устройства Apple (Beta)",
+                subtitle = "Apple TV по AirPlay. Пока выключено, сеть на AirPlay не сканируется. " +
+                    "HomePod и AirPlay-колонки не поддерживаются: им нужен протокол RAOP.",
+                trailing = { NamiSwitch(checked = airPlayEnabled, onCheckedChange = viewModel::setAirPlayEnabled) },
+                onClick = { viewModel.setAirPlayEnabled(!airPlayEnabled) },
             )
         }
     }

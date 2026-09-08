@@ -43,6 +43,8 @@ class SettingsViewModel @Inject constructor(
     val uiFontPath: StateFlow<String?> = appSettingsRepository.uiFontPath
     val doubleTapArtworkAction: StateFlow<dev.nami.domain.GestureAction> = appSettingsRepository.doubleTapArtworkAction
     val scrobblingEnabled: StateFlow<Boolean> = appSettingsRepository.scrobblingEnabled
+    val airPlayEnabled: StateFlow<Boolean> = appSettingsRepository.airPlayEnabled
+    fun setAirPlayEnabled(value: Boolean) = appSettingsRepository.setAirPlayEnabled(value)
     val listenBrainzToken: StateFlow<String?> = appSettingsRepository.listenBrainzToken
     val nowPlayingShowTechInfo: StateFlow<Boolean> = appSettingsRepository.nowPlayingShowTechInfo
     val nowPlayingShowShuffle: StateFlow<Boolean> = appSettingsRepository.nowPlayingShowShuffle

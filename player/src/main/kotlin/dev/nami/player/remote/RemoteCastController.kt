@@ -10,6 +10,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import com.yinnho.upnpcast.DLNACast
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.nami.core.model.Track
+import dev.nami.domain.SettingsRepository
 import dev.nami.player.LocalHttpServer
 import dev.nami.player.localIpAddress
 import kotlinx.coroutines.CoroutineScope
@@ -19,6 +20,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -42,6 +45,7 @@ private const val REMOTE_HTTP_PORT = 47822
 @UnstableApi
 class RemoteCastController @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val settings: SettingsRepository,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -68,9 +72,16 @@ class RemoteCastController @Inject constructor(
     private var searchJob: Job? = null
     private val upnpDevices = mutableMapOf<String, DLNACast.Device>()
 
-    /** Дополнительные искатели (AirPlay/Станция) - подключаются владельцем, только когда включён
-     * соответствующий Beta-тумблер. Выключенный тумблер означает "не сканировать сеть вообще". */
+    /** Искатели Beta-экосистем - см. init. */
     private val extraDiscoveries = mutableListOf<RemoteDiscovery>()
+
+    init {
+        // Beta-тумблер выключен - искатель просто не существует, то есть сеть на AirPlay/Станцию
+        // не сканируется вообще, а не "результаты спрятаны в UI".
+        settings.airPlayEnabled
+            .onEach { on -> if (on) addDiscovery(AirPlayDiscovery(context)) else removeDiscovery(RemoteKind.AIRPLAY) }
+            .launchIn(scope)
+    }
 
     /** true, пока играем на приёмнике - владелец не должен сам переставлять плеер сессии. */
     val isRemote: Boolean get() = remotePlayer != null
@@ -85,11 +96,11 @@ class RemoteCastController @Inject constructor(
         this.onActivePlayerChanged = onActivePlayerChanged
     }
 
-    fun addDiscovery(discovery: RemoteDiscovery) {
+    private fun addDiscovery(discovery: RemoteDiscovery) {
         if (extraDiscoveries.none { it.kind == discovery.kind }) extraDiscoveries += discovery
     }
 
-    fun removeDiscovery(kind: RemoteKind) {
+    private fun removeDiscovery(kind: RemoteKind) {
         extraDiscoveries.removeAll { it.kind == kind }
         _devices.value = _devices.value.filterNot { it.kind == kind }
     }
