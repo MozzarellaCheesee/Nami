@@ -1,6 +1,7 @@
 package dev.nami.feature.search
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,6 +30,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Search
@@ -55,6 +59,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil3.compose.AsyncImage
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.NamiPill
+import dev.nami.core.designsystem.NamiRadius
+import dev.nami.core.designsystem.NamiScreenHeader
+import dev.nami.core.designsystem.NamiType
 import dev.nami.core.model.AlbumId
 import dev.nami.core.model.ArtistId
 import dev.nami.core.model.TrackId
@@ -104,7 +112,8 @@ fun SearchScreen(
         CompactSearchField(
             value = uiState.query,
             onValueChange = viewModel::onQueryChange,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+            onClear = { viewModel.onQueryChange("") },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
         )
 
         if (uiState.query.isBlank()) {
@@ -117,14 +126,11 @@ fun SearchScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             items(uiState.recentQueries) { query ->
-                                Text(
+                                NamiPill(
                                     text = query,
-                                    color = NamiColors.Paper100,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    modifier = Modifier
-                                        .background(NamiColors.Ink800, RoundedCornerShape(20.dp))
-                                        .clickable { viewModel.onRecentQueryClick(query) }
-                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    color = NamiColors.Paper70,
+                                    leading = Icons.Outlined.History,
+                                    onClick = { viewModel.onRecentQueryClick(query) },
                                 )
                             }
                         }
@@ -166,22 +172,28 @@ fun SearchScreen(
                     browseArtists != null && browseArtists.isEmpty()
                 ) {
                     item {
-                        Box(modifier = Modifier.fillMaxWidth().padding(top = 80.dp), contentAlignment = Alignment.Center) {
-                            Text(text = "Начните вводить, чтобы искать", color = NamiColors.Paper40)
-                        }
+                        SearchPlaceholder(
+                            icon = Icons.Outlined.Search,
+                            title = "Пока искать не в чем",
+                            hint = "Добавь папку с музыкой в Настройках, и результаты появятся здесь",
+                        )
                     }
                 }
             }
         } else if (uiState.results.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(text = "Ничего не нашлось", color = NamiColors.Paper40)
-            }
+            SearchPlaceholder(
+                icon = Icons.Outlined.SearchOff,
+                title = "Ничего не нашлось",
+                hint = "Работают операторы: artist:, album:, year:, lyrics:",
+                modifier = Modifier.fillMaxSize(),
+            )
         } else {
             LazyColumn(state = resultsListState) {
                 if (tracks.isNotEmpty()) {
                     item {
                         SectionHeader(
                             title = "Треки",
+                            count = tracks.size,
                             onMoreClick = { expandedSection = SearchSection.TRACKS }.takeIf { tracks.size > TRACKS_PREVIEW },
                         )
                     }
@@ -197,6 +209,7 @@ fun SearchScreen(
                     item {
                         SectionHeader(
                             title = "Альбомы",
+                            count = albums.size,
                             onMoreClick = { expandedSection = SearchSection.ALBUMS }.takeIf { albums.size > ALBUMS_PREVIEW },
                         )
                     }
@@ -215,6 +228,7 @@ fun SearchScreen(
                     item {
                         SectionHeader(
                             title = "Артисты",
+                            count = artists.size,
                             onMoreClick = { expandedSection = SearchSection.ARTISTS }.takeIf { artists.size > ARTISTS_PREVIEW },
                         )
                     }
@@ -262,21 +276,19 @@ private fun ExpandedSectionScreen(
 ) {
     Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
         Column(modifier = Modifier.fillMaxSize().statusBarsPadding().displayCutoutPadding()) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
-                }
-                Text(
-                    text = when (section) {
-                        SearchSection.TRACKS -> "Треки"
-                        SearchSection.ALBUMS -> "Альбомы"
-                        SearchSection.ARTISTS -> "Артисты"
-                    },
-                    color = NamiColors.Paper100,
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(start = 8.dp),
-                )
-            }
+            NamiScreenHeader(
+                title = when (section) {
+                    SearchSection.TRACKS -> "Треки"
+                    SearchSection.ALBUMS -> "Альбомы"
+                    SearchSection.ARTISTS -> "Артисты"
+                },
+                subtitle = when (section) {
+                    SearchSection.TRACKS -> "Найдено ${tracks.size}"
+                    SearchSection.ALBUMS -> "Найдено ${albums.size}"
+                    SearchSection.ARTISTS -> "Найдено ${artists.size}"
+                },
+                onBack = onBack,
+            )
             when (section) {
                 SearchSection.TRACKS -> LazyColumn {
                     items(tracks, key = { it.id.value }) { track ->
@@ -306,23 +318,23 @@ private fun ExpandedSectionScreen(
 private val PaddingValuesHorizontal20 = PaddingValues(horizontal = 20.dp)
 
 @Composable
-private fun SectionHeader(title: String, onMoreClick: (() -> Unit)? = null) {
+private fun SectionHeader(title: String, onMoreClick: (() -> Unit)? = null, count: Int? = null) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 16.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = title,
+            text = title.uppercase(),
             color = NamiColors.Paper40,
-            style = MaterialTheme.typography.labelMedium,
+            style = NamiType.Caption,
             modifier = Modifier.weight(1f),
         )
         if (onMoreClick != null) {
-            Text(
-                text = "Больше",
+            // Счёт в кнопке: "Больше" не говорил, сколько ещё осталось за пределами превью.
+            NamiPill(
+                text = if (count != null) "Все $count" else "Больше",
                 color = NamiColors.Shu,
-                style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.clickable(onClick = onMoreClick).padding(horizontal = 8.dp, vertical = 4.dp),
+                onClick = onMoreClick,
             )
         }
     }
@@ -338,16 +350,16 @@ private fun TrackResultRow(track: SearchResult.TrackResult, onClick: () -> Unit,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)).background(NamiColors.Ink700),
+            modifier = Modifier.size(48.dp).clip(RoundedCornerShape(NamiRadius.AlbumArt)).background(NamiColors.Ink700),
         ) {
             if (track.artworkPath != null) {
                 AsyncImage(model = track.artworkPath, contentDescription = null, modifier = Modifier.fillMaxSize())
             }
         }
         Column(modifier = Modifier.weight(1f).padding(start = 14.dp)) {
-            Text(text = track.title, color = NamiColors.Paper100, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(text = track.title, color = NamiColors.Paper100, style = NamiType.TrackTitle, maxLines = 1, overflow = TextOverflow.Ellipsis)
             track.artistName?.let { name ->
-                Text(text = name, color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(text = name, color = NamiColors.Paper40, style = NamiType.Secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
         IconButton(onClick = onAddToPlaylist) {
@@ -365,7 +377,7 @@ private fun AlbumResultCard(album: SearchResult.AlbumResult, onClick: () -> Unit
 private fun AlbumCard(title: String, subtitle: String?, artworkPath: String?, onClick: () -> Unit) {
     Column(modifier = Modifier.width(140.dp).clickable(onClick = onClick)) {
         Box(
-            modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(8.dp)).background(NamiColors.Ink700),
+            modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(NamiRadius.AlbumArt)).background(NamiColors.Ink700),
         ) {
             if (artworkPath != null) {
                 AsyncImage(model = artworkPath, contentDescription = null, modifier = Modifier.fillMaxSize())
@@ -374,13 +386,13 @@ private fun AlbumCard(title: String, subtitle: String?, artworkPath: String?, on
         Text(
             text = title,
             color = NamiColors.Paper100,
-            style = MaterialTheme.typography.bodyMedium,
+            style = NamiType.ListTitle,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 6.dp),
+            modifier = Modifier.padding(top = 8.dp),
         )
         subtitle?.let { name ->
-            Text(text = name, color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(text = name, color = NamiColors.Paper40, style = NamiType.Secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -412,7 +424,7 @@ private fun ArtistRow(name: String, photoPath: String?, onClick: () -> Unit) {
         Text(
             text = name,
             color = NamiColors.Paper100,
-            style = MaterialTheme.typography.bodyLarge,
+            style = NamiType.TrackTitle,
             modifier = Modifier.padding(start = 14.dp),
         )
     }
@@ -421,26 +433,75 @@ private fun ArtistRow(name: String, photoPath: String?, onClick: () -> Unit) {
 /** Material3's TextField enforces a ~56dp min touch target no matter how padding is tweaked --
  * a plain BasicTextField in a fixed-height row is the only way to actually get a compact bar. */
 @Composable
-private fun CompactSearchField(value: String, onValueChange: (String) -> Unit, modifier: Modifier = Modifier) {
+private fun CompactSearchField(value: String, onValueChange: (String) -> Unit, onClear: () -> Unit, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
-            .height(44.dp)
-            .background(NamiColors.Ink800, RoundedCornerShape(14.dp))
-            .padding(horizontal = 14.dp),
+            .height(48.dp)
+            .background(NamiColors.Ink800, RoundedCornerShape(NamiRadius.Card))
+            .border(
+                width = 1.dp,
+                color = if (value.isEmpty()) NamiColors.Ink600 else NamiColors.Shu.copy(alpha = 0.5f),
+                shape = RoundedCornerShape(NamiRadius.Card),
+            )
+            .padding(start = 14.dp, end = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Outlined.Search, contentDescription = null, tint = NamiColors.Paper70, modifier = Modifier.size(20.dp))
+        Icon(
+            Icons.Outlined.Search,
+            contentDescription = null,
+            tint = if (value.isEmpty()) NamiColors.Paper40 else NamiColors.Shu,
+            modifier = Modifier.size(20.dp),
+        )
         Box(modifier = Modifier.weight(1f).padding(start = 10.dp)) {
             if (value.isEmpty()) {
-                Text("Поиск треков, альбомов, исполнителей", color = NamiColors.Paper40, style = MaterialTheme.typography.bodyMedium)
+                Text("Треки, альбомы, исполнители", color = NamiColors.Paper40, style = NamiType.TrackTitle)
             }
             BasicTextField(
                 value = value,
                 onValueChange = onValueChange,
                 singleLine = true,
-                textStyle = MaterialTheme.typography.bodyMedium.copy(color = NamiColors.Paper100),
+                textStyle = NamiType.TrackTitle.copy(color = NamiColors.Paper100),
                 cursorBrush = SolidColor(NamiColors.Shu),
                 modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        // Стереть запрос было нечем - приходилось зажимать backspace. Крестик появляется только
+        // когда есть что стирать, иначе он просто шум в пустом поле.
+        if (value.isNotEmpty()) {
+            IconButton(onClick = onClear, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Outlined.Close, contentDescription = "Очистить", tint = NamiColors.Paper70, modifier = Modifier.size(18.dp))
+            }
+        }
+    }
+}
+
+/** Пустое состояние: иконка + что произошло + что с этим делать. Раньше это была одна серая
+ * строка по центру, которая не подсказывала ни одного следующего шага. */
+@Composable
+private fun SearchPlaceholder(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    hint: String,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier = modifier.fillMaxWidth().padding(top = 64.dp), contentAlignment = Alignment.Center) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(horizontal = 40.dp),
+        ) {
+            Icon(icon, contentDescription = null, tint = NamiColors.Ink500, modifier = Modifier.size(48.dp))
+            Text(
+                text = title,
+                color = NamiColors.Paper70,
+                style = NamiType.TrackTitle,
+                modifier = Modifier.padding(top = 16.dp),
+            )
+            Text(
+                text = hint,
+                color = NamiColors.Paper40,
+                style = NamiType.Secondary,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.padding(top = 6.dp),
             )
         }
     }
