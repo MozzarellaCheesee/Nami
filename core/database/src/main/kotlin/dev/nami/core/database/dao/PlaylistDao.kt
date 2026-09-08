@@ -31,6 +31,10 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlists WHERE id = :id")
     suspend fun findById(id: String): PlaylistEntity?
 
+    /** Snapshot of every non-deleted playlist for export/backup -- see BackupRepository. */
+    @Query("SELECT * FROM playlists WHERE deletedAt IS NULL")
+    suspend fun allRaw(): List<PlaylistEntity>
+
     @Query("SELECT * FROM playlists WHERE id = :id")
     fun findByIdFlow(id: String): Flow<PlaylistEntity?>
 

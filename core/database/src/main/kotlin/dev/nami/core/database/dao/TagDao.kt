@@ -13,6 +13,14 @@ interface TagDao {
     @Query("SELECT * FROM tags ORDER BY name ASC")
     fun observeAll(): Flow<List<TagEntity>>
 
+    /** Snapshot for export/backup -- see BackupRepository. */
+    @Query("SELECT * FROM tags ORDER BY name ASC")
+    suspend fun allRaw(): List<TagEntity>
+
+    /** Snapshot of every track-tag assignment for export/backup. */
+    @Query("SELECT * FROM track_tags")
+    suspend fun allAssignmentsRaw(): List<TrackTagEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(tag: TagEntity)
 

@@ -25,6 +25,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import dev.nami.app.navigation.NamiNavHost
 import dev.nami.core.designsystem.NamiTheme
 import dev.nami.data.AppSettingsRepository
+import dev.nami.feature.library.BackupViewModel
 import dev.nami.feature.library.LibraryViewModel
 import dev.nami.player.EXTRA_OPEN_PLAYER
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -39,6 +40,7 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var appSettingsRepository: AppSettingsRepository
 
     private val libraryViewModel: LibraryViewModel by viewModels()
+    private val backupViewModel: BackupViewModel by viewModels()
     private val playlistActionsViewModel: PlaylistActionsViewModel by viewModels()
     private val metadataActionsViewModel: MetadataActionsViewModel by viewModels()
 
@@ -77,6 +79,10 @@ class MainActivity : ComponentActivity() {
     private val pickZip = registerForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri -> uri?.let { libraryViewModel.importZip(it.toString()) } }
+
+    private val createExportZip = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip"),
+    ) { uri -> uri?.let { backupViewModel.exportLibrary(it.toString()) } }
 
     private val pickFolder = registerForActivityResult(
         ActivityResultContracts.OpenDocumentTree(),
@@ -176,6 +182,13 @@ class MainActivity : ComponentActivity() {
                 attrs.screenBrightness = if (nightModeEnabled) 0.01f else android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
                 window.attributes = attrs
             }
+            val exportResult by backupViewModel.exportResult.collectAsState()
+            LaunchedEffect(exportResult) {
+                val result = exportResult ?: return@LaunchedEffect
+                val message = if (result) "Библиотека экспортирована" else "Ошибка экспорта"
+                android.widget.Toast.makeText(this@MainActivity, message, android.widget.Toast.LENGTH_SHORT).show()
+                backupViewModel.exportResultShown()
+            }
             LaunchedEffect(hideSystemBars) {
                 val controller = WindowInsetsControllerCompat(window, window.decorView)
                 if (hideSystemBars) {
@@ -191,6 +204,10 @@ class MainActivity : ComponentActivity() {
                     onImportFolderRequested = { pickFolder.launch(null) },
                     onImportZipRequested = { pickZip.launch(arrayOf("application/zip")) },
                     onAddWatchedFolderRequested = { pickWatchedFolder.launch(null) },
+                    onExportRequested = {
+                        val stamp = java.text.SimpleDateFormat("yyyy-MM-dd_HHmm", java.util.Locale.ROOT).format(java.util.Date())
+                        createExportZip.launch("nami_backup_$stamp.zip")
+                    },
                     importProgress = importProgress,
                     onPickPlaylistCover = { playlistId ->
                         playlistActionsViewModel.requestCoverPick(playlistId)

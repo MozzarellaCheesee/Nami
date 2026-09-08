@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ChevronRight
@@ -71,6 +72,7 @@ fun SettingsScreen(
     onLibraryHealthClick: () -> Unit,
     onStatsClick: () -> Unit,
     onWatchedFoldersClick: () -> Unit,
+    onExportClick: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900).padding(bottom = 24.dp)) {
         Text(
@@ -127,6 +129,12 @@ fun SettingsScreen(
                 title = "Отслеживаемые папки",
                 trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
                 onClick = onWatchedFoldersClick,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Archive,
+                title = "Экспорт библиотеки в .zip",
+                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
+                onClick = onExportClick,
             )
         }
     }

@@ -94,6 +94,7 @@ fun NamiNavHost(
     onImportFolderRequested: () -> Unit,
     onImportZipRequested: () -> Unit,
     onAddWatchedFolderRequested: () -> Unit,
+    onExportRequested: () -> Unit,
     importProgress: StateFlow<ImportProgress?>,
     onPickPlaylistCover: (PlaylistId) -> Unit,
     onExportPlaylist: (PlaylistId) -> Unit,
@@ -245,6 +246,7 @@ fun NamiNavHost(
                     onLibraryHealthClick = { navController.navigate(ROUTE_LIBRARY_HEALTH) },
                     onStatsClick = { navController.navigate(ROUTE_STATS) },
                     onWatchedFoldersClick = { navController.navigate(ROUTE_WATCHED_FOLDERS) },
+                    onExportClick = onExportRequested,
                 )
                 }
             }

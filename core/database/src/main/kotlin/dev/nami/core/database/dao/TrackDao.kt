@@ -89,6 +89,10 @@ interface TrackDao {
     @Query("SELECT COUNT(*) FROM tracks")
     suspend fun count(): Int
 
+    /** Snapshot of every non-deleted track for export/backup -- see BackupRepository. */
+    @Query("SELECT * FROM tracks WHERE deletedAt IS NULL")
+    suspend fun allRaw(): List<TrackEntity>
+
     @Query(
         """
         SELECT tracks.*, COALESCE(albums.artworkPath, tracks.artworkPath) AS albumArtworkPath,
