@@ -20,7 +20,7 @@ import java.io.File
  * тот же прямой подход что уже используется для waveform/artwork в этом проекте. */
 object TrackCardRenderer {
     private const val WIDTH = 1080
-    private const val HEIGHT = 1650
+    private const val HEIGHT = 1500
     private const val COVER_SIZE = 820
     private const val COVER_TOP = 100f
     private const val CORNER_RADIUS = 24f
@@ -121,9 +121,11 @@ object TrackCardRenderer {
         // 56:72 здесь, не одинаковый размер всех трёх.
         val controlsY = scrubberY + 270f
         val cornerEffect = android.graphics.CornerPathEffect(10f)
-        val playSize = 220f
+        // Тот же масштаб 56:72 что в приложении относительно ширины экрана (72dp на ~390dp
+        // экране) - раньше кнопки были непропорционально огромными для карточки.
+        val playSize = 110f
         val skipSize = playSize * (56f / 72f)
-        val playGap = playSize / 2 + skipSize / 2 + 24f
+        val playGap = playSize / 2 + skipSize / 2 + 20f
 
         drawTransportBlock(canvas, WIDTH / 2f - playGap, controlsY, skipSize, bgColor = "#1A1B1F", iconColor = "#EDEAE4") { cx, cy, size, paint ->
             drawSkipGlyph(canvas, cx, cy, size * 0.32f, isNext = false, paint = paint)
@@ -135,7 +137,7 @@ object TrackCardRenderer {
             drawSkipGlyph(canvas, cx, cy, size * 0.32f, isNext = true, paint = paint)
         }
 
-        var detailsY = controlsY + 130f
+        var detailsY = controlsY + 100f
 
         val metaParts = mutableListOf<String>()
         track.genre?.takeIf { it.isNotBlank() }?.let { metaParts += it }

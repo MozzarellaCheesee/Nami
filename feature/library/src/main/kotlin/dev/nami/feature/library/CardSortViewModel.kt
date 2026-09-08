@@ -5,6 +5,9 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.nami.core.model.Track
 import dev.nami.domain.LibraryRepository
+import dev.nami.domain.PlayableTrack
+import dev.nami.domain.PlaybackState
+import dev.nami.domain.PlayerRepository
 import dev.nami.domain.PlaylistRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,6 +24,7 @@ enum class SwipeDirection { LEFT, RIGHT, UP }
 class CardSortViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
     private val playlistRepository: PlaylistRepository,
+    private val playerRepository: PlayerRepository,
 ) : ViewModel() {
     data class UiState(
         val queue: List<Track> = emptyList(),
@@ -29,10 +33,39 @@ class CardSortViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState
+    val playbackState: StateFlow<PlaybackState> = playerRepository.state
 
     init {
         viewModelScope.launch {
             _uiState.value = UiState(queue = libraryRepository.allTracksOrdered().shuffled(), loading = false)
+        }
+    }
+
+    /** Прослушать карточку - не влияет на свайп, просто играет трек так же как из любого
+     * другого списка. Тап по уже играющей карточке ставит на паузу/возобновляет вместо
+     * перезапуска с начала. */
+    fun togglePlay(track: Track) {
+        val playing = playbackState.value as? PlaybackState.Playing
+        viewModelScope.launch {
+            if (playing?.trackId == track.id) {
+                playerRepository.toggle()
+            } else {
+                playerRepository.play(
+                    listOf(
+                        PlayableTrack(
+                            id = track.id,
+                            title = track.title,
+                            artistName = track.artistName,
+                            path = track.path,
+                            artworkPath = track.albumArtworkPath,
+                            format = track.format,
+                            cueStartMs = track.cueStartMs,
+                            cueEndMs = track.cueEndMs,
+                        ),
+                    ),
+                    startIndex = 0,
+                )
+            }
         }
     }
 

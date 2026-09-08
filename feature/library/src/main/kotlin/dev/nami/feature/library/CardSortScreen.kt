@@ -11,9 +11,12 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -72,9 +75,13 @@ fun CardSortScreen(onBack: () -> Unit, viewModel: CardSortViewModel = hiltViewMo
                     var offset by remember(top.id) { mutableStateOf(Offset.Zero) }
                     val animatedX by animateFloatAsState(offset.x, animationSpec = tween(150), label = "cardX")
                     val animatedY by animateFloatAsState(offset.y, animationSpec = tween(150), label = "cardY")
+                    val playbackState by viewModel.playbackState.collectAsState()
+                    val isPlayingThis = (playbackState as? dev.nami.domain.PlaybackState.Playing)?.let { it.trackId == top.id && it.isPlaying } == true
                     SortCard(
                         track = top,
                         offset = Offset(animatedX, animatedY),
+                        isPlaying = isPlayingThis,
+                        onPlayClick = { viewModel.togglePlay(top) },
                         modifier = Modifier.pointerInput(top.id) {
                             detectDragGestures(
                                 onDrag = { change, drag -> change.consume(); offset += drag },
@@ -96,7 +103,13 @@ fun CardSortScreen(onBack: () -> Unit, viewModel: CardSortViewModel = hiltViewMo
 }
 
 @Composable
-private fun SortCard(track: Track, offset: Offset, modifier: Modifier = Modifier) {
+private fun SortCard(
+    track: Track,
+    offset: Offset,
+    modifier: Modifier = Modifier,
+    isPlaying: Boolean = false,
+    onPlayClick: (() -> Unit)? = null,
+) {
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -111,6 +124,23 @@ private fun SortCard(track: Track, offset: Offset, modifier: Modifier = Modifier
             } else {
                 Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink700), contentAlignment = Alignment.Center) {
                     Text("波", color = NamiColors.Ink500, style = MaterialTheme.typography.displayLarge)
+                }
+            }
+            if (onPlayClick != null) {
+                androidx.compose.material3.IconButton(
+                    onClick = onPlayClick,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(12.dp)
+                        .size(56.dp)
+                        .background(NamiColors.Ink900.copy(alpha = 0.75f), androidx.compose.foundation.shape.CircleShape),
+                ) {
+                    Icon(
+                        if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                        contentDescription = if (isPlaying) "Пауза" else "Слушать",
+                        tint = NamiColors.Paper100,
+                        modifier = Modifier.size(32.dp),
+                    )
                 }
             }
         }
