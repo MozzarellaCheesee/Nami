@@ -44,6 +44,8 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.PlayCircleOutline
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.PlaylistAdd
 import androidx.compose.material.icons.outlined.QueueMusic
 import androidx.compose.material.icons.outlined.Repeat
@@ -114,6 +116,7 @@ fun NowPlayingScreen(
     onOpenAlbum: (dev.nami.core.model.AlbumId) -> Unit,
     onOpenArtist: (dev.nami.core.model.ArtistId) -> Unit,
     onShowTrackInfo: (dev.nami.core.model.TrackId) -> Unit,
+    onShareCard: (dev.nami.core.model.Track) -> Unit,
     viewModel: NowPlayingViewModel = hiltViewModel(),
 ) {
     val state by viewModel.playbackState.collectAsState()
@@ -281,6 +284,8 @@ fun NowPlayingScreen(
                     ContextAction("Моменты и петли", Icons.Outlined.Repeat) { showLoopSheet = true },
                     ContextAction("В плейлист", Icons.Outlined.PlaylistAdd) { showAddToPlaylist = true },
                     track?.let { ContextAction("Информация о треке", Icons.Outlined.Info) { onShowTrackInfo(it.id) } },
+                    track?.let { ContextAction("Начать радио от трека", Icons.Outlined.PlayCircleOutline) { viewModel.startRadio(it.id) } },
+                    track?.let { ContextAction("Поделиться карточкой", Icons.Outlined.Share) { onShareCard(it) } },
                     track?.artistId?.let { artistId -> ContextAction("Открыть исполнителя", Icons.Outlined.Person) { onOpenArtist(artistId) } },
                     track?.albumId?.let { albumId -> ContextAction("Открыть альбом", Icons.Outlined.Album) { onOpenAlbum(albumId) } },
                 ),

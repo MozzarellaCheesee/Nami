@@ -37,7 +37,13 @@ object TrackCardRenderer {
         if (coverBitmap != null) {
             val scaled = Bitmap.createScaledBitmap(coverBitmap, COVER_SIZE, COVER_SIZE, true)
             val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                shader = BitmapShader(scaled, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+                shader = BitmapShader(scaled, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP).apply {
+                    // Without this the shader samples from the bitmap's own (0,0) at the
+                    // CANVAS's absolute origin, not at coverRect's corner -- coverRect sits at
+                    // (coverLeft, COVER_TOP), so the cover appeared shifted, with the edge pixels
+                    // clamp-repeated into a solid strip along the right/bottom instead of image.
+                    setLocalMatrix(android.graphics.Matrix().apply { setTranslate(coverLeft, COVER_TOP) })
+                }
             }
             canvas.drawRoundRect(coverRect, CORNER_RADIUS, CORNER_RADIUS, paint)
         } else {

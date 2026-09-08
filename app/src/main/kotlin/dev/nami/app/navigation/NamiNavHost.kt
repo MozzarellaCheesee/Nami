@@ -555,6 +555,7 @@ fun NamiNavHost(
                 showNowPlaying = false
                 navController.navigate("track_info/${trackId.value}")
             },
+            onShareCard = { track -> trackQuickActionsViewModel.shareCard(track) },
             viewModel = nowPlayingViewModel,
         )
     }
