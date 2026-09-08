@@ -2,6 +2,7 @@ package dev.nami.data.webrtc
 
 import android.content.Context
 import android.util.Log
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
@@ -22,6 +23,8 @@ private const val ICE_GATHER_TIMEOUT_MS = 8_000L
 // DataChannel сообщения ограничены практическим потолком SCTP (~256КБ надёжно работает почти
 // везде) - режем байты трека на куски заметно меньше этого, с запасом на служебные байты рамки.
 private const val CHUNK_SIZE = 48_000
+// Потолок неотправленного в очереди канала - дальше отправитель ждёт, см. sendTrackBytes.
+private const val MAX_BUFFERED_BYTES = 1_000_000L
 private const val FRAME_TEXT: Byte = 1
 private const val FRAME_TRACK_META: Byte = 2
 private const val FRAME_TRACK_CHUNK: Byte = 3
@@ -131,11 +134,20 @@ class WebRtcInternetLink(context: Context) {
     fun sendTrackMeta(trackId: String, fileName: String, totalBytes: Int) =
         send(FRAME_TRACK_META, JSONObject().put("trackId", trackId).put("fileName", fileName).put("totalBytes", totalBytes).toString().toByteArray(StandardCharsets.UTF_8))
 
-    /** Режет файл на куски по CHUNK_SIZE и шлёт синхронно один за другим - DataChannel не гарантирует
-     * порядок доставки при unordered, поэтому канал создаётся с ordered=true (см. createDataChannel). */
-    fun sendTrackBytes(bytes: ByteArray) {
+    /** Режет файл на куски по CHUNK_SIZE и шлёт один за другим - DataChannel не гарантирует
+     * порядок доставки при unordered, поэтому канал создаётся с ordered=true (см. createDataChannel).
+     *
+     * Между кусками ждёт, пока разгребётся очередь отправки: раньше весь файл заливался в канал
+     * одним взрывом, и на треке чуть крупнее пары мегабайт очередь SCTP переполнялась - libwebrtc
+     * в этом случае не отдаёт ошибку наверх, а просто рвёт DataChannel, и у гостя навсегда
+     * оставалось "Скачивается...". Целые FLAC/большие mp3 без этого не доезжали вообще. */
+    suspend fun sendTrackBytes(bytes: ByteArray) {
         var offset = 0
         while (offset < bytes.size) {
+            while ((dataChannel?.bufferedAmount() ?: 0L) > MAX_BUFFERED_BYTES) {
+                if (dataChannel?.state() != DataChannel.State.OPEN) return
+                delay(20)
+            }
             val end = minOf(offset + CHUNK_SIZE, bytes.size)
             send(FRAME_TRACK_CHUNK, bytes.copyOfRange(offset, end))
             offset = end
@@ -199,6 +211,16 @@ class WebRtcInternetLink(context: Context) {
     }
 
     fun close() {
+        // Колбэки снимаются ПЕРВЫМИ: close() ниже приводит соединение в CLOSED, а это тот же путь,
+        // что и настоящий обрыв, - onChannelClosed прилетал уже после осознанного закрытия и
+        // переводил экран в "ошибка связи" на ровном месте, при том что связи уже нет по нашей воле.
+        onTextMessage = null
+        onTrackRequest = null
+        onTrackMeta = null
+        onTrackChunk = null
+        onTrackEnd = null
+        onChannelOpen = null
+        onChannelClosed = null
         dataChannel?.close()
         dataChannel = null
         peerConnection?.close()
