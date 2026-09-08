@@ -81,8 +81,15 @@ fun ThemeEditorScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltVie
             modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 12.dp),
         )
         SectionCaption("Галерея")
+        // Пресеты "Из обоев"/"Из обложки" считаются в рантайме (система/Palette), поэтому
+        // подмешиваются к статическому списку здесь, а не лежат в THEME_PRESETS константами.
+        val artworkPath by viewModel.nowPlayingArtworkPath.collectAsState()
+        val artworkAccent = dev.nami.feature.player.rememberArtworkAccentColor(artworkPath)
+        val presets = THEME_PRESETS +
+            listOfNotNull(wallpaperPreset(context)) +
+            listOfNotNull(artworkPath?.let { artworkPreset(artworkAccent.toArgb()) })
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
-            THEME_PRESETS.forEachIndexed { index, preset ->
+            presets.forEachIndexed { index, preset ->
                 if (index > 0) androidx.compose.material3.HorizontalDivider(color = NamiColors.Ink700)
                 Row(
                     modifier = Modifier
@@ -127,6 +134,21 @@ fun ThemeEditorScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltVie
                 )
             }
         }
+        SectionCaption("Контраст")
+        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            CONTRAST_PAIRS.forEachIndexed { index, (fg, bg) ->
+                if (index > 0) androidx.compose.material3.HorizontalDivider(color = NamiColors.Ink700)
+                ContrastRow(fg, bg, overrides)
+            }
+        }
+        Text(
+            "Коэффициент по WCAG 2.1, порог для обычного текста - 4.5:1. Это подсказка, а не " +
+                "запрет: низкий контраст может быть осознанным решением, поэтому применить " +
+                "цвет всё равно можно.",
+            color = NamiColors.Paper40,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+        )
         SectionCaption("Форма")
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
             NamiRadius.EDITABLE_TOKENS.forEachIndexed { index, token ->
@@ -327,6 +349,55 @@ private fun ThemeTokenRow(token: String, hex: String?, onHexChange: (String?) ->
                 Icon(Icons.Outlined.Close, contentDescription = "Сбросить (${colorToHex(default)})", tint = NamiColors.Paper40)
             }
         }
+    }
+}
+
+/** Пары "текст на фоне", которые реально встречаются в интерфейсе. Проверять все 12x12
+ * сочетаний незачем: Shu на Kin нигде не рисуется, а список из 144 строк никто не читает. */
+private val CONTRAST_PAIRS = listOf(
+    NamiColors.TOKEN_PAPER100 to NamiColors.TOKEN_INK900,
+    NamiColors.TOKEN_PAPER70 to NamiColors.TOKEN_INK900,
+    NamiColors.TOKEN_PAPER40 to NamiColors.TOKEN_INK900,
+    NamiColors.TOKEN_PAPER100 to NamiColors.TOKEN_INK800,
+    NamiColors.TOKEN_PAPER70 to NamiColors.TOKEN_INK800,
+    NamiColors.TOKEN_SHU to NamiColors.TOKEN_INK900,
+    NamiColors.TOKEN_AI to NamiColors.TOKEN_INK900,
+    NamiColors.TOKEN_KIN to NamiColors.TOKEN_INK900,
+    NamiColors.TOKEN_WAKABA to NamiColors.TOKEN_INK900,
+)
+
+@Composable
+private fun ContrastRow(fgToken: String, bgToken: String, overrides: Map<String, String>) {
+    fun colorOf(token: String) =
+        overrides[token]?.let(::parseHexOrNull) ?: NamiColors.defaultOf(token)
+    val fg = colorOf(fgToken)
+    val bg = colorOf(bgToken)
+    val ratio = contrastRatio(fg.toArgb(), bg.toArgb())
+    val passes = ratio >= 4.5
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Образец рисуется теми же цветами, что и оценивается - число рядом с тем, что видно.
+        Text(
+            "Aa",
+            color = fg,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier
+                .background(bg, RoundedCornerShape(6.dp))
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+        )
+        Text(
+            "${NamiColors.tokenLabel(fgToken)} на ${NamiColors.tokenLabel(bgToken)}",
+            color = NamiColors.Paper70,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.weight(1f).padding(start = 12.dp),
+        )
+        Text(
+            "%.1f:1".format(ratio) + if (passes) "" else " ⚠",
+            color = if (passes) NamiColors.Paper70 else NamiColors.Shu,
+            style = MaterialTheme.typography.bodySmall,
+        )
     }
 }
 

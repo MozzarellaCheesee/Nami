@@ -9,6 +9,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.nami.data.AppSettingsRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -18,7 +20,14 @@ import javax.inject.Inject
 class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val appSettingsRepository: AppSettingsRepository,
+    playerRepository: dev.nami.domain.PlayerRepository,
 ) : ViewModel() {
+
+    /** Только для пресета темы "Из обложки" (П.md §26) - экрану настроек нужен один путь к
+     * картинке текущего трека, а не весь плеер. */
+    val nowPlayingArtworkPath: StateFlow<String?> = playerRepository.queue
+        .map { it.nowPlaying?.artworkPath }
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, null)
 
     val autoOpenPlayer: StateFlow<Boolean> = appSettingsRepository.autoOpenPlayer
     val hideSystemBars: StateFlow<Boolean> = appSettingsRepository.hideSystemBars

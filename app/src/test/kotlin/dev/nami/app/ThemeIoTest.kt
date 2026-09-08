@@ -66,4 +66,31 @@ class ThemeIoTest {
             }
         }
     }
+
+    @Test
+    fun `коэффициент контраста по WCAG - известные опорные значения`() {
+        // Чёрное на белом - максимум по определению формулы, ровно 21:1.
+        assertEquals(21.0, contrastRatio(0x000000, 0xFFFFFF), 0.01)
+        assertEquals(1.0, contrastRatio(0x777777, 0x777777), 0.01)
+        // Порядок аргументов не важен: делится всегда светлое на тёмное.
+        assertEquals(contrastRatio(0x000000, 0xFFFFFF), contrastRatio(0xFFFFFF, 0x000000), 0.0001)
+        // Серый #767676 на белом - канонический пограничный пример WCAG, чуть выше 4.5:1.
+        assertTrue(contrastRatio(0x767676, 0xFFFFFF) >= 4.5)
+        assertTrue(contrastRatio(0x787878, 0xFFFFFF) < 4.5)
+    }
+
+    @Test
+    fun `пресет из обложки трогает только акцентные токены`() {
+        val preset = artworkPreset(0xFFC24A34.toInt())
+        assertEquals(
+            setOf(
+                NamiColors.TOKEN_SHU, NamiColors.TOKEN_AI,
+                NamiColors.TOKEN_KIN, NamiColors.TOKEN_WAKABA,
+            ),
+            preset.colors.keys,
+        )
+        preset.colors.values.forEach {
+            assertTrue(runCatching { android.graphics.Color.parseColor(it) }.isSuccess, "не разбирается $it")
+        }
+    }
 }
