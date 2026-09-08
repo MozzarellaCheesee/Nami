@@ -21,7 +21,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 
-data class ContextAction(val label: String, val icon: ImageVector, val onClick: () -> Unit)
+/** [keepParentOpen] - действие открывает своё окно поверх текущего листа, а не уводит с экрана
+ * совсем (например Аудиотракт, Таймер сна из Now Playing) - родительский лист не закрывать, он
+ * останется под новым окном и снова окажется на виду, когда то закроется. По умолчанию false -
+ * старое поведение (закрыть лист, потом выполнить действие) не меняется там, где это не нужно. */
+data class ContextAction(val label: String, val icon: ImageVector, val keepParentOpen: Boolean = false, val onClick: () -> Unit)
 
 /**
  * Slide-up sheet for a "..." menu - the app-wide replacement for a plain
@@ -46,7 +50,7 @@ fun ContextActionSheet(onDismiss: () -> Unit, actions: List<ContextAction>, head
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onDismiss(); action.onClick() }
+                        .clickable { if (!action.keepParentOpen) onDismiss(); action.onClick() }
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {

@@ -298,24 +298,28 @@ fun NowPlayingScreen(
                 },
                 grid = listOfNotNull(
                     ContextAction("Трансляция", Icons.Outlined.Cast) { openSystemMediaOutput(sheetContext) },
-                    track?.let { ContextAction("Поделиться", Icons.Outlined.Share) { shareTrackText(sheetContext, it) } },
+                    track?.let { ContextAction("Поделиться карточкой", Icons.Outlined.Share) { onShareCard(it) } },
                     track?.let { ContextAction("Радио", Icons.Outlined.PlayCircleOutline) { viewModel.startRadio(it.id) } },
-                    ContextAction("В плейлист", Icons.Outlined.PlaylistAdd) { showAddToPlaylist = true },
-                    ContextAction("Дорожный режим", Icons.Outlined.DirectionsCar, onOpenDriveMode),
-                    ContextAction("Аудиотракт", Icons.Outlined.QueueMusic) { showAudioTractSheet = true },
+                    // keepParentOpen: эти действия открывают своё окно ПОВЕРХ Now Playing (диалог/
+                    // лист/отдельный экран), а не заменяют его - лист "Ещё" остаётся под ними и
+                    // сам всплывает обратно, когда их закрывают/уходят назад, вместо того чтобы
+                    // пользователь оказывался на голом Now Playing и открывал "Ещё" заново.
+                    ContextAction("В плейлист", Icons.Outlined.PlaylistAdd, keepParentOpen = true) { showAddToPlaylist = true },
+                    ContextAction("Дорожный режим", Icons.Outlined.DirectionsCar, keepParentOpen = true, onClick = onOpenDriveMode),
+                    ContextAction("Аудиотракт", Icons.Outlined.QueueMusic, keepParentOpen = true) { showAudioTractSheet = true },
                     // Третий ряд: таймер сна и моменты/петли по частоте использования это быстрые
                     // действия, а не второстепенные пункты - подняты из плоского списка в сетку.
-                    ContextAction("Таймер сна", Icons.Outlined.DarkMode) { showSleepTimerSheet = true },
-                    ContextAction("Моменты и петли", Icons.Outlined.Repeat) { showLoopSheet = true },
+                    ContextAction("Таймер сна", Icons.Outlined.DarkMode, keepParentOpen = true) { showSleepTimerSheet = true },
+                    ContextAction("Моменты и петли", Icons.Outlined.Repeat, keepParentOpen = true) { showLoopSheet = true },
                 ),
                 list = listOfNotNull(
-                    track?.let { ContextAction("Поделиться карточкой", Icons.Outlined.Share) { onShareCard(it) } },
-                    track?.let { ContextAction("Информация о треке", Icons.Outlined.Info) { onShowTrackInfo(it.id) } },
-                    track?.artistId?.let { artistId -> ContextAction("Открыть исполнителя", Icons.Outlined.Person) { onOpenArtist(artistId) } },
-                    track?.albumId?.let { albumId -> ContextAction("Открыть альбом", Icons.Outlined.Album) { onOpenAlbum(albumId) } },
-                    ContextAction("Настройки плеера", Icons.Outlined.Tune, onOpenPlayerSettings),
-                    ContextAction("Редактор темы", Icons.Outlined.Palette, onOpenThemeEditor),
-                    ContextAction("Все настройки", Icons.Outlined.Settings, onOpenAllSettings),
+                    track?.let { ContextAction("Поделиться", Icons.Outlined.Share) { shareTrackText(sheetContext, it) } },
+                    track?.let { ContextAction("Информация о треке", Icons.Outlined.Info, keepParentOpen = true) { onShowTrackInfo(it.id) } },
+                    track?.artistId?.let { artistId -> ContextAction("Открыть исполнителя", Icons.Outlined.Person, keepParentOpen = true) { onOpenArtist(artistId) } },
+                    track?.albumId?.let { albumId -> ContextAction("Открыть альбом", Icons.Outlined.Album, keepParentOpen = true) { onOpenAlbum(albumId) } },
+                    ContextAction("Настройки плеера", Icons.Outlined.Tune, keepParentOpen = true, onClick = onOpenPlayerSettings),
+                    ContextAction("Редактор темы", Icons.Outlined.Palette, keepParentOpen = true, onClick = onOpenThemeEditor),
+                    ContextAction("Все настройки", Icons.Outlined.Settings, keepParentOpen = true, onClick = onOpenAllSettings),
                 ),
             )
         }

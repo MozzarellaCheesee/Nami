@@ -392,10 +392,10 @@ private fun SelectionTopBar(
         ContextActionSheet(
             onDismiss = { showMenu = false },
             actions = listOf(
-                ContextAction("В плейлист", Icons.Outlined.LibraryAdd, onAddToPlaylist),
-                ContextAction("Отметить любимым", Icons.Outlined.FavoriteBorder, onLikeSelected),
-                ContextAction("Редактировать теги", Icons.Outlined.Edit, onEditTags),
-                ContextAction("Удалить", Icons.Outlined.Delete, onDelete),
+                ContextAction("В плейлист", Icons.Outlined.LibraryAdd, onClick = onAddToPlaylist),
+                ContextAction("Отметить любимым", Icons.Outlined.FavoriteBorder, onClick = onLikeSelected),
+                ContextAction("Редактировать теги", Icons.Outlined.Edit, onClick = onEditTags),
+                ContextAction("Удалить", Icons.Outlined.Delete, onClick = onDelete),
             ),
         )
     }

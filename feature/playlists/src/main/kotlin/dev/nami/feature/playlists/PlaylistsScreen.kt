@@ -127,7 +127,7 @@ fun PlaylistsScreen(
             onDismiss = { showCreateChooser = false },
             actions = listOf(
                 dev.nami.core.designsystem.ContextAction("Обычный плейлист", Icons.Outlined.Add) { showCreateDialog = true },
-                dev.nami.core.designsystem.ContextAction("Умный плейлист", Icons.Outlined.Add, onCreateSmartPlaylist),
+                dev.nami.core.designsystem.ContextAction("Умный плейлист", Icons.Outlined.Add, onClick = onCreateSmartPlaylist),
             ),
         )
     }

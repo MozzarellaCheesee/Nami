@@ -376,7 +376,7 @@ private fun PlaylistTrackRow(track: Track, onClick: () -> Unit, onRemove: (() ->
         ContextActionSheet(
             onDismiss = { showMenu = false },
             actions = listOf(
-                ContextAction("Убрать из плейлиста", Icons.Outlined.Close, onRemove),
+                ContextAction("Убрать из плейлиста", Icons.Outlined.Close, onClick = onRemove),
             ),
         )
     }

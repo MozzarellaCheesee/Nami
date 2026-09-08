@@ -92,7 +92,7 @@ fun NowPlayingMoreSheet(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .fullBlockClickable { onDismiss(); action.onClick() }
+                                .fullBlockClickable { if (!action.keepParentOpen) onDismiss(); action.onClick() }
                                 .padding(horizontal = 16.dp, vertical = 14.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -111,20 +111,44 @@ fun NowPlayingMoreSheet(
     }
 }
 
+/** Детерминированный маппинг по подписи, не рандом - один и тот же пункт всегда одного цвета
+ * между открытиями меню. Использует уже существующую палитру приложения (никаких новых
+ * цветов), по смыслу действия: акцент - на самое частое/фирменное, синий - на информационное/
+ * сетевое, зелёное/жёлтое - там, где это уже привычные роли этих цветов в остальном приложении
+ * (Wakaba = успех/позитивное действие, Kin = внимание/таймер). Неизвестная подпись - нейтральный
+ * Paper100, как было раньше у всех. */
+private fun gridCellAccent(label: String): androidx.compose.ui.graphics.Color = when (label) {
+    "Трансляция" -> NamiColors.Ai
+    "Поделиться карточкой" -> NamiColors.Ai
+    "Радио" -> NamiColors.Shu
+    "В плейлист" -> NamiColors.Wakaba
+    "Дорожный режим" -> NamiColors.Kin
+    "Аудиотракт" -> NamiColors.Ai
+    "Таймер сна" -> NamiColors.Kin
+    "Моменты и петли" -> NamiColors.Shu
+    else -> NamiColors.Paper100
+}
+
 @Composable
 private fun GridCell(action: ContextAction, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    // Раньше все шесть-восемь ячеек делили один и тот же серый Ink700 - ряд читался одним
+    // плоским пятном, глазу не за что зацепиться, чтобы быстро найти нужное действие. Свой
+    // акцентный цвет на каждую (по смыслу иконки, не рандом) - тот же приём, что уже был у
+    // "Удалить"-строк в ContextActionSheet, просто на каждую ячейку свой оттенок вместо одного
+    // тревожного.
+    val accent = gridCellAccent(action.label)
     Column(
         modifier = modifier
-            .fullBlockClickable(shape = RoundedCornerShape(NamiRadius.Button)) { onDismiss(); action.onClick() }
+            .fullBlockClickable(shape = RoundedCornerShape(NamiRadius.Button)) { if (!action.keepParentOpen) onDismiss(); action.onClick() }
             .padding(vertical = 12.dp, horizontal = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         Box(
-            modifier = Modifier.size(44.dp).background(NamiColors.Ink700, RoundedCornerShape(NamiRadius.Button)),
+            modifier = Modifier.size(44.dp).background(accent.copy(alpha = 0.16f), RoundedCornerShape(NamiRadius.Button)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(action.icon, contentDescription = null, tint = NamiColors.Paper100, modifier = Modifier.size(22.dp))
+            Icon(action.icon, contentDescription = null, tint = accent, modifier = Modifier.size(22.dp))
         }
         Text(
             text = action.label,
