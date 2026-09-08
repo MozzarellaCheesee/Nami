@@ -714,6 +714,8 @@ private object NoOpSettingsRepository : dev.nami.domain.SettingsRepository {
     override fun setStudyModeEnabled(value: Boolean) {}
     override val lyricsFontPath = MutableStateFlow<String?>(null)
     override fun setLyricsFontPath(path: String?) {}
+    override val uiFontPath = MutableStateFlow<String?>(null)
+    override fun setUiFontPath(path: String?) {}
     override val eqEnabled = MutableStateFlow(false)
     override fun setEqEnabled(value: Boolean) {}
     override val eqBandGains = MutableStateFlow(emptyList<Float>())

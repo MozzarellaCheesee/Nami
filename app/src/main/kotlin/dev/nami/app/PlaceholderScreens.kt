@@ -194,6 +194,10 @@ fun SettingsAppearanceScreen(onBack: () -> Unit, viewModel: SettingsViewModel = 
     var selectedIcon by remember { mutableStateOf(IconPicker.current(context)) }
     var pendingIcon by remember { mutableStateOf<LauncherIcon?>(null) }
     val amoledEnabled by viewModel.amoledEnabled.collectAsState()
+    val uiFontPath by viewModel.uiFontPath.collectAsState()
+    val pickUiFont = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+    ) { uri -> uri?.let(viewModel::pickUiFont) }
 
     SettingsSubScreenScaffold(title = "Внешний вид", onBack = onBack) {
         SettingsSectionLabel("Тема")
@@ -204,6 +208,26 @@ fun SettingsAppearanceScreen(onBack: () -> Unit, viewModel: SettingsViewModel = 
                 trailing = { NamiSwitch(checked = amoledEnabled, onCheckedChange = viewModel::setAmoledEnabled) },
                 onClick = { viewModel.setAmoledEnabled(!amoledEnabled) },
             )
+            SettingsRow(
+                icon = Icons.Outlined.FontDownload,
+                title = "Шрифт интерфейса",
+                trailing = {
+                    Text(
+                        text = if (uiFontPath != null) "Свой" else "Стандартный",
+                        color = NamiColors.Paper40,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                },
+                onClick = { pickUiFont.launch(arrayOf("font/ttf", "font/otf", "*/*")) },
+            )
+            if (uiFontPath != null) {
+                SettingsRow(
+                    icon = Icons.Outlined.Close,
+                    title = "Сбросить шрифт интерфейса",
+                    trailing = {},
+                    onClick = viewModel::clearUiFont,
+                )
+            }
         }
         SettingsSectionLabel("Иконка приложения")
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {

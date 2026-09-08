@@ -5,15 +5,20 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.text.font.FontFamily
 
-private val NamiTypography = Typography(
-    titleLarge = NamiType.ScreenTitle,
-    titleMedium = NamiType.TrackTitle,
-    bodyLarge = NamiType.ListTitle,
-    bodyMedium = NamiType.Secondary,
-    labelMedium = NamiType.TechData,
-    labelSmall = NamiType.Caption,
-)
+private fun buildTypography(uiFont: FontFamily?): Typography {
+    fun style(base: androidx.compose.ui.text.TextStyle) = if (uiFont != null) base.copy(fontFamily = uiFont) else base
+    return Typography(
+        titleLarge = style(NamiType.ScreenTitle),
+        titleMedium = style(NamiType.TrackTitle),
+        bodyLarge = style(NamiType.ListTitle),
+        bodyMedium = style(NamiType.Secondary),
+        labelMedium = style(NamiType.TechData),
+        labelSmall = style(NamiType.Caption),
+    )
+}
 
 private val NamiDarkScheme = darkColorScheme(
     background = NamiColors.Ink900,
@@ -29,9 +34,12 @@ private val NamiDarkScheme = darkColorScheme(
 )
 
 /** [amoled] заменяет ink-900 на чистый #000000 и поверхности на #0A0B0D (Дизайн.md, "Режим
- * AMOLED") -- отдельный тумблер поверх тёмной темы, не сама тёмная тема. */
+ * AMOLED") - отдельный тумблер поверх тёмной темы, не сама тёмная тема. [uiFont] - группа E
+ * "свой шрифт интерфейса", подменяет Archivo во всех MaterialTheme.typography ролях, null =
+ * стандартный. */
 @Composable
-fun NamiTheme(amoled: Boolean = false, content: @Composable () -> Unit) {
+fun NamiTheme(amoled: Boolean = false, uiFont: FontFamily? = null, content: @Composable () -> Unit) {
     SideEffect { setAmoledColors(amoled) }
-    MaterialTheme(colorScheme = NamiDarkScheme, typography = NamiTypography, content = content)
+    val typography = remember(uiFont) { buildTypography(uiFont) }
+    MaterialTheme(colorScheme = NamiDarkScheme, typography = typography, content = content)
 }

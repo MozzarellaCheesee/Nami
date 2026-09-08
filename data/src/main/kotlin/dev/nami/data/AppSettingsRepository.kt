@@ -22,6 +22,7 @@ private const val KEY_HIDE_SYSTEM_BARS = "hide_system_bars"
 private const val KEY_KARAOKE_ENABLED = "karaoke_enabled"
 private const val KEY_STUDY_MODE_ENABLED = "study_mode_enabled"
 private const val KEY_LYRICS_FONT_PATH = "lyrics_font_path"
+private const val KEY_UI_FONT_PATH = "ui_font_path"
 private const val KEY_EQ_ENABLED = "eq_enabled"
 private const val KEY_EQ_BAND_GAINS = "eq_band_gains" // CSV, 9 floats, BAND_FREQS_HZ order
 private const val EQ_BAND_COUNT = 9
@@ -100,6 +101,14 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
     override fun setLyricsFontPath(path: String?) {
         prefs.edit { putString(KEY_LYRICS_FONT_PATH, path) }
         _lyricsFontPath.value = path
+    }
+
+    private val _uiFontPath = MutableStateFlow(prefs.getString(KEY_UI_FONT_PATH, null))
+    override val uiFontPath: StateFlow<String?> = _uiFontPath
+
+    override fun setUiFontPath(path: String?) {
+        prefs.edit { putString(KEY_UI_FONT_PATH, path) }
+        _uiFontPath.value = path
     }
 
     private val _eqEnabled = MutableStateFlow(prefs.getBoolean(KEY_EQ_ENABLED, false))

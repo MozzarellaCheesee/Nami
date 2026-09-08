@@ -63,6 +63,11 @@ interface SettingsRepository {
     val lyricsFontPath: StateFlow<String?>
     fun setLyricsFontPath(path: String?)
 
+    /** Группа E "свой шрифт интерфейса" - тот же механизм что lyricsFontPath, но применяется
+     * глобально через NamiTheme's typography, не только на экране лирики. */
+    val uiFontPath: StateFlow<String?>
+    fun setUiFontPath(path: String?)
+
     /** Этап 4's parametric EQ (Beta) -- off by default: it sits directly in the path of every
      * second of audio the app plays, so a subtle DSP bug means "everything sounds wrong" rather
      * than "one screen is broken". Bass/mid/treble in dB, ±12 typical range. */

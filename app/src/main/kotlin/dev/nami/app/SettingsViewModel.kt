@@ -31,6 +31,7 @@ class SettingsViewModel @Inject constructor(
     val deeplApiKey: StateFlow<String> = appSettingsRepository.deeplApiKey
     val shuffleMode: StateFlow<dev.nami.domain.ShuffleMode> = appSettingsRepository.shuffleMode
     val amoledEnabled: StateFlow<Boolean> = appSettingsRepository.amoledEnabled
+    val uiFontPath: StateFlow<String?> = appSettingsRepository.uiFontPath
 
     fun setAutoOpenPlayer(value: Boolean) {
         appSettingsRepository.setAutoOpenPlayer(value)
@@ -86,5 +87,25 @@ class SettingsViewModel @Inject constructor(
 
     fun setAmoledEnabled(value: Boolean) {
         appSettingsRepository.setAmoledEnabled(value)
+    }
+
+    /** Группа E "свой шрифт интерфейса" - тот же copy-once-to-local-storage приём что
+     * pickLyricsFont, т.к. [uri] не стабилен между запусками. */
+    fun pickUiFont(uri: Uri) {
+        viewModelScope.launch {
+            val extension = context.contentResolver.getType(uri)?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: "ttf"
+            val dest = File(context.filesDir, "fonts/ui.$extension")
+            val copied = withContext(Dispatchers.IO) {
+                dest.parentFile?.mkdirs()
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    dest.outputStream().use { output -> input.copyTo(output) }
+                } != null
+            }
+            if (copied) appSettingsRepository.setUiFontPath(dest.path)
+        }
+    }
+
+    fun clearUiFont() {
+        appSettingsRepository.setUiFontPath(null)
     }
 }

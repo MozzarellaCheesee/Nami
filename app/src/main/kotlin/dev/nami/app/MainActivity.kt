@@ -173,6 +173,11 @@ class MainActivity : ComponentActivity() {
             val hideSystemBars by appSettingsRepository.hideSystemBars.collectAsState()
             val nightModeEnabled by appSettingsRepository.nightModeEnabled.collectAsState()
             val amoledEnabled by appSettingsRepository.amoledEnabled.collectAsState()
+            val uiFontPath by appSettingsRepository.uiFontPath.collectAsState()
+            // Loaded once per path, not on every recomposition - Font(File) does real I/O/parsing.
+            val uiFontFamily = remember(uiFontPath) {
+                uiFontPath?.let { androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(java.io.File(it))) }
+            }
             // Dims the actual screen backlight (not just an on-screen overlay) to its minimum --
             // WindowManager.LayoutParams.screenBrightness in [0,1] overrides the system brightness
             // for this window only; -1 (BRIGHTNESS_OVERRIDE_NONE) restores following the system
@@ -199,7 +204,7 @@ class MainActivity : ComponentActivity() {
                     controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
                 }
             }
-            NamiTheme(amoled = amoledEnabled) {
+            NamiTheme(amoled = amoledEnabled, uiFont = uiFontFamily) {
                 NamiNavHost(
                     onImportRequested = { pickFiles.launch(arrayOf("audio/*")) },
                     onImportFolderRequested = { pickFolder.launch(null) },
