@@ -182,14 +182,23 @@ class NetworkImportRepositoryImpl @Inject constructor(
     /**
      * Публичные инстансы Piped регулярно падают, переезжают и упираются в защиту YouTube от ботов,
      * поэтому хост не один, а список: первый ответивший осмысленным JSON становится рабочим до
-     * конца сессии ([pipedInstance]), при следующей ошибке перебор начинается снова. Инстанс может
-     * ответить 200 и телом {"error": "..."} - это тоже отказ, а не результат.
+     * конца сессии, при следующей ошибке перебор начинается снова. Инстанс может ответить 200 и
+     * телом {"error": "..."} - это тоже отказ, а не результат.
+     *
+     * Отдельная память под /search и /streams ([pipedSearchInstance]/[pipedStreamsInstance]),
+     * а не один общий "рабочий инстанс" - у Piped это архитектурно разные пути: /search почти
+     * всегда лёгкий и кешируемый, а /streams заставляет инстанс сходить в YouTube за потоком
+     * заново, и именно там чаще всего прилетает "confirm you're not a bot". Инстанс, у которого
+     * работает поиск, совсем не обязательно отдаёт потоки - общая память заставляла бы каждый раз
+     * зря начинать перебор /streams с заведомо непригодного для этого хоста.
      */
     @Volatile
-    private var pipedInstance: String? = null
+    private var pipedSearchInstance: String? = null
+    @Volatile
+    private var pipedStreamsInstance: String? = null
 
     private fun searchPiped(query: String): List<NetworkTrack> {
-        val body = pipedGet("/search?q=${encode(query)}&filter=music_songs") ?: return emptyList()
+        val body = pipedGet("/search?q=${encode(query)}&filter=music_songs", forStreams = false) ?: return emptyList()
         val items = JSONObject(body).optJSONArray("items") ?: return emptyList()
         return (0 until items.length()).mapNotNull { i ->
             val item = items.optJSONObject(i) ?: return@mapNotNull null
@@ -217,7 +226,7 @@ class NetworkImportRepositoryImpl @Inject constructor(
     /** Возвращает трек с проставленными downloadUrl/fileName или null, если ни один инстанс не
      * отдал потоки. Перекодирования нет намеренно: lossy → lossy только портит звук и время. */
     private fun resolvePiped(track: NetworkTrack): NetworkTrack? {
-        val body = pipedGet("/streams/${track.id}") ?: return null
+        val body = pipedGet("/streams/${track.id}", forStreams = true) ?: return null
         val streams = JSONObject(body).optJSONArray("audioStreams") ?: return null
         var bestUrl: String? = null
         var bestBitrate = -1
@@ -241,9 +250,13 @@ class NetworkImportRepositoryImpl @Inject constructor(
         return track.copy(downloadUrl = url, fileName = "${track.title}.$ext")
     }
 
-    /** Пробует запомненный инстанс, потом все остальные по порядку. */
-    private fun pipedGet(path: String): String? {
-        val hosts = listOfNotNull(pipedInstance) + PIPED_INSTANCES.filter { it != pipedInstance }
+    /** Пробует запомненный для этого вида запроса инстанс, потом остальные - в перемешанном
+     * порядке, не в порядке списка. Один и тот же первый по списку хост иначе принимает весь
+     * трафик всех установок NAMI разом, что и провоцирует его бот-чек чаще остальных - вразнобой
+     * нагрузка размазывается по всему списку. */
+    private fun pipedGet(path: String, forStreams: Boolean): String? {
+        val sticky = if (forStreams) pipedStreamsInstance else pipedSearchInstance
+        val hosts = listOfNotNull(sticky) + PIPED_INSTANCES.filter { it != sticky }.shuffled()
         for (host in hosts) {
             val body = httpGet("$host$path") ?: continue
             val json = runCatching { JSONObject(body) }.getOrNull() ?: continue
@@ -251,10 +264,10 @@ class NetworkImportRepositoryImpl @Inject constructor(
                 Log.w(TAG, "инстанс $host отказал: ${json.optString("error").take(120)}")
                 continue
             }
-            pipedInstance = host
+            if (forStreams) pipedStreamsInstance = host else pipedSearchInstance = host
             return body
         }
-        pipedInstance = null
+        if (forStreams) pipedStreamsInstance = null else pipedSearchInstance = null
         return null
     }
 
@@ -313,15 +326,26 @@ class NetworkImportRepositoryImpl @Inject constructor(
         const val READ_TIMEOUT_MS = 15_000
         const val DOWNLOAD_TIMEOUT_MS = 120_000
         /** Не один захардкоженный хост: инстансы Piped то падают, то переезжают (их сообщество
-         * само это признаёт), поэтому при отказе перебираем следующий. */
+         * само это признаёт), поэтому при отказе перебираем следующий. Список сверен с
+         * актуальным на момент правки https://github.com/TeamPiped/documentation (не с
+         * piped-instances.kavin.rocks - тот сам нестабилен, 502 регулярно, незачем городить
+         * лишнюю точку отказа поверх и так шаткого источника). */
         val PIPED_INSTANCES = listOf(
-            "https://api.piped.private.coffee",
             "https://pipedapi.kavin.rocks",
-            "https://pipedapi.ducks.party",
-            "https://pipedapi.adminforge.de",
-            "https://pipedapi.drgns.space",
-            "https://pipedapi.r4fo.com",
+            "https://pipedapi.leptons.xyz",
             "https://pipedapi.nosebs.ru",
+            "https://pipedapi-libre.kavin.rocks",
+            "https://piped-api.privacy.com.de",
+            "https://pipedapi.adminforge.de",
+            "https://api.piped.yt",
+            "https://pipedapi.drgns.space",
+            "https://pipedapi.owo.si",
+            "https://pipedapi.ducks.party",
+            "https://piped-api.codespace.cz",
+            "https://pipedapi.reallyaweso.me",
+            "https://api.piped.private.coffee",
+            "https://pipedapi.darkness.services",
+            "https://pipedapi.orangenet.cc",
         )
         const val ITEMS_PER_SEARCH = 6
         const val FILES_PER_ITEM = 8
