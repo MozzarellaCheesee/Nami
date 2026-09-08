@@ -42,6 +42,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.animation.animateContentSize
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
@@ -296,6 +297,7 @@ private fun OutputProfileRow(
             .fillMaxWidth()
             .padding(top = 8.dp)
             .background(NamiColors.Ink800, RoundedCornerShape(16.dp))
+            .animateContentSize()
             .clickable { expanded = !expanded }
             .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {

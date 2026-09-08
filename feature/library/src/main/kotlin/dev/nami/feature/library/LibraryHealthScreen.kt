@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
+import androidx.compose.animation.animateContentSize
 import dev.nami.core.model.AlbumId
 import dev.nami.domain.HealthAlbumRef
 import dev.nami.domain.HealthArtistRef
@@ -118,7 +119,7 @@ private fun HealthCategory(
     fixLabel: String = "Вылечить",
 ) {
     var expanded by remember { mutableStateOf(false) }
-    Column(modifier = Modifier.padding(top = 8.dp).background(NamiColors.Ink800, RoundedCornerShape(12.dp)).clickable(enabled = count > 0) { expanded = !expanded }) {
+    Column(modifier = Modifier.padding(top = 8.dp).background(NamiColors.Ink800, RoundedCornerShape(12.dp)).animateContentSize().clickable(enabled = count > 0) { expanded = !expanded }) {
         Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 if (count == 0) Icons.Outlined.CheckCircle else Icons.Outlined.Warning,
@@ -159,7 +160,7 @@ private fun HealthCategory(
 @Composable
 private fun YearlessAlbumsCategory(albums: List<HealthAlbumRef>, onSave: (AlbumId, Int) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
-    Column(modifier = Modifier.padding(top = 8.dp).background(NamiColors.Ink800, RoundedCornerShape(12.dp)).clickable(enabled = albums.isNotEmpty()) { expanded = !expanded }) {
+    Column(modifier = Modifier.padding(top = 8.dp).background(NamiColors.Ink800, RoundedCornerShape(12.dp)).animateContentSize().clickable(enabled = albums.isNotEmpty()) { expanded = !expanded }) {
         Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 if (albums.isEmpty()) Icons.Outlined.CheckCircle else Icons.Outlined.Warning,
@@ -228,7 +229,7 @@ private fun YearlessAlbumsCategory(albums: List<HealthAlbumRef>, onSave: (AlbumI
 @Composable
 private fun InconsistentArtistNamesCategory(groups: List<List<HealthArtistRef>>, onMerge: (List<dev.nami.core.model.ArtistId>, String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
-    Column(modifier = Modifier.padding(top = 8.dp).background(NamiColors.Ink800, RoundedCornerShape(12.dp)).clickable(enabled = groups.isNotEmpty()) { expanded = !expanded }) {
+    Column(modifier = Modifier.padding(top = 8.dp).background(NamiColors.Ink800, RoundedCornerShape(12.dp)).animateContentSize().clickable(enabled = groups.isNotEmpty()) { expanded = !expanded }) {
         Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 if (groups.isEmpty()) Icons.Outlined.CheckCircle else Icons.Outlined.Warning,
@@ -259,7 +260,7 @@ private fun InconsistentArtistNamesCategory(groups: List<List<HealthArtistRef>>,
 @Composable
 private fun DuplicatesCategory(groups: List<List<HealthTrackRef>>, onResolve: (keepId: dev.nami.core.model.TrackId, group: List<HealthTrackRef>) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
-    Column(modifier = Modifier.padding(top = 8.dp).background(NamiColors.Ink800, RoundedCornerShape(12.dp)).clickable(enabled = groups.isNotEmpty()) { expanded = !expanded }) {
+    Column(modifier = Modifier.padding(top = 8.dp).background(NamiColors.Ink800, RoundedCornerShape(12.dp)).animateContentSize().clickable(enabled = groups.isNotEmpty()) { expanded = !expanded }) {
         Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 if (groups.isEmpty()) Icons.Outlined.CheckCircle else Icons.Outlined.Warning,
