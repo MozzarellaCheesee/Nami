@@ -33,6 +33,7 @@ class LocalShareViewModel @Inject constructor(
     val listenTogetherGuestState: StateFlow<ListenTogetherGuestState?> = repository.listenTogetherGuestState
     val wifiDirectPeers: StateFlow<List<WifiDirectPeer>> = repository.wifiDirectPeers
     val wifiDirectConnecting: StateFlow<Boolean> = repository.wifiDirectConnecting
+    val wifiDirectConnected: StateFlow<Boolean> = repository.wifiDirectConnected
     val internetLinkState: StateFlow<InternetLinkState> = repository.internetLinkState
 
     // Коды живут в репозитории (Singleton), не тут - иначе пересоздание ViewModel при выходе с
@@ -46,6 +47,8 @@ class LocalShareViewModel @Inject constructor(
     val lastSyncResult: StateFlow<Int?> = _lastSyncResult
     private val _lastPullResult = MutableStateFlow<Boolean?>(null)
     val lastPullResult: StateFlow<Boolean?> = _lastPullResult
+    private val _dropError = MutableStateFlow<String?>(null)
+    val dropError: StateFlow<String?> = _dropError
 
     init {
         repository.startServer()
@@ -61,6 +64,7 @@ class LocalShareViewModel @Inject constructor(
 
     fun startWifiDirectDiscovery() = repository.startWifiDirectDiscovery()
     fun connectWifiDirect(peer: WifiDirectPeer) = repository.connectWifiDirect(peer)
+    fun disconnectWifiDirect() = repository.disconnectWifiDirect()
 
     /** NSD-автопоиск запускается в init() ещё до того, как экран успевает спросить
      * NEARBY_WIFI_DEVICES/ACCESS_FINE_LOCATION - на Android 13+ без этого разрешения система
@@ -102,9 +106,20 @@ class LocalShareViewModel @Inject constructor(
     }
 
     fun setDropCurrentTrack() {
-        val nowPlaying = playerRepository.queue.value.nowPlaying ?: return
+        _dropError.value = null
+        val nowPlaying = playerRepository.queue.value.nowPlaying
+        if (nowPlaying == null) {
+            // Раньше молча ничего не делал - экран так и оставался "Ничего не раздаётся" без
+            // объяснения, выглядело как сломанная раздача, а на деле просто ничего не играет.
+            _dropError.value = "Сначала запусти воспроизведение трека"
+            return
+        }
         viewModelScope.launch {
-            val track = libraryRepository.track(nowPlaying.id).first() ?: return@launch
+            val track = libraryRepository.track(nowPlaying.id).first()
+            if (track == null) {
+                _dropError.value = "Не нашёл этот трек в библиотеке"
+                return@launch
+            }
             repository.setDropTrack(track)
         }
     }

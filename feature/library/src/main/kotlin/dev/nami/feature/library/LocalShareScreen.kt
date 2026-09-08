@@ -76,8 +76,10 @@ fun LocalShareScreen(
     val guestState by viewModel.listenTogetherGuestState.collectAsState()
     val lastSyncResult by viewModel.lastSyncResult.collectAsState()
     val lastPullResult by viewModel.lastPullResult.collectAsState()
+    val dropError by viewModel.dropError.collectAsState()
     val wifiDirectPeers by viewModel.wifiDirectPeers.collectAsState()
     val wifiDirectConnecting by viewModel.wifiDirectConnecting.collectAsState()
+    val wifiDirectConnected by viewModel.wifiDirectConnected.collectAsState()
     val internetLinkState by viewModel.internetLinkState.collectAsState()
     val internetInviteCode by viewModel.internetInviteCode.collectAsState()
     val internetAnswerCode by viewModel.internetAnswerCode.collectAsState()
@@ -185,6 +187,9 @@ fun LocalShareScreen(
                         TextButton(onClick = { viewModel.clearDropTrack() }) { Text("Стоп", color = NamiColors.Paper70) }
                     }
                 }
+                dropError?.let {
+                    Text(it, color = NamiColors.Shu, style = MaterialTheme.typography.bodySmall)
+                }
                 lastPullResult?.let {
                     Text(if (it) "Трек получен и добавлен в библиотеку" else "Не получилось скачать", color = if (it) NamiColors.Wakaba else NamiColors.Shu, style = MaterialTheme.typography.bodySmall)
                 }
@@ -233,6 +238,11 @@ fun LocalShareScreen(
                 if (!hasWifiDirectPermission) {
                     TextButton(onClick = { wifiDirectPermissionLauncher.launch(wifiDirectPermission) }) {
                         Text("Разрешить поиск устройств рядом", color = NamiColors.Shu)
+                    }
+                } else if (wifiDirectConnected) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Подключено по Wi-Fi Direct", color = NamiColors.Wakaba, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        TextButton(onClick = { viewModel.disconnectWifiDirect() }) { Text("Отключить", color = NamiColors.Shu) }
                     }
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -298,7 +308,9 @@ fun LocalShareScreen(
             if (manualText.isNotBlank()) {
                 item {
                     val manualDevice = viewModel.addManualDevice(manualText)
-                    if (manualDevice != null) {
+                    // Тот же хост уже виден автопоиском (NSD) - показывать его ещё раз отдельной
+                    // строкой "ip:port" вместо человекочитаемого "NAMI-..." только путает.
+                    if (manualDevice != null && devices.none { it.host == manualDevice.host }) {
                         DeviceRow(
                             device = manualDevice,
                             onPullDrop = { viewModel.pullDrop(manualDevice) },

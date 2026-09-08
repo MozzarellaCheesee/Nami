@@ -99,9 +99,14 @@ class LocalShareRepositoryImpl @Inject constructor(
     override val wifiDirectPeers: StateFlow<List<WifiDirectPeer>> = _wifiDirectPeers
     private val _wifiDirectConnecting = MutableStateFlow(false)
     override val wifiDirectConnecting: StateFlow<Boolean> = _wifiDirectConnecting
+    private val _wifiDirectConnected = MutableStateFlow(false)
+    override val wifiDirectConnected: StateFlow<Boolean> = _wifiDirectConnected
     // Имя peer'а, к которому только что запросили connect() - broadcast о смене соединения не
     // несёт имени, только его MAC/адрес и networkInfo, так что берём имя отсюда для DiscoveredDevice.
     private var pendingWifiDirectPeerName: String? = null
+    // Host, добавленный в discoveredDevices при подключении по Wi-Fi Direct - нужен, чтобы убрать
+    // его же при разрыве группы (см. WIFI_P2P_CONNECTION_CHANGED_ACTION ниже).
+    private var wifiDirectConnectedHost: String? = null
 
     // ------------------------------------------------------------------ WebRTC интернет-мост
     private var webRtcLink: WebRtcInternetLink? = null
@@ -494,13 +499,33 @@ class LocalShareRepositoryImpl @Inject constructor(
                                     _wifiDirectConnecting.value = false
                                     // Мы сами группа-владелец - другая сторона подключится к нашему же
                                     // ServerSocket по нашему адресу, добавлять самих себя незачем.
+                                    if (info.groupFormed) _wifiDirectConnected.value = true
                                     if (info.groupFormed && !info.isGroupOwner) {
                                         val host = info.groupOwnerAddress?.hostAddress ?: return@requestConnectionInfo
                                         val name = pendingWifiDirectPeerName ?: "Wi-Fi Direct"
+                                        wifiDirectConnectedHost = host
                                         _discoveredDevices.value = (_discoveredDevices.value.filterNot { it.host == host } +
                                             DiscoveredDevice(name = name, host = host, port = SERVER_PORT))
                                     }
+                                    // Владелец группы не знает IP клиента через этот API вообще
+                                    // (WifiP2pInfo его не отдаёт) - вместо ручного угадывания
+                                    // перезапускаем уже рабочий NSD-автопоиск, тот же сокет
+                                    // слушает на всех интерфейсах, включая интерфейс p2p-группы,
+                                    // так что обе стороны находят друг друга обычным mDNS поверх
+                                    // новой подсети без отдельного кода под каждую роль.
+                                    stopDiscovery()
+                                    startDiscovery()
                                 }
+                            } else {
+                                // Группа распалась (вышли/переключились/собеседник ушёл) - раньше
+                                // устройство так и оставалось в списке навсегда, будто всё ещё
+                                // подключено.
+                                wifiDirectConnectedHost?.let { host ->
+                                    _discoveredDevices.value = _discoveredDevices.value.filterNot { it.host == host }
+                                }
+                                wifiDirectConnectedHost = null
+                                _wifiDirectConnecting.value = false
+                                _wifiDirectConnected.value = false
                             }
                         }
                     }
@@ -550,6 +575,22 @@ class LocalShareRepositoryImpl @Inject constructor(
             _wifiDirectConnecting.value = false
             Log.w(TAG, "Wi-Fi Direct connect denied: ${e.message}")
         }
+    }
+
+    override fun disconnectWifiDirect() {
+        val manager = wifiP2pManager ?: return
+        val channel = wifiP2pChannel ?: return
+        manager.removeGroup(channel, object : WifiP2pManager.ActionListener {
+            override fun onSuccess() {}
+            override fun onFailure(reason: Int) { Log.w(TAG, "Wi-Fi Direct removeGroup failed: $reason") }
+        })
+        // removeGroup обычно доводит до нас же WIFI_P2P_CONNECTION_CHANGED_ACTION(isConnected=false)
+        // асинхронно, но сбрасываем сразу - UI не должен ждать broadcast, чтобы не мигать
+        // "подключено" ещё секунду после явного нажатия "Отключить".
+        wifiDirectConnectedHost?.let { host -> _discoveredDevices.value = _discoveredDevices.value.filterNot { it.host == host } }
+        wifiDirectConnectedHost = null
+        _wifiDirectConnected.value = false
+        _wifiDirectConnecting.value = false
     }
 
     private fun peerStatusLabel(status: Int): String = when (status) {
