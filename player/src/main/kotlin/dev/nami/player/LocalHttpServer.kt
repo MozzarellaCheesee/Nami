@@ -1,8 +1,5 @@
 package dev.nami.player
 
-import android.content.Context
-import android.net.wifi.WifiManager
-import android.text.format.Formatter
 import android.util.Log
 import dev.nami.core.model.Track
 import org.json.JSONObject
@@ -31,6 +28,12 @@ class LocalHttpServer(
     private val nowPlayingJsonBlocking: () -> JSONObject? = { null },
     private val dropTrackBlocking: () -> Track? = { null },
     private val manifestJsonBlocking: () -> JSONObject = { JSONObject() },
+    /** Теги раздаваемого трека из БАЗЫ отдающего (см. /dropmeta ниже) - null когда не раздаётся. */
+    private val dropMetaJsonBlocking: () -> JSONObject? = { null },
+    /** Файл обложки раздаваемого трека - null если её нет. */
+    private val dropCoverFileBlocking: () -> File? = { null },
+    /** Файл фото артиста раздаваемого трека - null если его нет. */
+    private val dropArtistPhotoFileBlocking: () -> File? = { null },
 ) {
     private var serverSocket: ServerSocket? = null
 
@@ -81,11 +84,20 @@ class LocalHttpServer(
                     }
                     path == "/manifest" -> writeJson(output, manifestJsonBlocking())
                     path == "/drop" -> serveTrack(output, dropTrackBlocking(), range)
+                    // Теги и обложка живут в БАЗЕ отдающего, а не обязательно в самом файле:
+                    // трек без тегов (а такие в библиотеке обычные) приезжал получателю голым -
+                    // название из имени файла (то есть UUID), без артиста, альбома и обложки.
+                    path == "/dropmeta" -> {
+                        val meta = dropMetaJsonBlocking()
+                        if (meta != null) writeJson(output, meta) else writeStatus(output, 404)
+                    }
+                    path == "/dropcover" -> serveFile(output, dropCoverFileBlocking(), "image/*")
+                    path == "/dropartistphoto" -> serveFile(output, dropArtistPhotoFileBlocking(), "image/*")
                     path.startsWith("/track/") -> serveTrack(output, trackByIdBlocking(path.removePrefix("/track/")), range)
                     else -> writeStatus(output, 404)
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "request failed: ${e.message}")
+                Log.w(TAG, "request failed", e)
             }
         }
     }
@@ -112,7 +124,7 @@ class LocalHttpServer(
             append("Accept-Ranges: bytes\r\n")
             append("Content-Length: $length\r\n")
             if (partial) append("Content-Range: bytes $from-$to/$total\r\n")
-            append("X-Original-Filename: ${file.name}\r\n")
+            append("X-Original-Filename: ${encodeFilenameHeader(downloadFileName(track, file))}\r\n")
             append("Connection: close\r\n\r\n")
         }
         output.write(header.toByteArray(Charsets.UTF_8))
@@ -127,6 +139,22 @@ class LocalHttpServer(
                 left -= read
             }
         }
+        output.flush()
+    }
+
+    /** Отдать файл целиком, без Range - обложка маленькая, куски ей ни к чему. */
+    private fun serveFile(output: OutputStream, file: File?, contentType: String) {
+        if (file == null || !file.exists()) {
+            writeStatus(output, 404)
+            return
+        }
+        val header = "HTTP/1.1 200 OK\r\n" +
+            "Content-Type: $contentType\r\n" +
+            "Content-Length: ${file.length()}\r\n" +
+            "X-Original-Filename: ${encodeFilenameHeader(file.name)}\r\n" +
+            "Connection: close\r\n\r\n"
+        output.write(header.toByteArray(Charsets.UTF_8))
+        file.inputStream().use { it.copyTo(output) }
         output.flush()
     }
 
@@ -148,6 +176,24 @@ class LocalHttpServer(
     }
 }
 
+/** Осмысленное имя файла для получателя (Wi-Fi Drop, кэш "слушать вместе"). Брать file.name
+ * нельзя: в библиотеке файлы лежат под UUID-именами, и трек без тегов приезжал на другое
+ * устройство с названием вида "367a78a5-dee5-4a7a-...", ровно так и попадая в библиотеку - импорт
+ * берёт название из имени файла, когда тегов нет. Расширение сохраняем: по нему определяется
+ * формат при импорте. */
+internal fun downloadFileName(track: Track, file: File): String {
+    val extension = file.extension.ifBlank { "audio" }
+    val artist = track.artistName?.takeIf { it.isNotBlank() }?.let { "$it - " } ?: ""
+    val base = "$artist${track.title}".replace(Regex("""[\\/:*?"<>|\r\n]"""), "_").trim().take(120)
+    return if (base.isBlank()) file.name else "$base.$extension"
+}
+
+/** Заголовки HTTP - ISO-8859-1, а имена треков сплошь и рядом не ASCII (японские названия в этой
+ * библиотеке - обычное дело). Без процентного кодирования получатель читал бы кракозябры и
+ * сохранял трек под ними же. Обратно разбирается URLDecoder'ом на стороне клиента. */
+internal fun encodeFilenameHeader(name: String): String =
+    java.net.URLEncoder.encode(name, "UTF-8")
+
 /** "bytes=NNN-" и "bytes=NNN-MMM" (единственные формы, которые шлют Chromecast и браузеры) в
  * готовые границы включительно. null означает "отдать файл целиком, 200" - в том числе для всего,
  * что не разобралось, и для Wi-Fi Drop, который Range вообще не шлёт. Multipart-диапазоны
@@ -162,10 +208,26 @@ internal fun parseByteRange(header: String?, total: Long): LongRange? {
     return from..to
 }
 
-/** Адрес телефона в текущей Wi-Fi сети - то, что должен позвать другой участник ЛВС (телевизор с
- * Chromecast, второй телефон). "0.0.0.0" означает "Wi-Fi нет", раздавать нечего. */
-fun localIpAddress(context: Context): String {
-    val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
-    val ipInt = wifiManager?.connectionInfo?.ipAddress ?: 0
-    return if (ipInt != 0) Formatter.formatIpAddress(ipInt) else "0.0.0.0"
-}
+/** Адрес телефона в текущей сети - то, что должен позвать другой участник ЛВС (телевизор с
+ * Chromecast, второй телефон). "0.0.0.0" означает "сети нет", раздавать нечего.
+ *
+ * Берётся перебором интерфейсов, а не через WifiManager.connectionInfo.ipAddress: тот знает
+ * ТОЛЬКО обычную Wi-Fi (wlan0) и отдаёт 0 на Wi-Fi Direct (интерфейс p2p-*), на раздаче интернета
+ * и на Ethernet - из-за чего экран группы G показывал "0.0.0.0:47821" (QR и ручной ввод давали
+ * заведомо нерабочий адрес) ровно в том сценарии, ради которого Wi-Fi Direct и нужен. wlan0
+ * остаётся приоритетным (Chromecast живёт именно там), p2p - следующим. */
+fun localIpAddress(): String = localIpAddresses().firstOrNull() ?: "0.0.0.0"
+
+/** Все свои IPv4-адреса разом - для отсева самого себя в автопоиске (NSD видит и собственную
+ * регистрацию). Сравнение с одним [localIpAddress] тут не годится: в Wi-Fi Direct устройство
+ * анонсирует себя по p2p-адресу, а localIpAddress вернул бы wlan0, и устройство показывало бы
+ * само себя в списке найденных. Порядок: wlan0, потом p2p, потом всё остальное. */
+fun localIpAddresses(): List<String> = runCatching {
+    java.net.NetworkInterface.getNetworkInterfaces().asSequence()
+        .filter { runCatching { it.isUp && !it.isLoopback }.getOrDefault(false) }
+        .sortedBy { if (it.name.startsWith("wlan")) 0 else if (it.name.startsWith("p2p")) 1 else 2 }
+        .flatMap { iface -> iface.inetAddresses.asSequence() }
+        .filter { !it.isLoopbackAddress && it is java.net.Inet4Address }
+        .mapNotNull { it.hostAddress }
+        .toList()
+}.getOrDefault(emptyList())

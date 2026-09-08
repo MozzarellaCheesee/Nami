@@ -31,6 +31,7 @@ class LocalShareViewModel @Inject constructor(
     val dropTrack: StateFlow<Track?> = repository.dropTrack
     val listenTogetherHostEnabled: StateFlow<Boolean> = repository.listenTogetherHostEnabled
     val listenTogetherGuestState: StateFlow<ListenTogetherGuestState?> = repository.listenTogetherGuestState
+    val listenTogetherError: StateFlow<String?> = repository.listenTogetherError
     val wifiDirectPeers: StateFlow<List<WifiDirectPeer>> = repository.wifiDirectPeers
     val wifiDirectConnecting: StateFlow<Boolean> = repository.wifiDirectConnecting
     val wifiDirectConnected: StateFlow<Boolean> = repository.wifiDirectConnected

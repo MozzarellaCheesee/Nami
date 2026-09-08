@@ -87,7 +87,7 @@ class CastController(
         // что пользователь слышит как эхо, а не как "трансляцию".
         local.pause()
 
-        val address = localIpAddress(context)
+        val address = localIpAddress()
         server?.stop()
         val fresh = LocalHttpServer(port = CAST_HTTP_PORT, trackByIdBlocking = trackByIdBlocking)
         try {

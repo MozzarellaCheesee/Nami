@@ -14,7 +14,17 @@ data class DiscoveredDevice(val name: String, val host: String, val port: Int)
  * (появится в [LocalShareRepository.discoveredDevices] как обычный [DiscoveredDevice] только
  * после [LocalShareRepository.connectWifiDirect]). [status] - человекочитаемое состояние
  * (WifiP2pDevice.deviceStatus), не enum - используется только для отображения. */
-data class WifiDirectPeer(val name: String, val address: String, val status: String)
+data class WifiDirectPeer(
+    val name: String,
+    val address: String,
+    val status: String,
+    /** true - устройство прямо сейчас в одной Wi-Fi Direct группе с нами (сопряжено). Берётся из
+     * состава группы (WifiP2pGroup), а не из результатов поиска: поиск после переоткрытия экрана
+     * начинается с нуля и уже сопряжённое устройство в нём может не появиться вовсе, хотя группа
+     * жива - экран тогда показывал "никого не видно рядом" при активном соединении. Состав группы
+     * симметричен: владелец видит клиентов, клиент видит владельца. */
+    val connected: Boolean = false,
+)
 
 /** П.md §24.25 "через интернет — опционально". Прямое P2P-соединение (WebRTC DataChannel,
  * публичный STUN Google, без своего сервера) для случая, когда оба устройства в разных сетях -
@@ -71,6 +81,10 @@ interface LocalShareRepository {
     fun setListenTogetherHost(enabled: Boolean)
 
     val listenTogetherGuestState: StateFlow<ListenTogetherGuestState?>
+    /** Почему гостевая сессия не идёт: хост недоступен, не включил "показывать что играю", или
+     * трек не скачался. null - всё в порядке. Без этого гость молча смотрел в пустой экран (или
+     * в вечное "Скачивается...") и не мог отличить "ещё грузится" от "уже никогда". */
+    val listenTogetherError: StateFlow<String?>
     fun joinListenTogether(device: DiscoveredDevice)
     fun leaveListenTogether()
 
@@ -85,9 +99,15 @@ interface LocalShareRepository {
      * отдельного UI-пути для него не требуется. */
     val wifiDirectPeers: StateFlow<List<WifiDirectPeer>>
     val wifiDirectConnecting: StateFlow<Boolean>
+    /** true пока группа Wi-Fi Direct реально сформирована (не только "жмём подключиться") -
+     * группа держится на уровне ОС, сама по себе не рвётся, пока не позвать [disconnectWifiDirect]. */
+    val wifiDirectConnected: StateFlow<Boolean>
     fun startWifiDirectDiscovery()
     fun stopWifiDirectDiscovery()
     fun connectWifiDirect(peer: WifiDirectPeer)
+    /** Рвёт текущую группу Wi-Fi Direct (WifiP2pManager.removeGroup) - без этого группа остаётся
+     * подключённой навсегда на обеих сторонах, экран так и продолжает показывать "подключено". */
+    fun disconnectWifiDirect()
 
     /** Интернет-мост через WebRTC (см. [InternetLinkState] doc) - хост и гость обмениваются
      * кодами вручную (текстом, любым мессенджером). После установки канала хост пушит nowplaying

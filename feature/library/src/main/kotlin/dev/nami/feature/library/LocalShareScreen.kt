@@ -74,6 +74,7 @@ fun LocalShareScreen(
     val dropTrack by viewModel.dropTrack.collectAsState()
     val hostEnabled by viewModel.listenTogetherHostEnabled.collectAsState()
     val guestState by viewModel.listenTogetherGuestState.collectAsState()
+    val listenTogetherError by viewModel.listenTogetherError.collectAsState()
     val lastSyncResult by viewModel.lastSyncResult.collectAsState()
     val lastPullResult by viewModel.lastPullResult.collectAsState()
     val dropError by viewModel.dropError.collectAsState()
@@ -206,6 +207,19 @@ fun LocalShareScreen(
                 }
             }
 
+            // Ошибка гостевой сессии живёт ОТДЕЛЬНО от карточки: самый частый случай (хост не
+            // включил "показывать что играю" или недоступен) - это как раз когда карточки нет
+            // вообще, и раньше нажатие "Слушать вместе" выглядело как кнопка, которая ничего не
+            // делает. Кнопка выхода тут же, иначе опрос некому остановить.
+            if (listenTogetherError != null) {
+                item {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                        Text(listenTogetherError!!, color = NamiColors.Shu, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                        TextButton(onClick = { viewModel.leaveListenTogether() }) { Text("Отменить", color = NamiColors.Paper70) }
+                    }
+                }
+            }
+
             if (guestState != null) {
                 item {
                     val g = guestState!!
@@ -239,15 +253,17 @@ fun LocalShareScreen(
                     TextButton(onClick = { wifiDirectPermissionLauncher.launch(wifiDirectPermission) }) {
                         Text("Разрешить поиск устройств рядом", color = NamiColors.Shu)
                     }
-                } else if (wifiDirectConnected) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Подключено по Wi-Fi Direct", color = NamiColors.Wakaba, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                        TextButton(onClick = { viewModel.disconnectWifiDirect() }) { Text("Отключить", color = NamiColors.Shu) }
-                    }
                 } else {
+                    // "Искать рядом" доступно ВСЕГДА, в том числе при активной группе: раньше при
+                    // подключении кнопка пропадала целиком, и подключиться ко второму устройству
+                    // (или просто обновить список) было нечем. Само сопряжение теперь видно на
+                    // строке конкретного устройства ниже, а не только этой общей плашкой.
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         TextButton(onClick = { viewModel.startWifiDirectDiscovery() }) {
                             Text(if (wifiDirectConnecting) "Подключение..." else "Искать рядом", color = NamiColors.Shu)
+                        }
+                        if (wifiDirectConnected) {
+                            Text("Есть активное соединение", color = NamiColors.Wakaba, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                     if (wifiDirectPeers.isEmpty()) {
@@ -258,11 +274,26 @@ fun LocalShareScreen(
             items(wifiDirectPeers, key = { "wd-" + it.address }) { peer ->
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(peer.name, color = NamiColors.Paper100, style = MaterialTheme.typography.bodyMedium)
-                        Text(peer.status, color = NamiColors.Paper40, style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            peer.name,
+                            color = if (peer.connected) NamiColors.Wakaba else NamiColors.Paper100,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            peer.status,
+                            color = if (peer.connected) NamiColors.Wakaba else NamiColors.Paper40,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                     }
-                    TextButton(onClick = { viewModel.connectWifiDirect(peer) }, enabled = !wifiDirectConnecting) {
-                        Text("Подключить", color = NamiColors.Shu)
+                    // Сопряжение видно на самой строке устройства, а не только общей плашкой сверху:
+                    // так понятно, С КЕМ именно связь (и это одинаково работает с обеих сторон -
+                    // и у владельца группы, и у клиента, см. refreshWifiDirectGroup).
+                    if (peer.connected) {
+                        TextButton(onClick = { viewModel.disconnectWifiDirect() }) { Text("Отключить", color = NamiColors.Shu) }
+                    } else {
+                        TextButton(onClick = { viewModel.connectWifiDirect(peer) }, enabled = !wifiDirectConnecting) {
+                            Text("Подключить", color = NamiColors.Shu)
+                        }
                     }
                 }
             }
