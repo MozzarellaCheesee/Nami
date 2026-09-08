@@ -41,7 +41,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Album
+import androidx.compose.material.icons.outlined.Cast
 import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.DirectionsCar
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Info
@@ -122,6 +127,12 @@ fun NowPlayingScreen(
     onOpenArtist: (dev.nami.core.model.ArtistId) -> Unit,
     onShowTrackInfo: (dev.nami.core.model.TrackId) -> Unit,
     onShareCard: (dev.nami.core.model.Track) -> Unit,
+    // Навигационные переходы из меню "Ещё". С дефолтами - чтобы не ломать превью и любые другие
+    // места вызова, которые про эти пункты не знают.
+    onOpenDriveMode: () -> Unit = {},
+    onOpenPlayerSettings: () -> Unit = {},
+    onOpenThemeEditor: () -> Unit = {},
+    onOpenAllSettings: () -> Unit = {},
     viewModel: NowPlayingViewModel = hiltViewModel(),
 ) {
     val state by viewModel.playbackState.collectAsState()
@@ -272,33 +283,37 @@ fun NowPlayingScreen(
                 Icon(Icons.Outlined.MoreVert, contentDescription = "Ещё", tint = NamiColors.Paper100)
             }
         }
-        // Slide-up sheet instead of a dropdown - same pattern as everywhere else's "..." menu,
-        // but with a header (cover/title/artist + a real system-volume slider) on top of the
-        // action list, same shape as a platform media output sheet.
+        // Своя вёрстка (NowPlayingMoreSheet), не общий ContextActionSheet: шапка с треком и
+        // громкостью, сетка быстрых действий 3-в-ряд, ниже плоский список переходов.
         if (showOverflowMenu) {
             val track = trackDetails
-            ContextActionSheet(
+            val sheetContext = androidx.compose.ui.platform.LocalContext.current
+            NowPlayingMoreSheet(
                 onDismiss = { showOverflowMenu = false },
                 header = {
                     if (track != null) {
                         NowPlayingOverflowHeader(track = track)
                         VolumeSlider(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp))
-                        androidx.compose.material3.HorizontalDivider(
-                            color = NamiColors.Ink700,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        )
                     }
                 },
-                actions = listOfNotNull(
+                grid = listOfNotNull(
+                    ContextAction("Трансляция", Icons.Outlined.Cast) { openSystemMediaOutput(sheetContext) },
+                    track?.let { ContextAction("Поделиться", Icons.Outlined.Share) { shareTrackText(sheetContext, it) } },
+                    track?.let { ContextAction("Радио", Icons.Outlined.PlayCircleOutline) { viewModel.startRadio(it.id) } },
+                    ContextAction("В плейлист", Icons.Outlined.PlaylistAdd) { showAddToPlaylist = true },
+                    ContextAction("Дорожный режим", Icons.Outlined.DirectionsCar, onOpenDriveMode),
                     ContextAction("Аудиотракт", Icons.Outlined.QueueMusic) { showAudioTractSheet = true },
+                ),
+                list = listOfNotNull(
                     ContextAction("Таймер сна", Icons.Outlined.DarkMode) { showSleepTimerSheet = true },
                     ContextAction("Моменты и петли", Icons.Outlined.Repeat) { showLoopSheet = true },
-                    ContextAction("В плейлист", Icons.Outlined.PlaylistAdd) { showAddToPlaylist = true },
-                    track?.let { ContextAction("Информация о треке", Icons.Outlined.Info) { onShowTrackInfo(it.id) } },
-                    track?.let { ContextAction("Начать радио от трека", Icons.Outlined.PlayCircleOutline) { viewModel.startRadio(it.id) } },
                     track?.let { ContextAction("Поделиться карточкой", Icons.Outlined.Share) { onShareCard(it) } },
+                    track?.let { ContextAction("Информация о треке", Icons.Outlined.Info) { onShowTrackInfo(it.id) } },
                     track?.artistId?.let { artistId -> ContextAction("Открыть исполнителя", Icons.Outlined.Person) { onOpenArtist(artistId) } },
                     track?.albumId?.let { albumId -> ContextAction("Открыть альбом", Icons.Outlined.Album) { onOpenAlbum(albumId) } },
+                    ContextAction("Настройки плеера", Icons.Outlined.Tune, onOpenPlayerSettings),
+                    ContextAction("Редактор темы", Icons.Outlined.Palette, onOpenThemeEditor),
+                    ContextAction("Все настройки", Icons.Outlined.Settings, onOpenAllSettings),
                 ),
             )
         }
@@ -1008,6 +1023,43 @@ private fun AddMomentDialog(onSave: (label: String, colorArgb: Int, isChapter: B
     )
 }
 
+/**
+ * "Трансляция": системная панель выбора аудиовыхода (Settings.Panel.ACTION_MEDIA_OUTPUT, API 29+).
+ * Осознанное решение вместо Google Cast SDK: тот тянет play-services-cast-framework, а План.md
+ * прямо требует "никаких Google Play Services". Системная панель - платформенная фича без единой
+ * новой зависимости, показывает те же устройства вывода, что видит система (Bluetooth, а на
+ * устройствах с Cast-провайдером - и их). До API 29 панели нет, честно говорим об этом тостом.
+ */
+private fun openSystemMediaOutput(context: android.content.Context) {
+    if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) {
+        android.widget.Toast.makeText(context, "Выбор устройства доступен с Android 10", android.widget.Toast.LENGTH_SHORT).show()
+        return
+    }
+    // Строкой, а не константой: Settings.Panel.ACTION_MEDIA_OUTPUT в SDK помечена @hide, хотя
+    // сам intent обрабатывается системным Settings. Если его нет - откатываемся на публичную
+    // панель громкости, там переключатель вывода тоже есть.
+    for (action in listOf("android.settings.panel.action.MEDIA_OUTPUT", android.provider.Settings.Panel.ACTION_VOLUME)) {
+        try {
+            context.startActivity(android.content.Intent(action))
+            return
+        } catch (e: android.content.ActivityNotFoundException) {
+            continue
+        }
+    }
+    android.widget.Toast.makeText(context, "Устройство не поддерживает выбор аудиовыхода", android.widget.Toast.LENGTH_SHORT).show()
+}
+
+/** Обычный share текстом - отдельно от "Поделиться карточкой" (та рендерит картинку,
+ * TrackCardRenderer). Ссылки у трека нет: плеер локальный, делиться нечем кроме названия. */
+private fun shareTrackText(context: android.content.Context, track: dev.nami.core.model.Track) {
+    val text = listOfNotNull(track.title, track.artistName).joinToString(" - ")
+    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(android.content.Intent.EXTRA_TEXT, text)
+    }
+    context.startActivity(android.content.Intent.createChooser(intent, "Поделиться треком"))
+}
+
 /** Header for the "..." sheet's richer layout (cover + "Сейчас играет" + title/artist), same
  * idea as a platform media output sheet's now-playing summary above its own action list. */
 @Composable
@@ -1031,7 +1083,7 @@ private fun NowPlayingOverflowHeader(track: dev.nami.core.model.Track) {
     }
 }
 
-/** Real system STREAM_MUSIC volume, same knob the hardware buttons control (VolumeController) --
+/** Real system STREAM_MUSIC volume, same knob the hardware buttons control (VolumeController) -
  * not a fake/local-only slider. */
 @Composable
 private fun VolumeSlider(modifier: Modifier = Modifier) {

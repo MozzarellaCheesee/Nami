@@ -663,6 +663,24 @@ fun NamiNavHost(
                 navController.navigate("track_info/${trackId.value}")
             },
             onShareCard = { track -> trackQuickActionsViewModel.shareCard(track) },
+            // Пункты меню "Ещё" - только переходы на уже существующие экраны, без дублирования
+            // самих настроек. NowPlaying это оверлей поверх NavHost, поэтому его сначала прячем.
+            onOpenDriveMode = {
+                showNowPlaying = false
+                navController.navigate(ROUTE_DRIVE_MODE)
+            },
+            onOpenPlayerSettings = {
+                showNowPlaying = false
+                navController.navigate(ROUTE_SETTINGS_PLAYER)
+            },
+            onOpenThemeEditor = {
+                showNowPlaying = false
+                navController.navigate(ROUTE_THEME_EDITOR)
+            },
+            onOpenAllSettings = {
+                showNowPlaying = false
+                navController.navigate(ROUTE_SETTINGS)
+            },
             viewModel = nowPlayingViewModel,
         )
     }
