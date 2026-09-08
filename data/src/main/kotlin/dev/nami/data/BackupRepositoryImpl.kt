@@ -34,7 +34,6 @@ class BackupRepositoryImpl @Inject constructor(
         withContext(Dispatchers.IO) {
             try {
                 val manifest = buildManifest()
-                val musicDir = File(context.filesDir, "music")
                 val resolver = context.contentResolver
                 resolver.openOutputStream(android.net.Uri.parse(destinationUri))?.use { out ->
                     ZipOutputStream(out).use { zip ->
@@ -42,9 +41,27 @@ class BackupRepositoryImpl @Inject constructor(
                         zip.write(manifest.toString(2).toByteArray())
                         zip.closeEntry()
 
-                        musicDir.listFiles()?.forEach { file ->
+                        // Раньше архив собирался листингом musicDir.listFiles() - на реальном
+                        // устройстве это давало пустой архив (только manifest.json без единого
+                        // трека), хотя все файлы реально лежат на диске. По реальным путям из БД
+                        // (t.path - тот же абсолютный путь, что уже используется в LibraryHealth
+                        // для проверки File(it.path).exists()) надёжнее в любом случае: не
+                        // зависит от того, плоско ли лежат файлы в одном каталоге, и естественно
+                        // пропускает треки без локальной копии (например будущий режим
+                        // наблюдения за папкой без копирования, П.md §2), а не падает на них.
+                        val usedNames = HashSet<String>()
+                        trackDao.allRaw().forEach { t ->
+                            val file = File(t.path)
                             if (!file.isFile) return@forEach
-                            zip.putNextEntry(ZipEntry("music/${file.name}"))
+                            // Разные треки могут называться одинаково (UUID-имена от импорта
+                            // обычно уникальны, но не гарантированно для любых путей) -
+                            // избегаем перезаписи одной entry другой внутри архива.
+                            var entryName = file.name
+                            var suffix = 1
+                            while (!usedNames.add(entryName)) {
+                                entryName = "${file.nameWithoutExtension}_${suffix++}.${file.extension}"
+                            }
+                            zip.putNextEntry(ZipEntry("music/$entryName"))
                             file.inputStream().use { it.copyTo(zip) }
                             zip.closeEntry()
                         }
