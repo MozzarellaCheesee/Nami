@@ -628,7 +628,12 @@ class PlayerRepositoryImpl @Inject constructor(
                 (playbackState as? PlaybackState.Playing)?.isPlaying to playerQueue.nowPlaying?.id
             }
                 .distinctUntilChanged()
-                .collect { requestTileListening("dev.nami.app.tile.PlayPauseTileService") }
+                .collect {
+                    requestTileListening("dev.nami.app.tile.PlayPauseTileService")
+                    // Виджеты показывают то же самое (трек + play/pause), и им нужен ровно тот же
+                    // триггер - это уже отфильтрованный поток "реальных" событий, без тиков позиции.
+                    nudgeNamiWidgets(context)
+                }
         }
         scope.launch {
             _sleepTimerRemainingMs

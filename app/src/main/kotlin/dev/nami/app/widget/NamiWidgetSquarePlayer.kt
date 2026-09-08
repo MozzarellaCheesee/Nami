@@ -2,6 +2,7 @@ package dev.nami.app.widget
 
 import android.content.Context
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.ColorFilter
@@ -12,6 +13,7 @@ import androidx.glance.ImageProvider
 import androidx.glance.LocalSize
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
+import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.provideContent
 import androidx.glance.background
@@ -37,6 +39,12 @@ import kotlinx.coroutines.flow.first
  * Прогресс - снимок на момент обновления виджета, не тикает сам по себе (Android жёстко
  * ограничивает частоту обновлений RemoteViews, у виджета нет своего таймера). */
 class NamiWidgetSquarePlayer : GlanceAppWidget() {
+
+    // Без sizeMode (дефолт Single) LocalSize.current всегда возвращал минимальный размер из
+    // widget_info_square_player.xml - прогресс-бар и кнопки считались по 180dp и не менялись
+    // при растягивании виджета. Responsive: три точки, Glance сам выбирает ближайшую.
+    override val sizeMode = SizeMode.Responsive(setOf(SMALL, MEDIUM, LARGE))
+
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val repo = widgetPlayerRepository(context)
         // Холодный старт - без ожидания MediaController'а nowPlaying/state/isPlaying были бы
@@ -55,7 +63,9 @@ class NamiWidgetSquarePlayer : GlanceAppWidget() {
                     Image(provider = ImageProvider(art), contentDescription = null, modifier = GlanceModifier.fillMaxSize())
                     Box(modifier = GlanceModifier.fillMaxSize().background(ColorProvider(Color(0xB3000000)))) {}
                 }
-                Column(modifier = GlanceModifier.fillMaxSize().padding(14.dp), verticalAlignment = Alignment.Vertical.Bottom) {
+                val size = LocalSize.current
+                val padding = if (size.width < MEDIUM.width) 10.dp else 14.dp
+                Column(modifier = GlanceModifier.fillMaxSize().padding(padding), verticalAlignment = Alignment.Vertical.Bottom) {
                     Row(verticalAlignment = Alignment.Vertical.CenterVertically) {
                         Column(modifier = GlanceModifier.defaultWeight()) {
                             Text(
@@ -77,22 +87,29 @@ class NamiWidgetSquarePlayer : GlanceAppWidget() {
                             )
                         }
                     }
-                    Spacer(modifier = GlanceModifier.size(10.dp))
+                    val gap = if (size.height < MEDIUM.height) 6.dp else 10.dp
+                    Spacer(modifier = GlanceModifier.size(gap))
                     // Glance has no fillMaxWidth(fraction) - width is computed from LocalSize
-                    // (the widget's own placed size on the home screen).
-                    val trackWidth = LocalSize.current.width - 28.dp
+                    // (the widget's own placed size on the home screen), минус собственные поля.
+                    val trackWidth = size.width - padding * 2
                     Box(modifier = GlanceModifier.width(trackWidth).height(4.dp).then(widgetCorner(2)).background(WidgetTrackEmpty)) {
                         Box(modifier = GlanceModifier.width(trackWidth * progress).height(4.dp).then(widgetCorner(2)).background(WidgetAccent)) {}
                     }
-                    Spacer(modifier = GlanceModifier.size(10.dp))
+                    Spacer(modifier = GlanceModifier.size(gap))
                     // Растёт вместе с виджетом при растягивании вместо фиксированного размера -
                     // 26dp при минимальной ширине (180dp, см. widget_info_square_player.xml),
                     // дальше линейно, с потолком чтобы не разъезжались на планшетных размерах.
-                    val transportIconSize = (LocalSize.current.width.value / 180f * 26f).dp.coerceIn(26.dp, 48.dp)
+                    val transportIconSize = (size.width.value / 180f * 26f).dp.coerceIn(26.dp, 48.dp)
                     TransportRow(isPlayingNow(repo), iconSize = transportIconSize)
                 }
             }
         }
+    }
+
+    private companion object {
+        val SMALL = DpSize(180.dp, 180.dp)
+        val MEDIUM = DpSize(250.dp, 250.dp)
+        val LARGE = DpSize(320.dp, 320.dp)
     }
 }
 

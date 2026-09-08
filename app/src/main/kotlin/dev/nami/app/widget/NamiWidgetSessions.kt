@@ -1,15 +1,18 @@
 package dev.nami.app.widget
 
 import android.content.Context
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
+import androidx.glance.LocalSize
 import androidx.glance.GlanceModifier
 import androidx.glance.action.ActionParameters
 import androidx.glance.action.clickable
 import androidx.glance.action.actionParametersOf
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
+import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.provideContent
@@ -55,12 +58,18 @@ class ApplySessionAction : ActionCallback {
  * EQ/кроссфейд/таймер сна той сессии - те же самые Сессии, что в Настройки -> Плеер -> Сессии,
  * не отдельный виджетный список. Пусто, если пользователь ещё ни одной не сохранил. */
 class NamiWidgetSessions : GlanceAppWidget() {
+
+    // Виджет тянется только по горизонтали (widget_info_sessions.xml), поэтому две точки по
+    // ширине: на узкой три пилюли не влезали и третья обрезалась по краю.
+    override val sizeMode = SizeMode.Responsive(setOf(NARROW, WIDE))
+
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val settings = widgetSettingsRepository(context)
-        val sessions = settings.sessions.value.take(MAX_SESSION_PILLS)
+        val allSessions = settings.sessions.value
         val activeName = settings.lastAppliedSessionName.value
 
         provideContent {
+            val sessions = allSessions.take(if (LocalSize.current.width < WIDE.width) 2 else MAX_SESSION_PILLS)
             Box(modifier = GlanceModifier.fillMaxSize().then(widgetCorner()).background(WidgetBackground).padding(8.dp), contentAlignment = Alignment.Center) {
                 if (sessions.isEmpty()) {
                     Text("Нет сохранённых сессий", style = TextStyle(color = WidgetTextSecondary, fontSize = 12.sp))
@@ -74,6 +83,11 @@ class NamiWidgetSessions : GlanceAppWidget() {
                 }
             }
         }
+    }
+
+    private companion object {
+        val NARROW = DpSize(250.dp, 64.dp)
+        val WIDE = DpSize(360.dp, 64.dp)
     }
 }
 

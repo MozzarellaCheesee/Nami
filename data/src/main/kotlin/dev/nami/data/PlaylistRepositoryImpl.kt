@@ -125,6 +125,9 @@ class PlaylistRepositoryImpl @Inject constructor(
         } else {
             addTrack(likedPlaylistId, trackId)
         }
+        // Лайк - единственное состояние виджета, которое не проходит через плеер: без явного
+        // пинка сердечко на рабочем столе оставалось старым до следующей смены трека.
+        dev.nami.player.nudgeNamiWidgets(context)
         return !alreadyLiked
     }
 
