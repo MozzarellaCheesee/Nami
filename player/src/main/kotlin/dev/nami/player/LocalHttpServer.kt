@@ -30,10 +30,14 @@ class LocalHttpServer(
     private val manifestJsonBlocking: () -> JSONObject = { JSONObject() },
     /** Теги раздаваемого трека из БАЗЫ отдающего (см. /dropmeta ниже) - null когда не раздаётся. */
     private val dropMetaJsonBlocking: () -> JSONObject? = { null },
-    /** Файл обложки раздаваемого трека - null если её нет. */
-    private val dropCoverFileBlocking: () -> File? = { null },
-    /** Файл фото артиста раздаваемого трека - null если его нет. */
-    private val dropArtistPhotoFileBlocking: () -> File? = { null },
+    /** Теги ЛЮБОГО трека по его id - тем же форматом, что /dropmeta. Нужны "слушать вместе":
+     * гость решает добавить в библиотеку то, что играет, и должен получить те же теги и картинки,
+     * что и при обычной раздаче, а не голый файл. */
+    private val trackMetaJsonBlocking: (String) -> JSONObject? = { null },
+    /** Файл обложки трека по его id - null если её нет. */
+    private val trackCoverFileBlocking: (String) -> File? = { null },
+    /** Файл фото артиста трека по его id - null если его нет. */
+    private val artistPhotoFileBlocking: (String) -> File? = { null },
 ) {
     private var serverSocket: ServerSocket? = null
 
@@ -91,8 +95,12 @@ class LocalHttpServer(
                         val meta = dropMetaJsonBlocking()
                         if (meta != null) writeJson(output, meta) else writeStatus(output, 404)
                     }
-                    path == "/dropcover" -> serveFile(output, dropCoverFileBlocking(), "image/*")
-                    path == "/dropartistphoto" -> serveFile(output, dropArtistPhotoFileBlocking(), "image/*")
+                    path.startsWith("/meta/") -> {
+                        val meta = trackMetaJsonBlocking(path.removePrefix("/meta/"))
+                        if (meta != null) writeJson(output, meta) else writeStatus(output, 404)
+                    }
+                    path.startsWith("/cover/") -> serveFile(output, trackCoverFileBlocking(path.removePrefix("/cover/")), "image/*")
+                    path.startsWith("/artistphoto/") -> serveFile(output, artistPhotoFileBlocking(path.removePrefix("/artistphoto/")), "image/*")
                     path.startsWith("/track/") -> serveTrack(output, trackByIdBlocking(path.removePrefix("/track/")), range)
                     else -> writeStatus(output, 404)
                 }

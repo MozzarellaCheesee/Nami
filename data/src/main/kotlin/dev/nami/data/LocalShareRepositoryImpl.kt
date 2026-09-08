@@ -100,6 +100,9 @@ class LocalShareRepositoryImpl @Inject constructor(
     private val _listenTogetherError = MutableStateFlow<String?>(null)
     override val listenTogetherError: StateFlow<String?> = _listenTogetherError
     private var guestJob: Job? = null
+    // Хост текущей гостевой сессии - нужен, чтобы "добавить в библиотеку" могло дотянуться за
+    // тегами и обложкой к тому же устройству, откуда играет трек.
+    private var guestHostDevice: DiscoveredDevice? = null
     private val listenTogetherCacheDir get() = File(context.cacheDir, "listen_together").apply { mkdirs() }
     private val cachedFilesByTrackId = mutableMapOf<String, File>()
 
@@ -129,6 +132,9 @@ class LocalShareRepositoryImpl @Inject constructor(
         scope.launch {
             playerRepository.queue.map { it.nowPlaying?.id }.distinctUntilChanged().collect { id ->
                 if (_dropTrack.value == null) return@collect
+                // В гостевой сессии играет чужой трек из кэша, которого в библиотеке нет - раздача
+                // не должна за ним следовать и обнуляться.
+                if (_listenTogetherGuestState.value != null) return@collect
                 _dropTrack.value = id?.let { runCatching { libraryRepository.track(it).first() }.getOrNull() }
             }
         }
@@ -145,9 +151,10 @@ class LocalShareRepositoryImpl @Inject constructor(
             nowPlayingJsonBlocking = { if (_listenTogetherHostEnabled.value) buildNowPlayingJson() else null },
             dropTrackBlocking = { _dropTrack.value },
             manifestJsonBlocking = { runBlocking { buildSyncManifest() } },
-            dropMetaJsonBlocking = { runBlocking { buildDropMetaJson() } },
-            dropCoverFileBlocking = { _dropTrack.value?.albumArtworkPath?.let { File(it) }?.takeIf { it.exists() } },
-            dropArtistPhotoFileBlocking = { dropArtistPhotoFile() },
+            dropMetaJsonBlocking = { runBlocking { _dropTrack.value?.let { buildTrackMetaJson(it) } } },
+            trackMetaJsonBlocking = { id -> runBlocking { trackById(id)?.let { buildTrackMetaJson(it) } } },
+            trackCoverFileBlocking = { id -> runBlocking { trackById(id) }?.albumArtworkPath?.let { File(it) }?.takeIf { it.exists() } },
+            artistPhotoFileBlocking = { id -> runBlocking { artistPhotoFile(trackById(id)) } },
         )
         try {
             server.start()
@@ -192,13 +199,15 @@ class LocalShareRepositoryImpl @Inject constructor(
         }
     }
 
-    /** Теги раздаваемого трека так, как их видит библиотека ОТДАЮЩЕГО. Сам аудиофайл может быть
-     * вообще без тегов (тогда получатель раньше видел UUID вместо названия и пустого артиста), а
-     * может быть с устаревшими - в базе лежит то, что пользователь реально правил руками. */
-    private suspend fun buildDropMetaJson(): JSONObject? {
-        val track = _dropTrack.value ?: return null
+    /** Теги трека так, как их видит библиотека ОТДАЮЩЕГО. Сам аудиофайл может быть вообще без
+     * тегов (тогда получатель видел бы UUID вместо названия и пустого артиста), а может быть с
+     * устаревшими - в базе лежит то, что пользователь реально правил руками. Один формат и для
+     * раздачи (/dropmeta), и для "слушать вместе" (/meta/<id>), чтобы получатель применял их
+     * одним и тем же кодом. */
+    private suspend fun buildTrackMetaJson(track: Track): JSONObject {
         val album = track.albumId?.let { runCatching { libraryRepository.album(it).first() }.getOrNull() }
         return JSONObject().apply {
+            put("trackId", track.id.value)
             put("title", track.title)
             put("artistName", track.artistName ?: JSONObject.NULL)
             put("albumName", album?.title ?: JSONObject.NULL)
@@ -206,14 +215,17 @@ class LocalShareRepositoryImpl @Inject constructor(
             put("genre", track.genre ?: JSONObject.NULL)
             put("rating", track.rating ?: JSONObject.NULL)
             put("hasCover", track.albumArtworkPath?.let { File(it).exists() } == true)
-            put("hasArtistPhoto", dropArtistPhotoFile() != null)
+            put("hasArtistPhoto", artistPhotoFile(track) != null)
         }
     }
 
-    /** Фото артиста раздаваемого трека - отдельный файл от обложки альбома (см. /dropartistphoto). */
-    private fun dropArtistPhotoFile(): File? {
-        val artistId = _dropTrack.value?.artistId ?: return null
-        val photo = runCatching { runBlocking { libraryRepository.artist(artistId).first() } }.getOrNull()?.photoPath
+    private suspend fun trackById(id: String): Track? =
+        runCatching { libraryRepository.track(TrackId(id)).first() }.getOrNull()
+
+    /** Фото артиста - отдельный файл от обложки альбома (см. /artistphoto/<id>). */
+    private suspend fun artistPhotoFile(track: Track?): File? {
+        val artistId = track?.artistId ?: return null
+        val photo = runCatching { libraryRepository.artist(artistId).first() }.getOrNull()?.photoPath
         return photo?.let { File(it) }?.takeIf { it.exists() }
     }
 
@@ -347,7 +359,7 @@ class LocalShareRepositoryImpl @Inject constructor(
             val before = libraryRepository.allTracksOrdered().map { it.id.value }.toSet()
             libraryRepository.import(ImportSource.Files(listOf(Uri.fromFile(scratchFile).toString()))).collect { }
             val imported = libraryRepository.allTracksOrdered().firstOrNull { it.id.value !in before }
-            if (imported != null) applyDropMeta(device, imported.id)
+            if (imported != null) applyRemoteMeta(device, httpGetJson(device, "/dropmeta"), imported.id)
             true
         } catch (e: Exception) {
             Log.w(TAG, "drop import failed", e)
@@ -357,11 +369,14 @@ class LocalShareRepositoryImpl @Inject constructor(
         }
     }
 
-    /** Переносит теги и обложку из библиотеки отдающего на только что импортированный трек - см.
-     * buildDropMetaJson. Молча пропускается, если отдающий старой версии (404 на /dropmeta):
-     * трек всё равно уже в библиотеке, ломать импорт из-за метаданных незачем. */
-    private suspend fun applyDropMeta(device: DiscoveredDevice, id: TrackId) {
-        val meta = httpGetJson(device, "/dropmeta") ?: return
+    /** Переносит теги, обложку и фото артиста из библиотеки отдающего на только что импортированный
+     * трек - см. buildTrackMetaJson. Один и тот же путь и для Wi-Fi Drop, и для "добавить в
+     * библиотеку" из "слушать вместе": добавленный трек не должен отличаться от переданного.
+     * Молча пропускается, если метаданных нет (отдающий старой версии): трек всё равно уже в
+     * библиотеке, ломать импорт из-за тегов незачем. */
+    private suspend fun applyRemoteMeta(device: DiscoveredDevice, meta: JSONObject?, id: TrackId) {
+        if (meta == null) return
+        val remoteId = meta.optString("trackId").takeIf { it.isNotBlank() } ?: return
         meta.optString("title").takeIf { it.isNotBlank() }?.let { libraryRepository.renameTrack(id, it) }
         libraryRepository.batchEditTracks(
             ids = listOf(id),
@@ -380,7 +395,7 @@ class LocalShareRepositoryImpl @Inject constructor(
         val artist = saved?.artistId?.let { libraryRepository.artist(it).first() }
 
         if (meta.optBoolean("hasCover")) {
-            saveRemoteImage(device, "/dropcover", "cover_${id.value}")?.let { uri ->
+            saveRemoteImage(device, "/cover/$remoteId", "cover_${id.value}")?.let { uri ->
                 libraryRepository.setTrackCover(id, uri)
                 // Обложка приезжает именно от АЛЬБОМА отдающего (Track.albumArtworkPath), поэтому
                 // ставится и альбому - иначе трек с обложкой, а его альбом без. Но НЕ поверх уже
@@ -390,7 +405,7 @@ class LocalShareRepositoryImpl @Inject constructor(
             }
         }
         if (meta.optBoolean("hasArtistPhoto") && artist != null && artist.photoPath.isNullOrBlank()) {
-            saveRemoteImage(device, "/dropartistphoto", "artist_${artist.id.value}")?.let { uri ->
+            saveRemoteImage(device, "/artistphoto/$remoteId", "artist_${artist.id.value}")?.let { uri ->
                 libraryRepository.setArtistPhoto(artist.id, uri)
             }
         }
@@ -450,6 +465,7 @@ class LocalShareRepositoryImpl @Inject constructor(
     override fun joinListenTogether(device: DiscoveredDevice) {
         leaveListenTogether()
         _listenTogetherError.value = null
+        guestHostDevice = device
         guestJob = scope.launch {
             // Раньше /info звался через runBlocking прямо из обработчика нажатия, то есть в main-
             // потоке - Android такой запрос не выполняет вообще (NetworkOnMainThreadException),
@@ -523,6 +539,7 @@ class LocalShareRepositoryImpl @Inject constructor(
     override fun leaveListenTogether() {
         guestJob?.cancel()
         guestJob = null
+        guestHostDevice = null
         _listenTogetherError.value = null
         val wasPlayingFromCache = _listenTogetherGuestState.value?.cachedPath != null
         _listenTogetherGuestState.value = null
@@ -535,12 +552,25 @@ class LocalShareRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun addCurrentListenTogetherTrackToLibrary(): Boolean {
-        val path = _listenTogetherGuestState.value?.cachedPath ?: return false
-        return try {
+    override suspend fun addCurrentListenTogetherTrackToLibrary(): Boolean = withContext(Dispatchers.IO) {
+        val state = _listenTogetherGuestState.value ?: return@withContext false
+        val path = state.cachedPath ?: return@withContext false
+        val device = guestHostDevice
+        val remoteTrackId = state.trackId?.value
+        return@withContext try {
+            // Ровно та же схема, что и Wi-Fi Drop: сначала файл, потом теги/обложка/фото артиста с
+            // того же хоста. Раньше импортировался только аудиофайл, и добавленный из совместного
+            // прослушивания трек оседал в библиотеке безымянным и без картинок, в отличие от того
+            // же самого трека, полученного раздачей.
+            val before = libraryRepository.allTracksOrdered().map { it.id.value }.toSet()
             libraryRepository.import(ImportSource.Files(listOf(Uri.fromFile(File(path)).toString()))).collect { }
+            val imported = libraryRepository.allTracksOrdered().firstOrNull { it.id.value !in before }
+            if (imported != null && device != null && remoteTrackId != null) {
+                applyRemoteMeta(device, httpGetJson(device, "/meta/$remoteTrackId"), imported.id)
+            }
             true
         } catch (e: Exception) {
+            Log.w(TAG, "listen-together import failed", e)
             false
         }
     }
@@ -588,7 +618,10 @@ class LocalShareRepositoryImpl @Inject constructor(
     private suspend fun downloadOnly(device: DiscoveredDevice, trackId: String): File? {
         if (cachedFilesByTrackId[trackId] != null) return cachedFilesByTrackId[trackId]
         val (bytes, fileName) = httpDownload(device, "/track/$trackId") ?: return null
-        val file = File(listenTogetherCacheDir, "${trackId}_$fileName")
+        // Уникальность даёт папка, а не префикс в имени: имя файла идёт прямо в название трека при
+        // "добавить в библиотеку", и "<uuid>_Артист - Трек.mp3" осело бы в библиотеке как есть,
+        // если теги с хоста почему-то не доехали.
+        val file = File(File(listenTogetherCacheDir, trackId).apply { mkdirs() }, fileName)
         file.writeBytes(bytes)
         cachedFilesByTrackId[trackId] = file
         return file
