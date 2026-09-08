@@ -10,6 +10,9 @@ import kotlinx.coroutines.flow.Flow
 
 interface PlaylistRepository {
     fun playlists(): Flow<PagingData<PlaylistSummary>>
+    /** Небольшой снимок последних плейлистов для блока главного экрана - Pager там не нужен,
+     * запрос тот же, что у [playlists], только с LIMIT (ср. LibraryRepository.recentAlbums). */
+    suspend fun recentPlaylists(limit: Int): List<PlaylistSummary>
     fun playlist(id: PlaylistId): Flow<Playlist?>
     fun tracksInPlaylist(id: PlaylistId): Flow<List<Track>>
     suspend fun createPlaylist(name: String): PlaylistId

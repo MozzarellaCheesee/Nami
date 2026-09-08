@@ -215,6 +215,7 @@ fun NamiNavHost(
                         }
                     },
                     onAlbumClick = { albumId -> navController.navigate("album/${albumId.value}") },
+                    onPlaylistClick = { playlistId -> navController.navigate("playlist/${playlistId.value}") },
                     onConstructorClick = { navController.navigate(ROUTE_HOME_CONSTRUCTOR) },
                 )
             }

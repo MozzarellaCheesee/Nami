@@ -44,6 +44,9 @@ class PlaylistRepositoryImpl @Inject constructor(
             .flow
             .map { pagingData -> pagingData.pagingMap { it.toDomain() } }
 
+    override suspend fun recentPlaylists(limit: Int): List<PlaylistSummary> =
+        playlistDao.recent(limit).map { it.toDomain() }
+
     override fun playlist(id: PlaylistId): Flow<Playlist?> =
         playlistDao.findByIdFlow(id.value).map { it?.toDomain() }
 

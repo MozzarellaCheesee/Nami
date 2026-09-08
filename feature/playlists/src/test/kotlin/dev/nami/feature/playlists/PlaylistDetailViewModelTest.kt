@@ -40,6 +40,7 @@ class PlaylistDetailViewModelTest {
         var removedTrackId: TrackId? = null
         val repo = object : PlaylistRepository {
             override fun playlists() = throw NotImplementedError()
+            override suspend fun recentPlaylists(limit: Int) = emptyList<dev.nami.core.model.PlaylistSummary>()
             override fun playlist(id: PlaylistId) = flowOf(playlist)
             override fun tracksInPlaylist(id: PlaylistId) = flowOf(listOf(track))
             override suspend fun createPlaylist(name: String) = throw NotImplementedError()

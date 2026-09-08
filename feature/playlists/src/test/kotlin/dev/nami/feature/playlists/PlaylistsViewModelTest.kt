@@ -32,6 +32,7 @@ class PlaylistsViewModelTest {
     private class RecordingPlaylistRepository : PlaylistRepository {
         var createdName: String? = null
         override fun playlists() = flowOf(PagingData.empty<PlaylistSummary>())
+        override suspend fun recentPlaylists(limit: Int) = emptyList<PlaylistSummary>()
         override fun playlist(id: PlaylistId) = flowOf<Playlist?>(null)
         override fun tracksInPlaylist(id: PlaylistId) = flowOf(emptyList<Track>())
         override suspend fun createPlaylist(name: String): PlaylistId {

@@ -785,6 +785,7 @@ private object NoOpSettingsRepository : dev.nami.domain.SettingsRepository {
 
 private object NoOpPlaylistRepository : PlaylistRepository {
     override fun playlists() = flowOf(PagingData.empty<dev.nami.core.model.PlaylistSummary>())
+    override suspend fun recentPlaylists(limit: Int) = emptyList<dev.nami.core.model.PlaylistSummary>()
     override fun playlist(id: PlaylistId) = flowOf<dev.nami.core.model.Playlist?>(null)
     override fun tracksInPlaylist(id: PlaylistId) = flowOf(emptyList<Track>())
     override suspend fun createPlaylist(name: String): PlaylistId = error("unused")

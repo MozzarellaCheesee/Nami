@@ -121,6 +121,7 @@ class AlbumDetailViewModelTest {
         }
         val fakePlaylistRepo = object : PlaylistRepository {
             override fun playlists() = throw NotImplementedError()
+            override suspend fun recentPlaylists(limit: Int) = emptyList<dev.nami.core.model.PlaylistSummary>()
             override fun playlist(id: dev.nami.core.model.PlaylistId) = throw NotImplementedError()
             override fun tracksInPlaylist(id: dev.nami.core.model.PlaylistId) = throw NotImplementedError()
             override suspend fun createPlaylist(name: String) = error("unused")

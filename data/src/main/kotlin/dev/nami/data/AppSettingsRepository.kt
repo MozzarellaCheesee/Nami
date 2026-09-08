@@ -454,6 +454,9 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
                 dev.nami.domain.HomeBlockConfig(type, obj.optBoolean("enabled", true))
             }
         }.getOrDefault(dev.nami.domain.DEFAULT_HOME_BLOCKS)
+            // Блоки, появившиеся в новой версии, дописываются в конец сохранённого порядка -
+            // иначе у тех, кто уже открывал конструктор, они не появились бы никогда.
+            .let { saved -> saved + dev.nami.domain.DEFAULT_HOME_BLOCKS.filter { d -> saved.none { it.type == d.type } } }
     }
 
     private fun writeSessions(sessions: List<Session>) {

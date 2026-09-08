@@ -60,6 +60,21 @@ interface PlaylistDao {
     @Query(
         """
         SELECT playlists.id AS id, playlists.name AS name, playlists.coverPath AS coverPath,
+               playlists.isLiked AS isLiked, playlists.isSmart AS isSmart,
+               COUNT(playlist_tracks.trackId) AS trackCount
+        FROM playlists
+        LEFT JOIN playlist_tracks ON playlists.id = playlist_tracks.playlistId
+        WHERE playlists.deletedAt IS NULL
+        GROUP BY playlists.id
+        ORDER BY playlists.isLiked DESC, playlists.createdAt DESC
+        LIMIT :limit
+        """,
+    )
+    suspend fun recent(limit: Int): List<PlaylistListRow>
+
+    @Query(
+        """
+        SELECT playlists.id AS id, playlists.name AS name, playlists.coverPath AS coverPath,
                playlists.deletedAt AS deletedAt, playlists.isLiked AS isLiked,
                playlists.isSmart AS isSmart, COUNT(playlist_tracks.trackId) AS trackCount
         FROM playlists

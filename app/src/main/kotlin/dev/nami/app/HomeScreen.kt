@@ -2,6 +2,8 @@ package dev.nami.app
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,27 +13,36 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ArrowDownward
-import androidx.compose.material.icons.outlined.ArrowUpward
+import androidx.compose.material.icons.outlined.DragHandle
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil3.compose.AsyncImage
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.model.AlbumId
-import dev.nami.core.model.Track
+import dev.nami.core.model.PlaylistId
 import dev.nami.core.model.TrackId
 import dev.nami.domain.HomeBlockConfig
 import dev.nami.domain.HomeBlockType
@@ -42,6 +53,7 @@ import dev.nami.domain.HomeBlockType
 fun HomeScreen(
     onTrackClick: (TrackId) -> Unit,
     onAlbumClick: (AlbumId) -> Unit,
+    onPlaylistClick: (PlaylistId) -> Unit,
     onConstructorClick: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -86,6 +98,44 @@ fun HomeScreen(
                         item { HomeSectionHeader("Давно не слушал") }
                         items(state.forgotten, key = { "forgotten-" + it.id.value }) { track ->
                             HomeTrackRow(track.title, track.artistName, track.albumArtworkPath, onClick = { onTrackClick(track.id) })
+                        }
+                    }
+                    HomeBlockType.QUICK_TAGS -> if (state.quickTags.isNotEmpty()) {
+                        item { HomeSectionHeader("Быстрые теги") }
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                state.quickTags.forEach { tag ->
+                                    TagChip(
+                                        name = tag.name,
+                                        colorArgb = tag.colorArgb,
+                                        selected = state.selectedTag == tag.id,
+                                        onClick = { viewModel.selectTag(tag.id) },
+                                    )
+                                }
+                            }
+                        }
+                        items(state.tagTracks, key = { "tag-" + it.id.value }) { track ->
+                            HomeTrackRow(track.title, track.artistName, track.albumArtworkPath, onClick = { onTrackClick(track.id) })
+                        }
+                    }
+                    HomeBlockType.BOOKMARKED_PLAYLISTS -> if (state.bookmarkedPlaylists.isNotEmpty()) {
+                        item { HomeSectionHeader("Плейлисты-закладки") }
+                        items(state.bookmarkedPlaylists, key = { "playlist-" + it.id.value }) { playlist ->
+                            HomeTrackRow(playlist.name, "${playlist.trackCount} треков", playlist.coverPath, onClick = { onPlaylistClick(playlist.id) })
+                        }
+                    }
+                    HomeBlockType.NEW_IMPORT -> if (state.newImportCount > 0) {
+                        item { HomeSectionHeader("Импорт") }
+                        item {
+                            Text(
+                                "Добавлено ${state.newImportCount} новых треков за последние сутки",
+                                color = NamiColors.Paper70,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                            )
                         }
                     }
                     HomeBlockType.STATS_TODAY -> state.statsToday?.let { stats ->
@@ -144,43 +194,99 @@ private fun HomeTrackRow(title: String, subtitle: String?, artworkPath: String?,
     }
 }
 
-/** Реордер простыми стрелками вверх/вниз, не drag-and-drop - список из 6 статичных строк не
- * оправдывает вес собственной drag-машинерии (см. QueueScreen для сравнения объёма кода) при
- * том же результате: любой порядок, любое подмножество включено. */
+/** Реордер долгим тапом по ручке справа и перетаскиванием, тот же жест, что в очереди плеера
+ * (QueueScreen), только сильно короче: строк меньше десятка, все на экране сразу, поэтому не нужны
+ * ни LazyColumn с layoutInfo, ни автоскролл, ни плавающая копия строки - хватает подсчёта
+ * "сколько высот строки прошёл палец" и обмена соседей по ходу жеста.
+ *
+ * Порядок во время перетаскивания живёт в локальном [order]: писать в настройки на каждый обмен
+ * значило бы дёргать перезагрузку данных главного экрана десяток раз за один жест, поэтому
+ * сохранение одно - на отпускание. */
 @Composable
 fun HomeConstructorScreen(onBack: () -> Unit, viewModel: HomeViewModel = hiltViewModel()) {
     val blocks by viewModel.blocks.collectAsState()
+    var order by remember { mutableStateOf(blocks) }
+    // Не remember(blocks): жест захватывает этот MutableState один раз (pointerInput(index)) и
+    // пересозданный на новом ключе объект остался бы для него навсегда устаревшим.
+    LaunchedEffect(blocks) { order = blocks }
+    var draggingIndex by remember { mutableStateOf<Int?>(null) }
+    var rowHeightPx by remember { mutableIntStateOf(0) }
+    var dragAccumulator by remember { mutableFloatStateOf(0f) }
 
     SettingsSubScreenScaffold(title = "Конструктор главного экрана", onBack = onBack) {
         Text(
-            "Включай, выключай и переставляй блоки стрелками.",
+            "Включай и выключай блоки, а порядок меняй долгим тапом по ручке справа.",
             color = NamiColors.Paper40,
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 12.dp),
         )
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
-            blocks.forEachIndexed { index, block ->
-                SettingsRow(
-                    icon = Icons.Outlined.Tune,
-                    title = homeBlockLabel(block.type),
-                    trailing = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(
-                                onClick = { viewModel.setHomeBlocks(moveBlock(blocks, index, index - 1)) },
-                                enabled = index > 0,
-                            ) { Icon(Icons.Outlined.ArrowUpward, contentDescription = "Выше", tint = if (index > 0) NamiColors.Paper70 else NamiColors.Ink700) }
-                            IconButton(
-                                onClick = { viewModel.setHomeBlocks(moveBlock(blocks, index, index + 1)) },
-                                enabled = index < blocks.lastIndex,
-                            ) { Icon(Icons.Outlined.ArrowDownward, contentDescription = "Ниже", tint = if (index < blocks.lastIndex) NamiColors.Paper70 else NamiColors.Ink700) }
-                            NamiSwitch(
-                                checked = block.enabled,
-                                onCheckedChange = { checked -> viewModel.setHomeBlocks(blocks.toMutableList().also { it[index] = block.copy(enabled = checked) }) },
-                            )
-                        }
-                    },
-                    onClick = {},
-                )
+            order.forEachIndexed { index, block ->
+                Box(
+                    modifier = Modifier
+                        .onSizeChanged { rowHeightPx = it.height }
+                        .background(
+                            if (draggingIndex == index) NamiColors.Ink700 else Color.Transparent,
+                            RoundedCornerShape(12.dp),
+                        ),
+                ) {
+                    SettingsRow(
+                        icon = Icons.Outlined.Tune,
+                        title = homeBlockLabel(block.type),
+                        trailing = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                NamiSwitch(
+                                    checked = block.enabled,
+                                    onCheckedChange = { checked ->
+                                        viewModel.setHomeBlocks(order.toMutableList().also { it[index] = it[index].copy(enabled = checked) })
+                                    },
+                                )
+                                Icon(
+                                    Icons.Outlined.DragHandle,
+                                    contentDescription = "Перетащить, чтобы изменить порядок",
+                                    tint = NamiColors.Paper70,
+                                    modifier = Modifier
+                                        .padding(start = 12.dp)
+                                        .size(28.dp)
+                                        // Ключ - только index: он у слота в Column постоянный, а
+                                        // order/draggingIndex читаются через State, так что жест
+                                        // не перезапускается посреди перетаскивания.
+                                        .pointerInput(index) {
+                                            detectDragGesturesAfterLongPress(
+                                                onDragStart = {
+                                                    draggingIndex = index
+                                                    dragAccumulator = 0f
+                                                },
+                                                onDragEnd = {
+                                                    draggingIndex = null
+                                                    viewModel.setHomeBlocks(order)
+                                                },
+                                                onDragCancel = { draggingIndex = null },
+                                                onDrag = { change, dragAmount ->
+                                                    change.consume()
+                                                    val height = rowHeightPx.takeIf { it > 0 } ?: return@detectDragGesturesAfterLongPress
+                                                    dragAccumulator += dragAmount.y
+                                                    var from = draggingIndex ?: return@detectDragGesturesAfterLongPress
+                                                    while (dragAccumulator >= height && from < order.lastIndex) {
+                                                        order = moveBlock(order, from, from + 1)
+                                                        dragAccumulator -= height
+                                                        from++
+                                                    }
+                                                    while (dragAccumulator <= -height && from > 0) {
+                                                        order = moveBlock(order, from, from - 1)
+                                                        dragAccumulator += height
+                                                        from--
+                                                    }
+                                                    draggingIndex = from
+                                                },
+                                            )
+                                        },
+                                )
+                            }
+                        },
+                        onClick = {},
+                    )
+                }
             }
         }
     }
@@ -197,5 +303,23 @@ private fun homeBlockLabel(type: HomeBlockType): String = when (type) {
     HomeBlockType.TOP_WEEK -> "Топ недели"
     HomeBlockType.RANDOM_ALBUM -> "Случайный альбом"
     HomeBlockType.FORGOTTEN -> "Давно не слушал"
+    HomeBlockType.QUICK_TAGS -> "Быстрые теги"
+    HomeBlockType.BOOKMARKED_PLAYLISTS -> "Плейлисты-закладки"
     HomeBlockType.STATS_TODAY -> "Статистика дня"
+    HomeBlockType.NEW_IMPORT -> "Импорт (если есть новое)"
+}
+
+@Composable
+private fun TagChip(name: String, colorArgb: Int, selected: Boolean, onClick: () -> Unit) {
+    val tagColor = Color(colorArgb)
+    Text(
+        name,
+        color = if (selected) NamiColors.Ink900 else NamiColors.Paper100,
+        style = MaterialTheme.typography.labelLarge,
+        modifier = Modifier
+            .padding(end = 8.dp)
+            .background(if (selected) tagColor else tagColor.copy(alpha = 0.24f), RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+    )
 }

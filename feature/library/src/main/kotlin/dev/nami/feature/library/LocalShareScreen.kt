@@ -10,7 +10,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -360,11 +362,21 @@ private fun InternetLinkSection(
 
 @Composable
 private fun CodeBox(code: String, onCopy: (String) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().background(NamiColors.Ink800, RoundedCornerShape(12.dp)).padding(8.dp)) {
-        SelectionContainer(modifier = Modifier.weight(1f)) {
-            Text(code, color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+    // Раньше текст был в узком Row с кнопкой - при длинном коде (реальный offer/answer JSON
+    // легко за 1000 символов) кнопка либо схлопывалась до невидимости, либо код обрезался
+    // многоточием и SelectionContainer выделял только обрезанный видимый кусок, а не весь код -
+    // "Копировать" копировала бы битую строку. Теперь текст в своей прокручиваемой области
+    // (весь код доступен, без обрезки), кнопка отдельной строкой во всю ширину снизу.
+    Column(modifier = Modifier.fillMaxWidth().background(NamiColors.Ink800, RoundedCornerShape(12.dp)).padding(8.dp)) {
+        SelectionContainer {
+            Text(
+                code,
+                color = NamiColors.Paper70,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.fillMaxWidth().heightIn(max = 160.dp).verticalScroll(rememberScrollState()),
+            )
         }
-        TextButton(onClick = { onCopy(code) }) { Text("Копировать", color = NamiColors.Shu) }
+        TextButton(onClick = { onCopy(code) }, modifier = Modifier.fillMaxWidth()) { Text("Копировать код", color = NamiColors.Shu) }
     }
 }
 
