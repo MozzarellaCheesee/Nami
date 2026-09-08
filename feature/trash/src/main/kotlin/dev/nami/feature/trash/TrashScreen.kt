@@ -74,6 +74,7 @@ fun TrashScreen(onBack: () -> Unit, viewModel: TrashViewModel = hiltViewModel())
                             trashed = trashed,
                             onRestore = { viewModel.restoreAlbum(trashed.album.id) },
                             onDeleteForever = { viewModel.deleteAlbumForever(trashed.album.id) },
+                            modifier = Modifier.animateItem(),
                         )
                     }
                 }
@@ -84,6 +85,7 @@ fun TrashScreen(onBack: () -> Unit, viewModel: TrashViewModel = hiltViewModel())
                             trashed = trashed,
                             onRestore = { viewModel.restoreTrack(trashed.track.id) },
                             onDeleteForever = { viewModel.deleteTrackForever(trashed.track.id) },
+                            modifier = Modifier.animateItem(),
                         )
                     }
                 }
@@ -94,6 +96,7 @@ fun TrashScreen(onBack: () -> Unit, viewModel: TrashViewModel = hiltViewModel())
                             trashed = trashed,
                             onRestore = { viewModel.restorePlaylist(trashed.playlist.id) },
                             onDeleteForever = { viewModel.deletePlaylistForever(trashed.playlist.id) },
+                            modifier = Modifier.animateItem(),
                         )
                     }
                 }
@@ -133,10 +136,10 @@ private fun daysRemaining(deletedAt: Long): Long {
 }
 
 @Composable
-private fun TrashedTrackRow(trashed: TrashedTrack, onRestore: () -> Unit, onDeleteForever: () -> Unit) {
+private fun TrashedTrackRow(trashed: TrashedTrack, onRestore: () -> Unit, onDeleteForever: () -> Unit, modifier: Modifier = Modifier) {
     var showConfirm by remember { mutableStateOf(false) }
     Row(
-        modifier = Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 20.dp),
+        modifier = modifier.fillMaxWidth().height(64.dp).padding(horizontal = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -160,10 +163,10 @@ private fun TrashedTrackRow(trashed: TrashedTrack, onRestore: () -> Unit, onDele
 }
 
 @Composable
-private fun TrashedAlbumRow(trashed: TrashedAlbum, onRestore: () -> Unit, onDeleteForever: () -> Unit) {
+private fun TrashedAlbumRow(trashed: TrashedAlbum, onRestore: () -> Unit, onDeleteForever: () -> Unit, modifier: Modifier = Modifier) {
     var showConfirm by remember { mutableStateOf(false) }
     Row(
-        modifier = Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 20.dp),
+        modifier = modifier.fillMaxWidth().height(64.dp).padding(horizontal = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -187,10 +190,10 @@ private fun TrashedAlbumRow(trashed: TrashedAlbum, onRestore: () -> Unit, onDele
 }
 
 @Composable
-private fun TrashedPlaylistRow(trashed: TrashedPlaylist, onRestore: () -> Unit, onDeleteForever: () -> Unit) {
+private fun TrashedPlaylistRow(trashed: TrashedPlaylist, onRestore: () -> Unit, onDeleteForever: () -> Unit, modifier: Modifier = Modifier) {
     var showConfirm by remember { mutableStateOf(false) }
     Row(
-        modifier = Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 20.dp),
+        modifier = modifier.fillMaxWidth().height(64.dp).padding(horizontal = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {

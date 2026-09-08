@@ -131,10 +131,13 @@ class PlaybackService : MediaSessionService() {
      * point for a custom action beyond the standard play/pause/skip set. */
     private val likeCommand = SessionCommand(ACTION_TOGGLE_LIKE, Bundle.EMPTY)
 
-    private fun likeButton(liked: Boolean) = CommandButton.Builder(CommandButton.ICON_UNDEFINED)
+    // ICON_HEART_FILLED/UNFILLED (не ICON_UNDEFINED + свой setIconResId) - системный медиа-плеер
+    // (шторка/блокировка на Android 13+) распознаёт и перерисовывает при тапе только эти
+    // именованные константы иконок, кастомный resId он показывает один раз статично и не обновляет
+    // после нажатия - от этого лайк в системном плеере "не менялся".
+    private fun likeButton(liked: Boolean) = CommandButton.Builder(if (liked) CommandButton.ICON_HEART_FILLED else CommandButton.ICON_HEART_UNFILLED)
         .setDisplayName(if (liked) "Убрать из любимых" else "В любимые")
         .setSessionCommand(likeCommand)
-        .setIconResId(if (liked) R.drawable.ic_like_filled else R.drawable.ic_like_outline)
         .build()
 
     private suspend fun refreshLikeButton() {

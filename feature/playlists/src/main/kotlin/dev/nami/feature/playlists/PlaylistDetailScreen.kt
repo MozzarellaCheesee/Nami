@@ -197,6 +197,7 @@ fun PlaylistDetailScreen(
                             // Smart playlist tracks aren't rows in playlist_tracks (they're
                             // computed by SmartPlaylistEvaluator) - there's nothing to remove.
                             onRemove = if (isSmart) null else { { viewModel.removeTrack(track.id) } },
+                            modifier = Modifier.animateItem(),
                         )
                     }
                 }
@@ -339,10 +340,10 @@ private fun tracksWord(count: Int): String {
  * reverse dependency needed to reuse TrackListItem directly isn't available without a bigger
  * module reshuffle out of scope here. */
 @Composable
-private fun PlaylistTrackRow(track: Track, onClick: () -> Unit, onRemove: (() -> Unit)?) {
+private fun PlaylistTrackRow(track: Track, onClick: () -> Unit, onRemove: (() -> Unit)?, modifier: Modifier = Modifier) {
     var showMenu by remember { mutableStateOf(false) }
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(horizontal = 20.dp, vertical = 8.dp),
