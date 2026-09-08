@@ -55,6 +55,7 @@ private const val KEY_LISTENBRAINZ_TOKEN = "listenbrainz_token"
 private const val KEY_HOME_BLOCKS = "home_blocks" // JSON array [{type, enabled}], see readHomeBlocks
 private const val KEY_NOW_PLAYING_SHOW_TECH_INFO = "now_playing_show_tech_info"
 private const val KEY_NOW_PLAYING_SHOW_SHUFFLE_REPEAT = "now_playing_show_shuffle_repeat"
+private const val KEY_THEME_COLOR_OVERRIDES = "theme_color_overrides" // JSON object {token: hex}
 // One "<CSV of 9 gains>|<volumeLimitPercent>" string per device type.
 private fun outputProfileKey(type: OutputDeviceType) = "output_profile_${type.name}"
 
@@ -418,6 +419,29 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
     override fun setNowPlayingShowShuffleRepeat(value: Boolean) {
         prefs.edit { putBoolean(KEY_NOW_PLAYING_SHOW_SHUFFLE_REPEAT, value) }
         _nowPlayingShowShuffleRepeat.value = value
+    }
+
+    private val _themeColorOverrides = MutableStateFlow(readThemeColorOverrides())
+    override val themeColorOverrides: StateFlow<Map<String, String>> = _themeColorOverrides
+    override fun setThemeColorOverride(token: String, hex: String?) {
+        val updated = if (hex != null) _themeColorOverrides.value + (token to hex) else _themeColorOverrides.value - token
+        writeThemeColorOverrides(updated)
+    }
+    override fun resetThemeColors() = writeThemeColorOverrides(emptyMap())
+
+    private fun writeThemeColorOverrides(overrides: Map<String, String>) {
+        val obj = JSONObject()
+        overrides.forEach { (token, hex) -> obj.put(token, hex) }
+        prefs.edit { putString(KEY_THEME_COLOR_OVERRIDES, obj.toString()) }
+        _themeColorOverrides.value = overrides
+    }
+
+    private fun readThemeColorOverrides(): Map<String, String> {
+        val raw = prefs.getString(KEY_THEME_COLOR_OVERRIDES, null) ?: return emptyMap()
+        return runCatching {
+            val obj = JSONObject(raw)
+            obj.keys().asSequence().associateWith { obj.getString(it) }
+        }.getOrDefault(emptyMap())
     }
 
     private fun readHomeBlocks(): List<dev.nami.domain.HomeBlockConfig> {

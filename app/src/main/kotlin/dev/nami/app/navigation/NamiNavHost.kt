@@ -76,6 +76,7 @@ private const val ROUTE_PLAYLIST_DETAIL = "playlist/{playlistId}"
 private const val ROUTE_SMART_PLAYLIST_EDITOR = "smart_playlist_editor"
 private const val ROUTE_SMART_PLAYLIST_EDIT_EXISTING = "smart_playlist_editor/{playlistId}"
 private const val ROUTE_SETTINGS_APPEARANCE = "settings/appearance"
+private const val ROUTE_THEME_EDITOR = "settings/theme_editor"
 private const val ROUTE_SETTINGS_PLAYER = "settings/player"
 private const val ROUTE_SESSIONS = "settings/sessions"
 private const val ROUTE_SETTINGS_LYRICS = "settings/lyrics"
@@ -309,7 +310,13 @@ fun NamiNavHost(
                 dev.nami.app.SettingsScrobblingScreen(onBack = { navController.popBackStack() })
             }
             composable(ROUTE_SETTINGS_APPEARANCE) {
-                SettingsAppearanceScreen(onBack = { navController.popBackStack() })
+                SettingsAppearanceScreen(
+                    onBack = { navController.popBackStack() },
+                    onThemeEditorClick = { navController.navigate(ROUTE_THEME_EDITOR) },
+                )
+            }
+            composable(ROUTE_THEME_EDITOR) {
+                dev.nami.app.ThemeEditorScreen(onBack = { navController.popBackStack() })
             }
             composable(ROUTE_SETTINGS_PLAYER) {
                 SettingsPlayerScreen(

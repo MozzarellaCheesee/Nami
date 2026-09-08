@@ -230,6 +230,13 @@ interface SettingsRepository {
     val nowPlayingShowShuffleRepeat: StateFlow<Boolean>
     fun setNowPlayingShowShuffleRepeat(value: Boolean)
 
+    /** П.md §26 "Редактор темы" - цветовые токены только (см. NamiColors.EDITABLE_TOKENS doc для
+     * того, чего в редакторе пока нет: форма/плотность/типографика/прозрачность/пресеты/
+     * автопереключение/экспорт). Ключ - имя токена (NamiColors.TOKEN_*), значение - hex-строка. */
+    val themeColorOverrides: StateFlow<Map<String, String>>
+    fun setThemeColorOverride(token: String, hex: String?)
+    fun resetThemeColors()
+
     companion object {
         const val STANDS4_DAILY_LIMIT = 100
     }

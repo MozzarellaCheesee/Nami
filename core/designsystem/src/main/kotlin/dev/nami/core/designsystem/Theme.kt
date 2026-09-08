@@ -20,7 +20,11 @@ private fun buildTypography(uiFont: FontFamily?): Typography {
     )
 }
 
-private val NamiDarkScheme = darkColorScheme(
+/** Не top-level val (было бы посчитано один раз при загрузке класса) - вызывается внутри
+ * [NamiTheme] на каждой рекомпозиции, чтобы редактор тем (П.md §26) реально перекрашивал
+ * MaterialTheme.colorScheme-based элементы (Switch, всё остальное на NamiColors.* и так уже
+ * реактивно само по себе). */
+private fun namiDarkScheme() = darkColorScheme(
     background = NamiColors.Ink900,
     surface = NamiColors.Ink800,
     surfaceVariant = NamiColors.Ink700,
@@ -36,10 +40,17 @@ private val NamiDarkScheme = darkColorScheme(
 /** [amoled] заменяет ink-900 на чистый #000000 и поверхности на #0A0B0D (Дизайн.md, "Режим
  * AMOLED") - отдельный тумблер поверх тёмной темы, не сама тёмная тема. [uiFont] - группа E
  * "свой шрифт интерфейса", подменяет Archivo во всех MaterialTheme.typography ролях, null =
- * стандартный. */
+ * стандартный. [colorOverrides] - П.md §26 "Редактор темы", токен -> hex ("#RRGGBB"/"#AARRGGBB"),
+ * применяется через NamiColors.setOverride перед первой отрисовкой контента. */
 @Composable
-fun NamiTheme(amoled: Boolean = false, uiFont: FontFamily? = null, content: @Composable () -> Unit) {
-    SideEffect { setAmoledColors(amoled) }
+fun NamiTheme(amoled: Boolean = false, uiFont: FontFamily? = null, colorOverrides: Map<String, String> = emptyMap(), content: @Composable () -> Unit) {
+    SideEffect {
+        setAmoledColors(amoled)
+        NamiColors.EDITABLE_TOKENS.forEach { token ->
+            val hex = colorOverrides[token]
+            NamiColors.setOverride(token, if (hex != null) runCatching { androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(hex)) }.getOrNull() else null)
+        }
+    }
     val typography = remember(uiFont) { buildTypography(uiFont) }
-    MaterialTheme(colorScheme = NamiDarkScheme, typography = typography, content = content)
+    MaterialTheme(colorScheme = namiDarkScheme(), typography = typography, content = content)
 }

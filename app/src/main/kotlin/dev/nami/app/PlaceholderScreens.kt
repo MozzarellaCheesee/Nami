@@ -262,7 +262,7 @@ internal fun SettingsSubScreenScaffold(title: String, onBack: () -> Unit, conten
 }
 
 @Composable
-fun SettingsAppearanceScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
+fun SettingsAppearanceScreen(onBack: () -> Unit, onThemeEditorClick: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
     val context = LocalContext.current
     var selectedIcon by remember { mutableStateOf(IconPicker.current(context)) }
     var pendingIcon by remember { mutableStateOf<LauncherIcon?>(null) }
@@ -280,6 +280,12 @@ fun SettingsAppearanceScreen(onBack: () -> Unit, viewModel: SettingsViewModel = 
                 title = "AMOLED-чёрный",
                 trailing = { NamiSwitch(checked = amoledEnabled, onCheckedChange = viewModel::setAmoledEnabled) },
                 onClick = { viewModel.setAmoledEnabled(!amoledEnabled) },
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Palette,
+                title = "Редактор темы",
+                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
+                onClick = onThemeEditorClick,
             )
             SettingsRow(
                 icon = Icons.Outlined.FontDownload,
