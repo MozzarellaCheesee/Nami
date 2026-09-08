@@ -16,6 +16,11 @@ data class Playlist(
      * lives - PlaylistRepository.parseSmartQuery is how a caller gets the parsed form. */
     val isSmart: Boolean = false,
     val smartQueryJson: String? = null,
+    /** П.md §20 "свои настройки на плейлист" - см. PlaylistEntity's identical doc. Null = не
+     * навязывать, глобальная настройка остаётся как есть. */
+    val eqGainsCsv: String? = null,
+    val crossfadeEnabled: Boolean? = null,
+    val shuffleOnStart: Boolean? = null,
 )
 
 data class PlaylistSummary(

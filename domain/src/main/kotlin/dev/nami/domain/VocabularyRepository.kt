@@ -22,4 +22,8 @@ interface VocabularyRepository {
     /** CSV, one row per word: word,reading,meaning,line,track - Anki's plain-CSV import maps
      * these directly to note fields, no .apkg packaging needed. */
     suspend fun exportCsv(): String
+
+    /** Колода Anki (.apkg) в [outputFile]. [workDir] - под временный collection.anki2 внутри
+     * архива: SQLite умеет писать только в настоящий файл. Дефолт для тестовых фейков - no-op. */
+    suspend fun exportApkg(workDir: java.io.File, outputFile: java.io.File) = Unit
 }

@@ -317,6 +317,30 @@ class NowPlayingViewModel @Inject constructor(
         }
     }
 
+    /** Как [playTracks], но сперва применяет свои настройки плейлиста (П.md §20): эквалайзер,
+     * кроссфейд, перемешивание. Незаданные (null) поля не трогаются - плейлист без своих
+     * настроек не должен молча перекраивать звук под себя.
+     *
+     * Настройки именно применяются к глобальным, а не живут "на время плейлиста": откатывать их
+     * пришлось бы по событию, которого нет (очередь можно доиграть, подменить, дополнить чужими
+     * треками), и пользователь получал бы необъяснимые скачки звука. Тут это осознанно
+     * односторонняя операция, как если бы он переключил их сам. */
+    fun playPlaylist(playlistId: dev.nami.core.model.PlaylistId, tracks: List<Track>, startIndex: Int) {
+        viewModelScope.launch {
+            val playlist = playlistRepository?.playlist(playlistId)?.first()
+            playlist?.eqGainsCsv
+                ?.split(',')
+                ?.mapNotNull { it.trim().toFloatOrNull() }
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { settingsRepository?.setEqBandGains(it) }
+            playlist?.crossfadeEnabled?.let { settingsRepository?.setCrossfadeEnabled(it) }
+
+            playerRepository.play(tracks.map { it.toPlayableTrack(null) }, startIndex = startIndex)
+            if (playlist?.shuffleOnStart == true) playerRepository.setShuffleEnabled(true)
+            _externalTrackChangeSignal.value++
+        }
+    }
+
     /** "Перемешать" from Album/Artist - starts the given tracks as a fresh queue, then
      * immediately shuffles it (see [PlayerRepository.setShuffleEnabled]) rather than shuffling
      * [tracks] here and starting at index 0: going through the real toggle means the player's own

@@ -24,6 +24,7 @@ import dev.nami.core.model.Artist
 import dev.nami.core.model.ArtistId
 import dev.nami.core.model.Track
 import dev.nami.core.model.TrackId
+import dev.nami.player.waveform.AudioFingerprint
 import dev.nami.data.mapper.toDomain
 import dev.nami.domain.CueSheet
 import dev.nami.domain.ImportProgress
@@ -74,15 +75,7 @@ class LibraryRepositoryImpl @Inject constructor(
             .filter { yearById[it.id] == null }
             .map { dev.nami.domain.HealthAlbumRef(dev.nami.core.model.AlbumId(it.id), it.title) }
 
-        // Heuristic grouping, not a real audio fingerprint (none exists in this codebase) --
-        // same title/artist/duration-rounded-to-5s is the same signal LibraryRepositoryImpl's
-        // own import-time dedup (findDuplicate) already uses, just applied after the fact
-        // instead of only at import.
-        val duplicateGroups = tracks
-            .groupBy { Triple(it.title.trim().lowercase(), it.artistId, it.durationMs / 5000) }
-            .values
-            .filter { it.size > 1 }
-            .map { group -> group.map { it.ref() } }
+        val duplicateGroups = duplicateGroups(tracks).map { group -> group.map { it.ref() } }
 
         val inconsistentArtistNameGroups = artistDao.allForIndexing()
             .groupBy { it.name.trim().lowercase() }
@@ -100,10 +93,104 @@ class LibraryRepositoryImpl @Inject constructor(
         )
     }
 
+    /** Дубли по двум независимым признакам сразу (П.md §23.19):
+     * - метаданные: то же название/артист/длительность с точностью до 5 с - тот же сигнал, что
+     *   уже использует дедуп при импорте (findDuplicate);
+     * - звук: отпечаток RMS-огибающей в пределах Хэммингова порога - ловит один трек в разных
+     *   форматах и битрейтах, где ни байты, ни теги не совпадают.
+     * Связи объединяются транзитивно (union-find), иначе один и тот же трек попал бы в две
+     * группы и "оставить это" удалило бы его из одной, оставив вторую висеть. */
+    private suspend fun duplicateGroups(tracks: List<Track>): List<List<Track>> {
+        val parent = HashMap<TrackId, TrackId>()
+        fun find(x: TrackId): TrackId {
+            var root = x
+            while (parent[root] != null && parent[root] != root) root = parent[root]!!
+            parent[x] = root
+            return root
+        }
+        fun union(a: TrackId, b: TrackId) {
+            parent.getOrPut(a) { a }
+            parent.getOrPut(b) { b }
+            val rootA = find(a)
+            val rootB = find(b)
+            if (rootA != rootB) parent[rootA] = rootB
+        }
+
+        tracks.groupBy { Triple(it.title.trim().lowercase(), it.artistId, it.durationMs / 5000) }
+            .values
+            .filter { it.size > 1 }
+            .forEach { group -> group.drop(1).forEach { union(group.first().id, it.id) } }
+
+        // ponytail: попарный перебор отпечатков, O(n²). Хэммингов порог не разбивается на
+        // корзины, поэтому индекса тут нет; при библиотеке в десятки тысяч треков имеет смысл
+        // разложить отпечаток на 4 куска по 16 бит и сравнивать только совпавшие по куску.
+        val fingerprints = trackDao.allFingerprints()
+        for (i in fingerprints.indices) {
+            for (j in i + 1 until fingerprints.size) {
+                if (AudioFingerprint.matches(fingerprints[i].fingerprint, fingerprints[j].fingerprint)) {
+                    union(TrackId(fingerprints[i].id), TrackId(fingerprints[j].id))
+                }
+            }
+        }
+
+        val byId = tracks.associateBy { it.id }
+        return parent.keys
+            .groupBy { find(it) }
+            .values
+            .mapNotNull { ids -> ids.mapNotNull { byId[it] }.takeIf { it.size > 1 } }
+    }
+
+    override suspend fun trackChains(): Map<String, String> =
+        trackDao.allChainLinks().associate { it.id to it.nextId }
+
+    override suspend fun setTrackChain(trackId: TrackId, nextTrackId: TrackId?) {
+        trackDao.setChainNext(trackId.value, nextTrackId?.value)
+    }
+
+    override suspend fun scanFingerprints(limit: Int): Int = withContext(Dispatchers.IO) {
+        val rows = trackDao.tracksWithoutFingerprint(limit)
+        rows.forEach { row ->
+            // Отпечаток пишется только при успехе: null оставляет трек в очереди на следующий
+            // запуск, а не помечает его "просканирован, дублей нет".
+            AudioFingerprint.compute(row.path)?.let { trackDao.setAudioFingerprint(row.id, it) }
+        }
+        trackDao.countWithoutFingerprint()
+    }
+
     override fun tracks(): Flow<PagingData<Track>> =
         Pager(PagingConfig(pageSize = 50)) { trackDao.pagingSource() }
             .flow
             .map { pagingData -> pagingData.pagingMap { it.toDomain() } }
+
+    override fun tracks(sort: dev.nami.domain.TrackSort): Flow<PagingData<Track>> {
+        val orderBy = when (sort) {
+            dev.nami.domain.TrackSort.DATE_ADDED -> "tracks.dateAdded DESC"
+            dev.nami.domain.TrackSort.TITLE -> "tracks.title COLLATE NOCASE ASC"
+            dev.nami.domain.TrackSort.ARTIST -> "artistName COLLATE NOCASE ASC, tracks.title COLLATE NOCASE ASC"
+            dev.nami.domain.TrackSort.YEAR -> "albums.year DESC"
+            dev.nami.domain.TrackSort.DURATION -> "tracks.durationMs DESC"
+            dev.nami.domain.TrackSort.PLAY_COUNT -> "tracks.playCount DESC"
+            dev.nami.domain.TrackSort.BPM -> "tracks.bpm DESC"
+            // Оценка битрейта: колонки нет, но размер/длительность дают порядок не хуже.
+            dev.nami.domain.TrackSort.BITRATE -> "(tracks.sizeBytes * 8000.0 / MAX(tracks.durationMs, 1)) DESC"
+            dev.nami.domain.TrackSort.RATING -> "tracks.rating DESC"
+        }
+        val sql = """
+            SELECT tracks.*, COALESCE(albums.artworkPath, tracks.artworkPath) AS albumArtworkPath,
+                   artists.name AS artistName
+            FROM tracks
+            LEFT JOIN albums ON tracks.albumId = albums.id
+            LEFT JOIN artists ON tracks.artistId = artists.id
+            WHERE tracks.deletedAt IS NULL
+            ORDER BY $orderBy
+        """.trimIndent()
+        return Pager(PagingConfig(pageSize = 50)) {
+            trackDao.pagingSourceSorted(androidx.sqlite.db.SimpleSQLiteQuery(sql))
+        }.flow.map { pagingData -> pagingData.pagingMap { it.toDomain() } }
+    }
+
+    override suspend fun trackYears(): Map<TrackId, Int> =
+        trackDao.allTrackYears().associate { TrackId(it.id) to it.year }
 
     override suspend fun allTracksOrdered(): List<Track> =
         trackDao.allOrderedWithArtwork().map { it.toDomain() }

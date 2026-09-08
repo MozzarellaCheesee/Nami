@@ -43,6 +43,7 @@ private val PRESETS = listOf(
     SmartPreset("Топ 100", emptyList(), SmartSortField.PLAY_COUNT, true, 100),
     SmartPreset("Забытое (полгода)", listOf(SmartRule(SmartField.LAST_PLAYED_DAYS_AGO, SmartOperator.GREATER_THAN, "180")), SmartSortField.DATE_ADDED, true, null),
     SmartPreset("Короткие (<2:30)", listOf(SmartRule(SmartField.DURATION_SEC, SmartOperator.LESS_THAN, "150")), SmartSortField.DURATION, false, null),
+    SmartPreset("Ночное", listOf(SmartRule(SmartField.LAST_PLAYED_AT_NIGHT, SmartOperator.EQUALS, "true")), SmartSortField.PLAY_COUNT, true, null),
     SmartPreset("Только FLAC", listOf(SmartRule(SmartField.FORMAT, SmartOperator.EQUALS, "flac")), SmartSortField.DATE_ADDED, true, null),
     SmartPreset("Без лирики", listOf(SmartRule(SmartField.HAS_LYRICS, SmartOperator.EQUALS, "false")), SmartSortField.DATE_ADDED, true, null),
 )
@@ -55,6 +56,7 @@ private fun fieldLabel(field: SmartField): String = when (field) {
     SmartField.LAST_PLAYED_DAYS_AGO -> "Дней с последнего прослушивания"
     SmartField.DURATION_SEC -> "Длительность (сек)"
     SmartField.HAS_LYRICS -> "Есть текст"
+    SmartField.LAST_PLAYED_AT_NIGHT -> "Слушалось ночью"
 }
 
 private fun operatorLabel(op: SmartOperator): String = when (op) {

@@ -24,6 +24,11 @@ data class PlaylistDetailUiState(val playlist: Playlist? = null, val tracks: Lis
 class PlaylistDetailViewModel @Inject constructor(
     private val playlistRepository: PlaylistRepository,
     savedStateHandle: SavedStateHandle,
+    // Nullable с дефолтом по той же причине, что и в NowPlayingViewModel: нужны только двум
+    // новым действиям (цепочки и запоминание эквалайзера), а существующие тесты продолжают
+    // строить этот ViewModel одним репозиторием и SavedStateHandle.
+    private val libraryRepository: dev.nami.domain.LibraryRepository? = null,
+    private val settingsRepository: dev.nami.domain.SettingsRepository? = null,
 ) : ViewModel() {
 
     val playlistId = PlaylistId(checkNotNull(savedStateHandle.get<String>("playlistId")))
@@ -46,6 +51,54 @@ class PlaylistDetailViewModel @Inject constructor(
 
     fun rename(name: String) {
         viewModelScope.launch { playlistRepository.renamePlaylist(playlistId, name) }
+    }
+
+    /** П.md §20 - свои настройки плейлиста. Пишутся все три разом (см. PlaylistDao). */
+    private fun setPlaybackSettings(eqGainsCsv: String?, crossfadeEnabled: Boolean?, shuffleOnStart: Boolean?) {
+        viewModelScope.launch {
+            playlistRepository.setPlaybackSettings(playlistId, eqGainsCsv, crossfadeEnabled, shuffleOnStart)
+        }
+    }
+
+    /** Эквалайзер запоминается снимком текущих полос, а не именем пресета: имени в хранилище нет
+     * нигде, пресет опознаётся по значениям, и "как сейчас звучит" - ровно то, что пользователь
+     * в этот момент видит на ползунках. */
+    fun rememberCurrentEq() {
+        val playlist = _uiState.value.playlist ?: return
+        val csv = (settingsRepository ?: return).eqBandGains.value.joinToString(",")
+        setPlaybackSettings(csv, playlist.crossfadeEnabled, playlist.shuffleOnStart)
+    }
+
+    fun clearEq() {
+        val playlist = _uiState.value.playlist ?: return
+        setPlaybackSettings(null, playlist.crossfadeEnabled, playlist.shuffleOnStart)
+    }
+
+    /** null -> вкл -> выкл -> null. Третье состояние ("не задано") обязано быть достижимым:
+     * без него настройку нельзя снять, только перевести в "всегда выключать". */
+    fun cycleCrossfade() {
+        val playlist = _uiState.value.playlist ?: return
+        val next = when (playlist.crossfadeEnabled) {
+            null -> true
+            true -> false
+            false -> null
+        }
+        setPlaybackSettings(playlist.eqGainsCsv, next, playlist.shuffleOnStart)
+    }
+
+    fun cycleShuffleOnStart() {
+        val playlist = _uiState.value.playlist ?: return
+        val next = when (playlist.shuffleOnStart) {
+            null -> true
+            true -> false
+            false -> null
+        }
+        setPlaybackSettings(playlist.eqGainsCsv, playlist.crossfadeEnabled, next)
+    }
+
+    /** П.md §20 "цепочки" - "после [trackId] всегда ставь [nextTrackId]". null снимает звено. */
+    fun setChain(trackId: TrackId, nextTrackId: TrackId?) {
+        viewModelScope.launch { libraryRepository?.setTrackChain(trackId, nextTrackId) }
     }
 
     fun delete(onDeleted: () -> Unit) {

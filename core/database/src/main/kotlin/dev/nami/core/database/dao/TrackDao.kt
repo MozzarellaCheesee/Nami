@@ -6,6 +6,8 @@ import androidx.room.Embedded
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.RawQuery
+import androidx.sqlite.db.SupportSQLiteQuery
 import dev.nami.core.database.entity.TrackEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -23,6 +25,13 @@ interface TrackDao {
         """,
     )
     fun pagingSource(): PagingSource<Int, TrackWithArtwork>
+
+    /** Тот же запрос, но с ORDER BY, который подставляет вызывающий (План.md §15 "сортировки").
+     * @RawQuery, потому что Room не умеет параметризовать ORDER BY, а плодить по статическому
+     * запросу на каждую из девяти сортировок - девять почти одинаковых копий. Строка ORDER BY
+     * собирается только из enum TrackSort, пользовательский ввод туда не попадает. */
+    @RawQuery(observedEntities = [TrackEntity::class])
+    fun pagingSourceSorted(query: SupportSQLiteQuery): PagingSource<Int, TrackWithArtwork>
 
     @Query(
         """
@@ -148,6 +157,42 @@ interface TrackDao {
     )
     suspend fun allForIndexing(): List<TrackIndexRow>
 
+    @Query(
+        """
+        SELECT tracks.id AS id, albums.year AS year
+        FROM tracks
+        LEFT JOIN albums ON tracks.albumId = albums.id
+        WHERE tracks.deletedAt IS NULL AND albums.year IS NOT NULL
+        """,
+    )
+    suspend fun allTrackYears(): List<TrackYearRow>
+
+    /** Поля для постфильтров поисковых операторов (План.md §21: bpm/rating/added/no-lyrics).
+     * Их нет в fts5-индексе, поэтому оператор доотбирает по ним уже найденные id, а не ищет ими. */
+    @Query("SELECT id, bpm, rating, dateAdded, path FROM tracks WHERE deletedAt IS NULL")
+    suspend fun allForSearchFilter(): List<TrackFilterRow>
+
+    /** Треки без отпечатка - вход для сканера дублей (П.md §23.19). Порция ограничена, потому
+     * что каждая строка тут означает полное декодирование файла. */
+    @Query("SELECT id, path FROM tracks WHERE deletedAt IS NULL AND audioFingerprint IS NULL LIMIT :limit")
+    suspend fun tracksWithoutFingerprint(limit: Int): List<TrackPathRow>
+
+    @Query("SELECT id, audioFingerprint AS fingerprint FROM tracks WHERE deletedAt IS NULL AND audioFingerprint IS NOT NULL")
+    suspend fun allFingerprints(): List<TrackFingerprintRow>
+
+    @Query("SELECT id, chainNextTrackId AS nextId FROM tracks WHERE deletedAt IS NULL AND chainNextTrackId IS NOT NULL")
+    suspend fun allChainLinks(): List<TrackChainRow>
+
+    /** П.md §20 "цепочки". null снимает звено. */
+    @Query("UPDATE tracks SET chainNextTrackId = :nextTrackId WHERE id = :id")
+    suspend fun setChainNext(id: String, nextTrackId: String?)
+
+    @Query("UPDATE tracks SET audioFingerprint = :fingerprint WHERE id = :id")
+    suspend fun setAudioFingerprint(id: String, fingerprint: Long?)
+
+    @Query("SELECT COUNT(*) FROM tracks WHERE deletedAt IS NULL AND audioFingerprint IS NULL")
+    suspend fun countWithoutFingerprint(): Int
+
     @Query("UPDATE tracks SET deletedAt = :deletedAt, path = :path WHERE id = :id")
     suspend fun setDeletedAt(id: String, deletedAt: Long?, path: String)
 
@@ -214,6 +259,22 @@ interface TrackDao {
         @Embedded val track: TrackEntity,
         val albumArtworkPath: String?,
         val artistName: String?,
+    )
+
+    data class TrackYearRow(val id: String, val year: Int)
+
+    data class TrackPathRow(val id: String, val path: String)
+
+    data class TrackChainRow(val id: String, val nextId: String)
+
+    data class TrackFingerprintRow(val id: String, val fingerprint: Long)
+
+    data class TrackFilterRow(
+        val id: String,
+        val bpm: Float?,
+        val rating: Int?,
+        val dateAdded: Long,
+        val path: String,
     )
 
     data class TrackIndexRow(

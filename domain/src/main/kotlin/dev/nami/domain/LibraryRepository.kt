@@ -10,9 +10,33 @@ import dev.nami.core.model.Track
 import dev.nami.core.model.TrackId
 import kotlinx.coroutines.flow.Flow
 
+/** План.md §15 "сортировки библиотеки". BITRATE считается на лету из размера файла и
+ * длительности - отдельной колонки битрейта в схеме нет, а для порядка сортировки этой оценки
+ * достаточно. YEAR берётся с альбома: у трека своего года нет. */
+enum class TrackSort { DATE_ADDED, TITLE, ARTIST, YEAR, DURATION, PLAY_COUNT, BPM, BITRATE, RATING }
+
 interface LibraryRepository {
+    /** Отсортированный вариант [tracks]. Дефолт-реализация игнорирует сортировку, чтобы тестовым
+     * фейкам не приходилось её знать - настоящий порядок задаёт только LibraryRepositoryImpl. */
+    fun tracks(sort: TrackSort): Flow<PagingData<Track>> = tracks()
+
+    /** Год трека - это год его альбома, своего поля у трека нет. Отдельным запросом, чтобы не
+     * тащить albums.year во все проекции Track ради одной вкладки "Годы" (План.md §15). */
+    suspend fun trackYears(): Map<TrackId, Int> = emptyMap()
+
     /** См. LibraryHealthReport - пробегает по всей библиотеке, не для частого вызова. */
     suspend fun libraryHealthReport(): LibraryHealthReport
+
+    /** П.md §23.19 - считает отпечатки звука для [limit] треков, у которых их ещё нет, и
+     * возвращает, сколько осталось. Порциями и по кнопке, а не фоном при импорте: каждый трек
+     * тут полностью декодируется. Дефолт для тестовых фейков - "сканировать нечего". */
+    suspend fun scanFingerprints(limit: Int = 50): Int = 0
+
+    /** П.md §20 "цепочки" - "после этого трека всегда ставь вот этот", одной картой на всю
+     * библиотеку: звеньев единицы, и один запрос при старте очереди дешевле, чем лукап на трек. */
+    suspend fun trackChains(): Map<String, String> = emptyMap()
+
+    suspend fun setTrackChain(trackId: TrackId, nextTrackId: TrackId?) = Unit
 
     fun tracks(): Flow<PagingData<Track>>
     /** Snapshot of every non-deleted track, same order as [tracks], for building a full playback queue. */

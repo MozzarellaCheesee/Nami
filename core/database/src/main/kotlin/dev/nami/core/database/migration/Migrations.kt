@@ -279,6 +279,23 @@ val MIGRATION_24_25 = object : Migration(24, 25) {
     }
 }
 
+/** П.md §23.19 - отпечаток звука для поиска дублей, считается по требованию (не при импорте). */
+val MIGRATION_25_26 = object : Migration(25, 26) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE tracks ADD COLUMN audioFingerprint INTEGER")
+    }
+}
+
+/** П.md §20 - цепочки треков и свои настройки воспроизведения на плейлист. */
+val MIGRATION_26_27 = object : Migration(26, 27) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE tracks ADD COLUMN chainNextTrackId TEXT")
+        db.execSQL("ALTER TABLE playlists ADD COLUMN eqGainsCsv TEXT")
+        db.execSQL("ALTER TABLE playlists ADD COLUMN crossfadeEnabled INTEGER")
+        db.execSQL("ALTER TABLE playlists ADD COLUMN shuffleOnStart INTEGER")
+    }
+}
+
 val MIGRATION_14_15 = object : Migration(14, 15) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL(

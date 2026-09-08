@@ -6,6 +6,8 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,6 +28,8 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
@@ -39,6 +43,7 @@ import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Sort
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -165,7 +170,9 @@ fun LibraryScreen(
         LibraryTab.TRACKS -> trackListScrollingDown
         LibraryTab.ALBUMS -> albumGridScrollingDown
         LibraryTab.ARTISTS -> artistListScrollingDown
+        else -> false
     }
+    BackHandler(enabled = uiState.openedGroup != null) { viewModel.closeBrowseGroup() }
 
     Scaffold(snackbarHost = { dev.nami.core.designsystem.NamiSnackbarHost(snackbarHostState) }) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding).background(NamiColors.Ink900)) {
@@ -189,7 +196,12 @@ fun LibraryScreen(
                         onDelete = viewModel::deleteSelectedAlbums,
                     )
                 } else {
-                    LibraryChipsRow(selected = uiState.selectedTab, onSelect = viewModel::selectTab)
+                    LibraryChipsRow(
+                        selected = uiState.selectedTab,
+                        onSelect = viewModel::selectTab,
+                        sort = uiState.sort,
+                        onSort = viewModel::setSort,
+                    )
                 }
                 when (uiState.selectedTab) {
                     LibraryTab.TRACKS -> TrackListContent(
@@ -217,6 +229,7 @@ fun LibraryScreen(
                         onStartRadio = onStartRadio,
                         onShareCard = onShareCard,
                         nowPlaying = nowPlaying,
+                        sort = uiState.sort,
                     )
                     LibraryTab.ALBUMS -> AlbumGridContent(
                         viewModel = viewModel,
@@ -227,6 +240,16 @@ fun LibraryScreen(
                         onToggleAlbumSelection = { albumId -> viewModel.toggleAlbumSelection(albumId) },
                     )
                     LibraryTab.ARTISTS -> ArtistListContent(viewModel, artistListState, onArtistClick)
+                    else -> BrowseContent(
+                        groups = uiState.browseGroups,
+                        loading = uiState.browseLoading,
+                        openedGroup = uiState.openedGroup,
+                        openedTracks = uiState.openedGroupTracks,
+                        onOpenGroup = viewModel::openBrowseGroup,
+                        onCloseGroup = viewModel::closeBrowseGroup,
+                        onTrackClick = onTrackClick,
+                        nowPlaying = nowPlaying,
+                    )
                 }
             }
 
@@ -422,11 +445,43 @@ private fun AlbumSelectionTopBar(selectedCount: Int, onCancel: () -> Unit, onDel
     }
 }
 
+private val SORT_LABELS = listOf(
+    dev.nami.domain.TrackSort.DATE_ADDED to "Дата добавления",
+    dev.nami.domain.TrackSort.TITLE to "Название",
+    dev.nami.domain.TrackSort.ARTIST to "Артист",
+    dev.nami.domain.TrackSort.YEAR to "Год",
+    dev.nami.domain.TrackSort.DURATION to "Длительность",
+    dev.nami.domain.TrackSort.PLAY_COUNT to "Прослушивания",
+    dev.nami.domain.TrackSort.BPM to "BPM",
+    dev.nami.domain.TrackSort.BITRATE to "Битрейт",
+    dev.nami.domain.TrackSort.RATING to "Рейтинг",
+)
+
 @Composable
-private fun LibraryChipsRow(selected: LibraryTab, onSelect: (LibraryTab) -> Unit) {
-    val labels = mapOf(LibraryTab.TRACKS to "Треки", LibraryTab.ALBUMS to "Альбомы", LibraryTab.ARTISTS to "Артисты")
+private fun LibraryChipsRow(
+    selected: LibraryTab,
+    onSelect: (LibraryTab) -> Unit,
+    sort: dev.nami.domain.TrackSort,
+    onSort: (dev.nami.domain.TrackSort) -> Unit,
+) {
+    val labels = mapOf(
+        LibraryTab.TRACKS to "Треки",
+        LibraryTab.ALBUMS to "Альбомы",
+        LibraryTab.ARTISTS to "Артисты",
+        LibraryTab.GENRES to "Жанры",
+        LibraryTab.FOLDERS to "Папки",
+        LibraryTab.TAGS to "Теги",
+        LibraryTab.YEARS to "Годы",
+    )
+    var showSortSheet by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+    Row(
+        modifier = Modifier
+            .weight(1f)
+            .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         LibraryTab.entries.forEach { tab ->
@@ -450,7 +505,76 @@ private fun LibraryChipsRow(selected: LibraryTab, onSelect: (LibraryTab) -> Unit
             }
         }
     }
+        if (selected == LibraryTab.TRACKS) {
+            IconButton(onClick = { showSortSheet = true }) {
+                Icon(Icons.Outlined.Sort, contentDescription = "Сортировка", tint = NamiColors.Paper70)
+            }
+        }
+    }
+    if (showSortSheet) {
+        ContextActionSheet(
+            onDismiss = { showSortSheet = false },
+            actions = SORT_LABELS.map { (value, label) ->
+                ContextAction(
+                    if (value == sort) "$label ✓" else label,
+                    Icons.Outlined.Sort,
+                    onClick = { onSort(value) },
+                )
+            },
+        )
+    }
 }
+
+/** План.md §15 "алфавитный быстрый скролл". Прыгает к первому УЖЕ ЗАГРУЖЕННОМУ треку на букву -
+ * список постраничный (Paging), полного алфавитного индекса по всей библиотеке в БД нет, и
+ * строить его ради боковой полоски дороже, чем она стоит. Латиница + цифры в "#", всё остальное
+ * (кириллица, кана, кандзи) сваливается в одну группу "他": честной транслитерации каны в ромадзи
+ * для сортировки тут нет, а фальшивая (по первому символу) хуже, чем отдельная группа. */
+@Composable
+private fun AlphabetIndex(letters: List<Char>, onLetter: (Char) -> Unit, modifier: Modifier = Modifier) {
+    var heightPx by remember { mutableFloatStateOf(0f) }
+    fun letterAt(y: Float) {
+        if (heightPx <= 0f || letters.isEmpty()) return
+        val index = ((y / heightPx) * letters.size).toInt().coerceIn(0, letters.lastIndex)
+        onLetter(letters[index])
+    }
+    Column(
+        modifier = modifier
+            .width(22.dp)
+            .onSizeChanged { heightPx = it.height.toFloat() }
+            .pointerInput(letters) {
+                detectVerticalDragGestures(
+                    onDragStart = { offset -> letterAt(offset.y) },
+                    onVerticalDrag = { change, _ -> letterAt(change.position.y) },
+                )
+            }
+            .pointerInput(letters) {
+                detectTapGestures { offset -> letterAt(offset.y) }
+            },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        letters.forEach { letter ->
+            Text(
+                text = letter.toString(),
+                color = NamiColors.Paper40,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+    }
+}
+
+/** Буква для алфавитного индекса: латиница как есть, цифры - "#", остальное - "他". */
+private fun indexLetterOf(text: String): Char {
+    val first = text.trimStart().firstOrNull()?.uppercaseChar() ?: return '他'
+    return when {
+        first in 'A'..'Z' -> first
+        first.isDigit() -> '#'
+        else -> '他'
+    }
+}
+
+private val INDEX_LETTERS: List<Char> = listOf('#') + ('A'..'Z').toList() + '他'
 
 /** True once the user has scrolled down past the top and the last delta was downward. */
 @Composable
@@ -520,6 +644,7 @@ private fun TrackListContent(
     onStartRadio: (TrackId) -> Unit,
     onShareCard: (Track) -> Unit,
     nowPlaying: NowPlayingRow?,
+    sort: dev.nami.domain.TrackSort,
 ) {
     if (tracks.itemCount == 0) {
         if (tracks.loadState.refresh is androidx.paging.LoadState.Loading) {
@@ -656,6 +781,83 @@ private fun TrackListContent(
                         isPlaying = track.id == nowPlaying?.trackId && nowPlaying.isPlaying,
                     )
                 }
+            }
+        }
+
+        // Боковой алфавит нужен только там, где список реально алфавитный.
+        if (sort == dev.nami.domain.TrackSort.TITLE || sort == dev.nami.domain.TrackSort.ARTIST) {
+            val scope = rememberCoroutineScope()
+            val headerCount = (if (recentAlbums.isNotEmpty()) 1 else 0) + (if (featuredArtists.isNotEmpty()) 1 else 0)
+            AlphabetIndex(
+                letters = INDEX_LETTERS,
+                onLetter = { letter ->
+                    val items = tracks.itemSnapshotList.items
+                    val target = items.indexOfFirst { track ->
+                        val key = if (sort == dev.nami.domain.TrackSort.ARTIST) track.artistName.orEmpty() else track.title
+                        indexLetterOf(key) == letter
+                    }
+                    if (target >= 0) scope.launch { listState.scrollToItem(target + headerCount) }
+                },
+                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 2.dp),
+            )
+        }
+    }
+}
+
+/** Вкладки Жанры/Папки/Теги/Годы: сначала список групп, тап - треки внутри группы. Отдельного
+ * экрана под группу нет - это тот же список на месте вкладки плюс строка "назад", так дешевле
+ * и не плодит новых маршрутов навигации. */
+@Composable
+private fun BrowseContent(
+    groups: List<BrowseGroup>,
+    loading: Boolean,
+    openedGroup: BrowseGroup?,
+    openedTracks: List<Track>,
+    onOpenGroup: (BrowseGroup) -> Unit,
+    onCloseGroup: () -> Unit,
+    onTrackClick: (TrackId) -> Unit,
+    nowPlaying: NowPlayingRow?,
+) {
+    if (loading) {
+        LibrarySkeleton()
+        return
+    }
+    if (openedGroup != null) {
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable(onClick = onCloseGroup).padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("← ${openedGroup.title}", color = NamiColors.Paper100, style = MaterialTheme.typography.titleMedium)
+            }
+            LazyColumn {
+                items(openedTracks, key = { it.id.value }) { track ->
+                    TrackListItem(
+                        track = track,
+                        onClick = { onTrackClick(track.id) },
+                        isCurrentTrack = track.id == nowPlaying?.trackId,
+                        isPlaying = track.id == nowPlaying?.trackId && nowPlaying.isPlaying,
+                    )
+                }
+            }
+        }
+        return
+    }
+    if (groups.isEmpty()) {
+        EmptyLibraryMessage()
+        return
+    }
+    LazyColumn {
+        items(groups, key = { it.key }) { group ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpenGroup(group) }
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(group.title, color = NamiColors.Paper100, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                Text("${group.trackCount}", color = NamiColors.Paper40, style = MaterialTheme.typography.bodySmall)
             }
         }
     }

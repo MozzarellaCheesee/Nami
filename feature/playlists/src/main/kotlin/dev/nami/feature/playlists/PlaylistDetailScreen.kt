@@ -25,7 +25,11 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.LinkOff
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Tune
+import dev.nami.core.model.TrackId
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -97,6 +101,7 @@ fun PlaylistDetailScreen(
     var showRenameDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
+    var showPlaybackSettings by remember { mutableStateOf(false) }
 
     val density = LocalDensity.current
     val headerState = rememberCollapsingHeaderState(maxHeight = HEADER_MAX_HEIGHT, minHeight = HEADER_MIN_HEIGHT)
@@ -185,8 +190,38 @@ fun PlaylistDetailScreen(
                             } else {
                                 ContextAction("Изменить обложку", Icons.Outlined.Image) { onPickCoverRequested(viewModel.playlistId) }
                             },
+                            ContextAction("Настройки воспроизведения", Icons.Outlined.Tune) { showPlaybackSettings = true },
                             ContextAction("Экспорт в .m3u8", Icons.Outlined.Share) { onExportRequested(viewModel.playlistId) },
                             ContextAction("Удалить плейлист", Icons.Outlined.Delete) { showDeleteDialog = true },
+                        ),
+                    )
+                }
+                if (showPlaybackSettings) {
+                    // П.md §20. Каждый тап переключает одну настройку; лист закрывается, как и
+                    // любой ContextActionSheet - своего экрана ради трёх переключателей не надо.
+                    fun tristate(value: Boolean?) = when (value) {
+                        null -> "не задано"
+                        true -> "включать"
+                        false -> "выключать"
+                    }
+                    ContextActionSheet(
+                        onDismiss = { showPlaybackSettings = false },
+                        actions = listOf(
+                            ContextAction(
+                                if (playlist?.eqGainsCsv == null) {
+                                    "Эквалайзер: не задан - запомнить текущий"
+                                } else {
+                                    "Эквалайзер: запомнен - перезаписать текущим"
+                                },
+                                Icons.Outlined.Tune,
+                            ) { viewModel.rememberCurrentEq() },
+                            ContextAction("Эквалайзер: забыть", Icons.Outlined.Close) { viewModel.clearEq() },
+                            ContextAction("Кроссфейд: ${tristate(playlist?.crossfadeEnabled)}", Icons.Outlined.Tune) {
+                                viewModel.cycleCrossfade()
+                            },
+                            ContextAction("Перемешивать при запуске: ${tristate(playlist?.shuffleOnStart)}", Icons.Outlined.Tune) {
+                                viewModel.cycleShuffleOnStart()
+                            },
                         ),
                     )
                 }
@@ -199,6 +234,8 @@ fun PlaylistDetailScreen(
                             // computed by SmartPlaylistEvaluator) - there's nothing to remove.
                             onRemove = if (isSmart) null else { { viewModel.removeTrack(track.id) } },
                             modifier = Modifier.animateItem(),
+                            chainCandidates = uiState.tracks,
+                            onSetChain = { next -> viewModel.setChain(track.id, next) },
                         )
                     }
                 }
@@ -341,8 +378,19 @@ private fun tracksWord(count: Int): String {
  * reverse dependency needed to reuse TrackListItem directly isn't available without a bigger
  * module reshuffle out of scope here. */
 @Composable
-private fun PlaylistTrackRow(track: Track, onClick: () -> Unit, onRemove: (() -> Unit)?, modifier: Modifier = Modifier) {
+private fun PlaylistTrackRow(
+    track: Track,
+    onClick: () -> Unit,
+    onRemove: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+    // Кандидаты в преемники - только треки этого же плейлиста: полноценный поиск по библиотеке
+    // ради связки двух соседних треков был бы отдельным экраном, а цепочку почти всегда строят
+    // именно внутри плейлиста, который сейчас перед глазами.
+    chainCandidates: List<Track> = emptyList(),
+    onSetChain: ((TrackId?) -> Unit)? = null,
+) {
     var showMenu by remember { mutableStateOf(false) }
+    var showChainPicker by remember { mutableStateOf(false) }
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -375,9 +423,25 @@ private fun PlaylistTrackRow(track: Track, onClick: () -> Unit, onRemove: (() ->
     if (showMenu && onRemove != null) {
         ContextActionSheet(
             onDismiss = { showMenu = false },
-            actions = listOf(
+            actions = listOfNotNull(
                 ContextAction("Убрать из плейлиста", Icons.Outlined.Close, onClick = onRemove),
+                onSetChain?.let {
+                    ContextAction("Всегда ставить следом…", Icons.Outlined.Link) { showChainPicker = true }
+                },
+                onSetChain?.let { setChain ->
+                    ContextAction("Убрать цепочку", Icons.Outlined.LinkOff) { setChain(null) }
+                },
             ),
+        )
+    }
+    if (showChainPicker && onSetChain != null) {
+        ContextActionSheet(
+            onDismiss = { showChainPicker = false },
+            actions = chainCandidates
+                .filter { it.id != track.id }
+                .map { candidate ->
+                    ContextAction(candidate.title, Icons.Outlined.Link) { onSetChain(candidate.id) }
+                },
         )
     }
 }

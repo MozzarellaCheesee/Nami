@@ -42,19 +42,27 @@ object SmartPlaylistEvaluator {
             compareNumbers(days, rule.operator, rule.value)
         }
         SmartField.HAS_LYRICS -> {
-            val hasLyrics = lrcFileFor(track.path).exists()
+            val hasLyrics = File(lyricsSibling(track.path, ".lrc")).exists()
             val expected = rule.value.toBooleanStrictOrNull() ?: true
             if (rule.operator == SmartOperator.NOT_EQUALS) hasLyrics != expected else hasLyrics == expected
         }
+        SmartField.LAST_PLAYED_AT_NIGHT -> {
+            val atNight = track.lastPlayed?.let { isNight(it) } == true
+            val expected = rule.value.toBooleanStrictOrNull() ?: true
+            if (rule.operator == SmartOperator.NOT_EQUALS) atNight != expected else atNight == expected
+        }
+    }
+
+    /** 22:00-06:00 по местному времени устройства - ночь именно та, в которую слушал человек,
+     * а не UTC-полночь где-то ещё. */
+    private fun isNight(timestampMs: Long): Boolean {
+        val hour = java.util.Calendar.getInstance()
+            .apply { timeInMillis = timestampMs }
+            .get(java.util.Calendar.HOUR_OF_DAY)
+        return hour >= 22 || hour < 6
     }
 
     private fun daysSince(timestampMs: Long, nowMs: Long): Double = (nowMs - timestampMs) / 86_400_000.0
-
-    private fun lrcFileFor(path: String): File {
-        val dot = path.lastIndexOf('.')
-        val base = if (dot > path.lastIndexOf('/')) path.substring(0, dot) else path
-        return File("$base.lrc")
-    }
 
     private fun compareStrings(actual: String?, operator: SmartOperator, expected: String): Boolean {
         val matches = actual?.equals(expected, ignoreCase = true) == true

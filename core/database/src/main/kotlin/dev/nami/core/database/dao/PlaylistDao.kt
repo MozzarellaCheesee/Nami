@@ -92,6 +92,20 @@ interface PlaylistDao {
     @Query("UPDATE playlists SET smartQueryJson = :queryJson WHERE id = :id")
     suspend fun updateSmartQuery(id: String, queryJson: String)
 
+    /** П.md §20 - свои настройки воспроизведения на плейлист. Null в любом поле означает
+     * "не навязывать", поэтому пишутся все три разом: частичное обновление потребовало бы
+     * отличать "не задано" от "не меняй", а разницы в поведении между ними нет. */
+    @Query(
+        "UPDATE playlists SET eqGainsCsv = :eqGainsCsv, crossfadeEnabled = :crossfadeEnabled, " +
+            "shuffleOnStart = :shuffleOnStart WHERE id = :id",
+    )
+    suspend fun updatePlaybackSettings(
+        id: String,
+        eqGainsCsv: String?,
+        crossfadeEnabled: Boolean?,
+        shuffleOnStart: Boolean?,
+    )
+
     data class PlaylistListRow(
         val id: String,
         val name: String,

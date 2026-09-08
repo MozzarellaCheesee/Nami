@@ -44,8 +44,20 @@ class SearchRepositoryImplTest {
             .allowMainThreadQueries()
             .build()
 
-    private fun fakeTrackDao(rows: List<TrackDao.TrackIndexRow> = emptyList()) = object : TrackDao {
+    private fun fakeTrackDao(
+        rows: List<TrackDao.TrackIndexRow> = emptyList(),
+        filterRows: List<TrackDao.TrackFilterRow> = emptyList(),
+    ) = object : TrackDao {
+        override suspend fun allForSearchFilter(): List<TrackDao.TrackFilterRow> = filterRows
+        override suspend fun tracksWithoutFingerprint(limit: Int): List<TrackDao.TrackPathRow> = emptyList()
+        override suspend fun allFingerprints(): List<TrackDao.TrackFingerprintRow> = emptyList()
+        override suspend fun setAudioFingerprint(id: String, fingerprint: Long?) = error("unused")
+        override suspend fun countWithoutFingerprint(): Int = 0
+        override suspend fun allChainLinks(): List<TrackDao.TrackChainRow> = emptyList()
+        override suspend fun setChainNext(id: String, nextTrackId: String?) = error("unused")
         override fun pagingSource(): PagingSource<Int, TrackDao.TrackWithArtwork> = error("unused")
+        override fun pagingSourceSorted(query: androidx.sqlite.db.SupportSQLiteQuery): PagingSource<Int, TrackDao.TrackWithArtwork> = error("unused")
+        override suspend fun allTrackYears(): List<TrackDao.TrackYearRow> = emptyList()
         override suspend fun allOrderedWithArtwork(): List<TrackDao.TrackWithArtwork> = error("unused")
         override suspend fun findById(id: String): TrackEntity? = error("unused")
         override suspend fun findByIdWithArtwork(id: String): TrackDao.TrackWithArtwork? = null
@@ -228,5 +240,35 @@ class SearchRepositoryImplTest {
         val results = repo.search("   ")
 
         assertEquals(emptyList(), results)
+    }
+
+    @Test
+    fun `track-only operators post-filter FTS rows and drop albums`() = runTest {
+        val searchDao = object : SearchDao {
+            override suspend fun clear() = error("unused")
+            override suspend fun insert(itemId: String, type: String, title: String, subtitle: String?, format: String?, year: Int?) = error("unused")
+            override suspend fun searchByMatchWithFilters(matchExpression: String, format: String?, year: Int?) = listOf(
+                SearchDao.SearchResultRow("t1", "track", "Fast", null, null, null),
+                SearchDao.SearchResultRow("t2", "track", "Slow", null, null, null),
+                SearchDao.SearchResultRow("a1", "album", "Album", null, null, null),
+            )
+            override suspend fun filterOnly(format: String?, year: Int?) = error("should not be called")
+        }
+        val now = System.currentTimeMillis()
+        val repo = SearchRepositoryImpl(
+            inMemoryDb(),
+            fakeTrackDao(
+                filterRows = listOf(
+                    TrackDao.TrackFilterRow("t1", bpm = 128f, rating = 5, dateAdded = now, path = "/m/a.flac"),
+                    TrackDao.TrackFilterRow("t2", bpm = 90f, rating = 5, dateAdded = now, path = "/m/b.flac"),
+                ),
+            ),
+            fakeAlbumDao(), fakeArtistDao(), searchDao,
+        )
+
+        val results = repo.search("bpm:120-140 rating:>3 added:<7d wind")
+
+        assertEquals(1, results.size)
+        assertEquals("Fast", (results.single() as SearchResult.TrackResult).title)
     }
 }

@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.Style
 import androidx.compose.material.icons.outlined.Quiz
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -69,8 +70,13 @@ fun VocabularyScreen(
                         Icon(Icons.Outlined.Quiz, contentDescription = "Квиз (Beta)", tint = NamiColors.Paper70)
                     }
                 }
+                // Два формата рядом: .apkg открывается в AnkiDroid одним тапом, CSV остаётся
+                // для всего остального (Quizlet, таблицы, свой разбор).
+                IconButton(onClick = { viewModel.exportApkg() }, enabled = words.isNotEmpty()) {
+                    Icon(Icons.Outlined.Style, contentDescription = "Экспорт колодой Anki (.apkg)", tint = NamiColors.Paper70)
+                }
                 IconButton(onClick = { viewModel.exportCsv() }, enabled = words.isNotEmpty()) {
-                    Icon(Icons.Outlined.FileDownload, contentDescription = "Экспорт в CSV (Anki)", tint = NamiColors.Paper70)
+                    Icon(Icons.Outlined.FileDownload, contentDescription = "Экспорт в CSV", tint = NamiColors.Paper70)
                 }
             }
             if (words.isEmpty()) {

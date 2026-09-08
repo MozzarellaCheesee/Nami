@@ -18,6 +18,8 @@ import dev.nami.domain.PlayerRepository
 import dev.nami.domain.PlaylistRepository
 import dev.nami.domain.SearchRepository
 import dev.nami.domain.SettingsRepository
+import dev.nami.domain.TagRepository
+import dev.nami.domain.TrackSort
 import dev.nami.domain.TrashRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
@@ -26,14 +28,24 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-enum class LibraryTab { TRACKS, ALBUMS, ARTISTS }
+enum class LibraryTab { TRACKS, ALBUMS, ARTISTS, GENRES, FOLDERS, TAGS, YEARS }
+
+/** Вкладки, которые показывают не плоский список, а сначала список групп (жанр/папка/тег/год),
+ * и уже внутри группы - треки. */
+val LibraryTab.isBrowse: Boolean
+    get() = this == LibraryTab.GENRES || this == LibraryTab.FOLDERS ||
+        this == LibraryTab.TAGS || this == LibraryTab.YEARS
 
 data class NowPlayingRow(val trackId: TrackId, val isPlaying: Boolean)
+
+/** Одна строка в списке групп вкладок Жанры/Папки/Теги/Годы. */
+data class BrowseGroup(val key: String, val title: String, val trackCount: Int)
 
 data class LibraryUiState(
     val importProgress: ImportProgress? = null,
@@ -41,6 +53,12 @@ data class LibraryUiState(
     val lastDeletedTrackIds: Set<TrackId> = emptySet(),
     val selectedTrackIds: Set<TrackId> = emptySet(),
     val selectedAlbumIds: Set<AlbumId> = emptySet(),
+    val sort: TrackSort = TrackSort.DATE_ADDED,
+    val browseGroups: List<BrowseGroup> = emptyList(),
+    val browseLoading: Boolean = false,
+    /** Открытая группа внутри browse-вкладки; null - показываем список групп. */
+    val openedGroup: BrowseGroup? = null,
+    val openedGroupTracks: List<Track> = emptyList(),
 )
 
 @HiltViewModel
@@ -51,6 +69,7 @@ class LibraryViewModel @Inject constructor(
     private val playerRepository: PlayerRepository,
     private val playlistRepository: PlaylistRepository,
     private val settingsRepository: SettingsRepository,
+    private val tagRepository: TagRepository,
 ) : ViewModel() {
 
     fun likeTrack(trackId: TrackId) {
@@ -78,8 +97,11 @@ class LibraryViewModel @Inject constructor(
     suspend fun searchMusicBrainz(title: String, artistName: String?) =
         libraryRepository.searchMusicBrainz(title, artistName)
 
+    private val sort = MutableStateFlow(TrackSort.DATE_ADDED)
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val tracks: Flow<PagingData<Track>> =
-        libraryRepository.tracks().cachedIn(viewModelScope)
+        sort.flatMapLatest { libraryRepository.tracks(it) }.cachedIn(viewModelScope)
 
     val albums: Flow<PagingData<AlbumSummary>> =
         libraryRepository.albums().cachedIn(viewModelScope)
@@ -103,7 +125,73 @@ class LibraryViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     fun selectTab(tab: LibraryTab) {
-        _uiState.value = _uiState.value.copy(selectedTab = tab)
+        _uiState.value = _uiState.value.copy(selectedTab = tab, openedGroup = null, openedGroupTracks = emptyList())
+        if (tab.isBrowse) loadBrowseGroups(tab)
+    }
+
+    fun setSort(newSort: TrackSort) {
+        sort.value = newSort
+        _uiState.value = _uiState.value.copy(sort = newSort)
+    }
+
+    /** Группы для вкладок Жанры/Папки/Теги/Годы считаются в памяти по снимку библиотеки, а не
+     * отдельными GROUP BY-запросами: снимок уже есть (allTracksOrdered используется для очереди),
+     * а группировка по строке пути или по жанру в SQL всё равно потребовала бы своих запросов и
+     * миграций ради экрана, который открывают редко. */
+    private fun loadBrowseGroups(tab: LibraryTab) {
+        _uiState.value = _uiState.value.copy(browseLoading = true, browseGroups = emptyList())
+        viewModelScope.launch {
+            val all = libraryRepository.allTracksOrdered()
+            browseSource = all
+            val groups = when (tab) {
+                LibraryTab.GENRES -> all.groupBy { it.genre?.trim().orEmpty().ifBlank { UNKNOWN_KEY } }
+                    .map { (key, tracks) -> BrowseGroup(key, if (key == UNKNOWN_KEY) "Без жанра" else key, tracks.size) }
+                    .sortedBy { it.title.lowercase() }
+                LibraryTab.FOLDERS -> all.groupBy { folderOf(it.path) }
+                    .map { (key, tracks) -> BrowseGroup(key, key.substringAfterLast('/').ifBlank { key }, tracks.size) }
+                    .sortedBy { it.title.lowercase() }
+                LibraryTab.YEARS -> {
+                    val years = libraryRepository.trackYears()
+                    browseYears = years
+                    all.groupBy { years[it.id]?.toString() ?: UNKNOWN_KEY }
+                        .map { (key, tracks) -> BrowseGroup(key, if (key == UNKNOWN_KEY) "Без года" else key, tracks.size) }
+                        .sortedByDescending { it.key }
+                }
+                LibraryTab.TAGS -> tagRepository.tags().first().map { tag ->
+                    BrowseGroup(tag.id.value, tag.name, tagRepository.tracksForTag(tag.id).first().size)
+                }
+                else -> emptyList()
+            }
+            _uiState.value = _uiState.value.copy(browseGroups = groups, browseLoading = false)
+        }
+    }
+
+    private var browseSource: List<Track> = emptyList()
+    private var browseYears: Map<TrackId, Int> = emptyMap()
+
+    fun openBrowseGroup(group: BrowseGroup) {
+        val tab = _uiState.value.selectedTab
+        _uiState.value = _uiState.value.copy(openedGroup = group)
+        viewModelScope.launch {
+            val tracks = when (tab) {
+                LibraryTab.GENRES -> browseSource.filter { it.genre?.trim().orEmpty().ifBlank { UNKNOWN_KEY } == group.key }
+                LibraryTab.FOLDERS -> browseSource.filter { folderOf(it.path) == group.key }
+                LibraryTab.YEARS -> browseSource.filter { (browseYears[it.id]?.toString() ?: UNKNOWN_KEY) == group.key }
+                LibraryTab.TAGS -> tagRepository.tracksForTag(dev.nami.domain.TagId(group.key)).first()
+                else -> emptyList()
+            }
+            _uiState.value = _uiState.value.copy(openedGroupTracks = tracks)
+        }
+    }
+
+    fun closeBrowseGroup() {
+        _uiState.value = _uiState.value.copy(openedGroup = null, openedGroupTracks = emptyList())
+    }
+
+    private fun folderOf(path: String) = path.substringBeforeLast('/', "").ifBlank { "/" }
+
+    private companion object {
+        const val UNKNOWN_KEY = " none"
     }
 
     fun addToQueue(track: Track) {

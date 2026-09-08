@@ -636,7 +636,12 @@ fun NamiNavHost(
             composable(
                 ROUTE_PLAYLIST_DETAIL,
                 arguments = listOf(navArgument("playlistId") { type = NavType.StringType }),
-            ) {
+            ) { backStackEntry ->
+                // Свои настройки плейлиста применяются при старте воспроизведения (П.md §20),
+                // поэтому запуск идёт через playPlaylist, а не общий playTracks.
+                val playlistId = dev.nami.core.model.PlaylistId(
+                    backStackEntry.arguments?.getString("playlistId").orEmpty(),
+                )
                 Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
                 PlaylistDetailScreen(
                     onBack = { navController.popBackStack() },
@@ -645,7 +650,7 @@ fun NamiNavHost(
                         if (queue.nowPlaying?.id == tracks.getOrNull(startIndex)?.id) {
                             showNowPlaying = true
                         } else {
-                            nowPlayingViewModel.playTracks(tracks, artistName = null, startIndex = startIndex)
+                            nowPlayingViewModel.playPlaylist(playlistId, tracks, startIndex)
                             if (autoOpenPlayer) showNowPlaying = true
                         }
                     },

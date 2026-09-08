@@ -40,6 +40,10 @@ class VocabularyRepositoryImpl @Inject constructor(
         return (listOf(header) + rows).joinToString("\n")
     }
 
+    override suspend fun exportApkg(workDir: java.io.File, outputFile: java.io.File) {
+        AnkiPackageBuilder.build(dao.observeAllSnapshot().map { it.toDomain() }, workDir, outputFile)
+    }
+
     private fun csvEscape(value: String): String =
         if (value.contains(',') || value.contains('"') || value.contains('\n')) {
             "\"${value.replace("\"", "\"\"")}\""

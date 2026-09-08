@@ -344,9 +344,18 @@ class PlayerRepositoryImpl @Inject constructor(
         _shuffleEnabled.value = false
         preShuffleOrder = null
         tracks.forEach { trackInfoByMediaId[it.id.value] = it.toMediaItemInfo() }
-        val items = tracks.map { it.toMediaItem() }
+        // Цепочки (П.md §20) применяются именно здесь - play() единственный вход, через который
+        // очередь вообще возникает, так что одного места хватает и для плейлиста, и для альбома.
+        val orderedIds = applyChains(tracks.map { it.id.value }, libraryRepository.trackChains())
+        val byId = tracks.associateBy { it.id.value }
+        val ordered = orderedIds.mapNotNull { byId[it] }
+        // Якорь - тот же трек, что выбрал пользователь: перестановка не должна начинать
+        // воспроизведение с чужой позиции.
+        val anchorId = tracks.getOrNull(startIndex)?.id?.value
+        val newStartIndex = ordered.indexOfFirst { it.id.value == anchorId }.coerceAtLeast(0)
+        val items = ordered.map { it.toMediaItem() }
         controller?.apply {
-            setMediaItems(items, startIndex, startMs)
+            setMediaItems(items, newStartIndex, startMs)
             prepare()
             play()
         }

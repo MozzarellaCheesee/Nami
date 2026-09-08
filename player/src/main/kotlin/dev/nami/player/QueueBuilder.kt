@@ -94,3 +94,31 @@ private fun fitsAt(list: List<Track>, index: Int, candidate: Track, allowSkipped
     if (!allowSkipped && candidate.skipCount >= SKIP_COUNT_THRESHOLD) return false
     return true
 }
+
+/**
+ * П.md §20 "цепочки" - ставит преемника сразу за его треком. Работает с голыми id, а не с
+ * [Track]: цепочка - это чистая перестановка списка, ничего из полей трека ей не нужно, и в
+ * таком виде она одинаково применима и к MediaItem'ам, и в тесте.
+ *
+ * Звено, чей преемник не попал в эту очередь, просто игнорируется - плейлист не должен
+ * втягивать в себя посторонние треки только потому, что кто-то когда-то настроил цепочку.
+ *
+ * Цепочка идёт транзитивно (A->B->C ставит все три подряд), а [visited] заодно защищает от
+ * кольца A->B->A: трек, уже поставленный в очередь, второй раз не ставится.
+ */
+fun applyChains(ids: List<String>, chain: Map<String, String>): List<String> {
+    if (chain.isEmpty()) return ids
+    val available = ids.toHashSet()
+    val visited = HashSet<String>(ids.size)
+    val result = ArrayList<String>(ids.size)
+    for (id in ids) {
+        if (!visited.add(id)) continue
+        result += id
+        var next = chain[id]
+        while (next != null && next in available && visited.add(next)) {
+            result += next
+            next = chain[next]
+        }
+    }
+    return result
+}
