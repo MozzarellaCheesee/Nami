@@ -136,18 +136,31 @@ fun DriveModeScreen(onBack: () -> Unit, viewModel: NowPlayingViewModel = hiltVie
                     }
                 }
 
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(28.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    DriveModeButton(Icons.Rounded.SkipPrevious, "Предыдущий", 84.dp) { viewModel.skipToPreviousTrack() }
-                    DriveModeButton(
-                        icon = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                        contentDescription = if (isPlaying) "Пауза" else "Играть",
-                        size = 116.dp,
-                        background = NamiColors.Shu,
-                    ) { viewModel.toggle() }
-                    DriveModeButton(Icons.Rounded.SkipNext, "Следующий", 84.dp) { viewModel.skipNext() }
+                // Раньше размеры кнопок (84+116+84dp + отступы) были зашиты в dp - на экранах
+                // уже ~360dp это не влезало в ширину после горизонтальных полей 32dp с каждой
+                // стороны, и Row молча обрезал последнюю кнопку (Next) по краю, хотя код обеих
+                // боковых кнопок идентичен. BoxWithConstraints считает те же пропорции 84:116:84
+                // от реально доступной ширины, так что кнопки всегда помещаются целиком.
+                androidx.compose.foundation.layout.BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                    val gapDp = 20.dp
+                    val totalGaps = gapDp * 2
+                    val unit = ((maxWidth - totalGaps) / (84 + 116 + 84)).coerceAtMost(1.dp)
+                    val sideSize = (unit * 84).coerceAtMost(84.dp)
+                    val centerSize = (unit * 116).coerceAtMost(116.dp)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(gapDp, Alignment.CenterHorizontally),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        DriveModeButton(Icons.Rounded.SkipPrevious, "Предыдущий", sideSize) { viewModel.skipToPreviousTrack() }
+                        DriveModeButton(
+                            icon = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                            contentDescription = if (isPlaying) "Пауза" else "Играть",
+                            size = centerSize,
+                            background = NamiColors.Shu,
+                        ) { viewModel.toggle() }
+                        DriveModeButton(Icons.Rounded.SkipNext, "Следующий", sideSize) { viewModel.skipNext() }
+                    }
                 }
             }
         }
