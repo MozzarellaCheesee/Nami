@@ -6,6 +6,8 @@ import androidx.room.Embedded
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.RawQuery
+import androidx.sqlite.db.SupportSQLiteQuery
 import dev.nami.core.database.entity.TrackEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -23,6 +25,13 @@ interface TrackDao {
         """,
     )
     fun pagingSource(): PagingSource<Int, TrackWithArtwork>
+
+    /** Тот же запрос, но с ORDER BY, который подставляет вызывающий (План.md §15 "сортировки").
+     * @RawQuery, потому что Room не умеет параметризовать ORDER BY, а плодить по статическому
+     * запросу на каждую из девяти сортировок - девять почти одинаковых копий. Строка ORDER BY
+     * собирается только из enum TrackSort, пользовательский ввод туда не попадает. */
+    @RawQuery(observedEntities = [TrackEntity::class])
+    fun pagingSourceSorted(query: SupportSQLiteQuery): PagingSource<Int, TrackWithArtwork>
 
     @Query(
         """
@@ -148,6 +157,16 @@ interface TrackDao {
     )
     suspend fun allForIndexing(): List<TrackIndexRow>
 
+    @Query(
+        """
+        SELECT tracks.id AS id, albums.year AS year
+        FROM tracks
+        LEFT JOIN albums ON tracks.albumId = albums.id
+        WHERE tracks.deletedAt IS NULL AND albums.year IS NOT NULL
+        """,
+    )
+    suspend fun allTrackYears(): List<TrackYearRow>
+
     @Query("UPDATE tracks SET deletedAt = :deletedAt, path = :path WHERE id = :id")
     suspend fun setDeletedAt(id: String, deletedAt: Long?, path: String)
 
@@ -215,6 +234,8 @@ interface TrackDao {
         val albumArtworkPath: String?,
         val artistName: String?,
     )
+
+    data class TrackYearRow(val id: String, val year: Int)
 
     data class TrackIndexRow(
         val id: String,

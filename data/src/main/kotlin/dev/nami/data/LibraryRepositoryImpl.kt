@@ -105,6 +105,36 @@ class LibraryRepositoryImpl @Inject constructor(
             .flow
             .map { pagingData -> pagingData.pagingMap { it.toDomain() } }
 
+    override fun tracks(sort: dev.nami.domain.TrackSort): Flow<PagingData<Track>> {
+        val orderBy = when (sort) {
+            dev.nami.domain.TrackSort.DATE_ADDED -> "tracks.dateAdded DESC"
+            dev.nami.domain.TrackSort.TITLE -> "tracks.title COLLATE NOCASE ASC"
+            dev.nami.domain.TrackSort.ARTIST -> "artistName COLLATE NOCASE ASC, tracks.title COLLATE NOCASE ASC"
+            dev.nami.domain.TrackSort.YEAR -> "albums.year DESC"
+            dev.nami.domain.TrackSort.DURATION -> "tracks.durationMs DESC"
+            dev.nami.domain.TrackSort.PLAY_COUNT -> "tracks.playCount DESC"
+            dev.nami.domain.TrackSort.BPM -> "tracks.bpm DESC"
+            // Оценка битрейта: колонки нет, но размер/длительность дают порядок не хуже.
+            dev.nami.domain.TrackSort.BITRATE -> "(tracks.sizeBytes * 8000.0 / MAX(tracks.durationMs, 1)) DESC"
+            dev.nami.domain.TrackSort.RATING -> "tracks.rating DESC"
+        }
+        val sql = """
+            SELECT tracks.*, COALESCE(albums.artworkPath, tracks.artworkPath) AS albumArtworkPath,
+                   artists.name AS artistName
+            FROM tracks
+            LEFT JOIN albums ON tracks.albumId = albums.id
+            LEFT JOIN artists ON tracks.artistId = artists.id
+            WHERE tracks.deletedAt IS NULL
+            ORDER BY $orderBy
+        """.trimIndent()
+        return Pager(PagingConfig(pageSize = 50)) {
+            trackDao.pagingSourceSorted(androidx.sqlite.db.SimpleSQLiteQuery(sql))
+        }.flow.map { pagingData -> pagingData.pagingMap { it.toDomain() } }
+    }
+
+    override suspend fun trackYears(): Map<TrackId, Int> =
+        trackDao.allTrackYears().associate { TrackId(it.id) to it.year }
+
     override suspend fun allTracksOrdered(): List<Track> =
         trackDao.allOrderedWithArtwork().map { it.toDomain() }
 

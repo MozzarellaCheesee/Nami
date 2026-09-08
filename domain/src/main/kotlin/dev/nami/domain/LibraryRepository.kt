@@ -10,7 +10,20 @@ import dev.nami.core.model.Track
 import dev.nami.core.model.TrackId
 import kotlinx.coroutines.flow.Flow
 
+/** План.md §15 "сортировки библиотеки". BITRATE считается на лету из размера файла и
+ * длительности - отдельной колонки битрейта в схеме нет, а для порядка сортировки этой оценки
+ * достаточно. YEAR берётся с альбома: у трека своего года нет. */
+enum class TrackSort { DATE_ADDED, TITLE, ARTIST, YEAR, DURATION, PLAY_COUNT, BPM, BITRATE, RATING }
+
 interface LibraryRepository {
+    /** Отсортированный вариант [tracks]. Дефолт-реализация игнорирует сортировку, чтобы тестовым
+     * фейкам не приходилось её знать - настоящий порядок задаёт только LibraryRepositoryImpl. */
+    fun tracks(sort: TrackSort): Flow<PagingData<Track>> = tracks()
+
+    /** Год трека - это год его альбома, своего поля у трека нет. Отдельным запросом, чтобы не
+     * тащить albums.year во все проекции Track ради одной вкладки "Годы" (План.md §15). */
+    suspend fun trackYears(): Map<TrackId, Int> = emptyMap()
+
     /** См. LibraryHealthReport - пробегает по всей библиотеке, не для частого вызова. */
     suspend fun libraryHealthReport(): LibraryHealthReport
 
