@@ -99,6 +99,13 @@ class PlaybackService : MediaSessionService() {
     private val audioAttributes = AudioAttributes.Builder()
         .setUsage(C.USAGE_MEDIA)
         .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+        // Явно гасим системную пространственную обработку (Spatializer, API 32+). media3 сам
+        // конвертирует это в android.media.AudioAttributes.Builder.setSpatializationBehavior()
+        // при сборке AudioTrack (DefaultAudioTrackProvider.getAudioTrackAttributesV21, media3
+        // 1.5.0). На более старых устройствах поле просто игнорируется платформой. Без этого
+        // система вправе сама решать, «опространствливать» ли вывод - а весь наш тракт (ReplayGain
+        // /EQ/кроссфид/свёртка/дизер) посчитан именно под «чистый» стерео-сигнал без её вмешательства.
+        .setSpatializationBehavior(C.SPATIALIZATION_BEHAVIOR_NEVER)
         .build()
 
     // Per-track ReplayGain scan lives on the player instance's own listener list, re-attached to

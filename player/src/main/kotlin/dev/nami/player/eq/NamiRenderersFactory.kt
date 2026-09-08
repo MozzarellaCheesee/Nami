@@ -43,7 +43,19 @@ import dev.nami.player.replaygain.ReplayGainAudioProcessor
  * они этой схеме не мешают.
  *
  * Порядок в массиве обязателен: DitherAudioProcessor идёт последним, потому что после наших
- * процессоров media3 ставит silence-skipping и Sonic, а те принимают только int16. */
+ * процессоров media3 ставит silence-skipping и Sonic, а те принимают только int16.
+ *
+ * Audio offload (TrackSelectionParameters.AudioOffloadPreferences) сюда сознательно НЕ добавлен.
+ * Проверено байткодом DefaultAudioSink.configure() в media3 1.5.0: когда offload-ветка активна
+ * (offloadMode != 0 и формат поддержан), метод строит `new AudioProcessingPipeline(ImmutableList.of())`
+ * - пустой конвейер, `audioProcessorChain.getAudioProcessors()` там не вызывается вообще (эта
+ * строчка есть только в PCM-ветке для "audio/raw"). То есть offload отдаёт декодирование в DSP
+ * устройства и передаёт сжатый/чужой поток напрямую в AudioTrack, физически без прохода через
+ * ReplayGain/EQ/свёртку/кроссфид/Dither - ровно то несовместимо, о чём предупреждали заранее.
+ * Включать offload как отдельный режим "когда EQ/кроссфид/свёртка выключены" означало бы на лету
+ * пересобирать AudioSink/RenderersFactory при каждом входе-выходе пользователя из этих настроек
+ * (а часть, свёртка и кроссфид, могут быть переключены прямо во время воспроизведения) - это
+ * отдельная архитектурная задача, не "если дёшево". Оставлено как есть: обычный PCM-путь. */
 @UnstableApi
 class NamiRenderersFactory(
     context: Context,
