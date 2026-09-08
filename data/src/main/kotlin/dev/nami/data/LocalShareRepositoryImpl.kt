@@ -105,6 +105,7 @@ class LocalShareRepositoryImpl @Inject constructor(
     private var guestHostDevice: DiscoveredDevice? = null
     private val listenTogetherCacheDir get() = File(context.cacheDir, "listen_together").apply { mkdirs() }
     private val cachedFilesByTrackId = mutableMapOf<String, File>()
+    private val cachedArtworkByTrackId = mutableMapOf<String, String>()
 
     // ------------------------------------------------------------------ Wi-Fi Direct
     private val wifiP2pManager by lazy { context.getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager }
@@ -277,6 +278,10 @@ class LocalShareRepositoryImpl @Inject constructor(
     }
 
     override fun startDiscovery() {
+        // Адрес пересчитывается при каждом входе на экран: он считался один раз при старте сервера
+        // и потом устаревал молча - после переключения Wi-Fi (или её включения обратно) экран и QR
+        // показывали старый адрес, по которому уже никто не отвечает.
+        if (_serverRunning.value) _serverAddress.value = "${localIpAddress()}:$SERVER_PORT"
         if (discoveryListener != null) return
         // Список НЕ чистится при старте поиска. Чистка ломала два сценария сразу: (1) подключённый
         // по Wi-Fi Direct peer добавляется в список вручную, а следом WIFI_P2P_CONNECTION_CHANGED
@@ -510,7 +515,7 @@ class LocalShareRepositoryImpl @Inject constructor(
                     )
                     val cached = cachedFilesByTrackId[trackId]
                     if (cached != null) {
-                        playCached(cached, hostPositionMs)
+                        playCached(cached, hostPositionMs, cachedArtworkFor(device, trackId))
                     } else {
                         downloadAndPlay(device, trackId, json.optString("title"), json.optString("artistName", null))
                     }
@@ -544,6 +549,7 @@ class LocalShareRepositoryImpl @Inject constructor(
         val wasPlayingFromCache = _listenTogetherGuestState.value?.cachedPath != null
         _listenTogetherGuestState.value = null
         cachedFilesByTrackId.clear()
+        cachedArtworkByTrackId.clear()
         // Плеер останавливается ДО удаления кэша сессии: раньше файл сносили из-под играющего
         // ExoPlayer, и вместо тишины оставался зависший плеер с чужим треком, которого уже нет.
         scope.launch {
@@ -603,7 +609,7 @@ class LocalShareRepositoryImpl @Inject constructor(
             fresh.optString("trackId") != trackId -> return
             else -> aheadByOneWay(fresh, (android.os.SystemClock.elapsedRealtime() - startedAt) / 2)
         }
-        playCached(file, startPositionMs)
+        playCached(file, startPositionMs, cachedArtworkFor(device, trackId))
     }
 
     /** Позиция из ответа описывает момент, когда хост её измерил; пока ответ шёл к нам, хост
@@ -650,7 +656,7 @@ class LocalShareRepositoryImpl @Inject constructor(
     // проверяет поток и падает с IllegalStateException ("called from a wrong thread"). Гостевой
     // цикл живёт на Dispatchers.IO, поэтому КАЖДЫЙ вход в "слушать вместе" ронял приложение
     // насмерть в момент старта воспроизведения.
-    private suspend fun playCached(file: File, startPositionMs: Long) = withContext(Dispatchers.Main) {
+    private suspend fun playCached(file: File, startPositionMs: Long, artworkPath: String?) = withContext(Dispatchers.Main) {
         playerRepository.play(
             listOf(
                 dev.nami.domain.PlayableTrack(
@@ -658,11 +664,23 @@ class LocalShareRepositoryImpl @Inject constructor(
                     title = _listenTogetherGuestState.value?.trackTitle ?: file.nameWithoutExtension,
                     artistName = _listenTogetherGuestState.value?.artistName,
                     path = file.path,
+                    artworkPath = artworkPath,
                 ),
             ),
             startIndex = 0,
             startMs = startPositionMs,
         )
+    }
+
+    /** Обложка чужого трека в кэш сессии - без неё гость слушал вместе с хостом, но смотрел на
+     * пустой серый квадрат вместо картинки, хотя у хоста она есть. Живёт там же, где сам трек, и
+     * удаляется вместе с сессией. */
+    private suspend fun cachedArtworkFor(device: DiscoveredDevice, trackId: String): String? {
+        cachedArtworkByTrackId[trackId]?.let { return it }
+        val (bytes, name) = httpDownload(device, "/cover/$trackId") ?: return null
+        val file = File(File(listenTogetherCacheDir, trackId).apply { mkdirs() }, "cover.${File(name).extension.ifBlank { "jpg" }}")
+        file.writeBytes(bytes)
+        return file.path.also { cachedArtworkByTrackId[trackId] = it }
     }
 
     // ------------------------------------------------------------------ Wi-Fi Direct
