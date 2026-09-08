@@ -26,3 +26,33 @@ include $(BUILD_SHARED_LIBRARY)
 # (так предписывает libopenmpt/build/android_ndk/README.AndroidNDK.txt).
 include $(NAMI_OPENMPT)/Android.mk
 include $(NAMI_GME)/Android.mk
+
+# APE/WavPack/TAK/Musepack - минимальный FFmpeg, собранный native/jni/build_ffmpeg.sh.
+# Статические .a, а не .so: с четырьмя декодерами и пятью демуксерами линковка отбрасывает
+# почти всё, и получается ~1.5 МБ на ABI вместо четырёх отдельных библиотек.
+NAMI_FFMPEG := $(NAMI_THIRD_PARTY)/ffmpeg-build/$(TARGET_ARCH_ABI)
+
+ifneq ($(wildcard $(NAMI_FFMPEG)/lib/libavcodec.a),)
+
+define nami_ffmpeg_prebuilt
+include $(CLEAR_VARS)
+LOCAL_MODULE := $(1)
+LOCAL_SRC_FILES := $(NAMI_FFMPEG)/lib/lib$(1).a
+LOCAL_EXPORT_C_INCLUDES := $(NAMI_FFMPEG)/include
+include $(PREBUILT_STATIC_LIBRARY)
+endef
+
+$(eval $(call nami_ffmpeg_prebuilt,avformat))
+$(eval $(call nami_ffmpeg_prebuilt,avcodec))
+$(eval $(call nami_ffmpeg_prebuilt,swresample))
+$(eval $(call nami_ffmpeg_prebuilt,avutil))
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := namiffmpeg
+LOCAL_SRC_FILES := nami_ffmpeg_jni.cpp
+LOCAL_CPPFLAGS := -std=c++17 -fvisibility=hidden
+LOCAL_STATIC_LIBRARIES := avformat avcodec swresample avutil
+LOCAL_LDLIBS := -llog -lz
+include $(BUILD_SHARED_LIBRARY)
+
+endif

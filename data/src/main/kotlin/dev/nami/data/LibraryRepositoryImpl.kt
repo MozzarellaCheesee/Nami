@@ -32,6 +32,7 @@ import dev.nami.domain.LibraryHealthReport
 import dev.nami.domain.LibraryRepository
 import dev.nami.domain.LyricsRepository
 import dev.nami.domain.NativeBridge
+import dev.nami.core.tracker.FfmpegNative
 import dev.nami.core.tracker.TrackerNative
 import dev.nami.player.dsd.DsfToDopWav
 import kotlinx.coroutines.Dispatchers
@@ -418,12 +419,11 @@ class LibraryRepositoryImpl @Inject constructor(
         }
     }.flowOn(Dispatchers.IO)
 
-    // .wv/.ape тут есть, но Media3 их не декодирует - см. комментарий в copyAndIndex про
-    // media3-decoder-ffmpeg. Трекерные модули и чиптюны (TrackerNative.extensions) играют через
-    // конвертацию в .wav при импорте.
+    // Всё, что Media3 не умеет само (трекерные модули, чиптюны, APE/WavPack/TAK/Musepack),
+    // конвертируется в .wav при импорте - см. copyAndIndex.
     private fun isAudioFileName(name: String): Boolean =
-        (listOf(".mp3", ".flac", ".m4a", ".aac", ".ogg", ".opus", ".wav", ".aiff", ".wv", ".ape", ".dsf", ".dff") +
-            TrackerNative.extensions)
+        (listOf(".mp3", ".flac", ".m4a", ".aac", ".ogg", ".opus", ".wav", ".aiff", ".dsf", ".dff") +
+            TrackerNative.extensions + FfmpegNative.extensions)
             .any { name.endsWith(it, ignoreCase = true) }
 
     internal fun importFolderFromGroups(groups: List<AudioGroup>): Flow<ImportProgress> = flow {
@@ -513,6 +513,18 @@ class LibraryRepositoryImpl @Inject constructor(
         if (TrackerNative.extensions.any { displayName?.endsWith(it, ignoreCase = true) == true }) {
             val wavDestination = File(musicDir, "${destination.nameWithoutExtension}.wav")
             if (TrackerNative.renderToWav(destination.path, wavDestination.path)) {
+                destination.delete()
+                destination = wavDestination
+            }
+        }
+
+        // APE/WavPack/TAK/Musepack: у Media3 для этих контейнеров нет ни декодера, ни Extractor'а,
+        // поэтому декодируем своим минимальным FFmpeg (native/jni/build_ffmpeg.sh). Раньше .ape
+        // и .wv импортировались и молча не игрались - теперь либо играются, либо остаются как
+        // есть, если .so не собрана.
+        if (FfmpegNative.extensions.any { displayName?.endsWith(it, ignoreCase = true) == true }) {
+            val wavDestination = File(musicDir, "${destination.nameWithoutExtension}.wav")
+            if (FfmpegNative.decodeToWav(destination.path, wavDestination.path)) {
                 destination.delete()
                 destination = wavDestination
             }
