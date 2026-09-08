@@ -39,6 +39,10 @@ import kotlinx.coroutines.flow.first
 class NamiWidgetSquarePlayer : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val repo = widgetPlayerRepository(context)
+        // Холодный старт - без ожидания MediaController'а nowPlaying/state/isPlaying были бы
+        // пустыми даже когда реально что-то играет (Android часто убивает фоновый процесс,
+        // тап по виджету поднимает его заново).
+        repo.awaitReady()
         val nowPlaying = repo.queue.value.nowPlaying
         val playing = repo.state.value as? PlaybackState.Playing
         val art = loadArtBitmap(nowPlaying?.artworkPath)
@@ -81,7 +85,11 @@ class NamiWidgetSquarePlayer : GlanceAppWidget() {
                         Box(modifier = GlanceModifier.width(trackWidth * progress).height(4.dp).then(widgetCorner(2)).background(WidgetAccent)) {}
                     }
                     Spacer(modifier = GlanceModifier.size(10.dp))
-                    TransportRow(isPlayingNow(repo), iconSize = 26.dp)
+                    // Растёт вместе с виджетом при растягивании вместо фиксированного размера -
+                    // 26dp при минимальной ширине (180dp, см. widget_info_square_player.xml),
+                    // дальше линейно, с потолком чтобы не разъезжались на планшетных размерах.
+                    val transportIconSize = (LocalSize.current.width.value / 180f * 26f).dp.coerceIn(26.dp, 48.dp)
+                    TransportRow(isPlayingNow(repo), iconSize = transportIconSize)
                 }
             }
         }

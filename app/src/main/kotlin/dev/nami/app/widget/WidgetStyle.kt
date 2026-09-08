@@ -85,7 +85,11 @@ class SkipPreviousAction : ActionCallback {
 
 class ToggleLikeAction : ActionCallback {
     override suspend fun onAction(context: android.content.Context, glanceId: androidx.glance.GlanceId, parameters: androidx.glance.action.ActionParameters) {
-        val trackId = widgetPlayerRepository(context).queue.value.nowPlaying?.id ?: return
+        val playerRepo = widgetPlayerRepository(context)
+        // На холодном старте queue.value ещё пуст, пока MediaController не подключился -
+        // без ожидания nowPlaying был бы null даже когда что-то реально играет.
+        playerRepo.awaitReady()
+        val trackId = playerRepo.queue.value.nowPlaying?.id ?: return
         widgetPlaylistRepository(context).toggleLike(trackId)
         updateAllNamiWidgets(context)
     }

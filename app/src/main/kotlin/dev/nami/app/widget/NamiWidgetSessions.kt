@@ -13,6 +13,7 @@ import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.provideContent
+import androidx.glance.appwidget.updateAll
 import androidx.glance.background
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
@@ -36,8 +37,14 @@ class ApplySessionAction : ActionCallback {
         settings.setEqEnabled(true)
         settings.setCrossfadeEnabled(session.crossfadeEnabled)
         session.sleepTimerMinutes?.let { minutes ->
+            widgetPlayerRepository(context).awaitReady()
             widgetPlayerRepository(context).startSleepTimer(minutes * 60_000L)
         }
+        // Session сама по себе не хранит "применена ли сейчас" - без этого нажатие пилюли не
+        // давало никакого видимого отклика (реально применялось, но выглядело как ничего не
+        // произошло).
+        settings.setLastAppliedSessionName(name)
+        NamiWidgetSessions().updateAll(context)
     }
 }
 
@@ -46,7 +53,9 @@ class ApplySessionAction : ActionCallback {
  * не отдельный виджетный список. Пусто, если пользователь ещё ни одной не сохранил. */
 class NamiWidgetSessions : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val sessions = widgetSettingsRepository(context).sessions.value.take(MAX_SESSION_PILLS)
+        val settings = widgetSettingsRepository(context)
+        val sessions = settings.sessions.value.take(MAX_SESSION_PILLS)
+        val activeName = settings.lastAppliedSessionName.value
 
         provideContent {
             Box(modifier = GlanceModifier.fillMaxSize().then(widgetCorner()).background(WidgetBackground).padding(8.dp), contentAlignment = Alignment.Center) {
@@ -56,7 +65,7 @@ class NamiWidgetSessions : GlanceAppWidget() {
                     Row(verticalAlignment = Alignment.Vertical.CenterVertically) {
                         sessions.forEachIndexed { index, session ->
                             if (index > 0) androidx.glance.layout.Spacer(modifier = GlanceModifier.size(8.dp))
-                            SessionPill(session)
+                            SessionPill(session, isActive = session.name == activeName)
                         }
                     }
                 }
@@ -65,12 +74,15 @@ class NamiWidgetSessions : GlanceAppWidget() {
     }
 }
 
+/** [isActive] - последняя применённая сессия (см. SettingsRepository.lastAppliedSessionName)
+ * подсвечивается акцентным фоном, чтобы тап давал видимый результат - до этого пилюля выглядела
+ * одинаково и до, и после нажатия, даже когда EQ/кроссфейд реально применились. */
 @androidx.compose.runtime.Composable
-private fun SessionPill(session: Session) {
+private fun SessionPill(session: Session, isActive: Boolean) {
     Box(
         modifier = GlanceModifier
             .then(widgetCorner(16))
-            .background(WidgetSurface)
+            .background(if (isActive) WidgetAccent else WidgetSurface)
             .clickable(actionRunCallback<ApplySessionAction>(actionParametersOf(SessionNameKey to session.name)))
             .padding(horizontal = 12.dp, vertical = 8.dp),
     ) {

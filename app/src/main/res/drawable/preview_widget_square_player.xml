@@ -5,8 +5,9 @@
     android:viewportHeight="300">
     <!-- Фон - тёмная обложка -->
     <path android:fillColor="#FF1A1B1F" android:pathData="M16,16 h268 a16,16 0 0 1 16,16 v236 a16,16 0 0 1 -16,16 h-268 a16,16 0 0 1 -16,-16 v-236 a16,16 0 0 1 16,-16 z" />
-    <!-- Затемнение снизу под текстом/транспортом -->
-    <path android:fillColor="#B3000000" android:pathData="M16,150 h268 v134 h-268 z" />
+    <!-- Затемнение снизу под текстом/транспортом - нижние углы скруглены как у фона, иначе
+         прямые углы прямоугольника торчат за пределы скруглённого силуэта фона. -->
+    <path android:fillColor="#B3000000" android:pathData="M16,150 h268 v118 a16,16 0 0 1 -16,16 h-236 a16,16 0 0 1 -16,-16 z" />
     <!-- Название/исполнитель - плейсхолдер-полоски -->
     <path android:fillColor="#FFEDEAE4" android:pathData="M28,166 h140 v14 h-140 z" />
     <path android:fillColor="#FF9B9A97" android:pathData="M28,186 h90 v10 h-90 z" />

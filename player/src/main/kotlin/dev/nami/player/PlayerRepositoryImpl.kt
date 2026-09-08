@@ -330,8 +330,23 @@ class PlayerRepositoryImpl @Inject constructor(
         }
     }
 
+    /** Ждёт до 3с чтобы MediaController успел подключиться к сервису (см. интерфейса doc) -
+     * простой polling, не отдельная Deferred/coroutine машинерия ради редкого холодно-стартового
+     * случая. Возвращает controller как только он готов, или null если так и не подключился. */
+    private suspend fun awaitController(): MediaController? {
+        repeat(60) {
+            controller?.let { return it }
+            delay(50)
+        }
+        return controller
+    }
+
+    override suspend fun awaitReady() {
+        awaitController()
+    }
+
     override suspend fun toggle() {
-        controller?.apply {
+        awaitController()?.apply {
             if (isPlaying) {
                 pause()
             } else {
@@ -345,14 +360,14 @@ class PlayerRepositoryImpl @Inject constructor(
     }
 
     override suspend fun seek(ms: Long) {
-        controller?.seekTo(ms)
+        awaitController()?.seekTo(ms)
     }
 
     override suspend fun skipNext() {
         // "Избегать треков, скипнутых 3+ раз" (План.md §22.13) - only counts as a skip when the
         // user moves on well before the track would've ended naturally; skipping in the last few
         // percent is just "the track is basically over", not "I don't want to hear this".
-        controller?.let { player ->
+        awaitController()?.let { player ->
             val mediaId = player.currentMediaItem?.mediaId
             val duration = player.duration
             val position = player.currentPosition
@@ -364,11 +379,11 @@ class PlayerRepositoryImpl @Inject constructor(
     }
 
     override suspend fun skipPrevious() {
-        controller?.seekToPrevious()
+        awaitController()?.seekToPrevious()
     }
 
     override suspend fun skipToPreviousTrack() {
-        controller?.seekToPreviousMediaItem()
+        awaitController()?.seekToPreviousMediaItem()
     }
 
     override suspend fun stop() {

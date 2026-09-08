@@ -48,6 +48,7 @@ private const val KEY_LAST_PLAYBACK_POSITION_MS = "last_playback_position_ms"
 private const val KEY_LAST_PLAYBACK_PAUSED_AT = "last_playback_paused_at"
 private const val KEY_SHUFFLE_MODE = "shuffle_mode"
 private const val KEY_SESSIONS = "sessions" // JSON array, see AppSettingsRepository.readSessions
+private const val KEY_LAST_APPLIED_SESSION = "last_applied_session"
 private const val KEY_OUTPUT_PROFILES_ENABLED = "output_profiles_enabled"
 // One "<CSV of 9 gains>|<volumeLimitPercent>" string per device type.
 private fun outputProfileKey(type: OutputDeviceType) = "output_profile_${type.name}"
@@ -366,6 +367,14 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
 
     override fun deleteSession(name: String) {
         writeSessions(_sessions.value.filterNot { it.name == name })
+    }
+
+    private val _lastAppliedSessionName = MutableStateFlow(prefs.getString(KEY_LAST_APPLIED_SESSION, null))
+    override val lastAppliedSessionName: StateFlow<String?> = _lastAppliedSessionName
+
+    override fun setLastAppliedSessionName(name: String?) {
+        prefs.edit { putString(KEY_LAST_APPLIED_SESSION, name) }
+        _lastAppliedSessionName.value = name
     }
 
     private fun writeSessions(sessions: List<Session>) {

@@ -194,6 +194,12 @@ interface SettingsRepository {
     fun saveSession(session: Session)
     fun deleteSession(name: String)
 
+    /** Имя последней применённой сессии - для виджета "Сессии" (группа E), у которого иначе нет
+     * способа показать, какая пилюля сейчас "активна" (нажатие меняет только EQ/кроссфейд
+     * настройки, само по себе не отслеживается как состояние). Null пока ни одна не применена. */
+    val lastAppliedSessionName: StateFlow<String?>
+    fun setLastAppliedSessionName(name: String?)
+
     companion object {
         const val STANDS4_DAILY_LIMIT = 100
     }

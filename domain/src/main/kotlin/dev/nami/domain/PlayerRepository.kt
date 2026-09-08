@@ -56,6 +56,14 @@ data class PlayerQueue(
 interface PlayerRepository {
     val state: StateFlow<PlaybackState>
     val queue: StateFlow<PlayerQueue>
+    /** Виджеты (группа E) вызывают toggle/skipNext/etc. из свежего процесса (Android часто убивает
+     * фоновый процесс приложения, тап по виджету поднимает его заново) - MediaController
+     * подключается к сервису асинхронно, и сразу после холодного старта ещё не готов, из-за чего
+     * toggle()/skipNext() читали controller == null и молча ничего не делали ("кнопки не
+     * работают"). Ждёт готовности контроллера (с таймаутом) перед тем как виджет читает state/
+     * queue напрямую - toggle/seek/skipNext/skipPrevious/skipToPreviousTrack ждут сами внутри
+     * себя и этого явного вызова не требуют. */
+    suspend fun awaitReady()
     /** Bumped when ExoPlayer advances to the next track on its own (the current one simply ended)
      * - as opposed to a skip button, a swipe, or a list tap, which the UI already animates for
      * itself. Lets Now Playing/MiniPlayer play the same slide transition for a natural track

@@ -54,6 +54,7 @@ class NowPlayingViewModelTest {
         override suspend fun play(tracks: List<PlayableTrack>, startIndex: Int, startMs: Long) {
             playedTracks = tracks
         }
+        override suspend fun awaitReady() {}
         override suspend fun toggle() {}
         override suspend fun seek(ms: Long) {}
         override suspend fun skipNext() {}

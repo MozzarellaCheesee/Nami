@@ -75,6 +75,7 @@ class LibraryViewModelTest {
             override val shuffleEnabled: StateFlow<Boolean> = MutableStateFlow(false)
             override val repeatMode: StateFlow<dev.nami.domain.RepeatMode> = MutableStateFlow(dev.nami.domain.RepeatMode.OFF)
         override suspend fun play(tracks: List<PlayableTrack>, startIndex: Int, startMs: Long) {}
+        override suspend fun awaitReady() {}
         override suspend fun toggle() {}
         override suspend fun seek(ms: Long) {}
         override suspend fun skipNext() {}
@@ -765,6 +766,8 @@ private object NoOpSettingsRepository : dev.nami.domain.SettingsRepository {
     override val sessions = MutableStateFlow(emptyList<dev.nami.domain.Session>())
     override fun saveSession(session: dev.nami.domain.Session) {}
     override fun deleteSession(name: String) {}
+    override val lastAppliedSessionName = MutableStateFlow<String?>(null)
+    override fun setLastAppliedSessionName(name: String?) {}
 }
 
 private object NoOpPlaylistRepository : PlaylistRepository {

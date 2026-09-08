@@ -100,6 +100,7 @@ class AlbumDetailViewModelTest {
             override val shuffleEnabled: StateFlow<Boolean> = MutableStateFlow(false)
             override val repeatMode: StateFlow<dev.nami.domain.RepeatMode> = MutableStateFlow(dev.nami.domain.RepeatMode.OFF)
             override suspend fun play(tracks: List<PlayableTrack>, startIndex: Int, startMs: Long) {}
+            override suspend fun awaitReady() {}
             override suspend fun toggle() {}
             override suspend fun seek(ms: Long) {}
             override suspend fun skipNext() {}
