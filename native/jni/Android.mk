@@ -22,11 +22,6 @@ LOCAL_SHARED_LIBRARIES := openmpt libgme
 LOCAL_LDLIBS := -llog
 include $(BUILD_SHARED_LIBRARY)
 
-# Официальные сборочные файлы апстрима, скопированные в корень дерева исходников
-# (так предписывает libopenmpt/build/android_ndk/README.AndroidNDK.txt).
-include $(NAMI_OPENMPT)/Android.mk
-include $(NAMI_GME)/Android.mk
-
 # APE/WavPack/TAK/Musepack - минимальный FFmpeg, собранный native/jni/build_ffmpeg.sh.
 # Статические .a, а не .so: с четырьмя декодерами и пятью демуксерами линковка отбрасывает
 # почти всё, и получается ~1.5 МБ на ABI вместо четырёх отдельных библиотек.
@@ -56,3 +51,8 @@ LOCAL_LDLIBS := -llog -lz
 include $(BUILD_SHARED_LIBRARY)
 
 endif
+
+# Официальные сборочные файлы апстрима, скопированные в корень дерева исходников
+# (так предписывает libopenmpt/build/android_ndk/README.AndroidNDK.txt).
+include $(NAMI_OPENMPT)/Android.mk
+include $(NAMI_GME)/Android.mk
