@@ -1,8 +1,17 @@
 package dev.nami.feature.player
 
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.nami.player.convolution.IrWavLoader
+import dev.nami.player.output.DeviceAudioProbe
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import java.io.File
 import dev.nami.core.model.Track
 import dev.nami.domain.LibraryRepository
 import dev.nami.domain.OutputDeviceType
@@ -32,6 +41,13 @@ data class AudioTractUiState(
     val outputProfilesEnabled: Boolean = false,
     val outputProfiles: Map<OutputDeviceType, OutputProfile> = emptyMap(),
     val smartCrossfadeEnabled: Boolean = false,
+    val crossfeedEnabled: Boolean = false,
+    val convolutionEnabled: Boolean = false,
+    val convolutionIrPath: String? = null,
+    val deviceAudioProfile: String? = null,
+    /** Тест устройства идёт секунды (строит и рушит десятки AudioTrack) - экран должен показать,
+     * что он идёт, иначе кнопка выглядит сломанной. */
+    val deviceProbeRunning: Boolean = false,
 )
 
 /** Feeds both План.md's 4.6 "Аудиотракт" and 4.7 "Эквалайзер" screens - same underlying state,
@@ -41,12 +57,16 @@ class AudioTractViewModel @Inject constructor(
     playerRepository: PlayerRepository,
     libraryRepository: LibraryRepository,
     private val settingsRepository: SettingsRepository,
+    @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
     // Was filterIsInstance<Playing>() - which never emits at all while nothing is playing, so
     // the whole combine() below stayed stuck on its initial value forever and every toggle looked
     // like it silently reverted (it was actually saved fine, the screen just never redrew). Falls
     // back to a null track instead of blocking, so settings work regardless of playback state.
+    // Объявлено до uiState: тот его читает в combine, а Kotlin инициализирует свойства сверху вниз.
+    private val deviceProbeRunning = MutableStateFlow(false)
+
     private val currentTrack = playerRepository.state
         .flatMapLatest { state ->
             if (state is PlaybackState.Playing) libraryRepository.track(state.trackId) else flowOf(null)
@@ -65,6 +85,10 @@ class AudioTractViewModel @Inject constructor(
         settingsRepository.outputProfilesEnabled,
         settingsRepository.outputProfiles,
         settingsRepository.smartCrossfadeEnabled,
+        settingsRepository.crossfeedEnabled,
+        settingsRepository.convolutionEnabled,
+        settingsRepository.convolutionIrPath,
+        settingsRepository.deviceAudioProfile,
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         AudioTractUiState(
@@ -80,8 +104,14 @@ class AudioTractViewModel @Inject constructor(
             outputProfilesEnabled = values[9] as Boolean,
             outputProfiles = values[10] as Map<OutputDeviceType, OutputProfile>,
             smartCrossfadeEnabled = values[11] as Boolean,
+            crossfeedEnabled = values[12] as Boolean,
+            convolutionEnabled = values[13] as Boolean,
+            convolutionIrPath = values[14] as String?,
+            deviceAudioProfile = values[15] as String?,
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AudioTractUiState())
+    }
+        .combine(deviceProbeRunning) { state, running -> state.copy(deviceProbeRunning = running) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AudioTractUiState())
 
     fun setEqEnabled(enabled: Boolean) = settingsRepository.setEqEnabled(enabled)
 
@@ -104,4 +134,53 @@ class AudioTractViewModel @Inject constructor(
     fun setOutputProfile(type: OutputDeviceType, profile: OutputProfile) = settingsRepository.setOutputProfile(type, profile)
 
     fun setSmartCrossfadeEnabled(enabled: Boolean) = settingsRepository.setSmartCrossfadeEnabled(enabled)
+
+    fun setCrossfeedEnabled(enabled: Boolean) = settingsRepository.setCrossfeedEnabled(enabled)
+
+    fun setConvolutionEnabled(enabled: Boolean) = settingsRepository.setConvolutionEnabled(enabled)
+
+    /** Импульс копируется из SAF в files/ir/ - см. SettingsRepository.convolutionIrPath про то,
+     * почему не хранится сам Uri. Разбор тут же, чтобы сразу отказать по кривому файлу, а не
+     * молча не дать звука после включения тумблера. */
+    fun importImpulseResponse(uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val directory = File(context.filesDir, "ir").apply { mkdirs() }
+            val name = uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: "impulse.wav"
+            val target = File(directory, name)
+            val copied = runCatching {
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    target.outputStream().use { output -> input.copyTo(output) }
+                } ?: error("не открылся поток")
+            }.isSuccess
+            if (!copied || IrWavLoader.load(target) == null) {
+                target.delete()
+                _irImportError.value = "Не удалось прочитать импульс - нужен WAV"
+                return@launch
+            }
+            // Прошлый импульс больше не нужен, и лежит он в приватной папке приложения, которую
+            // пользователь сам не почистит.
+            settingsRepository.convolutionIrPath.value
+                ?.takeIf { it != target.absolutePath }
+                ?.let { runCatching { File(it).delete() } }
+            settingsRepository.setConvolutionIrPath(target.absolutePath)
+        }
+    }
+
+    private val _irImportError = MutableStateFlow<String?>(null)
+    val irImportError: StateFlow<String?> = _irImportError
+    fun irImportErrorShown() { _irImportError.value = null }
+
+    /** П.md §11 "Тест устройства". Строго не на главном потоке: перебор строит и рушит десятки
+     * настоящих AudioTrack, каждый из которых ходит в аудиосервер. */
+    fun runDeviceProbe() {
+        if (deviceProbeRunning.value) return
+        viewModelScope.launch(Dispatchers.IO) {
+            deviceProbeRunning.value = true
+            try {
+                settingsRepository.setDeviceAudioProfile(DeviceAudioProbe.probe())
+            } finally {
+                deviceProbeRunning.value = false
+            }
+        }
+    }
 }

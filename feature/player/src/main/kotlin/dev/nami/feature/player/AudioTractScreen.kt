@@ -78,6 +78,17 @@ fun AudioTractBody(onOpenEqualizer: () -> Unit, viewModel: AudioTractViewModel =
     val uiState by viewModel.uiState.collectAsState()
     val track = uiState.track
     val context = LocalContext.current
+    // Импорт импульса через SAF. "*/*" в списке типов не от лени: IR-файлы часто отдаются
+    // провайдерами с типом application/octet-stream, и без него они были бы недоступны для выбора.
+    val pickImpulseResponse = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+    ) { uri -> uri?.let(viewModel::importImpulseResponse) }
+    val irImportError by viewModel.irImportError.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(irImportError) {
+        val message = irImportError ?: return@LaunchedEffect
+        android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+        viewModel.irImportErrorShown()
+    }
     val isBluetoothOutput by rememberBluetoothOutputActive()
     val outputSampleRateHz = remember { AudioOutputInfo.outputSampleRateHz(context) }
 
@@ -199,6 +210,7 @@ fun AudioTractBody(onOpenEqualizer: () -> Unit, viewModel: AudioTractViewModel =
                     ToggleRow("Bit-perfect по USB (Android 14+, Beta)", "выключает EQ/ReplayGain/dither/кроссфейд, если реально включился", uiState.bitPerfectUsbEnabled, viewModel::setBitPerfectUsbEnabled)
                     ToggleRow("ReplayGain (Beta)", "выравнивает громкость треков, не EBU R128", uiState.replayGainEnabled, viewModel::setReplayGainEnabled)
                     ToggleRow("Dither (Beta)", "сглаживает шум квантования при обработке", uiState.ditherEnabled, viewModel::setDitherEnabled)
+                    ToggleRow("Кроссфид (Beta)", "подмешивает каналы с задержкой 0.3 мс - собирает разваленную в наушниках сцену к центру, только для стерео", uiState.crossfeedEnabled, viewModel::setCrossfeedEnabled)
                     ToggleRow("Кроссфейд (Beta)", "плавный переход между треками, не настоящее смешивание", uiState.crossfadeEnabled, viewModel::setCrossfadeEnabled)
                     if (uiState.crossfadeEnabled) {
                         ToggleRow(
@@ -240,6 +252,75 @@ fun AudioTractBody(onOpenEqualizer: () -> Unit, viewModel: AudioTractViewModel =
                             type = type,
                             profile = uiState.outputProfiles[type] ?: dev.nami.domain.OutputProfile.IDENTITY,
                             onProfileChange = { viewModel.setOutputProfile(type, it) },
+                        )
+                    }
+                }
+                Text(
+                    text = "Свёртка с импульсом комнаты",
+                    color = NamiColors.Paper40,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(top = 20.dp, bottom = 8.dp),
+                )
+                ToggleRow(
+                    "Свёртка с IR (Beta)",
+                    "накладывает импульсную характеристику помещения или наушников, добавляет ~46 мс задержки",
+                    uiState.convolutionEnabled,
+                    viewModel::setConvolutionEnabled,
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                        .background(NamiColors.Ink800, RoundedCornerShape(NamiRadius.Card))
+                        .clickable { pickImpulseResponse.launch(arrayOf("audio/x-wav", "audio/wav", "*/*")) }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Файл импульса", color = NamiColors.Paper100, style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            text = uiState.convolutionIrPath?.substringAfterLast('/') ?: "не выбран - нажми, чтобы выбрать WAV",
+                            color = NamiColors.Paper40,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Icon(Icons.Outlined.Description, contentDescription = null, tint = NamiColors.Paper40)
+                }
+
+                Text(
+                    text = "Тест устройства",
+                    color = NamiColors.Paper40,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(top = 20.dp, bottom = 8.dp),
+                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(NamiColors.Ink800, RoundedCornerShape(NamiRadius.Card))
+                        .clickable(enabled = !uiState.deviceProbeRunning) { viewModel.runDeviceProbe() }
+                        .padding(16.dp),
+                ) {
+                    Text(
+                        text = if (uiState.deviceProbeRunning) "Проверяю..." else "Проверить, какие форматы принимает выход",
+                        color = if (uiState.deviceProbeRunning) NamiColors.Paper40 else NamiColors.Shu,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    uiState.deviceAudioProfile?.let { profile ->
+                        Text(
+                            text = profile,
+                            color = NamiColors.Paper70,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                        // Без этой оговорки таблица читается как «мой ЦАП играет 192 кГц», чего
+                        // она не означает - см. DeviceAudioProbe.
+                        Text(
+                            text = "Это то, что примет микшер Android, а не обязательно то, что уйдёт в железо без пересчёта.",
+                            color = NamiColors.Paper40,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 8.dp),
                         )
                     }
                 }
