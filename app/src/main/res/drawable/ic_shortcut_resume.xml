@@ -1,0 +1,12 @@
+<!-- Ярлыки лаунчера рисуются на фоне самого лаунчера (светлого или тёмного), поэтому у иконки
+     свой круг Ink900 под белым глифом - голый белый вектор на светлой теме был бы не виден. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <path android:fillColor="#FF0C0D0F" android:pathData="M24,0A24,24 0 1,1 24,48A24,24 0 1,1 24,0z" />
+    <group android:translateX="12" android:translateY="12">
+        <path android:fillColor="#FFFFFFFF" android:pathData="M8,5v14l11,-7z" />
+    </group>
+</vector>

@@ -175,6 +175,37 @@ fun NamiNavHost(
         hasSeenInitialOpenSignal = true
     }
 
+    // План.md §28 "Ярлыки приложения (долгий тап по иконке)" - пересобираем их под текущую
+    // историю при каждом запуске, и здесь же ловим нажатие. Живёт в NavHost, а не в
+    // MainActivity, потому что три из четырёх ярлыков в итоге просто открывают экран, а до
+    // navController/showNowPlaying можно дотянуться только отсюда. Второй intent (тап по ярлыку,
+    // когда приложение уже живо - launchMode singleTop) приходит в onNewIntent, поэтому
+    // подписываемся и на него, а не только на стартовый.
+    val shortcutsViewModel: dev.nami.app.ShortcutsViewModel = hiltViewModel()
+    val activity = androidx.compose.ui.platform.LocalContext.current as? androidx.activity.ComponentActivity
+    val handleShortcut: (android.content.Intent) -> Unit = { shortcutIntent ->
+        val id = shortcutIntent.getStringExtra(dev.nami.app.EXTRA_SHORTCUT_ID)
+        if (id != null) {
+            // Снимаем extra сразу: intent переживает композицию, и после смены конфигурации
+            // ярлык сработал бы второй раз сам собой.
+            shortcutIntent.removeExtra(dev.nami.app.EXTRA_SHORTCUT_ID)
+            when (val target = shortcutsViewModel.handle(id)) {
+                null -> Unit
+                dev.nami.app.SHORTCUT_TARGET_NOW_PLAYING -> showNowPlaying = true
+                else -> navController.navigate(target)
+            }
+        }
+    }
+    LaunchedEffect(Unit) {
+        shortcutsViewModel.refresh()
+        activity?.intent?.let(handleShortcut)
+    }
+    androidx.compose.runtime.DisposableEffect(activity) {
+        val listener = androidx.core.util.Consumer<android.content.Intent> { handleShortcut(it) }
+        activity?.addOnNewIntentListener(listener)
+        onDispose { activity?.removeOnNewIntentListener(listener) }
+    }
+
     // Bumped each time the Library tab is tapped, to reset its sub-tab to Tracks without
     // recreating LibraryViewModel/its Paging flows - an earlier fix used a fresh nav entry
     // (popUpTo inclusive) for that reset, which briefly flashed an empty list + import banner
