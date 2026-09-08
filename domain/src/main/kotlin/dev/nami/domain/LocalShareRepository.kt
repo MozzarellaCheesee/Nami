@@ -94,6 +94,11 @@ interface LocalShareRepository {
      * (тот же переключатель [listenTogetherHostEnabled]) и отдаёт байты трека гостю, гость
      * попадает в тот же [listenTogetherGuestState], что и LAN-версия "слушать вместе". */
     val internetLinkState: StateFlow<InternetLinkState>
+    /** Коды приглашения/ответа последнего вызова - живут здесь, а не только в ViewModel, чтобы
+     * не пропадать при повторном заходе на экран, пока связь ещё CONNECTING/CONNECTED (ViewModel
+     * пересоздаётся при уходе с экрана, репозиторий - Singleton). null после [closeInternetLink]. */
+    val internetInviteCode: StateFlow<String?>
+    val internetAnswerCode: StateFlow<String?>
     /** Хост: создаёт offer и ждёт сбора ICE-кандидатов, возвращает код приглашения. */
     suspend fun createInternetInvite(): String
     /** Гость: принимает код приглашения, возвращает код ответа для хоста. */

@@ -109,6 +109,10 @@ class LocalShareRepositoryImpl @Inject constructor(
     private var internetLinkPushJob: Job? = null
     private val _internetLinkState = MutableStateFlow(InternetLinkState.IDLE)
     override val internetLinkState: StateFlow<InternetLinkState> = _internetLinkState
+    private val _internetInviteCode = MutableStateFlow<String?>(null)
+    override val internetInviteCode: StateFlow<String?> = _internetInviteCode
+    private val _internetAnswerCode = MutableStateFlow<String?>(null)
+    override val internetAnswerCode: StateFlow<String?> = _internetAnswerCode
     // Один трек скачивается за раз (см. WebRtcInternetLink doc) - гостевая сторона копит куски
     // сюда между onTrackMeta и onTrackEnd.
     private var pendingTrackId: String? = null
@@ -566,7 +570,7 @@ class LocalShareRepositoryImpl @Inject constructor(
         internetLinkIsHost = true
         _internetLinkState.value = InternetLinkState.CONNECTING
         wireInternetLinkCallbacks(link)
-        return link.createInvite()
+        return link.createInvite().also { _internetInviteCode.value = it }
     }
 
     override suspend fun acceptInternetInvite(inviteCode: String): String {
@@ -576,7 +580,7 @@ class LocalShareRepositoryImpl @Inject constructor(
         internetLinkIsHost = false
         _internetLinkState.value = InternetLinkState.CONNECTING
         wireInternetLinkCallbacks(link)
-        return link.acceptInvite(inviteCode)
+        return link.acceptInvite(inviteCode).also { _internetAnswerCode.value = it }
     }
 
     override suspend fun completeInternetLink(answerCode: String) {
@@ -589,6 +593,8 @@ class LocalShareRepositoryImpl @Inject constructor(
         webRtcLink?.close()
         webRtcLink = null
         _internetLinkState.value = InternetLinkState.IDLE
+        _internetInviteCode.value = null
+        _internetAnswerCode.value = null
         if (!internetLinkIsHost) _listenTogetherGuestState.value = null
     }
 

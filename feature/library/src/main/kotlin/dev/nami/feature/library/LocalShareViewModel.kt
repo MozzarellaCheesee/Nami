@@ -35,10 +35,10 @@ class LocalShareViewModel @Inject constructor(
     val wifiDirectConnecting: StateFlow<Boolean> = repository.wifiDirectConnecting
     val internetLinkState: StateFlow<InternetLinkState> = repository.internetLinkState
 
-    private val _internetInviteCode = MutableStateFlow<String?>(null)
-    val internetInviteCode: StateFlow<String?> = _internetInviteCode
-    private val _internetAnswerCode = MutableStateFlow<String?>(null)
-    val internetAnswerCode: StateFlow<String?> = _internetAnswerCode
+    // Коды живут в репозитории (Singleton), не тут - иначе пересоздание ViewModel при выходе с
+    // экрана теряло бы уже показанный код приглашения/ответа, хотя сама связь ещё жива.
+    val internetInviteCode: StateFlow<String?> = repository.internetInviteCode
+    val internetAnswerCode: StateFlow<String?> = repository.internetAnswerCode
     private val _internetLinkError = MutableStateFlow<String?>(null)
     val internetLinkError: StateFlow<String?> = _internetLinkError
 
@@ -76,7 +76,6 @@ class LocalShareViewModel @Inject constructor(
         viewModelScope.launch {
             _internetLinkError.value = null
             runCatching { repository.createInternetInvite() }
-                .onSuccess { _internetInviteCode.value = it }
                 .onFailure { _internetLinkError.value = "Не получилось создать приглашение: ${it.message}" }
         }
     }
@@ -85,7 +84,6 @@ class LocalShareViewModel @Inject constructor(
         viewModelScope.launch {
             _internetLinkError.value = null
             runCatching { repository.acceptInternetInvite(code) }
-                .onSuccess { _internetAnswerCode.value = it }
                 .onFailure { _internetLinkError.value = "Код не подошёл: ${it.message}" }
         }
     }
@@ -99,9 +97,7 @@ class LocalShareViewModel @Inject constructor(
     }
 
     fun closeInternetLink() {
-        repository.closeInternetLink()
-        _internetInviteCode.value = null
-        _internetAnswerCode.value = null
+        repository.closeInternetLink() // сам чистит internetInviteCode/internetAnswerCode
         _internetLinkError.value = null
     }
 
