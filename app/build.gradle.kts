@@ -101,6 +101,11 @@ dependencies {
     implementation(libs.glance.appwidget)
     implementation(libs.glance.material3)
     implementation(libs.coil.compose)
+    // Coil 3 без этого не грузит ни один http(s):// URL вообще (обложки треков "В сети" -
+    // Audius/Archive/Piped) - молча остаются пустыми, ни ошибки, ни краша. Регистрируется сам
+    // через механизм автообнаружения компонентов Coil, достаточно один раз на classpath
+    // финального APK - подключать в каждый feature-модуль отдельно не нужно.
+    implementation(libs.coil.network.okhttp)
     // Ставит baseline-профиль в ART при первом запуске - без него сам файл профиля в APK
     // ни на что не влияет.
     implementation(libs.androidx.profileinstaller)

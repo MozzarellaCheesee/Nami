@@ -58,6 +58,10 @@ hilt-android = { module = "com.google.dagger:hilt-android", version.ref = "hilt"
 hilt-compiler = { module = "com.google.dagger:hilt-android-compiler", version.ref = "hilt" }
 hilt-navigation-compose = { module = "androidx.hilt:hilt-navigation-compose", version = "1.2.0" }
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
+# Coil 3 с версии 3.0 не грузит http(s):// вообще (ни ошибки, ни краша - просто пустая
+# картинка) без отдельного сетевого фетчера - без этого артефакта обложки треков "В сети"
+# (Audius/Archive/Piped, все по URL) молча не показывались.
+coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version.ref = "coil" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 junit = { module = "junit:junit", version = "4.13.2" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
