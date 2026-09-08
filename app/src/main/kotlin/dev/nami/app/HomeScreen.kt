@@ -77,17 +77,14 @@ fun HomeScreen(
     val state by viewModel.state.collectAsState()
 
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
-            Text(
-                "Главная",
-                color = NamiColors.Paper100,
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.weight(1f).padding(start = 16.dp),
-            )
-            IconButton(onClick = onConstructorClick) {
-                Icon(Icons.Outlined.Tune, contentDescription = "Настроить блоки", tint = NamiColors.Paper70)
-            }
-        }
+        dev.nami.core.designsystem.NamiScreenHeader(
+            title = "Главная",
+            actions = {
+                IconButton(onClick = onConstructorClick) {
+                    Icon(Icons.Outlined.Tune, contentDescription = "Настроить блоки", tint = NamiColors.Paper70)
+                }
+            },
+        )
         LazyColumn(modifier = Modifier.fillMaxSize()) {
             state.blocks.filter { it.enabled }.forEach { block ->
                 when (block.type) {
@@ -176,7 +173,7 @@ fun HomeScreen(
                     }
                 }
             }
-            if (state.blocks.none { it.enabled }) {
+            if (state.loaded && state.blocks.none { it.enabled }) {
                 item {
                     Text(
                         "Все блоки выключены - настрой в конструкторе (⚙ сверху)",

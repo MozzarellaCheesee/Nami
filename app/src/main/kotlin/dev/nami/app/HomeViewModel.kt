@@ -42,6 +42,10 @@ data class HomeState(
     val tagTracks: List<Track> = emptyList(),
     val bookmarkedPlaylists: List<PlaylistSummary> = emptyList(),
     val newImportCount: Int = 0,
+    /** false до конца первой загрузки. Без этого флага пустой стартовый HomeState неотличим от
+     * "все блоки выключены", и при каждом заходе на главную сначала мелькала подсказка про
+     * конструктор, а потом её сменял настоящий экран. */
+    val loaded: Boolean = false,
 )
 
 /** П.md §14 "Главный экран - конструктор" - см. HomeBlock.kt для списка блоков и того, чего в
@@ -79,6 +83,7 @@ class HomeViewModel @Inject constructor(
             }
             val continueListeningId = playerRepository.queue.value.nowPlaying?.id
             _state.value = HomeState(
+                loaded = true,
                 blocks = settingsRepository.homeBlocks.value,
                 continueListening = continueListeningId?.let { libraryRepository.track(it).first() },
                 recentlyAdded = if (HomeBlockType.RECENTLY_ADDED in enabledTypes) allTracks.sortedByDescending { it.dateAdded }.take(BLOCK_ITEM_LIMIT) else emptyList(),

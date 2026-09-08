@@ -74,11 +74,8 @@ fun ThemeEditorScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltVie
     }
 
     SettingsSubScreenScaffold(title = "Редактор темы", onBack = onBack) {
-        Text(
+        SectionNote(
             "Меняется сразу по всему приложению. Крестик у поля - сбросить это поле, кнопка снизу - сбросить всё.",
-            color = NamiColors.Paper40,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 12.dp),
         )
         SectionCaption("Галерея")
         // Пресеты "Из обоев"/"Из обложки" считаются в рантайме (система/Palette), поэтому
@@ -109,19 +106,16 @@ fun ThemeEditorScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltVie
                     Text(
                         preset.name,
                         color = NamiColors.Paper100,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = dev.nami.core.designsystem.NamiType.TrackTitle,
                         modifier = Modifier.padding(start = 12.dp),
                     )
                 }
             }
         }
-        Text(
+        SectionNote(
             "Тап применяет пресет и снимает все ручные правки цвета. Пресет - это набор цветов " +
                 "поверх тёмной схемы, поэтому на светлой \"Бумаге\" отдельные захардкоженные " +
                 "затемнения (например ночной режим в плеере) остаются тёмными.",
-            color = NamiColors.Paper40,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
         )
         SectionCaption("Цвет")
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
@@ -141,13 +135,10 @@ fun ThemeEditorScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltVie
                 ContrastRow(fg, bg, overrides)
             }
         }
-        Text(
+        SectionNote(
             "Коэффициент по WCAG 2.1, порог для обычного текста - 4.5:1. Это подсказка, а не " +
                 "запрет: низкий контраст может быть осознанным решением, поэтому применить " +
                 "цвет всё равно можно.",
-            color = NamiColors.Paper40,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
         )
         SectionCaption("Форма")
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
@@ -165,23 +156,17 @@ fun ThemeEditorScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltVie
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
             ScalePills(NamiDensity.SCALES, densityScale, viewModel::setThemeDensityScale)
         }
-        Text(
+        SectionNote(
             "Пока меняет только высоту строки в списках треков - остальные отступы приложения фиксированные.",
-            color = NamiColors.Paper40,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
         )
 
         SectionCaption("Типографика")
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
             ScalePills(NamiTypeScale.SCALES, fontScale, viewModel::setThemeFontScale)
         }
-        Text(
+        SectionNote(
             "Масштаб текста поверх системного - системная настройка размера шрифта продолжает " +
                 "работать сверх этой. Гарнитура настраивается отдельно, во Внешнем виде.",
-            color = NamiColors.Paper40,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
         )
 
         SectionCaption("Прозрачность")
@@ -193,12 +178,9 @@ fun ThemeEditorScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltVie
                 onClick = { viewModel.setBlurEnabled(!blurEnabled) },
             )
         }
-        Text(
+        SectionNote(
             "Выключи на слабом устройстве: размытые обложки в плеере, очереди, тексте и " +
                 "мини-плеере рисуются на GPU и стоят дороже всего остального в кадре.",
-            color = NamiColors.Paper40,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
         )
 
         SectionCaption("Автопереключение")
@@ -210,13 +192,10 @@ fun ThemeEditorScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltVie
                 onClick = { viewModel.setAutoNightAmoled(!autoNightAmoled) },
             )
         }
-        Text(
+        SectionNote(
             "С 23:00 до 6:00 включает AMOLED-чёрный сам. Час проверяется при открытии " +
                 "приложения, а не живым таймером - если приложение уже открыто, тема сменится " +
                 "на следующем запуске.",
-            color = NamiColors.Paper40,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
         )
 
         SectionCaption("Файл темы")
@@ -237,25 +216,19 @@ fun ThemeEditorScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltVie
                 onClick = { importTheme.launch(arrayOf("application/json", "*/*")) },
             )
         }
-        Text(
+        SectionNote(
             "Импорт заменяет цвета, форму, плотность и масштаб текста целиком. Неизвестные поля " +
                 "и некорректные значения в чужом файле игнорируются, а не ломают импорт.",
-            color = NamiColors.Paper40,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
         )
 
-        Text(
-            text = "Сбросить всё",
+        dev.nami.core.designsystem.NamiPill(
+            text = "Сбросить всю тему",
             color = NamiColors.Shu,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier
-                .padding(horizontal = 20.dp, vertical = 16.dp)
-                .clickable {
-                    viewModel.resetThemeColors()
-                    viewModel.resetThemeShapeAndDensity()
-                },
-        )
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
+        ) {
+            viewModel.resetThemeColors()
+            viewModel.resetThemeShapeAndDensity()
+        }
     }
 }
 
@@ -282,12 +255,17 @@ private fun ScalePills(scales: List<Pair<Float, String>>, current: Float, onSele
 }
 
 @Composable
-private fun SectionCaption(text: String) {
+private fun SectionCaption(text: String) = dev.nami.core.designsystem.NamiSectionLabel(text)
+
+/** Пояснение под карточкой - всегда в одном месте и одним стилем: раньше каждый такой абзац
+ * задавал свои отступы и по вертикали они шли вразнобой. */
+@Composable
+private fun SectionNote(text: String) {
     Text(
         text,
-        color = NamiColors.Paper70,
-        style = MaterialTheme.typography.bodyMedium,
-        modifier = Modifier.padding(start = 20.dp, top = 20.dp, bottom = 8.dp),
+        color = NamiColors.Paper40,
+        style = dev.nami.core.designsystem.NamiType.Secondary,
+        modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 8.dp),
     )
 }
 
@@ -299,8 +277,8 @@ private fun ShapeTokenRow(token: String, dp: Int?, onChange: (Int?) -> Unit) {
     val current = dp ?: default
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(NamiRadius.tokenLabel(token), color = NamiColors.Paper100, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            Text("$current dp", color = NamiColors.Paper40, style = MaterialTheme.typography.bodySmall)
+            Text(NamiRadius.tokenLabel(token), color = NamiColors.Paper100, style = dev.nami.core.designsystem.NamiType.TrackTitle, modifier = Modifier.weight(1f))
+            Text("$current dp", color = NamiColors.Paper40, style = dev.nami.core.designsystem.NamiType.TechData)
             if (dp != null) {
                 IconButton(onClick = { onChange(null) }) {
                     Icon(Icons.Outlined.Close, contentDescription = "Сбросить ($default dp)", tint = NamiColors.Paper40)
@@ -332,7 +310,7 @@ private fun ThemeTokenRow(token: String, hex: String?, onHexChange: (String?) ->
             )
         }
         Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
-            Text(NamiColors.tokenLabel(token), color = NamiColors.Paper100, style = MaterialTheme.typography.bodyMedium)
+            Text(NamiColors.tokenLabel(token), color = NamiColors.Paper100, style = dev.nami.core.designsystem.NamiType.TrackTitle)
             OutlinedTextField(
                 value = text,
                 onValueChange = { newText ->
