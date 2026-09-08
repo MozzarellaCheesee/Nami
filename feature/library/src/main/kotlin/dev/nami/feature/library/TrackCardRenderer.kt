@@ -115,17 +115,25 @@ object TrackCardRenderer {
         timePaint.textAlign = Paint.Align.RIGHT
         canvas.drawText(durationText, scrubberRight, scrubberY + 190f, timePaint)
 
-        // Те же контролы что в Now Playing - Icons.Rounded.* (не Outlined) скругляют каждый
-        // угол треугольника/полосы, а не только сам корпус иконки. CornerPathEffect делает то
-        // же самое на любом Path/Rect без ручной геометрии под скруглённые вершины.
+        // Те же контролы что в Now Playing (NowPlayingScreen.TransportBlock): скруглённый
+        // квадрат (RoundedCornerShape(size/3.5)), не круг - play светлый фон/тёмная иконка и
+        // крупнее (72dp), prev/next тёмный фон/светлая иконка и меньше (56dp) - тот же масштаб
+        // 56:72 здесь, не одинаковый размер всех трёх.
         val controlsY = scrubberY + 270f
         val cornerEffect = android.graphics.CornerPathEffect(10f)
-        val controlPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#EDEAE4"); pathEffect = cornerEffect }
-        drawSkipGlyph(canvas, WIDTH / 2f - 140f, controlsY, 34f, isNext = false, paint = controlPaint)
-        canvas.drawCircle(WIDTH / 2f, controlsY, 64f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#C24A34") })
-        val playPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#EDEAE4"); pathEffect = cornerEffect }
-        drawTriangle(canvas, WIDTH / 2f + 10f, controlsY, 30f, pointsRight = true, paint = playPaint)
-        drawSkipGlyph(canvas, WIDTH / 2f + 140f, controlsY, 34f, isNext = true, paint = controlPaint)
+        val playSize = 220f
+        val skipSize = playSize * (56f / 72f)
+        val playGap = playSize / 2 + skipSize / 2 + 24f
+
+        drawTransportBlock(canvas, WIDTH / 2f - playGap, controlsY, skipSize, bgColor = "#1A1B1F", iconColor = "#EDEAE4") { cx, cy, size, paint ->
+            drawSkipGlyph(canvas, cx, cy, size * 0.32f, isNext = false, paint = paint)
+        }
+        drawTransportBlock(canvas, WIDTH / 2f, controlsY, playSize, bgColor = "#EDEAE4", iconColor = "#0C0D0F") { cx, cy, size, paint ->
+            drawTriangle(canvas, cx + size * 0.05f, cy, size * 0.28f, pointsRight = true, paint = paint)
+        }
+        drawTransportBlock(canvas, WIDTH / 2f + playGap, controlsY, skipSize, bgColor = "#1A1B1F", iconColor = "#EDEAE4") { cx, cy, size, paint ->
+            drawSkipGlyph(canvas, cx, cy, size * 0.32f, isNext = true, paint = paint)
+        }
 
         var detailsY = controlsY + 130f
 
@@ -157,6 +165,27 @@ object TrackCardRenderer {
         canvas.drawText("波 NAMI", WIDTH / 2f, HEIGHT - 60f, watermarkPaint)
 
         return bitmap
+    }
+
+    /** Same shape as Now Playing's TransportBlock - a rounded square (RoundedCornerShape(size/
+     * 3.5)), not a circle, background+icon colors swapped for the filled (play) button. */
+    private fun drawTransportBlock(
+        canvas: Canvas,
+        cx: Float,
+        cy: Float,
+        size: Float,
+        bgColor: String,
+        iconColor: String,
+        drawIcon: (cx: Float, cy: Float, size: Float, paint: Paint) -> Unit,
+    ) {
+        val radius = size / 3.5f
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor(bgColor) }
+        canvas.drawRoundRect(RectF(cx - size / 2, cy - size / 2, cx + size / 2, cy + size / 2), radius, radius, bgPaint)
+        val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor(iconColor)
+            pathEffect = android.graphics.CornerPathEffect(size * 0.045f)
+        }
+        drawIcon(cx, cy, size, iconPaint)
     }
 
     /** Simple play/skip triangle glyph centered at ([cx], [cy]) - prev/next use two of these
