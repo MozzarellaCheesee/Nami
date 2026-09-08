@@ -393,29 +393,45 @@ class LibraryRepositoryImpl @Inject constructor(
         val musicDir = File(context.filesDir, "music").apply { mkdirs() }
         val resolver = context.contentResolver
         val scratchDir = File(context.cacheDir, "zip_import").apply { mkdirs() }
-        val entries = mutableListOf<Pair<String, ByteArray>>()
+
+        // Раньше все аудиозаписи архива сначала целиком читались в память (List<ByteArray>) и
+        // только потом обрабатывались - на архиве заметного размера (альбом, тем более whole-
+        // library бэкап) это OutOfMemoryError раньше, чем хоть один трек успевал добавиться.
+        // ZipInputStream и так уже потоковый - каждая запись сразу льётся на диск и индексируется
+        // по одной, не накапливаясь.
+        var total = 0
         resolver.openInputStream(uriString.toUri())?.use { input ->
             java.util.zip.ZipInputStream(input).use { zip ->
                 var entry = zip.nextEntry
                 while (entry != null) {
-                    if (!entry.isDirectory && isAudioFileName(entry.name)) {
-                        entries.add(entry.name to zip.readBytes())
-                    }
+                    if (!entry.isDirectory && isAudioFileName(entry.name)) total++
                     zip.closeEntry()
                     entry = zip.nextEntry
                 }
             }
         }
-        entries.forEachIndexed { index, (name, bytes) ->
-            val scratchFile = File(scratchDir, "${UUID.randomUUID()}_${name.substringAfterLast('/')}")
-            scratchFile.writeBytes(bytes)
-            try {
-                val result = copyAndIndex(resolver, android.net.Uri.fromFile(scratchFile), musicDir)
-                result?.albumId?.let { syncAlbumIsSingle(it) }
-            } finally {
-                scratchFile.delete()
+
+        var done = 0
+        resolver.openInputStream(uriString.toUri())?.use { input ->
+            java.util.zip.ZipInputStream(input).use { zip ->
+                var entry = zip.nextEntry
+                while (entry != null) {
+                    if (!entry.isDirectory && isAudioFileName(entry.name)) {
+                        val scratchFile = File(scratchDir, "${UUID.randomUUID()}_${entry.name.substringAfterLast('/')}")
+                        scratchFile.outputStream().use { out -> zip.copyTo(out) }
+                        try {
+                            val result = copyAndIndex(resolver, android.net.Uri.fromFile(scratchFile), musicDir)
+                            result?.albumId?.let { syncAlbumIsSingle(it) }
+                        } finally {
+                            scratchFile.delete()
+                        }
+                        done++
+                        emit(ImportProgress(done = done, total = total))
+                    }
+                    zip.closeEntry()
+                    entry = zip.nextEntry
+                }
             }
-            emit(ImportProgress(done = index + 1, total = entries.size))
         }
     }.flowOn(Dispatchers.IO)
 
