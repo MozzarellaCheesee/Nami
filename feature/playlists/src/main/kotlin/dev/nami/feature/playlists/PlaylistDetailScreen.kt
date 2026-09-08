@@ -66,6 +66,7 @@ import dev.nami.core.designsystem.LikedPlaylistCover
 import dev.nami.core.designsystem.NamiAlertDialog
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.designsystem.NamiRadius
+import dev.nami.core.designsystem.NamiType
 import dev.nami.core.designsystem.RenameDialog
 import dev.nami.core.designsystem.rememberCollapsingHeaderState
 import dev.nami.core.model.PlaylistId
@@ -131,7 +132,7 @@ fun PlaylistDetailScreen(
                     Text(
                         text = playlist?.name ?: "",
                         color = NamiColors.Paper100,
-                        style = MaterialTheme.typography.headlineSmall,
+                        style = NamiType.ScreenTitle,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier
@@ -139,11 +140,27 @@ fun PlaylistDetailScreen(
                             .basicMarquee(iterations = Int.MAX_VALUE)
                             .let { if (isLiked) it else it.clickable { showRenameDialog = true } },
                     )
-                    Text(
-                        text = "${uiState.tracks.size} " + tracksWord(uiState.tracks.size),
-                        color = NamiColors.Paper70,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+                    // Мета-строка: тип плейлиста цветом (умный - Ai), дальше счёт треков. Раньше
+                    // "умный" нигде на самом экране не отображался, хотя от него зависит, можно ли
+                    // вообще убрать трек руками.
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+                        if (isSmart) {
+                            Text(
+                                text = "УМНЫЙ",
+                                color = NamiColors.Ai,
+                                style = NamiType.Caption,
+                                modifier = Modifier
+                                    .background(NamiColors.Ai.copy(alpha = 0.14f), RoundedCornerShape(NamiRadius.Chip))
+                                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                            )
+                            Spacer(modifier = Modifier.size(8.dp))
+                        }
+                        Text(
+                            text = "${uiState.tracks.size} " + tracksWord(uiState.tracks.size),
+                            color = NamiColors.Paper40,
+                            style = NamiType.Secondary,
+                        )
+                    }
                     Row(modifier = Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Spacer(
                             modifier = Modifier
@@ -236,6 +253,7 @@ fun PlaylistDetailScreen(
                             modifier = Modifier.animateItem(),
                             chainCandidates = uiState.tracks,
                             onSetChain = { next -> viewModel.setChain(track.id, next) },
+                            position = index + 1,
                         )
                     }
                 }
@@ -328,9 +346,14 @@ fun PlaylistDetailScreen(
             }
         }
 
+        // Кружок под стрелкой: она лежит поверх обложки, и на светлой картинке белая стрелка без
+        // подложки просто исчезала.
         IconButton(
             onClick = onBack,
-            modifier = Modifier.align(Alignment.TopStart).padding(top = 12.dp, start = 12.dp),
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(top = 12.dp, start = 12.dp)
+                .background(NamiColors.Ink900.copy(alpha = 0.45f), CircleShape),
         ) {
             Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
         }
@@ -388,6 +411,7 @@ private fun PlaylistTrackRow(
     // именно внутри плейлиста, который сейчас перед глазами.
     chainCandidates: List<Track> = emptyList(),
     onSetChain: ((TrackId?) -> Unit)? = null,
+    position: Int? = null,
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var showChainPicker by remember { mutableStateOf(false) }
@@ -398,20 +422,30 @@ private fun PlaylistTrackRow(
             .padding(horizontal = 20.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Номер позиции: в плейлисте порядок - смысл, а не случайность (цепочки, "играть с
+        // этого места"), и по одним обложкам понять, какой это по счёту трек, было нельзя.
+        if (position != null) {
+            Text(
+                text = "$position",
+                color = NamiColors.Paper40,
+                style = NamiType.TechData,
+                modifier = Modifier.size(width = 24.dp, height = 20.dp).padding(end = 4.dp),
+            )
+        }
         if (track.albumArtworkPath != null) {
             AsyncImage(
                 model = track.albumArtworkPath,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.size(44.dp).clip(RoundedCornerShape(4.dp)).background(NamiColors.Ink700),
+                modifier = Modifier.size(44.dp).clip(RoundedCornerShape(NamiRadius.AlbumArt)).background(NamiColors.Ink700),
             )
         } else {
-            Box(modifier = Modifier.size(44.dp).clip(RoundedCornerShape(4.dp)).background(NamiColors.Ink700))
+            Box(modifier = Modifier.size(44.dp).clip(RoundedCornerShape(NamiRadius.AlbumArt)).background(NamiColors.Ink700))
         }
         Column(modifier = Modifier.weight(1f).padding(start = 14.dp)) {
-            Text(text = track.title, color = NamiColors.Paper100, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(text = track.title, color = NamiColors.Paper100, style = NamiType.TrackTitle, maxLines = 1, overflow = TextOverflow.Ellipsis)
             track.artistName?.let { name ->
-                Text(text = name, color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(text = name, color = NamiColors.Paper40, style = NamiType.Secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
         if (onRemove != null) {

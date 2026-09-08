@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.FileUpload
+import androidx.compose.material.icons.outlined.QueueMusic
 import dev.nami.core.designsystem.NamiAlertDialog
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
@@ -40,6 +41,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemKey
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.NamiPill
+import dev.nami.core.designsystem.NamiScreenHeader
+import dev.nami.core.designsystem.NamiType
 import dev.nami.core.model.PlaylistId
 import dev.nami.domain.ImportM3u8Result
 import kotlinx.coroutines.flow.StateFlow
@@ -73,16 +77,42 @@ fun PlaylistsScreen(
         snackbarHost = { dev.nami.core.designsystem.NamiSnackbarHost(snackbarHostState) },
     ) { padding ->
     Column(modifier = Modifier.fillMaxSize().padding(padding).background(NamiColors.Ink900)) {
-        Text(
-            text = "Плейлисты",
-            color = NamiColors.Paper100,
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+        // Импорт .m3u8 переехал из плавающей кнопки внизу слева (она лежала поверх сетки и
+        // перекрывала последний ряд карточек) в действие шапки - рядом с заголовком, где ему и
+        // место: это редкое действие, а не второй по важности жест экрана.
+        NamiScreenHeader(
+            title = "Плейлисты",
+            subtitle = if (playlists.itemCount > 0) "${playlists.itemCount} шт." else null,
+            actions = {
+                androidx.compose.material3.IconButton(onClick = { showImportDialog = true }) {
+                    Icon(Icons.Outlined.FileUpload, contentDescription = "Импортировать .m3u8", tint = NamiColors.Paper70)
+                }
+            },
         )
         Box(modifier = Modifier.fillMaxSize()) {
             if (playlists.itemCount == 0) {
-                Box(modifier = Modifier.fillMaxSize().padding(bottom = 80.dp), contentAlignment = Alignment.Center) {
-                    Text(text = "Создайте первый плейлист", color = NamiColors.Paper70)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 40.dp, vertical = 80.dp),
+                ) {
+                    Icon(
+                        Icons.Outlined.QueueMusic,
+                        contentDescription = null,
+                        tint = NamiColors.Ink500,
+                        modifier = Modifier.padding(bottom = 16.dp).then(Modifier),
+                    )
+                    Text("Плейлистов пока нет", color = NamiColors.Paper70, style = NamiType.TrackTitle)
+                    Text(
+                        "Обычный собирается руками, умный - по правилам и обновляется сам",
+                        color = NamiColors.Paper40,
+                        style = NamiType.Secondary,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.padding(top = 6.dp, bottom = 20.dp),
+                    )
+                    Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                        NamiPill("Обычный", NamiColors.Shu) { showCreateDialog = true }
+                        NamiPill("Умный", NamiColors.Ai, onClick = onCreateSmartPlaylist)
+                    }
                 }
             } else {
                 LazyVerticalGrid(
@@ -99,14 +129,6 @@ fun PlaylistsScreen(
                         }
                     }
                 }
-            }
-
-            TextButton(
-                onClick = { showImportDialog = true },
-                modifier = Modifier.align(Alignment.BottomStart).padding(20.dp),
-            ) {
-                Icon(Icons.Outlined.FileUpload, contentDescription = null, tint = NamiColors.Paper70, modifier = Modifier.padding(end = 6.dp))
-                Text(text = "Импортировать .m3u8", color = NamiColors.Paper70)
             }
 
             FloatingActionButton(

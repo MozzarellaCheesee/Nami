@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
@@ -30,7 +31,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import dev.nami.core.designsystem.NamiCard
+import dev.nami.core.designsystem.NamiCardDivider
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.NamiPill
+import dev.nami.core.designsystem.NamiRadius
+import dev.nami.core.designsystem.NamiScreenHeader
+import dev.nami.core.designsystem.NamiSectionLabel
+import dev.nami.core.designsystem.NamiType
 import dev.nami.domain.SmartField
 import dev.nami.domain.SmartOperator
 import dev.nami.domain.SmartRule
@@ -81,13 +89,20 @@ fun SmartPlaylistEditorScreen(onBack: () -> Unit, viewModel: SmartPlaylistEditor
     val uiState by viewModel.uiState.collectAsState()
     var showAddRule by remember { mutableStateOf(false) }
 
-    Column(modifier = Modifier.fillMaxWidth().background(NamiColors.Ink900).padding(bottom = 24.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
-            }
-            Text(text = "Умный плейлист", color = NamiColors.Paper100, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 8.dp))
-        }
+    // Экран не скроллился: с четырьмя-пятью правилами кнопка "Сохранить" уезжала за нижний край,
+    // и сохранить плейлист было физически нечем.
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(NamiColors.Ink900)
+            .verticalScroll(rememberScrollState())
+            .padding(bottom = 32.dp),
+    ) {
+        NamiScreenHeader(
+            title = "Умный плейлист",
+            subtitle = "Обновляется сам по правилам",
+            onBack = onBack,
+        )
 
         Column(modifier = Modifier.padding(horizontal = 20.dp)) {
             OutlinedTextField(
@@ -95,52 +110,80 @@ fun SmartPlaylistEditorScreen(onBack: () -> Unit, viewModel: SmartPlaylistEditor
                 onValueChange = viewModel::setName,
                 placeholder = { Text("Название плейлиста") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
             )
+        }
 
-            Text(text = "Готовые наборы", color = NamiColors.Paper40, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                PRESETS.forEach { preset ->
-                    Chip(preset.label) { viewModel.applyPreset(preset.rules, preset.sortBy, preset.sortDescending, preset.limit) }
+        NamiSectionLabel("Готовые наборы")
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp),
+        ) {
+            PRESETS.forEach { preset ->
+                NamiPill(preset.label, NamiColors.Ai) {
+                    viewModel.applyPreset(preset.rules, preset.sortBy, preset.sortDescending, preset.limit)
                 }
             }
+        }
 
-            Text(text = "Правила (все должны совпасть)", color = NamiColors.Paper40, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
+        NamiSectionLabel("Правила - совпасть должны все")
+        NamiCard(modifier = Modifier.padding(horizontal = 20.dp), padding = androidx.compose.foundation.layout.PaddingValues(12.dp)) {
+            if (uiState.rules.isEmpty()) {
+                Text(
+                    text = "Правил нет - попадут все треки библиотеки",
+                    color = NamiColors.Paper40,
+                    style = NamiType.Secondary,
+                    modifier = Modifier.padding(bottom = 12.dp),
+                )
+            }
             uiState.rules.forEachIndexed { index, rule ->
+                if (index > 0) NamiCardDivider()
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).background(NamiColors.Ink800, RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    // Поле, оператор и значение разными весами: раньше правило было одной строкой
+                    // одного цвета, и глазами разобрать "что с чем сравнивается" было тяжело.
                     Text(
-                        text = "${fieldLabel(rule.field)} ${operatorLabel(rule.operator)} ${rule.value}",
-                        color = NamiColors.Paper100,
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = fieldLabel(rule.field),
+                        color = NamiColors.Paper70,
+                        style = NamiType.Secondary,
                         modifier = Modifier.weight(1f),
                     )
+                    Text(
+                        text = operatorLabel(rule.operator),
+                        color = NamiColors.Ai,
+                        style = NamiType.TechData,
+                        modifier = Modifier.padding(horizontal = 10.dp),
+                    )
+                    Text(text = rule.value, color = NamiColors.Paper100, style = NamiType.TrackTitle)
                     IconButton(onClick = { viewModel.removeRule(index) }) {
                         Icon(Icons.Outlined.Close, contentDescription = "Убрать правило", tint = NamiColors.Paper40)
                     }
                 }
             }
-            Text(
-                text = "+ Добавить правило",
-                color = NamiColors.Shu,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(top = 8.dp).clickable { showAddRule = true },
-            )
-
-            Text(text = "Сортировка", color = NamiColors.Paper40, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                SmartSortField.entries.forEach { field ->
-                    Chip(sortLabel(field), selected = uiState.sortBy == field) { viewModel.setSortBy(field) }
-                }
-                Chip(if (uiState.sortDescending) "По убыванию" else "По возрастанию") { viewModel.setSortDescending(!uiState.sortDescending) }
-            }
-
-            TextButton(onClick = { viewModel.save(onBack) }, modifier = Modifier.padding(top = 24.dp)) {
-                Text("Сохранить", color = NamiColors.Shu)
-            }
+            NamiPill("Добавить правило", NamiColors.Shu, modifier = Modifier.padding(top = 8.dp)) { showAddRule = true }
         }
+
+        NamiSectionLabel("Сортировка")
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp),
+        ) {
+            SmartSortField.entries.forEach { field ->
+                NamiPill(sortLabel(field), NamiColors.Paper70, selected = uiState.sortBy == field) { viewModel.setSortBy(field) }
+            }
+            NamiPill(
+                if (uiState.sortDescending) "По убыванию" else "По возрастанию",
+                NamiColors.Ai,
+            ) { viewModel.setSortDescending(!uiState.sortDescending) }
+        }
+
+        NamiPill(
+            text = "Сохранить плейлист",
+            color = NamiColors.Shu,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
+        ) { viewModel.save(onBack) }
     }
 
     if (showAddRule) {
@@ -148,18 +191,6 @@ fun SmartPlaylistEditorScreen(onBack: () -> Unit, viewModel: SmartPlaylistEditor
             onAdd = { rule -> viewModel.addRule(rule); showAddRule = false },
             onDismiss = { showAddRule = false },
         )
-    }
-}
-
-@Composable
-private fun Chip(label: String, selected: Boolean = false, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .background(if (selected) NamiColors.Paper100 else NamiColors.Ink800, RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-    ) {
-        Text(text = label, color = if (selected) NamiColors.Ink900 else NamiColors.Paper70, style = MaterialTheme.typography.labelLarge)
     }
 }
 
@@ -174,13 +205,13 @@ private fun AddRuleDialog(onAdd: (SmartRule) -> Unit, onDismiss: () -> Unit) {
         title = { Text("Новое правило") },
         text = {
             Column {
-                Text(text = "Поле", color = NamiColors.Paper40, style = MaterialTheme.typography.labelSmall)
+                Text(text = "Поле", color = NamiColors.Paper40, style = NamiType.Caption)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState()).padding(top = 4.dp)) {
-                    SmartField.entries.forEach { f -> Chip(fieldLabel(f), selected = field == f) { field = f } }
+                    SmartField.entries.forEach { f -> NamiPill(fieldLabel(f), NamiColors.Paper70, selected = field == f) { field = f } }
                 }
-                Text(text = "Оператор", color = NamiColors.Paper40, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 12.dp))
+                Text(text = "Оператор", color = NamiColors.Paper40, style = NamiType.Caption, modifier = Modifier.padding(top = 12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
-                    SmartOperator.entries.forEach { op -> Chip(operatorLabel(op), selected = operator == op) { operator = op } }
+                    SmartOperator.entries.forEach { op -> NamiPill(operatorLabel(op), NamiColors.Ai, selected = operator == op) { operator = op } }
                 }
                 OutlinedTextField(
                     value = value,

@@ -18,6 +18,8 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import dev.nami.core.designsystem.LikedPlaylistCover
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.NamiRadius
+import dev.nami.core.designsystem.NamiType
 import dev.nami.core.model.PlaylistSummary
 
 @Composable
@@ -25,7 +27,7 @@ fun PlaylistCard(playlist: PlaylistSummary, onClick: () -> Unit, modifier: Modif
     Column(modifier = modifier.fillMaxWidth().clickable(onClick = onClick)) {
         when {
             playlist.isLiked -> LikedPlaylistCover(
-                modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(4.dp)),
+                modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(NamiRadius.AlbumArt)),
             )
             playlist.coverPath != null -> AsyncImage(
                 model = playlist.coverPath,
@@ -33,19 +35,19 @@ fun PlaylistCard(playlist: PlaylistSummary, onClick: () -> Unit, modifier: Modif
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(1f)
-                    .background(NamiColors.Ink700, RoundedCornerShape(4.dp)),
+                    .background(NamiColors.Ink700, RoundedCornerShape(NamiRadius.AlbumArt)),
             )
             else -> Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(1f)
-                    .background(NamiColors.Ink700, RoundedCornerShape(4.dp)),
+                    .background(NamiColors.Ink700, RoundedCornerShape(NamiRadius.AlbumArt)),
             )
         }
         Text(
             text = playlist.name,
             color = NamiColors.Paper100,
-            style = MaterialTheme.typography.bodyLarge,
+            style = NamiType.ListTitle,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 8.dp),
@@ -55,8 +57,10 @@ fun PlaylistCard(playlist: PlaylistSummary, onClick: () -> Unit, modifier: Modif
             // so the LEFT JOIN COUNT() backing trackCount is always 0 for them - showing that as
             // "0 треков" would read as a broken/empty playlist, not what it actually is.
             text = if (playlist.isSmart) "Умный плейлист" else "${playlist.trackCount} треков",
-            color = NamiColors.Paper70,
-            style = MaterialTheme.typography.bodySmall,
+            // Умный плейлист отличался от обычного только словом в подписи - теперь ещё и цветом:
+            // в сетке из двадцати карточек слово читается позже, чем оттенок.
+            color = if (playlist.isSmart) NamiColors.Ai else NamiColors.Paper40,
+            style = NamiType.Secondary,
         )
     }
 }
