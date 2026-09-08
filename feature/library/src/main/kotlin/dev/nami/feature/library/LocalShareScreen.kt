@@ -10,9 +10,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,18 +42,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.designsystem.NamiRadius
 import dev.nami.domain.DiscoveredDevice
-import dev.nami.domain.InternetLinkState
 import dev.nami.domain.WifiDirectPeer
 
 /** Группа G "сеть" - один экран, три сценария (Wi-Fi Drop, синхронизация, слушать вместе) на
@@ -81,12 +75,6 @@ fun LocalShareScreen(
     val wifiDirectPeers by viewModel.wifiDirectPeers.collectAsState()
     val wifiDirectConnecting by viewModel.wifiDirectConnecting.collectAsState()
     val wifiDirectConnected by viewModel.wifiDirectConnected.collectAsState()
-    val internetLinkState by viewModel.internetLinkState.collectAsState()
-    val internetInviteCode by viewModel.internetInviteCode.collectAsState()
-    val internetAnswerCode by viewModel.internetAnswerCode.collectAsState()
-    val internetLinkError by viewModel.internetLinkError.collectAsState()
-    var internetPasteText by remember { mutableStateOf("") }
-    val clipboard = LocalClipboardManager.current
 
     // То же разрешение нужно не только Wi-Fi Direct, но и обычному NSD-автопоиску (Wi-Fi Drop/
     // синхронизация/слушать вместе): на Android 13+ NsdManager без NEARBY_WIFI_DEVICES тихо не
@@ -299,30 +287,6 @@ fun LocalShareScreen(
             }
 
             item {
-                Text(
-                    "Через интернет - разные сети (WebRTC)",
-                    color = NamiColors.Paper40,
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.padding(top = 8.dp, bottom = 8.dp),
-                )
-            }
-            item {
-                InternetLinkSection(
-                    state = internetLinkState,
-                    inviteCode = internetInviteCode,
-                    answerCode = internetAnswerCode,
-                    error = internetLinkError,
-                    pasteText = internetPasteText,
-                    onPasteTextChange = { internetPasteText = it },
-                    onCreateInvite = viewModel::createInternetInvite,
-                    onAcceptInvite = { viewModel.acceptInternetInvite(internetPasteText) },
-                    onCompleteLink = { viewModel.completeInternetLink(internetPasteText) },
-                    onClose = viewModel::closeInternetLink,
-                    onCopy = { clipboard.setText(AnnotatedString(it)) },
-                )
-            }
-
-            item {
                 Text("Найденные устройства", color = NamiColors.Paper40, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(vertical = 12.dp))
             }
             if (devices.isEmpty()) {
@@ -356,84 +320,6 @@ fun LocalShareScreen(
             }
             item { Box(modifier = Modifier.padding(bottom = 24.dp)) }
         }
-    }
-}
-
-/** Ручной обмен offer/answer (см. LocalShareRepository.InternetLinkState doc) - без своего
- * сервера сигналинг больше неоткуда взять, поэтому код нужно скопировать и отправить любым
- * способом (мессенджер, почта) на другое устройство. Хост создаёт приглашение первым, гость
- * вставляет его код и отдаёт хосту свой код ответа - тем же способом, в обратную сторону. */
-@Composable
-private fun InternetLinkSection(
-    state: InternetLinkState,
-    inviteCode: String?,
-    answerCode: String?,
-    error: String?,
-    pasteText: String,
-    onPasteTextChange: (String) -> Unit,
-    onCreateInvite: () -> Unit,
-    onAcceptInvite: () -> Unit,
-    onCompleteLink: () -> Unit,
-    onClose: () -> Unit,
-    onCopy: (String) -> Unit,
-) {
-    Column {
-        when {
-            state == InternetLinkState.CONNECTED -> {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Подключено", color = NamiColors.Wakaba, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                    TextButton(onClick = onClose) { Text("Отключить", color = NamiColors.Paper70) }
-                }
-            }
-            inviteCode != null -> {
-                // Хост: сам код приглашения уже отправлен, ждём код ответа от гостя.
-                Text("Код приглашения - отправь его собеседнику:", color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall)
-                CodeBox(inviteCode, onCopy)
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
-                    OutlinedTextField(value = pasteText, onValueChange = onPasteTextChange, label = { Text("Код ответа от собеседника") }, modifier = Modifier.weight(1f))
-                }
-                Row {
-                    TextButton(onClick = onCompleteLink, enabled = pasteText.isNotBlank()) { Text("Завершить подключение", color = NamiColors.Shu) }
-                    TextButton(onClick = onClose) { Text("Отмена", color = NamiColors.Paper70) }
-                }
-            }
-            answerCode != null -> {
-                // Гость: свой код ответа готов, нужно отправить его хосту.
-                Text("Код ответа - отправь его обратно собеседнику:", color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall)
-                CodeBox(answerCode, onCopy)
-                TextButton(onClick = onClose) { Text("Отмена", color = NamiColors.Paper70) }
-            }
-            else -> {
-                Row {
-                    TextButton(onClick = onCreateInvite) { Text("Создать приглашение (я хост)", color = NamiColors.Shu) }
-                }
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
-                    OutlinedTextField(value = pasteText, onValueChange = onPasteTextChange, label = { Text("Код приглашения от собеседника") }, modifier = Modifier.weight(1f))
-                }
-                TextButton(onClick = onAcceptInvite, enabled = pasteText.isNotBlank()) { Text("Принять (я гость)", color = NamiColors.Shu) }
-            }
-        }
-        error?.let { Text(it, color = NamiColors.Shu, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp)) }
-    }
-}
-
-@Composable
-private fun CodeBox(code: String, onCopy: (String) -> Unit) {
-    // Раньше текст был в узком Row с кнопкой - при длинном коде (реальный offer/answer JSON
-    // легко за 1000 символов) кнопка либо схлопывалась до невидимости, либо код обрезался
-    // многоточием и SelectionContainer выделял только обрезанный видимый кусок, а не весь код -
-    // "Копировать" копировала бы битую строку. Теперь текст в своей прокручиваемой области
-    // (весь код доступен, без обрезки), кнопка отдельной строкой во всю ширину снизу.
-    Column(modifier = Modifier.fillMaxWidth().background(NamiColors.Ink800, RoundedCornerShape(NamiRadius.Button)).padding(8.dp)) {
-        SelectionContainer {
-            Text(
-                code,
-                color = NamiColors.Paper70,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.fillMaxWidth().heightIn(max = 160.dp).verticalScroll(rememberScrollState()),
-            )
-        }
-        TextButton(onClick = { onCopy(code) }, modifier = Modifier.fillMaxWidth()) { Text("Копировать код", color = NamiColors.Shu) }
     }
 }
 
