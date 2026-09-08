@@ -1,7 +1,12 @@
 package dev.nami.feature.library
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -38,10 +43,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.domain.DiscoveredDevice
+import dev.nami.domain.WifiDirectPeer
 
 /** Группа G "сеть" - один экран, три сценария (Wi-Fi Drop, синхронизация, слушать вместе) на
  * общем списке найденных по NSD устройств + ручной ввод/QR как запасной путь. */
@@ -61,6 +69,20 @@ fun LocalShareScreen(
     val guestState by viewModel.listenTogetherGuestState.collectAsState()
     val lastSyncResult by viewModel.lastSyncResult.collectAsState()
     val lastPullResult by viewModel.lastPullResult.collectAsState()
+    val wifiDirectPeers by viewModel.wifiDirectPeers.collectAsState()
+    val wifiDirectConnecting by viewModel.wifiDirectConnecting.collectAsState()
+
+    // Wi-Fi Direct нужно ACCESS_FINE_LOCATION до Android 13, NEARBY_WIFI_DEVICES начиная с 13 -
+    // тот же паттерн запроса разрешения, что у сканера QR (LocalShareScanScreen).
+    val context = LocalContext.current
+    val wifiDirectPermission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.NEARBY_WIFI_DEVICES else Manifest.permission.ACCESS_FINE_LOCATION
+    var hasWifiDirectPermission by remember {
+        mutableStateOf(ContextCompat.checkSelfPermission(context, wifiDirectPermission) == PackageManager.PERMISSION_GRANTED)
+    }
+    val wifiDirectPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        hasWifiDirectPermission = granted
+        if (granted) viewModel.startWifiDirectDiscovery()
+    }
 
     var showQr by remember { mutableStateOf(false) }
     var manualText by remember { mutableStateOf("") }
@@ -69,6 +91,9 @@ fun LocalShareScreen(
             manualText = it
             onScannedAddressConsumed()
         }
+    }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        if (hasWifiDirectPermission) viewModel.startWifiDirectDiscovery()
     }
 
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
@@ -166,6 +191,42 @@ fun LocalShareScreen(
                             }
                             TextButton(onClick = { viewModel.leaveListenTogether() }) { Text("Выйти", color = NamiColors.Paper70) }
                         }
+                    }
+                }
+            }
+
+            item {
+                Text(
+                    "Wi-Fi Direct - без роутера и интернета",
+                    color = NamiColors.Paper40,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 8.dp),
+                )
+            }
+            item {
+                if (!hasWifiDirectPermission) {
+                    TextButton(onClick = { wifiDirectPermissionLauncher.launch(wifiDirectPermission) }) {
+                        Text("Разрешить поиск устройств рядом", color = NamiColors.Shu)
+                    }
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { viewModel.startWifiDirectDiscovery() }) {
+                            Text(if (wifiDirectConnecting) "Подключение..." else "Искать рядом", color = NamiColors.Shu)
+                        }
+                    }
+                    if (wifiDirectPeers.isEmpty()) {
+                        Text("Никого не видно рядом", color = NamiColors.Paper40, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+            items(wifiDirectPeers, key = { "wd-" + it.address }) { peer ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(peer.name, color = NamiColors.Paper100, style = MaterialTheme.typography.bodyMedium)
+                        Text(peer.status, color = NamiColors.Paper40, style = MaterialTheme.typography.bodySmall)
+                    }
+                    TextButton(onClick = { viewModel.connectWifiDirect(peer) }, enabled = !wifiDirectConnecting) {
+                        Text("Подключить", color = NamiColors.Shu)
                     }
                 }
             }

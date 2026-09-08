@@ -10,6 +10,12 @@ import kotlinx.coroutines.flow.StateFlow
  * работает везде одинаково. Всё в пределах LAN, наружу ничего не уходит. */
 data class DiscoveredDevice(val name: String, val host: String, val port: Int)
 
+/** Wi-Fi Direct peer до подключения - "видимое" устройство рядом, но ещё не в общей IP-сети
+ * (появится в [LocalShareRepository.discoveredDevices] как обычный [DiscoveredDevice] только
+ * после [LocalShareRepository.connectWifiDirect]). [status] - человекочитаемое состояние
+ * (WifiP2pDevice.deviceStatus), не enum - используется только для отображения. */
+data class WifiDirectPeer(val name: String, val address: String, val status: String)
+
 data class ListenTogetherGuestState(
     val hostName: String,
     val trackId: TrackId?,
@@ -64,4 +70,15 @@ interface LocalShareRepository {
     /** Добавляет ТЕКУЩИЙ скачанный в сессии трек в постоянную библиотеку (обычным импортом) -
      * до этого он живёт только в кэше сессии и удаляется при выходе из "слушать вместе". */
     suspend fun addCurrentListenTogetherTrackToLibrary(): Boolean
+
+    /** Wi-Fi Direct - работает БЕЗ роутера и БЕЗ интернета (устройства напрямую договариваются
+     * о своей собственной IP-сети), в отличие от NSD-автопоиска [discoveredDevices], которому
+     * нужна общая Wi-Fi сеть. Тот же сценарий "слушать вместе"/Wi-Fi Drop/синхронизация -
+     * подключённый peer появляется в [discoveredDevices] как обычное устройство, никакого
+     * отдельного UI-пути для него не требуется. */
+    val wifiDirectPeers: StateFlow<List<WifiDirectPeer>>
+    val wifiDirectConnecting: StateFlow<Boolean>
+    fun startWifiDirectDiscovery()
+    fun stopWifiDirectDiscovery()
+    fun connectWifiDirect(peer: WifiDirectPeer)
 }

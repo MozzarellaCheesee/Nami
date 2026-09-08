@@ -1,4 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -9,6 +9,14 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!-- Wi-Fi Direct (группа G) - работает без роутера и без интернета, устройства сами
+         договариваются о своей IP-подсети. CHANGE_WIFI_STATE нужен самому WifiP2pManager.
+         NEARBY_WIFI_DEVICES (Android 13+) заменяет ACCESS_FINE_LOCATION для P2P-поиска -
+         neverForLocation честен: своё местоположение приложение не вычисляет и не хранит. На
+         Android 12 и ниже система всё равно требует ACCESS_FINE_LOCATION для discoverPeers(). -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" android:usesPermissionFlags="neverForLocation" tools:targetApi="33" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="32" />
     <!-- Только для сканирования QR-кода как запасного пути для группы G, когда автопоиск
          устройств (NSD) ничего не находит. -->
     <uses-permission android:name="android.permission.CAMERA" />

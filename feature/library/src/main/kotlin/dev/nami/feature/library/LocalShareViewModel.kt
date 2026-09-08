@@ -9,6 +9,7 @@ import dev.nami.domain.LibraryRepository
 import dev.nami.domain.ListenTogetherGuestState
 import dev.nami.domain.LocalShareRepository
 import dev.nami.domain.PlayerRepository
+import dev.nami.domain.WifiDirectPeer
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -29,6 +30,8 @@ class LocalShareViewModel @Inject constructor(
     val dropTrack: StateFlow<Track?> = repository.dropTrack
     val listenTogetherHostEnabled: StateFlow<Boolean> = repository.listenTogetherHostEnabled
     val listenTogetherGuestState: StateFlow<ListenTogetherGuestState?> = repository.listenTogetherGuestState
+    val wifiDirectPeers: StateFlow<List<WifiDirectPeer>> = repository.wifiDirectPeers
+    val wifiDirectConnecting: StateFlow<Boolean> = repository.wifiDirectConnecting
 
     private val _lastSyncResult = MutableStateFlow<Int?>(null)
     val lastSyncResult: StateFlow<Int?> = _lastSyncResult
@@ -42,9 +45,13 @@ class LocalShareViewModel @Inject constructor(
 
     override fun onCleared() {
         repository.stopDiscovery()
+        repository.stopWifiDirectDiscovery()
         // Сервер и "слушать вместе" намеренно НЕ останавливаются здесь - экран может закрыться,
         // пока другое устройство ещё качает раздачу или гость всё ещё в сессии.
     }
+
+    fun startWifiDirectDiscovery() = repository.startWifiDirectDiscovery()
+    fun connectWifiDirect(peer: WifiDirectPeer) = repository.connectWifiDirect(peer)
 
     fun setDropCurrentTrack() {
         val nowPlaying = playerRepository.queue.value.nowPlaying ?: return

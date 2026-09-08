@@ -1,10 +1,16 @@
 package dev.nami.data
 
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.net.Uri
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.net.wifi.WifiManager
+import android.net.wifi.p2p.WifiP2pConfig
+import android.net.wifi.p2p.WifiP2pDevice
+import android.net.wifi.p2p.WifiP2pManager
 import android.text.format.Formatter
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -18,6 +24,7 @@ import dev.nami.domain.LocalShareRepository
 import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerRepository
 import dev.nami.domain.PlaylistRepository
+import dev.nami.domain.WifiDirectPeer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -79,6 +86,18 @@ class LocalShareRepositoryImpl @Inject constructor(
     private var guestJob: Job? = null
     private val listenTogetherCacheDir get() = File(context.cacheDir, "listen_together").apply { mkdirs() }
     private val cachedFilesByTrackId = mutableMapOf<String, File>()
+
+    // ------------------------------------------------------------------ Wi-Fi Direct
+    private val wifiP2pManager by lazy { context.getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager }
+    private var wifiP2pChannel: WifiP2pManager.Channel? = null
+    private var wifiP2pReceiver: BroadcastReceiver? = null
+    private val _wifiDirectPeers = MutableStateFlow<List<WifiDirectPeer>>(emptyList())
+    override val wifiDirectPeers: StateFlow<List<WifiDirectPeer>> = _wifiDirectPeers
+    private val _wifiDirectConnecting = MutableStateFlow(false)
+    override val wifiDirectConnecting: StateFlow<Boolean> = _wifiDirectConnecting
+    // Имя peer'а, к которому только что запросили connect() - broadcast о смене соединения не
+    // несёт имени, только его MAC/адрес и networkInfo, так что берём имя отсюда для DiscoveredDevice.
+    private var pendingWifiDirectPeerName: String? = null
 
     init {
         // Пока раздача (Wi-Fi Drop) запущена (dropTrack != null), она следует за играющим
@@ -425,6 +444,103 @@ class LocalShareRepositoryImpl @Inject constructor(
             startIndex = 0,
             startMs = startPositionMs,
         )
+    }
+
+    // ------------------------------------------------------------------ Wi-Fi Direct
+
+    /** Работает без общей Wi-Fi сети и без интернета - устройства сами договариваются о своей
+     * IP-подсети (обычно 192.168.49.x). Подключённый peer добавляется в [_discoveredDevices] как
+     * обычное устройство (см. [connectWifiDirect]) - весь остальной код (Wi-Fi Drop, синхронизация,
+     * "слушать вместе") работает с ним без единого изменения, потому что ServerSocket уже слушает
+     * на всех интерфейсах, не только на обычной Wi-Fi. */
+    override fun startWifiDirectDiscovery() {
+        val manager = wifiP2pManager ?: return
+        if (wifiP2pChannel == null) wifiP2pChannel = manager.initialize(context, context.mainLooper, null)
+        val channel = wifiP2pChannel ?: return
+
+        if (wifiP2pReceiver == null) {
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(ctx: Context, intent: Intent) {
+                    when (intent.action) {
+                        WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION -> {
+                            manager.requestPeers(channel) { peers ->
+                                _wifiDirectPeers.value = peers.deviceList.map {
+                                    WifiDirectPeer(name = it.deviceName, address = it.deviceAddress, status = peerStatusLabel(it.status))
+                                }
+                            }
+                        }
+                        WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION -> {
+                            val networkInfo = intent.getParcelableExtra<android.net.NetworkInfo>(WifiP2pManager.EXTRA_NETWORK_INFO)
+                            if (networkInfo?.isConnected == true) {
+                                manager.requestConnectionInfo(channel) { info ->
+                                    _wifiDirectConnecting.value = false
+                                    // Мы сами группа-владелец - другая сторона подключится к нашему же
+                                    // ServerSocket по нашему адресу, добавлять самих себя незачем.
+                                    if (info.groupFormed && !info.isGroupOwner) {
+                                        val host = info.groupOwnerAddress?.hostAddress ?: return@requestConnectionInfo
+                                        val name = pendingWifiDirectPeerName ?: "Wi-Fi Direct"
+                                        _discoveredDevices.value = (_discoveredDevices.value.filterNot { it.host == host } +
+                                            DiscoveredDevice(name = name, host = host, port = SERVER_PORT))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            wifiP2pReceiver = receiver
+            context.registerReceiver(
+                receiver,
+                IntentFilter().apply {
+                    addAction(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION)
+                    addAction(WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION)
+                },
+            )
+        }
+        try {
+            manager.discoverPeers(channel, object : WifiP2pManager.ActionListener {
+                override fun onSuccess() {}
+                override fun onFailure(reason: Int) { Log.w(TAG, "Wi-Fi Direct discoverPeers failed: $reason") }
+            })
+        } catch (e: SecurityException) {
+            Log.w(TAG, "Wi-Fi Direct discoverPeers denied: ${e.message}")
+        }
+    }
+
+    override fun stopWifiDirectDiscovery() {
+        wifiP2pReceiver?.let { runCatching { context.unregisterReceiver(it) } }
+        wifiP2pReceiver = null
+        wifiP2pChannel?.let { channel -> runCatching { wifiP2pManager?.stopPeerDiscovery(channel, null) } }
+        _wifiDirectPeers.value = emptyList()
+    }
+
+    override fun connectWifiDirect(peer: WifiDirectPeer) {
+        val manager = wifiP2pManager ?: return
+        val channel = wifiP2pChannel ?: return
+        pendingWifiDirectPeerName = peer.name
+        _wifiDirectConnecting.value = true
+        val config = WifiP2pConfig().apply { deviceAddress = peer.address }
+        try {
+            manager.connect(channel, config, object : WifiP2pManager.ActionListener {
+                override fun onSuccess() {}
+                override fun onFailure(reason: Int) {
+                    _wifiDirectConnecting.value = false
+                    Log.w(TAG, "Wi-Fi Direct connect failed: $reason")
+                }
+            })
+        } catch (e: SecurityException) {
+            _wifiDirectConnecting.value = false
+            Log.w(TAG, "Wi-Fi Direct connect denied: ${e.message}")
+        }
+    }
+
+    private fun peerStatusLabel(status: Int): String = when (status) {
+        WifiP2pDevice.CONNECTED -> "подключено"
+        WifiP2pDevice.INVITED -> "приглашение отправлено"
+        WifiP2pDevice.FAILED -> "ошибка"
+        WifiP2pDevice.AVAILABLE -> "доступно"
+        WifiP2pDevice.UNAVAILABLE -> "недоступно"
+        else -> "неизвестно"
     }
 
     // ------------------------------------------------------------------ HTTP client helpers
