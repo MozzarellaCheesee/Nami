@@ -7,7 +7,9 @@ import android.graphics.Color as AndroidColor
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -15,17 +17,28 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Devices
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.Headphones
 import androidx.compose.material.icons.outlined.QrCode
 import androidx.compose.material.icons.outlined.QrCodeScanner
+import androidx.compose.material.icons.outlined.Send
+import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material.icons.outlined.WifiTethering
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -42,7 +55,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -53,7 +69,11 @@ import dev.nami.domain.DiscoveredDevice
 import dev.nami.domain.WifiDirectPeer
 
 /** Группа G "сеть" - один экран, три сценария (Wi-Fi Drop, синхронизация, слушать вместе) на
- * общем списке найденных по NSD устройств + ручной ввод/QR как запасной путь. */
+ * общем списке найденных по NSD устройств + ручной ввод/QR как запасной путь.
+ *
+ * Раскладка сверху вниз по частоте использования, а не по порядку реализации: своё устройство и
+ * QR -> что происходит прямо сейчас -> два сценария-переключателя -> найденные устройства ->
+ * свёрнутое "ещё" (Wi-Fi Direct и ручной ввод адреса). */
 @Composable
 fun LocalShareScreen(
     onBack: () -> Unit,
@@ -95,10 +115,14 @@ fun LocalShareScreen(
     }
 
     var showQr by remember { mutableStateOf(false) }
+    var showMore by remember { mutableStateOf(false) }
     var manualText by remember { mutableStateOf("") }
     androidx.compose.runtime.LaunchedEffect(scannedAddress) {
         scannedAddress?.let {
             manualText = it
+            // Поле ручного ввода живёт в свёрнутом "ещё" - после скана его надо показать, иначе
+            // результат сканирования уезжает в невидимую секцию.
+            showMore = true
             onScannedAddressConsumed()
         }
     }
@@ -121,206 +145,377 @@ fun LocalShareScreen(
             Text("Локальная сеть", color = NamiColors.Paper100, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 8.dp))
         }
 
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            // 1. Своё устройство - адрес, статус сервера и QR для тех, кого не видит автопоиск.
             item {
-                Text(
-                    if (serverRunning) "Видно другим устройствам как ${serverAddress.orEmpty()}" else "Сервер не запущен",
-                    color = NamiColors.Paper70,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(vertical = 12.dp),
-                )
-            }
-
-            item {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
-                    IconButton(onClick = { showQr = !showQr }) {
-                        Icon(Icons.Outlined.QrCode, contentDescription = "Показать QR", tint = NamiColors.Paper100)
-                    }
-                    Text("Показать QR (для устройств, которых нет в автопоиске)", color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            if (showQr && serverAddress != null) {
-                item {
-                    Box(modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp), contentAlignment = Alignment.Center) {
-                        QrCodeImage(content = serverAddress!!, modifier = Modifier.size(220.dp))
-                    }
-                }
-            }
-
-            item {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 20.dp)) {
-                    OutlinedTextField(
-                        value = manualText,
-                        onValueChange = { manualText = it },
-                        label = { Text("IP:порт вручную") },
-                        modifier = Modifier.weight(1f),
-                    )
-                    IconButton(onClick = onScanRequested) {
-                        Icon(Icons.Outlined.QrCodeScanner, contentDescription = "Сканировать QR", tint = NamiColors.Paper100)
-                    }
-                }
-            }
-
-            item {
-                Text("Раздача трека (Wi-Fi Drop)", color = NamiColors.Paper40, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(bottom = 8.dp))
-            }
-            item {
-                Text(
-                    dropTrack?.let { "Раздаю: ${it.title}" } ?: "Ничего не раздаётся",
-                    color = if (dropTrack != null) NamiColors.Shu else NamiColors.Paper70,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Row(modifier = Modifier.padding(vertical = 8.dp)) {
-                    TextButton(onClick = { viewModel.setDropCurrentTrack() }) { Text("Раздать играющий трек", color = NamiColors.Shu) }
-                    if (dropTrack != null) {
-                        TextButton(onClick = { viewModel.clearDropTrack() }) { Text("Стоп", color = NamiColors.Paper70) }
-                    }
-                }
-                dropError?.let {
-                    Text(it, color = NamiColors.Shu, style = MaterialTheme.typography.bodySmall)
-                }
-                lastPullResult?.let {
-                    Text(if (it) "Трек получен и добавлен в библиотеку" else "Не получилось скачать", color = if (it) NamiColors.Wakaba else NamiColors.Shu, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-
-            item {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 16.dp)) {
-                    Text("Слушать вместе - показывать что играю", color = NamiColors.Paper70, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                    Switch(
-                        checked = hostEnabled,
-                        onCheckedChange = { viewModel.setListenTogetherHost(it) },
-                        colors = SwitchDefaults.colors(checkedTrackColor = NamiColors.Wakaba),
-                    )
-                }
-            }
-
-            // Ошибка гостевой сессии живёт ОТДЕЛЬНО от карточки: самый частый случай (хост не
-            // включил "показывать что играю" или недоступен) - это как раз когда карточки нет
-            // вообще, и раньше нажатие "Слушать вместе" выглядело как кнопка, которая ничего не
-            // делает. Кнопка выхода тут же, иначе опрос некому остановить.
-            if (listenTogetherError != null) {
-                item {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                        Text(listenTogetherError!!, color = NamiColors.Shu, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                        TextButton(onClick = { viewModel.leaveListenTogether() }) { Text("Отменить", color = NamiColors.Paper70) }
-                    }
-                }
-            }
-
-            if (guestState != null) {
-                item {
-                    val g = guestState!!
-                    Column(modifier = Modifier.fillMaxWidth().background(NamiColors.Ink800, RoundedCornerShape(NamiRadius.Card)).padding(16.dp)) {
-                        Text("Слушаю вместе с ${g.hostName}", color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall)
-                        Text(g.trackTitle ?: "-", color = NamiColors.Paper100, style = MaterialTheme.typography.bodyLarge)
-                        g.artistName?.let { Text(it, color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall) }
-                        if (g.downloading) {
-                            Text("Скачивается...", color = NamiColors.Ai, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
-                        }
-                        Row(modifier = Modifier.padding(top = 8.dp)) {
-                            if (!g.downloading && g.cachedPath != null) {
-                                TextButton(onClick = { viewModel.addCurrentListenTogetherTrackToLibrary() }) { Text("Добавить в библиотеку", color = NamiColors.Shu) }
-                            }
-                            TextButton(onClick = { viewModel.leaveListenTogether() }) { Text("Выйти", color = NamiColors.Paper70) }
-                        }
-                    }
-                }
-            }
-
-            item {
-                Text(
-                    "Wi-Fi Direct - без роутера и интернета",
-                    color = NamiColors.Paper40,
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.padding(top = 8.dp, bottom = 8.dp),
-                )
-            }
-            item {
-                if (!hasWifiDirectPermission) {
-                    TextButton(onClick = { wifiDirectPermissionLauncher.launch(wifiDirectPermission) }) {
-                        Text("Разрешить поиск устройств рядом", color = NamiColors.Shu)
-                    }
-                } else {
-                    // "Искать рядом" доступно ВСЕГДА, в том числе при активной группе: раньше при
-                    // подключении кнопка пропадала целиком, и подключиться ко второму устройству
-                    // (или просто обновить список) было нечем. Само сопряжение теперь видно на
-                    // строке конкретного устройства ниже, а не только этой общей плашкой.
+                NetCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { viewModel.startWifiDirectDiscovery() }) {
-                            Text(if (wifiDirectConnecting) "Подключение..." else "Искать рядом", color = NamiColors.Shu)
+                        StatusDot(if (serverRunning) NamiColors.Wakaba else NamiColors.Paper40)
+                        Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+                            Text(
+                                if (serverRunning) "Видно другим устройствам" else "Сервер не запущен",
+                                color = NamiColors.Paper100,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                serverAddress ?: "адрес появится после запуска",
+                                color = NamiColors.Paper40,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
                         }
-                        if (wifiDirectConnected) {
-                            Text("Есть активное соединение", color = NamiColors.Wakaba, style = MaterialTheme.typography.bodySmall)
+                        IconButton(onClick = { showQr = !showQr }) {
+                            Icon(
+                                Icons.Outlined.QrCode,
+                                contentDescription = "Показать QR",
+                                tint = if (showQr) NamiColors.Shu else NamiColors.Paper70,
+                            )
                         }
                     }
-                    if (wifiDirectPeers.isEmpty()) {
-                        Text("Никого не видно рядом", color = NamiColors.Paper40, style = MaterialTheme.typography.bodySmall)
+                    AnimatedVisibility(visible = showQr && serverAddress != null) {
+                        Column {
+                            Box(modifier = Modifier.fillMaxWidth().padding(top = 12.dp), contentAlignment = Alignment.Center) {
+                                QrCodeImage(content = serverAddress.orEmpty(), modifier = Modifier.size(200.dp))
+                            }
+                            Text(
+                                "Отсканируйте с устройства, которого нет в автопоиске",
+                                color = NamiColors.Paper40,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                        }
                     }
                 }
             }
-            items(wifiDirectPeers, key = { "wd-" + it.address }) { peer ->
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    Column(modifier = Modifier.weight(1f)) {
+
+            // 2. Разрешение - без него слеп ВЕСЬ экран, поэтому предупреждение вверху, а не в
+            // секции Wi-Fi Direct, откуда оно раньше просилось.
+            if (!hasWifiDirectPermission) {
+                item {
+                    NetCard(accent = NamiColors.Kin) {
+                        Text("Нужен доступ к устройствам рядом", color = NamiColors.Paper100, style = MaterialTheme.typography.bodyMedium)
                         Text(
-                            peer.name,
-                            color = if (peer.connected) NamiColors.Wakaba else NamiColors.Paper100,
-                            style = MaterialTheme.typography.bodyMedium,
+                            "Без него автопоиск не находит вообще никого",
+                            color = NamiColors.Paper40,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 2.dp),
                         )
+                        Row(modifier = Modifier.padding(top = 12.dp)) {
+                            Pill("Разрешить", NamiColors.Kin) { wifiDirectPermissionLauncher.launch(wifiDirectPermission) }
+                        }
+                    }
+                }
+            }
+
+            // 3. Что происходит прямо сейчас - единственная карточка с цветной рамкой, поэтому
+            // взгляд цепляется за неё первой. Нет активности - карточки нет вообще.
+            val hasActivity = guestState != null || dropTrack != null || listenTogetherError != null
+            if (hasActivity) {
+                item {
+                    NetCard(accent = if (listenTogetherError != null) NamiColors.Shu else NamiColors.Wakaba) {
+                        SectionTitle(Icons.Outlined.Headphones, "Сейчас", NamiColors.Wakaba)
+                        listenTogetherError?.let { error ->
+                            // Самый частый случай - хост не включил "показывать что играю" или
+                            // недоступен; без этой строки кнопка "Слушать вместе" выглядела как
+                            // кнопка, которая ничего не делает. Выход тут же, иначе опрос некому
+                            // остановить.
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                                Text(error, color = NamiColors.Shu, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                                Pill("Отменить", NamiColors.Paper70) { viewModel.leaveListenTogether() }
+                            }
+                        }
+                        guestState?.let { g ->
+                            Column(modifier = Modifier.padding(top = 8.dp)) {
+                                Text("Слушаю вместе с ${g.hostName}", color = NamiColors.Paper40, style = MaterialTheme.typography.bodySmall)
+                                Text(g.trackTitle ?: "-", color = NamiColors.Paper100, style = MaterialTheme.typography.bodyLarge)
+                                g.artistName?.let { Text(it, color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall) }
+                                if (g.downloading) {
+                                    Text("Скачивается...", color = NamiColors.Ai, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 10.dp)) {
+                                    if (!g.downloading && g.cachedPath != null) {
+                                        Pill("В библиотеку", NamiColors.Shu) { viewModel.addCurrentListenTogetherTrackToLibrary() }
+                                    }
+                                    Pill("Выйти", NamiColors.Paper70) { viewModel.leaveListenTogether() }
+                                }
+                            }
+                        }
+                        dropTrack?.let { track ->
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Раздаётся", color = NamiColors.Paper40, style = MaterialTheme.typography.bodySmall)
+                                    Text(track.title, color = NamiColors.Paper100, style = MaterialTheme.typography.bodyMedium)
+                                }
+                                Pill("Стоп", NamiColors.Paper70) { viewModel.clearDropTrack() }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 4. Два сценария-переключателя: раздать трек и пустить к себе слушать вместе.
+            item { SectionLabel("Что отдаю") }
+            item {
+                NetCard {
+                    SectionTitle(Icons.Outlined.Send, "Wi-Fi Drop", NamiColors.Shu)
+                    Text(
+                        "Один трек по прямой ссылке - другое устройство заберёт его кнопкой \"Получить\"",
+                        color = NamiColors.Paper40,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                    Row(modifier = Modifier.padding(top = 12.dp)) {
+                        Pill(if (dropTrack == null) "Раздать играющий трек" else "Сменить на играющий", NamiColors.Shu) {
+                            viewModel.setDropCurrentTrack()
+                        }
+                    }
+                    dropError?.let {
+                        Text(it, color = NamiColors.Shu, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
+                    }
+                    lastPullResult?.let {
                         Text(
-                            peer.status,
-                            color = if (peer.connected) NamiColors.Wakaba else NamiColors.Paper40,
+                            if (it) "Трек получен и добавлен в библиотеку" else "Не получилось скачать",
+                            color = if (it) NamiColors.Wakaba else NamiColors.Shu,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                }
+            }
+            item {
+                NetCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            SectionTitle(Icons.Outlined.Groups, "Слушать вместе", NamiColors.Wakaba)
+                            Text(
+                                "Показывать что играю - другие смогут подключиться",
+                                color = NamiColors.Paper40,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                        }
+                        Switch(
+                            checked = hostEnabled,
+                            onCheckedChange = { viewModel.setListenTogetherHost(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = NamiColors.Wakaba,
+                                checkedThumbColor = NamiColors.Paper100,
+                                uncheckedTrackColor = NamiColors.Ink600,
+                                uncheckedThumbColor = NamiColors.Paper70,
+                            ),
+                        )
+                    }
+                }
+            }
+
+            // 5. Найденные устройства - одна карточка со строками, а не россыпь по полотну.
+            item { SectionLabel(if (devices.isEmpty()) "Устройства рядом" else "Устройства рядом - ${devices.size}") }
+            item {
+                NetCard {
+                    if (devices.isEmpty()) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Outlined.Devices, contentDescription = null, tint = NamiColors.Paper40, modifier = Modifier.size(20.dp))
+                            Text(
+                                "Пока никого - другое устройство должно открыть этот же экран",
+                                color = NamiColors.Paper40,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(start = 12.dp),
+                            )
+                        }
+                    }
+                    devices.forEachIndexed { index, device ->
+                        if (index > 0) Divider()
+                        DeviceRow(
+                            device = device,
+                            onPullDrop = { viewModel.pullDrop(device) },
+                            onSync = { viewModel.syncWith(device) },
+                            onJoinListenTogether = { viewModel.joinListenTogether(device) },
+                        )
+                    }
+                    if (manualText.isNotBlank()) {
+                        val manualDevice = viewModel.addManualDevice(manualText)
+                        // Тот же хост уже виден автопоиском (NSD) - показывать его ещё раз
+                        // отдельной строкой "ip:port" вместо человекочитаемого "NAMI-..." только
+                        // путает.
+                        if (manualDevice != null && devices.none { it.host == manualDevice.host }) {
+                            if (devices.isNotEmpty()) Divider()
+                            DeviceRow(
+                                device = manualDevice,
+                                onPullDrop = { viewModel.pullDrop(manualDevice) },
+                                onSync = { viewModel.syncWith(manualDevice) },
+                                onJoinListenTogether = { viewModel.joinListenTogether(manualDevice) },
+                            )
+                        }
+                    }
+                    lastSyncResult?.let { count ->
+                        Text(
+                            "Синхронизировано треков: $count",
+                            color = NamiColors.Wakaba,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 12.dp),
+                        )
+                    }
+                }
+            }
+
+            // 6. Редкие способы под "ещё": Wi-Fi Direct (нужен только без роутера) и ручной
+            // ввод адреса/скан QR (запасной путь, когда автопоиск не видит).
+            item {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(NamiRadius.Button))
+                        .clickable { showMore = !showMore }
+                        .padding(vertical = 8.dp),
+                ) {
+                    Text("Другие способы", color = NamiColors.Paper70, style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+                    Icon(
+                        if (showMore) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                        contentDescription = null,
+                        tint = NamiColors.Paper40,
+                    )
+                }
+            }
+            if (showMore) {
+                item {
+                    NetCard {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                SectionTitle(Icons.Outlined.WifiTethering, "Wi-Fi Direct", NamiColors.Ai)
+                                Text(
+                                    "Без роутера и интернета",
+                                    color = NamiColors.Paper40,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.padding(top = 4.dp),
+                                )
+                            }
+                            if (wifiDirectConnected) StatusDot(NamiColors.Wakaba)
+                        }
+                        if (hasWifiDirectPermission) {
+                            // "Искать рядом" доступно ВСЕГДА, в том числе при активной группе:
+                            // раньше при подключении кнопка пропадала целиком, и подключиться ко
+                            // второму устройству (или просто обновить список) было нечем.
+                            Row(modifier = Modifier.padding(top = 12.dp)) {
+                                Pill(if (wifiDirectConnecting) "Подключение..." else "Искать рядом", NamiColors.Ai) {
+                                    viewModel.startWifiDirectDiscovery()
+                                }
+                            }
+                            if (wifiDirectPeers.isEmpty()) {
+                                Text("Никого не видно рядом", color = NamiColors.Paper40, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
+                            }
+                            wifiDirectPeers.forEach { peer ->
+                                PeerRow(
+                                    peer = peer,
+                                    connecting = wifiDirectConnecting,
+                                    onConnect = { viewModel.connectWifiDirect(peer) },
+                                    onDisconnect = { viewModel.disconnectWifiDirect() },
+                                )
+                            }
+                        } else {
+                            Row(modifier = Modifier.padding(top = 12.dp)) {
+                                Pill("Разрешить поиск устройств рядом", NamiColors.Ai) {
+                                    wifiDirectPermissionLauncher.launch(wifiDirectPermission)
+                                }
+                            }
+                        }
+                    }
+                }
+                item {
+                    NetCard {
+                        SectionTitle(Icons.Outlined.QrCodeScanner, "Адрес вручную", NamiColors.Paper70)
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                            OutlinedTextField(
+                                value = manualText,
+                                onValueChange = { manualText = it },
+                                label = { Text("IP:порт") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                            )
+                            IconButton(onClick = onScanRequested) {
+                                Icon(Icons.Outlined.QrCodeScanner, contentDescription = "Сканировать QR", tint = NamiColors.Paper100)
+                            }
+                        }
+                        Text(
+                            "Введённый адрес появится в списке устройств выше",
+                            color = NamiColors.Paper40,
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
-                    // Сопряжение видно на самой строке устройства, а не только общей плашкой сверху:
-                    // так понятно, С КЕМ именно связь (и это одинаково работает с обеих сторон -
-                    // и у владельца группы, и у клиента, см. refreshWifiDirectGroup).
-                    if (peer.connected) {
-                        TextButton(onClick = { viewModel.disconnectWifiDirect() }) { Text("Отключить", color = NamiColors.Shu) }
-                    } else {
-                        TextButton(onClick = { viewModel.connectWifiDirect(peer) }, enabled = !wifiDirectConnecting) {
-                            Text("Подключить", color = NamiColors.Shu)
-                        }
-                    }
                 }
             }
 
-            item {
-                Text("Найденные устройства", color = NamiColors.Paper40, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(vertical = 12.dp))
-            }
-            if (devices.isEmpty()) {
-                item { Text("Пока никого - другое устройство должно открыть этот же экран", color = NamiColors.Paper40, style = MaterialTheme.typography.bodySmall) }
-            }
-            items(devices, key = { it.host + it.port }) { device ->
-                DeviceRow(
-                    device = device,
-                    onPullDrop = { viewModel.pullDrop(device) },
-                    onSync = { viewModel.syncWith(device) },
-                    onJoinListenTogether = { viewModel.joinListenTogether(device) },
-                )
-            }
-            if (manualText.isNotBlank()) {
-                item {
-                    val manualDevice = viewModel.addManualDevice(manualText)
-                    // Тот же хост уже виден автопоиском (NSD) - показывать его ещё раз отдельной
-                    // строкой "ip:port" вместо человекочитаемого "NAMI-..." только путает.
-                    if (manualDevice != null && devices.none { it.host == manualDevice.host }) {
-                        DeviceRow(
-                            device = manualDevice,
-                            onPullDrop = { viewModel.pullDrop(manualDevice) },
-                            onSync = { viewModel.syncWith(manualDevice) },
-                            onJoinListenTogether = { viewModel.joinListenTogether(manualDevice) },
-                        )
-                    }
-                }
-            }
-            lastSyncResult?.let { count ->
-                item { Text("Синхронизировано треков: $count", color = NamiColors.Wakaba, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp)) }
-            }
-            item { Box(modifier = Modifier.padding(bottom = 24.dp)) }
+            item { Spacer(modifier = Modifier.height(24.dp)) }
         }
     }
+}
+
+/** Базовая карточка экрана - как SettingsCard в настройках, плюс необязательная цветная рамка
+ * для карточек, требующих внимания (активная сессия, отсутствующее разрешение). */
+@Composable
+private fun NetCard(accent: Color? = null, content: @Composable () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(NamiColors.Ink800, RoundedCornerShape(NamiRadius.Card))
+            .then(
+                if (accent != null) {
+                    Modifier.border(1.dp, accent.copy(alpha = 0.6f), RoundedCornerShape(NamiRadius.Card))
+                } else {
+                    Modifier
+                },
+            )
+            .padding(16.dp),
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text = text,
+        color = NamiColors.Paper40,
+        style = MaterialTheme.typography.labelMedium,
+        modifier = Modifier.padding(start = 4.dp, top = 8.dp),
+    )
+}
+
+@Composable
+private fun SectionTitle(icon: ImageVector, text: String, accent: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
+        Text(text, color = NamiColors.Paper100, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 8.dp))
+    }
+}
+
+@Composable
+private fun StatusDot(color: Color) {
+    Box(modifier = Modifier.size(8.dp).background(color, CircleShape))
+}
+
+@Composable
+private fun Divider() {
+    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(NamiColors.Ink600))
+}
+
+/** Пилюля вместо TextButton - у карточек и без того много текста одного размера, кнопке нужна
+ * своя форма, чтобы её было видно как кнопку. */
+@Composable
+private fun Pill(text: String, color: Color, enabled: Boolean = true, onClick: () -> Unit) {
+    val tint = if (enabled) color else NamiColors.Paper40
+    Text(
+        text = text,
+        color = tint,
+        style = MaterialTheme.typography.labelLarge,
+        modifier = Modifier
+            .clip(RoundedCornerShape(NamiRadius.Button))
+            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
+            .border(1.dp, tint.copy(alpha = 0.45f), RoundedCornerShape(NamiRadius.Button))
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+    )
 }
 
 @Composable
@@ -330,20 +525,51 @@ private fun DeviceRow(
     onSync: () -> Unit,
     onJoinListenTogether: () -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-        Text(device.name, color = NamiColors.Paper100, style = MaterialTheme.typography.bodyLarge)
-        Text("${device.host}:${device.port}", color = NamiColors.Paper40, style = MaterialTheme.typography.bodySmall)
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Devices, contentDescription = null, tint = NamiColors.Paper70, modifier = Modifier.size(20.dp))
+            Column(modifier = Modifier.padding(start = 12.dp)) {
+                Text(device.name, color = NamiColors.Paper100, style = MaterialTheme.typography.bodyLarge)
+                Text("${device.host}:${device.port}", color = NamiColors.Paper40, style = MaterialTheme.typography.bodySmall)
+            }
+        }
         // Обычный Row без ширины отдаёт остаток места ПОСЛЕДНЕМУ ребёнку - на узких экранах
         // "Слушать вместе" (самый длинный текст) получал меньше всего места и переносился на
         // вторую строку, из-за чего сама кнопка (и её ripple) растягивалась по высоте.
         // horizontalScroll не даёт ни одной кнопке сжаться - переносится сама строка, не текст.
         Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(top = 10.dp).horizontalScroll(rememberScrollState()),
         ) {
-            TextButton(onClick = onPullDrop) { Text("Получить раздачу", color = NamiColors.Shu) }
-            TextButton(onClick = onSync) { Text("Синхр.", color = NamiColors.Ai) }
-            TextButton(onClick = onJoinListenTogether) { Text("Слушать вместе", color = NamiColors.Paper100) }
+            Pill("Получить раздачу", NamiColors.Shu, onClick = onPullDrop)
+            Pill("Синхр.", NamiColors.Ai, onClick = onSync)
+            Pill("Слушать вместе", NamiColors.Wakaba, onClick = onJoinListenTogether)
+        }
+    }
+}
+
+@Composable
+private fun PeerRow(peer: WifiDirectPeer, connecting: Boolean, onConnect: () -> Unit, onDisconnect: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                peer.name,
+                color = if (peer.connected) NamiColors.Wakaba else NamiColors.Paper100,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                peer.status,
+                color = if (peer.connected) NamiColors.Wakaba else NamiColors.Paper40,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        // Сопряжение видно на самой строке устройства, а не только общей плашкой сверху: так
+        // понятно, С КЕМ именно связь (и это одинаково работает с обеих сторон - и у владельца
+        // группы, и у клиента, см. refreshWifiDirectGroup).
+        if (peer.connected) {
+            Pill("Отключить", NamiColors.Shu, onClick = onDisconnect)
+        } else {
+            Pill("Подключить", NamiColors.Ai, enabled = !connecting, onClick = onConnect)
         }
     }
 }
