@@ -31,6 +31,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.mlkit.translate)
     implementation(libs.kuromoji.ipadic)
+    implementation(libs.zxing.core)
     ksp(libs.hilt.compiler)
     testImplementation(libs.junit)
     testImplementation(kotlin("test"))

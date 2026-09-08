@@ -1,0 +1,67 @@
+package dev.nami.domain
+
+import dev.nami.core.model.Track
+import dev.nami.core.model.TrackId
+import kotlinx.coroutines.flow.StateFlow
+
+/** Группа G "сеть" - один локальный HTTP-сервер на устройстве плюс NSD (Network Service
+ * Discovery) для автопоиска, QR-код вручную как запасной путь когда автопоиск ничего не находит.
+ * Никакого Wi-Fi Direct - на многих телефонах он ненадёжен, обычный сокет по локальной сети
+ * работает везде одинаково. Всё в пределах LAN, наружу ничего не уходит. */
+data class DiscoveredDevice(val name: String, val host: String, val port: Int)
+
+data class ListenTogetherGuestState(
+    val hostName: String,
+    val trackId: TrackId?,
+    val trackTitle: String?,
+    val artistName: String?,
+    /** true пока качается текущий трек - воспроизведение начнётся когда станет false. */
+    val downloading: Boolean,
+    /** Путь к треку в кэше сессии (не в библиотеке) - null пока не скачан. */
+    val cachedPath: String?,
+    val positionMs: Long,
+    val durationMs: Long,
+)
+
+interface LocalShareRepository {
+    val serverRunning: StateFlow<Boolean>
+    /** "192.168.x.x:PORT" пока сервер работает, иначе null. */
+    val serverAddress: StateFlow<String?>
+    fun startServer()
+    fun stopServer()
+
+    val discoveredDevices: StateFlow<List<DiscoveredDevice>>
+    fun startDiscovery()
+    fun stopDiscovery()
+
+    /** Разбирает "host:port" (в т.ч. из отсканированного QR) в устройство для ручного добавления
+     * когда автопоиск не нашёл. */
+    fun parseManualAddress(text: String): DiscoveredDevice?
+
+    /** Что прямо сейчас отдаётся другим устройствам через /drop - null значит ничего. */
+    val dropTrack: StateFlow<Track?>
+    fun setDropTrack(track: Track?)
+
+    /** Скачивает то, что [device] сейчас раздаёт (см. [dropTrack] на его стороне), и сразу
+     * добавляет в библиотеку тем же импортом что обычный выбор файла - Wi-Fi Drop это осознанная
+     * передача, не временный кэш как "слушать вместе". */
+    suspend fun pullDrop(device: DiscoveredDevice): Boolean
+
+    /** Тянет манифест с [device] и переносит лайки/рейтинги на СВОИ треки, совпадающие по
+     * названию/исполнителю/длительности (та же нечёткая эвристика что дедуп при импорте) -
+     * не создаёт и не удаляет треки, только обновляет метаданные уже существующих. */
+    suspend fun syncWith(device: DiscoveredDevice): Int
+
+    /** Включает раздачу /nowplaying - без этого другие устройства не видят, что сейчас играет
+     * (приватность по умолчанию, не автоматически при старте сервера). */
+    val listenTogetherHostEnabled: StateFlow<Boolean>
+    fun setListenTogetherHost(enabled: Boolean)
+
+    val listenTogetherGuestState: StateFlow<ListenTogetherGuestState?>
+    fun joinListenTogether(device: DiscoveredDevice)
+    fun leaveListenTogether()
+
+    /** Добавляет ТЕКУЩИЙ скачанный в сессии трек в постоянную библиотеку (обычным импортом) -
+     * до этого он живёт только в кэше сессии и удаляется при выходе из "слушать вместе". */
+    suspend fun addCurrentListenTogetherTrackToLibrary(): Boolean
+}

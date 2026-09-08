@@ -34,6 +34,7 @@ import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PlayCircleOutline
 import androidx.compose.material.icons.outlined.School
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Shuffle
 import androidx.compose.material.icons.outlined.Usb
 import androidx.compose.material3.Slider
@@ -77,6 +78,7 @@ fun SettingsScreen(
     onDjModeClick: () -> Unit,
     onBlindListenClick: () -> Unit,
     onCardSortClick: () -> Unit,
+    onLocalShareClick: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -166,6 +168,12 @@ fun SettingsScreen(
                 title = "Карточный разбор библиотеки",
                 trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
                 onClick = onCardSortClick,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Share,
+                title = "Локальная сеть (Wi-Fi Drop, синхронизация, слушать вместе)",
+                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
+                onClick = onLocalShareClick,
             )
         }
     }

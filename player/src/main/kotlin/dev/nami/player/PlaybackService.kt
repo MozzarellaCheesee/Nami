@@ -108,6 +108,18 @@ class PlaybackService : MediaSessionService() {
             scope.launch { updateEndingFadeForCurrentTrack(trackId) }
             scope.launch { scanBpmKeyIfMissing(trackId) }
         }
+
+        // "Кроссфейд при перелистывании назад не должен работать" - skipPrevious/
+        // skipToPreviousTrack (and any other manual seek) land here as DISCONTINUITY_REASON_SEEK.
+        // Without cancelling, a crossfade already mid-flight near the end of a track kept both
+        // its outgoing (fading-out) and incoming players alive while the user jumped backward,
+        // so the old track's tail kept bleeding into whatever the seek landed on. A natural
+        // auto-transition (the actual crossfade handover) is a different reason and untouched.
+        override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
+            if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+                crossfade?.cancel()
+            }
+        }
     }
 
     @Inject lateinit var settingsRepository: SettingsRepository

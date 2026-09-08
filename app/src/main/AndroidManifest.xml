@@ -2,9 +2,16 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Only ever hit for the LRCLIB lookup (План.md's explicitly-allowed opt-in network use),
-         when a track has no local .lrc and no other lyrics source. -->
+    <!-- INTERNET is also required by Android for plain local-LAN sockets, not just real internet
+         access - used for the LRCLIB lookup (План.md's opt-in network use) AND группа G's local
+         HTTP server/client (Wi-Fi Drop, синхронизация, слушать вместе), which never leaves the
+         LAN. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!-- Только для сканирования QR-кода как запасного пути для группы G, когда автопоиск
+         устройств (NSD) ничего не находит. -->
+    <uses-permission android:name="android.permission.CAMERA" />
 
     <application
         android:name=".NamiApplication"

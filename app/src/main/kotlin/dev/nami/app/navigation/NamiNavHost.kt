@@ -87,6 +87,7 @@ private const val ROUTE_DJ_MODE = "dj_mode"
 private const val ROUTE_BLIND_LISTEN = "blind_listen"
 private const val ROUTE_CARD_SORT = "card_sort"
 private const val ROUTE_DRIVE_MODE = "drive_mode"
+private const val ROUTE_LOCAL_SHARE = "local_share"
 private const val ROUTE_ALBUM_INFO = "album_info/{albumId}"
 private const val ROUTE_ARTIST_INFO = "artist_info/{artistId}"
 private const val ROUTE_AUDIO_TRACT = "audio_tract"
@@ -275,6 +276,7 @@ fun NamiNavHost(
                     onDjModeClick = { navController.navigate(ROUTE_DJ_MODE) },
                     onBlindListenClick = { navController.navigate(ROUTE_BLIND_LISTEN) },
                     onCardSortClick = { navController.navigate(ROUTE_CARD_SORT) },
+                    onLocalShareClick = { navController.navigate(ROUTE_LOCAL_SHARE) },
                 )
                 }
             }
@@ -332,6 +334,9 @@ fun NamiNavHost(
             }
             composable(ROUTE_DRIVE_MODE) {
                 dev.nami.feature.player.DriveModeScreen(onBack = { navController.popBackStack() })
+            }
+            composable(ROUTE_LOCAL_SHARE) {
+                dev.nami.feature.library.LocalShareScreen(onBack = { navController.popBackStack() })
             }
             composable(
                 ROUTE_ALBUM_INFO,
