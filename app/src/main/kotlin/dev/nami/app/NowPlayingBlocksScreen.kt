@@ -3,6 +3,8 @@ package dev.nami.app
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,8 +29,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import dev.nami.core.designsystem.NamiCard
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.designsystem.NamiRadius
+import dev.nami.core.designsystem.NamiSectionLabel
 import dev.nami.domain.NowPlayingBlock
 
 /** П.md §17 "порядок блоков" - тот же жест и та же реализация, что у конструктора главного
@@ -48,13 +52,21 @@ fun NowPlayingBlocksScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hi
     var dragAccumulator by remember { mutableFloatStateOf(0f) }
 
     SettingsSubScreenScaffold(title = "Порядок блоков плеера", onBack = onBack) {
-        Text(
-            "Порядок секций под обложкой. Сама обложка всегда сверху - вокруг неё завязаны " +
-                "свайпы смены трека, её местами не двигаем. Меняй порядок долгим тапом по ручке справа.",
-            color = NamiColors.Paper40,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 12.dp),
-        )
+        NamiCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            Text(
+                "Обложка всегда сверху",
+                color = NamiColors.Paper100,
+                style = dev.nami.core.designsystem.NamiType.TrackTitle,
+            )
+            Text(
+                "Вокруг неё завязаны свайпы смены трека, местами её не двигаем. Ниже - порядок " +
+                    "секций под обложкой, меняется долгим тапом по ручке справа.",
+                color = NamiColors.Paper40,
+                style = dev.nami.core.designsystem.NamiType.Secondary,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        NamiSectionLabel("Под обложкой")
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
             order.forEachIndexed { index, block ->
                 Box(
@@ -65,11 +77,31 @@ fun NowPlayingBlocksScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hi
                             RoundedCornerShape(NamiRadius.Button),
                         ),
                 ) {
-                    SettingsRow(
-                        icon = Icons.Outlined.Tune,
-                        title = nowPlayingBlockLabel(block),
-                        trailing = {
-                            Icon(
+                    // Номер позиции вместо одинаковой иконки Tune на всех пяти строках: иконка
+                    // ничего не различала, а порядок - ровно то, ради чего этот экран есть.
+                    Row(
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                    ) {
+                        Box(
+                            contentAlignment = androidx.compose.ui.Alignment.Center,
+                            modifier = Modifier
+                                .size(24.dp)
+                                .background(NamiColors.Ink700, androidx.compose.foundation.shape.CircleShape),
+                        ) {
+                            Text(
+                                "${index + 1}",
+                                color = NamiColors.Paper70,
+                                style = dev.nami.core.designsystem.NamiType.Caption,
+                            )
+                        }
+                        Text(
+                            nowPlayingBlockLabel(block),
+                            color = NamiColors.Paper100,
+                            style = dev.nami.core.designsystem.NamiType.TrackTitle,
+                            modifier = Modifier.weight(1f).padding(start = 16.dp),
+                        )
+                        Icon(
                                 Icons.Outlined.DragHandle,
                                 contentDescription = "Перетащить, чтобы изменить порядок",
                                 tint = NamiColors.Paper70,
@@ -106,9 +138,7 @@ fun NowPlayingBlocksScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hi
                                         )
                                     },
                             )
-                        },
-                        onClick = {},
-                    )
+                    }
                 }
             }
         }

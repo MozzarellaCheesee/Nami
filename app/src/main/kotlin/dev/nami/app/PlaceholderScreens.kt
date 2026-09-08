@@ -69,6 +69,11 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.designsystem.NamiRadius
+import dev.nami.core.designsystem.NamiDisclosure
+import dev.nami.core.designsystem.NamiPill
+import dev.nami.core.designsystem.NamiScreenHeader
+import dev.nami.core.designsystem.NamiSectionLabel
+import dev.nami.core.designsystem.NamiType
 
 /** Top-level Settings screen - just categories, per План.md Часть VIII. Each row opens its own
  * screen instead of everything living in one long scroll (that's what this replaced: one Column
@@ -91,6 +96,7 @@ fun SettingsScreen(
     onScrobblingClick: () -> Unit,
     onBatteryClick: () -> Unit,
 ) {
+    var showExtras by remember { mutableStateOf(false) }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -101,104 +107,78 @@ fun SettingsScreen(
             .verticalScroll(androidx.compose.foundation.rememberScrollState())
             .padding(bottom = 24.dp),
     ) {
-        Text(
-            text = "Настройки",
-            color = NamiColors.Paper100,
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
-        )
+        NamiScreenHeader(title = "Настройки")
+
+        // Раньше все 15 пунктов лежали одним неразличимым списком в одной карточке. Теперь три
+        // группы по смыслу (звук и плеер / библиотека / оформление), а редкие режимы-эксперименты
+        // и служебное - под "Ещё": их открывают раз в месяц, а место наверху они занимали каждый.
+        NamiSectionLabel("Звук и плеер")
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
-            SettingsRow(
-                icon = Icons.Outlined.PlayCircleOutline,
-                title = "Плеер",
-                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
-                onClick = onPlayerClick,
-            )
-            SettingsRow(
-                icon = Icons.Outlined.School,
-                title = "Лирика",
-                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
-                onClick = onLyricsClick,
-            )
-            SettingsRow(
-                icon = Icons.Outlined.GraphicEq,
-                title = "Аудиотракт (Beta)",
-                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
-                onClick = onAudioTractClick,
-            )
-            SettingsRow(
-                icon = Icons.Outlined.Palette,
-                title = "Внешний вид",
-                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
-                onClick = onAppearanceClick,
-            )
-            SettingsRow(
-                icon = Icons.Outlined.Delete,
-                title = "Хранилище",
-                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
-                onClick = onTrashClick,
-            )
-            SettingsRow(
-                icon = Icons.Outlined.CheckCircle,
-                title = "Здоровье библиотеки",
-                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
-                onClick = onLibraryHealthClick,
-            )
-            SettingsRow(
-                icon = Icons.Outlined.BarChart,
-                title = "Статистика",
-                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
-                onClick = onStatsClick,
-            )
-            SettingsRow(
-                icon = Icons.Outlined.Folder,
-                title = "Отслеживаемые папки",
-                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
-                onClick = onWatchedFoldersClick,
-            )
-            SettingsRow(
-                icon = Icons.Outlined.Archive,
-                title = "Экспорт библиотеки в .zip",
-                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
-                onClick = onExportClick,
-            )
-            SettingsRow(
-                icon = Icons.Outlined.GraphicEq,
-                title = "DJ-режим",
-                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
-                onClick = onDjModeClick,
-            )
-            SettingsRow(
-                icon = Icons.Outlined.PlayCircleOutline,
-                title = "Слепое прослушивание",
-                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
-                onClick = onBlindListenClick,
-            )
-            SettingsRow(
-                icon = Icons.Outlined.Shuffle,
-                title = "Карточный разбор библиотеки",
-                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
-                onClick = onCardSortClick,
-            )
-            SettingsRow(
-                icon = Icons.Outlined.Share,
-                title = "Локальная сеть (Wi-Fi Drop, синхронизация, слушать вместе)",
-                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
-                onClick = onLocalShareClick,
-            )
-            SettingsRow(
-                icon = Icons.Outlined.BarChart,
-                title = "Скробблинг (ListenBrainz)",
-                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
-                onClick = onScrobblingClick,
-            )
-            SettingsRow(
-                icon = Icons.Outlined.BatteryChargingFull,
-                title = "Фоновое воспроизведение (оптимизация батареи)",
-                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
-                onClick = onBatteryClick,
-            )
+            NavRow(Icons.Outlined.PlayCircleOutline, "Плеер", "Макет Now Playing, жесты, перемешивание", onPlayerClick)
+            NavRow(Icons.Outlined.GraphicEq, "Аудиотракт", "Эквалайзер, кроссфейд, вывод звука - Beta", onAudioTractClick)
+            NavRow(Icons.Outlined.School, "Лирика", "Тексты, перевод, режим изучения", onLyricsClick)
         }
+
+        NamiSectionLabel("Библиотека")
+        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            NavRow(Icons.Outlined.Folder, "Отслеживаемые папки", "Откуда берутся треки", onWatchedFoldersClick)
+            NavRow(Icons.Outlined.CheckCircle, "Здоровье библиотеки", "Битые файлы, дубли, пустые теги", onLibraryHealthClick)
+            NavRow(Icons.Outlined.BarChart, "Статистика", "Что и сколько слушалось", onStatsClick)
+            NavRow(Icons.Outlined.Delete, "Хранилище", "Корзина и занятое место", onTrashClick)
+            NavRow(Icons.Outlined.Archive, "Экспорт в .zip", "Треки и плейлисты одним архивом", onExportClick)
+        }
+
+        NamiSectionLabel("Оформление")
+        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            NavRow(Icons.Outlined.Palette, "Внешний вид", "Тема, шрифты, иконка, вкладки", onAppearanceClick)
+        }
+
+        NamiSectionLabel("Связь")
+        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            NavRow(Icons.Outlined.Share, "Локальная сеть", "Wi-Fi Drop, синхронизация, слушать вместе", onLocalShareClick)
+            NavRow(Icons.Outlined.BarChart, "Скробблинг", "ListenBrainz", onScrobblingClick)
+        }
+
+        NamiDisclosure(
+            text = "Ещё - режимы и система",
+            expanded = showExtras,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+            onToggle = { showExtras = !showExtras },
+        )
+        if (showExtras) {
+            SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+                NavRow(Icons.Outlined.GraphicEq, "DJ-режим", "Ручное сведение двух треков", onDjModeClick)
+                NavRow(Icons.Outlined.PlayCircleOutline, "Слепое прослушивание", "Угадать трек без обложки и названия", onBlindListenClick)
+                NavRow(Icons.Outlined.Shuffle, "Карточный разбор", "Быстрая сортировка библиотеки свайпами", onCardSortClick)
+                NavRow(Icons.Outlined.BatteryChargingFull, "Фоновое воспроизведение", "Отключить оптимизацию батареи", onBatteryClick)
+            }
+        }
+    }
+}
+
+/** Строка-переход с подписью: без неё пятнадцать одинаковых строк не отличались друг от друга
+ * ничем, кроме заголовка, и приходилось заходить внутрь, чтобы вспомнить, что там лежит. */
+@Composable
+private fun NavRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(NamiRadius.Button))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = NamiColors.Paper70, modifier = Modifier.padding(end = 16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = title, color = NamiColors.Paper100, style = dev.nami.core.designsystem.NamiType.TrackTitle)
+            Text(text = subtitle, color = NamiColors.Paper40, style = dev.nami.core.designsystem.NamiType.Secondary)
+        }
+        Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40)
     }
 }
 
@@ -238,13 +218,10 @@ fun SettingsScrobblingScreen(onBack: () -> Unit, viewModel: SettingsViewModel = 
                     supportingText = { ApiKeyHint("Получить токен: listenbrainz.org/settings", "https://listenbrainz.org/settings/") },
                     modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                 )
-                Text(
-                    text = "Сохранить",
-                    color = NamiColors.Shu,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier
-                        .padding(top = 12.dp)
-                        .clickable { viewModel.setListenBrainzToken(tokenText) },
+                NamiPill(
+                    text = "Сохранить токен",
+                    modifier = Modifier.padding(top = 12.dp),
+                    onClick = { viewModel.setListenBrainzToken(tokenText) },
                 )
             }
         }
@@ -262,17 +239,7 @@ internal fun SettingsSubScreenScaffold(title: String, onBack: () -> Unit, conten
             .verticalScroll(androidx.compose.foundation.rememberScrollState())
             .padding(bottom = 24.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
-            androidx.compose.material3.IconButton(onClick = onBack) {
-                Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
-            }
-            Text(
-                text = title,
-                color = NamiColors.Paper100,
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(start = 8.dp),
-            )
-        }
+        NamiScreenHeader(title = title, onBack = onBack)
         content()
     }
 }
@@ -796,14 +763,7 @@ private fun ApiKeyHint(text: String, url: String) {
 }
 
 @Composable
-private fun SettingsSectionLabel(text: String) {
-    Text(
-        text = text,
-        color = NamiColors.Paper40,
-        style = MaterialTheme.typography.labelMedium,
-        modifier = Modifier.padding(start = 24.dp, top = 20.dp, bottom = 8.dp),
-    )
-}
+private fun SettingsSectionLabel(text: String) = NamiSectionLabel(text)
 
 @Composable
 internal fun SettingsCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
@@ -836,17 +796,23 @@ internal fun SettingsRow(
     title: String,
     trailing: @Composable () -> Unit,
     onClick: () -> Unit,
+    subtitle: String? = null,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(NamiRadius.Button))
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, contentDescription = null, tint = NamiColors.Paper70, modifier = Modifier.padding(end = 16.dp))
-        Text(text = title, color = NamiColors.Paper100, modifier = Modifier.weight(1f))
+        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(text = title, color = NamiColors.Paper100, style = NamiType.TrackTitle)
+            if (subtitle != null) {
+                Text(text = subtitle, color = NamiColors.Paper40, style = NamiType.Secondary)
+            }
+        }
         trailing()
     }
 }
@@ -920,13 +886,10 @@ fun SessionsScreen(onBack: () -> Unit, viewModel: SessionsViewModel = hiltViewMo
                 )
             }
         }
-        Text(
-            text = "+ Сохранить текущие настройки как сессию",
-            color = NamiColors.Shu,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier
-                .padding(horizontal = 20.dp, vertical = 16.dp)
-                .clickable { showSaveDialog = true },
+        NamiPill(
+            text = "Сохранить текущие настройки как сессию",
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+            onClick = { showSaveDialog = true },
         )
     }
 

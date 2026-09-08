@@ -31,8 +31,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.app.navigation.bottomTabIcon
 import dev.nami.app.navigation.bottomTabLabel
+import dev.nami.core.designsystem.NamiCard
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.designsystem.NamiRadius
+import dev.nami.core.designsystem.NamiSectionLabel
 import dev.nami.domain.BottomTabConfig
 import dev.nami.domain.MAX_BOTTOM_TABS
 import dev.nami.domain.MIN_BOTTOM_TABS
@@ -55,20 +57,40 @@ fun BottomTabsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltView
     val enabledCount = order.count { it.enabled }
 
     SettingsSubScreenScaffold(title = "Вкладки", onBack = onBack) {
-        Text(
-            "Включи от $MIN_BOTTOM_TABS до $MAX_BOTTOM_TABS вкладок, порядок меняй долгим тапом " +
-                "по ручке справа. Сейчас включено: $enabledCount.",
-            color = NamiColors.Paper40,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 12.dp),
-        )
+        // Счётчик включённых - главное, что тут нужно видеть: у списка есть жёсткий предел, и
+        // раньше он был спрятан в конце длинной серой строки текста. Красная рамка на пределе
+        // объясняет, почему следующий переключатель перестаёт отвечать.
+        val atLimit = enabledCount >= MAX_BOTTOM_TABS || enabledCount <= MIN_BOTTOM_TABS
+        NamiCard(
+            modifier = Modifier.padding(horizontal = 20.dp),
+            accent = if (atLimit) NamiColors.Kin else null,
+        ) {
+            Text(
+                "Включено $enabledCount из $MAX_BOTTOM_TABS",
+                color = if (atLimit) NamiColors.Kin else NamiColors.Paper100,
+                style = dev.nami.core.designsystem.NamiType.TrackTitle,
+            )
+            Text(
+                "Допустимо от $MIN_BOTTOM_TABS до $MAX_BOTTOM_TABS. Порядок меняется долгим тапом по ручке справа.",
+                color = NamiColors.Paper40,
+                style = dev.nami.core.designsystem.NamiType.Secondary,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+
+        NamiSectionLabel("Подписи")
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
             SettingsRow(
                 icon = Icons.Outlined.Label,
                 title = "Скрыть подписи вкладок",
+                subtitle = "Останутся только иконки",
                 trailing = { NamiSwitch(checked = labelsHidden, onCheckedChange = viewModel::setBottomTabLabelsHidden) },
                 onClick = { viewModel.setBottomTabLabelsHidden(!labelsHidden) },
             )
+        }
+
+        NamiSectionLabel("Вкладки и порядок")
+        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
             order.forEachIndexed { index, config ->
                 Box(
                     modifier = Modifier

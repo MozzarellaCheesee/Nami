@@ -6,28 +6,30 @@ import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.runtime.DisposableEffect
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import dev.nami.core.designsystem.NamiCard
 import dev.nami.core.designsystem.NamiColors
-import dev.nami.core.designsystem.NamiRadius
+import dev.nami.core.designsystem.NamiPill
+import dev.nami.core.designsystem.NamiSectionLabel
+import dev.nami.core.designsystem.NamiType
 
 /** Единственный официальный способ узнать, что систему уговорили не убивать процесс в фоне.
  * До Android 6 (API 23) режима Doze нет вообще, но minSdk=26, так что ветка не нужна. */
@@ -59,46 +61,54 @@ fun BatteryOptimizationScreen(onBack: () -> Unit) {
     }
 
     SettingsSubScreenScaffold(title = "Фоновое воспроизведение", onBack = onBack) {
-        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
-            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                Text(
-                    text = if (ignoring) {
-                        "Всё в порядке: система не будет усыплять Nami в фоне."
-                    } else {
-                        "Android экономит батарею, усыпляя приложения в фоне. Для плеера это значит, " +
-                            "что музыка может оборваться посреди трека, когда экран выключен - особенно " +
-                            "на Xiaomi, Samsung и Huawei, где чистка фоновых процессов агрессивнее обычной.\n\n" +
-                            "Если нажать «Отключить оптимизацию», откроется системный диалог Android с " +
-                            "вопросом, разрешить ли Nami работать в фоне без ограничений. Никаких данных " +
-                            "это не открывает - только запрещает системе убивать воспроизведение."
-                    },
-                    color = NamiColors.Paper100,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                if (!ignoring) {
-                    Text(
-                        text = "Отключить оптимизацию",
-                        color = NamiColors.Ink900,
-                        style = MaterialTheme.typography.titleSmall,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .padding(top = 16.dp)
-                            .fillMaxWidth()
-                            .background(NamiColors.Shu, RoundedCornerShape(NamiRadius.Card))
-                            .clickable { context.requestIgnoreBatteryOptimizations() }
-                            .padding(vertical = 12.dp),
-                    )
-                }
-                Text(
-                    text = "Готово",
-                    color = NamiColors.Paper40,
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
+        // Статус - первое и самое крупное на экране: раньше он был первым абзацем сплошного
+        // текста, и понять "у меня уже нормально или ещё нет" можно было только вчитавшись.
+        NamiCard(
+            modifier = Modifier.padding(horizontal = 20.dp),
+            accent = if (ignoring) NamiColors.Wakaba else NamiColors.Kin,
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
                     modifier = Modifier
-                        .padding(top = 12.dp)
-                        .fillMaxWidth()
-                        .clickable(onClick = onBack)
-                        .padding(vertical = 12.dp),
+                        .size(10.dp)
+                        .background(if (ignoring) NamiColors.Wakaba else NamiColors.Kin, CircleShape),
+                )
+                Text(
+                    text = if (ignoring) "Фон разрешён" else "Система может обрывать музыку",
+                    color = NamiColors.Paper100,
+                    style = NamiType.TrackTitle,
+                    modifier = Modifier.padding(start = 12.dp),
+                )
+            }
+            Text(
+                text = if (ignoring) {
+                    "Nami исключён из оптимизации батареи - воспроизведение в фоне система не усыпит."
+                } else {
+                    "Android экономит батарею, усыпляя приложения в фоне, и музыка может оборваться " +
+                        "посреди трека при выключенном экране - особенно на Xiaomi, Samsung и Huawei."
+                },
+                color = NamiColors.Paper40,
+                style = NamiType.Secondary,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            if (!ignoring) {
+                NamiPill(
+                    text = "Отключить оптимизацию",
+                    color = NamiColors.Shu,
+                    modifier = Modifier.padding(top = 14.dp),
+                    onClick = { context.requestIgnoreBatteryOptimizations() },
+                )
+            }
+        }
+        if (!ignoring) {
+            NamiSectionLabel("Что произойдёт")
+            NamiCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+                Text(
+                    text = "Откроется системный диалог Android с вопросом, разрешить ли Nami работать " +
+                        "в фоне без ограничений. Никаких данных это не открывает - только запрещает " +
+                        "системе убивать воспроизведение.",
+                    color = NamiColors.Paper70,
+                    style = NamiType.Secondary,
                 )
             }
         }
