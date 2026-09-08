@@ -85,6 +85,7 @@ private const val ROUTE_TRACK_INFO = "track_info/{trackId}"
 private const val ROUTE_AB_COMPARE = "ab_compare/{trackIdA}/{trackIdB}"
 private const val ROUTE_DJ_MODE = "dj_mode"
 private const val ROUTE_BLIND_LISTEN = "blind_listen"
+private const val ROUTE_CARD_SORT = "card_sort"
 private const val ROUTE_ALBUM_INFO = "album_info/{albumId}"
 private const val ROUTE_ARTIST_INFO = "artist_info/{artistId}"
 private const val ROUTE_AUDIO_TRACT = "audio_tract"
@@ -252,6 +253,7 @@ fun NamiNavHost(
                     onExportClick = onExportRequested,
                     onDjModeClick = { navController.navigate(ROUTE_DJ_MODE) },
                     onBlindListenClick = { navController.navigate(ROUTE_BLIND_LISTEN) },
+                    onCardSortClick = { navController.navigate(ROUTE_CARD_SORT) },
                 )
                 }
             }
@@ -308,6 +310,9 @@ fun NamiNavHost(
             }
             composable(ROUTE_BLIND_LISTEN) {
                 dev.nami.feature.player.BlindListenScreen(onBack = { navController.popBackStack() })
+            }
+            composable(ROUTE_CARD_SORT) {
+                dev.nami.feature.library.CardSortScreen(onBack = { navController.popBackStack() })
             }
             composable(
                 ROUTE_ALBUM_INFO,

@@ -76,6 +76,7 @@ fun SettingsScreen(
     onExportClick: () -> Unit,
     onDjModeClick: () -> Unit,
     onBlindListenClick: () -> Unit,
+    onCardSortClick: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900).padding(bottom = 24.dp)) {
         Text(
@@ -150,6 +151,12 @@ fun SettingsScreen(
                 title = "Слепое прослушивание",
                 trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
                 onClick = onBlindListenClick,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Shuffle,
+                title = "Карточный разбор библиотеки",
+                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
+                onClick = onCardSortClick,
             )
         }
     }
