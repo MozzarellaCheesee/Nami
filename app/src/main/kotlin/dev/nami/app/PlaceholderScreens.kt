@@ -75,6 +75,7 @@ fun SettingsScreen(
     onWatchedFoldersClick: () -> Unit,
     onExportClick: () -> Unit,
     onDjModeClick: () -> Unit,
+    onBlindListenClick: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900).padding(bottom = 24.dp)) {
         Text(
@@ -143,6 +144,12 @@ fun SettingsScreen(
                 title = "DJ-режим",
                 trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
                 onClick = onDjModeClick,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.PlayCircleOutline,
+                title = "Слепое прослушивание",
+                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
+                onClick = onBlindListenClick,
             )
         }
     }
