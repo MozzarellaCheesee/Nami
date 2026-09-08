@@ -60,6 +60,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil3.compose.AsyncImage
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.designsystem.NamiPill
+import dev.nami.core.designsystem.NamiPillRow
 import dev.nami.core.designsystem.NamiRadius
 import dev.nami.core.designsystem.NamiScreenHeader
 import dev.nami.core.designsystem.NamiType
@@ -75,14 +76,21 @@ private const val ARTISTS_PREVIEW = 4
 
 private enum class SearchSection { TRACKS, ALBUMS, ARTISTS }
 
+/** Поиск по своей библиотеке и поиск в открытых сетевых источниках - две вкладки одного экрана,
+ * а не отдельный пункт навигации: ищут они одно и то же, отличается только где. */
+private enum class SearchTab { LIBRARY, NETWORK }
+
 @Composable
 fun SearchScreen(
     onTrackClick: (TrackId) -> Unit,
     onAlbumClick: (AlbumId) -> Unit,
     onArtistClick: (ArtistId) -> Unit,
     viewModel: SearchViewModel = hiltViewModel(),
+    networkViewModel: NetworkSearchViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val networkState by networkViewModel.uiState.collectAsState()
+    var tab by remember { mutableStateOf(SearchTab.LIBRARY) }
     var addToPlaylistTrackId by remember { mutableStateOf<TrackId?>(null) }
     var expandedSection by remember { mutableStateOf<SearchSection?>(null) }
     val focusManager = LocalFocusManager.current
@@ -109,14 +117,27 @@ fun SearchScreen(
     val browseArtists = browseArtistsState
 
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900).imePadding()) {
+        val networkTab = tab == SearchTab.NETWORK
         CompactSearchField(
-            value = uiState.query,
-            onValueChange = viewModel::onQueryChange,
-            onClear = { viewModel.onQueryChange("") },
+            value = if (networkTab) networkState.query else uiState.query,
+            onValueChange = if (networkTab) networkViewModel::onQueryChange else viewModel::onQueryChange,
+            onClear = { if (networkTab) networkViewModel.onQueryChange("") else viewModel.onQueryChange("") },
+            placeholder = if (networkTab) "Найти трек в сети" else "Треки, альбомы, исполнители",
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
         )
+        NamiPillRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 2.dp)) {
+            NamiPill(text = "В библиотеке", selected = !networkTab, onClick = { tab = SearchTab.LIBRARY })
+            NamiPill(text = "В сети", selected = networkTab, onClick = { tab = SearchTab.NETWORK })
+        }
 
-        if (uiState.query.isBlank()) {
+        if (networkTab) {
+            NetworkSearchContent(
+                state = networkState,
+                onSourceChange = networkViewModel::onSourceChange,
+                onDownload = networkViewModel::onDownload,
+                onDismissMessage = networkViewModel::dismissMessage,
+            )
+        } else if (uiState.query.isBlank()) {
             LazyColumn(state = resultsListState) {
                 if (uiState.recentQueries.isNotEmpty()) {
                     item { SectionHeader("Недавнее") }
@@ -433,7 +454,13 @@ private fun ArtistRow(name: String, photoPath: String?, onClick: () -> Unit) {
 /** Material3's TextField enforces a ~56dp min touch target no matter how padding is tweaked --
  * a plain BasicTextField in a fixed-height row is the only way to actually get a compact bar. */
 @Composable
-private fun CompactSearchField(value: String, onValueChange: (String) -> Unit, onClear: () -> Unit, modifier: Modifier = Modifier) {
+private fun CompactSearchField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onClear: () -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+) {
     Row(
         modifier = modifier
             .height(48.dp)
@@ -454,7 +481,7 @@ private fun CompactSearchField(value: String, onValueChange: (String) -> Unit, o
         )
         Box(modifier = Modifier.weight(1f).padding(start = 10.dp)) {
             if (value.isEmpty()) {
-                Text("Треки, альбомы, исполнители", color = NamiColors.Paper40, style = NamiType.TrackTitle)
+                Text(placeholder, color = NamiColors.Paper40, style = NamiType.TrackTitle)
             }
             BasicTextField(
                 value = value,

@@ -16,6 +16,7 @@ import dev.nami.data.PlaylistRepositoryImpl
 import dev.nami.data.TagRepositoryImpl
 import dev.nami.data.TrashRepositoryImpl
 import dev.nami.data.VocabularyRepositoryImpl
+import dev.nami.data.networkimport.NetworkImportRepositoryImpl
 import dev.nami.data.search.SearchRepositoryImpl
 import dev.nami.domain.BackupRepository
 import dev.nami.domain.LocalShareRepository
@@ -24,6 +25,7 @@ import dev.nami.domain.LibraryRepository
 import dev.nami.domain.LyricsRepository
 import dev.nami.domain.LoopsRepository
 import dev.nami.domain.MomentsRepository
+import dev.nami.domain.NetworkImportRepository
 import dev.nami.domain.PlaylistRepository
 import dev.nami.domain.SearchRepository
 import dev.nami.domain.SettingsRepository
@@ -50,6 +52,10 @@ abstract class DataModule {
     @Binds
     @Singleton
     abstract fun bindLyricsRepository(impl: LyricsRepositoryImpl): LyricsRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindNetworkImportRepository(impl: NetworkImportRepositoryImpl): NetworkImportRepository
 
     @Binds
     @Singleton
