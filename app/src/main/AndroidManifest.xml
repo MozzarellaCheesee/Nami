@@ -145,6 +145,32 @@
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info_sessions" />
         </receiver>
 
+        <!-- План.md §28 "Плитка быстрых настроек" - две отдельные плитки (играть/пауза и таймер
+             сна), пользователь сам добавляет нужные в шторку. ACTIVE_TILE намеренно не объявлен:
+             он нужен только чтобы обновлять плитку, когда она НЕ на экране, а её всё равно никто
+             в этот момент не видит - подписки в onStartListening достаточно, зато система не
+             будит процесс лишний раз ради батареи. -->
+        <service
+            android:name=".tile.PlayPauseTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_widget_play"
+            android:label="Nami: играть/пауза"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+        <service
+            android:name=".tile.SleepTimerTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_tile_sleep_timer"
+            android:label="Nami: таймер сна"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
         <!-- Группа D "карточка трека (экспорт-картинка)" - нужен content:// Uri чтобы поделиться
              сгенерированной картинкой в другое приложение (ACTION_SEND не примет file://). -->
         <provider
