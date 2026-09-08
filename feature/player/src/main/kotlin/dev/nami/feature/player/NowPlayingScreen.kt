@@ -303,10 +303,12 @@ fun NowPlayingScreen(
                     ContextAction("В плейлист", Icons.Outlined.PlaylistAdd) { showAddToPlaylist = true },
                     ContextAction("Дорожный режим", Icons.Outlined.DirectionsCar, onOpenDriveMode),
                     ContextAction("Аудиотракт", Icons.Outlined.QueueMusic) { showAudioTractSheet = true },
-                ),
-                list = listOfNotNull(
+                    // Третий ряд: таймер сна и моменты/петли по частоте использования это быстрые
+                    // действия, а не второстепенные пункты - подняты из плоского списка в сетку.
                     ContextAction("Таймер сна", Icons.Outlined.DarkMode) { showSleepTimerSheet = true },
                     ContextAction("Моменты и петли", Icons.Outlined.Repeat) { showLoopSheet = true },
+                ),
+                list = listOfNotNull(
                     track?.let { ContextAction("Поделиться карточкой", Icons.Outlined.Share) { onShareCard(it) } },
                     track?.let { ContextAction("Информация о треке", Icons.Outlined.Info) { onShowTrackInfo(it.id) } },
                     track?.artistId?.let { artistId -> ContextAction("Открыть исполнителя", Icons.Outlined.Person) { onOpenArtist(artistId) } },
