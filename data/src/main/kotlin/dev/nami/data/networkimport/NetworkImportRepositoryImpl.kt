@@ -10,6 +10,9 @@ import dev.nami.domain.NetworkImportRepository
 import dev.nami.domain.NetworkImportSource
 import dev.nami.domain.NetworkTrack
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
@@ -42,7 +45,7 @@ class NetworkImportRepositoryImpl @Inject constructor(
             runCatching {
                 when (source) {
                     NetworkImportSource.AUDIUS -> searchAudius(trimmed)
-                    NetworkImportSource.ARCHIVE -> emptyList()
+                    NetworkImportSource.ARCHIVE -> searchArchive(trimmed)
                     NetworkImportSource.PIPED -> emptyList()
                 }
             }.getOrElse {
@@ -112,9 +115,71 @@ class NetworkImportRepositoryImpl @Inject constructor(
         }
     }
 
+    // ------------------------------------------------------------------ Internet Archive
+
+    /**
+     * Archive отдаёт не треки, а "предметы" (концерт, оцифрованная пластинка), внутри которых
+     * лежат файлы. Поэтому два шага: сначала поиск предметов, потом их metadata с составом файлов -
+     * зато на экране получается обычный плоский список треков, а не папки, по которым надо лазить.
+     *
+     * Предметов берём мало (ITEMS_PER_SEARCH), файлов из каждого - тоже: metadata большого
+     * концерта весит сотни килобайт, а это мобильный трафик.
+     */
+    private suspend fun searchArchive(query: String): List<NetworkTrack> = coroutineScope {
+        val url = "https://archive.org/advancedsearch.php?q=${encode("($query) AND mediatype:(audio)")}" +
+            "&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=creator&rows=$ITEMS_PER_SEARCH&page=1&output=json"
+        val body = httpGet(url) ?: return@coroutineScope emptyList()
+        val docs = JSONObject(body).optJSONObject("response")?.optJSONArray("docs")
+            ?: return@coroutineScope emptyList()
+        (0 until docs.length()).mapNotNull { i -> docs.optJSONObject(i) }
+            .map { doc -> async { archiveItemTracks(doc) } }
+            .awaitAll()
+            .flatten()
+    }
+
+    private fun archiveItemTracks(doc: JSONObject): List<NetworkTrack> {
+        val identifier = doc.optString("identifier").takeIf { it.isNotBlank() } ?: return emptyList()
+        val itemTitle = doc.optString("title").takeIf { it.isNotBlank() } ?: identifier
+        val creator = doc.optString("creator").takeIf { it.isNotBlank() }
+        val meta = httpGet("https://archive.org/metadata/$identifier")?.let { runCatching { JSONObject(it) }.getOrNull() }
+            ?: return emptyList()
+        val files = meta.optJSONArray("files") ?: return emptyList()
+        // Один и тот же трек лежит в предмете сразу в нескольких форматах (flac + mp3 + ogg) -
+        // группируем по имени без расширения и оставляем лучший, иначе список троится.
+        val best = LinkedHashMap<String, Pair<JSONObject, Int>>()
+        for (i in 0 until files.length()) {
+            val f = files.optJSONObject(i) ?: continue
+            val name = f.optString("name").takeIf { it.isNotBlank() } ?: continue
+            val rank = AUDIO_FORMAT_RANK[name.substringAfterLast('.', "").lowercase()] ?: continue
+            val key = name.substringBeforeLast('.')
+            val current = best[key]
+            if (current == null || rank < current.second) best[key] = f to rank
+        }
+        return best.values.take(FILES_PER_ITEM).map { (f, _) ->
+            val name = f.optString("name")
+            val ext = name.substringAfterLast('.', "").uppercase()
+            val sizeMb = f.optString("size").toLongOrNull()?.let { it / 1024 / 1024 }
+            NetworkTrack(
+                source = NetworkImportSource.ARCHIVE,
+                id = "$identifier/$name",
+                title = f.optString("title").takeIf { it.isNotBlank() } ?: name.substringBeforeLast('.'),
+                artistName = f.optString("artist").takeIf { it.isNotBlank() } ?: creator ?: itemTitle,
+                durationSec = f.optString("length").toFloatOrNull()?.toInt(),
+                artworkUrl = "https://archive.org/services/img/$identifier",
+                detail = listOfNotNull(ext.takeIf { it.isNotEmpty() }, sizeMb?.let { "$it МБ" }).joinToString(" · "),
+                downloadUrl = "https://archive.org/download/$identifier/${encodePath(name)}",
+                fileName = name.substringAfterLast('/'),
+            )
+        }
+    }
+
     // ------------------------------------------------------------------ HTTP
 
     private fun encode(value: String): String = URLEncoder.encode(value, "UTF-8")
+
+    /** URLEncoder кодирует пробел как "+", что верно для параметров запроса и неверно для пути -
+     * archive.org по такой ссылке отдаёт 404. */
+    private fun encodePath(value: String): String = encode(value).replace("+", "%20")
 
     private fun httpGet(url: String): String? = openConnection(url, READ_TIMEOUT_MS)?.let { conn ->
         try {
@@ -162,5 +227,12 @@ class NetworkImportRepositoryImpl @Inject constructor(
         const val CONNECT_TIMEOUT_MS = 10_000
         const val READ_TIMEOUT_MS = 15_000
         const val DOWNLOAD_TIMEOUT_MS = 120_000
+        const val ITEMS_PER_SEARCH = 6
+        const val FILES_PER_ITEM = 8
+        /** Чем меньше число, тем предпочтительнее формат: сначала lossless, потом lossy. */
+        val AUDIO_FORMAT_RANK = mapOf(
+            "flac" to 0, "wav" to 1, "aiff" to 2, "aif" to 2, "ape" to 3, "shn" to 4,
+            "m4a" to 5, "ogg" to 6, "opus" to 6, "mp3" to 7,
+        )
     }
 }
