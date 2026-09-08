@@ -83,6 +83,7 @@ private const val ROUTE_STATS = "stats"
 private const val ROUTE_WATCHED_FOLDERS = "watched_folders"
 private const val ROUTE_TRACK_INFO = "track_info/{trackId}"
 private const val ROUTE_AB_COMPARE = "ab_compare/{trackIdA}/{trackIdB}"
+private const val ROUTE_DJ_MODE = "dj_mode"
 private const val ROUTE_ALBUM_INFO = "album_info/{albumId}"
 private const val ROUTE_ARTIST_INFO = "artist_info/{artistId}"
 private const val ROUTE_AUDIO_TRACT = "audio_tract"
@@ -248,6 +249,7 @@ fun NamiNavHost(
                     onStatsClick = { navController.navigate(ROUTE_STATS) },
                     onWatchedFoldersClick = { navController.navigate(ROUTE_WATCHED_FOLDERS) },
                     onExportClick = onExportRequested,
+                    onDjModeClick = { navController.navigate(ROUTE_DJ_MODE) },
                 )
                 }
             }
@@ -298,6 +300,9 @@ fun NamiNavHost(
                 ),
             ) {
                 dev.nami.feature.player.ABCompareRoute(onBack = { navController.popBackStack() })
+            }
+            composable(ROUTE_DJ_MODE) {
+                dev.nami.feature.player.DjScreen(onBack = { navController.popBackStack() })
             }
             composable(
                 ROUTE_ALBUM_INFO,

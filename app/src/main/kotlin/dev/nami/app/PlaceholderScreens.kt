@@ -74,6 +74,7 @@ fun SettingsScreen(
     onStatsClick: () -> Unit,
     onWatchedFoldersClick: () -> Unit,
     onExportClick: () -> Unit,
+    onDjModeClick: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900).padding(bottom = 24.dp)) {
         Text(
@@ -136,6 +137,12 @@ fun SettingsScreen(
                 title = "Экспорт библиотеки в .zip",
                 trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
                 onClick = onExportClick,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.GraphicEq,
+                title = "DJ-режим",
+                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
+                onClick = onDjModeClick,
             )
         }
     }
