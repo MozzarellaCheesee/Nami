@@ -20,7 +20,10 @@ import java.io.File
  * тот же прямой подход что уже используется для waveform/artwork в этом проекте. */
 object TrackCardRenderer {
     private const val WIDTH = 1080
-    private const val HEIGHT = 1500
+    // Было 1500 - ряд транспорта (controlsY=1400, playSize=110, низ кнопки на 1455) не помещался
+    // до конца холста вместе с метатекстом (детали формата) и водяным знаком под ним, поэтому
+    // и текст, и водяной знак рисовались НАД кнопками - "кривые кнопки под нижним текстом".
+    private const val HEIGHT = 1650
     private const val COVER_SIZE = 820
     private const val COVER_TOP = 100f
     private const val CORNER_RADIUS = 24f
@@ -137,7 +140,7 @@ object TrackCardRenderer {
             drawSkipGlyph(canvas, cx, cy, size * 0.32f, isNext = true, paint = paint)
         }
 
-        var detailsY = controlsY + 100f
+        var detailsY = controlsY + 120f
 
         val metaParts = mutableListOf<String>()
         track.genre?.takeIf { it.isNotBlank() }?.let { metaParts += it }
