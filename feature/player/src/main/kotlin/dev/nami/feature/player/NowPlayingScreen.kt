@@ -12,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.pager.HorizontalPager
@@ -64,6 +65,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
@@ -131,6 +133,9 @@ fun NowPlayingScreen(
     var showLoopSheet by remember { mutableStateOf(false) }
     var showAddToPlaylist by remember { mutableStateOf(false) }
     var pendingLoopStartMs by remember { mutableStateOf<Long?>(null) }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        viewModel.requestShowLyrics.collect { onLyricsClick() }
+    }
     val clipExportUri by viewModel.clipExportUri.collectAsState()
     val clipShareContext = androidx.compose.ui.platform.LocalContext.current
     androidx.compose.runtime.LaunchedEffect(clipExportUri) {
@@ -450,7 +455,10 @@ fun NowPlayingScreen(
                         contentDescription = track.title,
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(NamiColors.Ink700, RoundedCornerShape(4.dp)),
+                            .background(NamiColors.Ink700, RoundedCornerShape(4.dp))
+                            .pointerInput(Unit) {
+                                detectTapGestures(onDoubleTap = { viewModel.performDoubleTapAction() })
+                            },
                     )
                 }
             }

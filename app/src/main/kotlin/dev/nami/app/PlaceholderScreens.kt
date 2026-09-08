@@ -284,6 +284,7 @@ fun SettingsPlayerScreen(onBack: () -> Unit, onSessionsClick: () -> Unit, viewMo
     val hideSystemBars by viewModel.hideSystemBars.collectAsState()
     val karaokeEnabled by viewModel.karaokeEnabled.collectAsState()
     val shuffleMode by viewModel.shuffleMode.collectAsState()
+    val doubleTapAction by viewModel.doubleTapArtworkAction.collectAsState()
 
     SettingsSubScreenScaffold(title = "Плеер", onBack = onBack) {
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
@@ -331,6 +332,28 @@ fun SettingsPlayerScreen(onBack: () -> Unit, onSessionsClick: () -> Unit, viewMo
                 title = "Сессии (Учёба/Дорога/Сон)",
                 trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
                 onClick = onSessionsClick,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.PlayCircleOutline,
+                title = "Двойной тап по обложке",
+                trailing = {
+                    Text(
+                        text = when (doubleTapAction) {
+                            dev.nami.domain.GestureAction.NONE -> "Ничего"
+                            dev.nami.domain.GestureAction.TOGGLE_LIKE -> "Любимый трек"
+                            dev.nami.domain.GestureAction.SKIP_NEXT -> "Следующий трек"
+                            dev.nami.domain.GestureAction.PLAY_PAUSE -> "Пауза/играть"
+                            dev.nami.domain.GestureAction.SHOW_LYRICS -> "Показать лирику"
+                        },
+                        color = NamiColors.Paper40,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                },
+                onClick = {
+                    val values = dev.nami.domain.GestureAction.entries
+                    val next = values[(values.indexOf(doubleTapAction) + 1) % values.size]
+                    viewModel.setDoubleTapArtworkAction(next)
+                },
             )
         }
     }

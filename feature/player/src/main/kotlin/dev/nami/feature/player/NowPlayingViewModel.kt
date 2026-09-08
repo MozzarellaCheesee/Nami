@@ -26,6 +26,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterIsInstance
@@ -82,6 +84,24 @@ class NowPlayingViewModel @Inject constructor(
         val trackId = (playbackState.value as? PlaybackState.Playing)?.trackId ?: return
         val repo = playlistRepository ?: return
         viewModelScope.launch { repo.toggleLike(trackId) }
+    }
+
+    /** Группа E "настраиваемые жесты" - двойной тап по обложке на Now Playing раньше ничего не
+     * делал, теперь запускает то, что выбрано в Настройках. */
+    val doubleTapArtworkAction: StateFlow<dev.nami.domain.GestureAction> =
+        settingsRepository?.doubleTapArtworkAction ?: MutableStateFlow(dev.nami.domain.GestureAction.NONE)
+
+    private val _requestShowLyrics = MutableSharedFlow<Unit>()
+    val requestShowLyrics = _requestShowLyrics.asSharedFlow()
+
+    fun performDoubleTapAction() {
+        when (doubleTapArtworkAction.value) {
+            dev.nami.domain.GestureAction.NONE -> Unit
+            dev.nami.domain.GestureAction.TOGGLE_LIKE -> toggleLikeCurrentTrack()
+            dev.nami.domain.GestureAction.SKIP_NEXT -> viewModelScope.launch { playerRepository.skipNext() }
+            dev.nami.domain.GestureAction.PLAY_PAUSE -> viewModelScope.launch { playerRepository.toggle() }
+            dev.nami.domain.GestureAction.SHOW_LYRICS -> viewModelScope.launch { _requestShowLyrics.emit(Unit) }
+        }
     }
 
     /** Метки моментов (План.md §22.1) for whatever's currently playing - see WaveformScrubber's

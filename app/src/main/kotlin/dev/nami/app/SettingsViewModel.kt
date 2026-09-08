@@ -32,6 +32,7 @@ class SettingsViewModel @Inject constructor(
     val shuffleMode: StateFlow<dev.nami.domain.ShuffleMode> = appSettingsRepository.shuffleMode
     val amoledEnabled: StateFlow<Boolean> = appSettingsRepository.amoledEnabled
     val uiFontPath: StateFlow<String?> = appSettingsRepository.uiFontPath
+    val doubleTapArtworkAction: StateFlow<dev.nami.domain.GestureAction> = appSettingsRepository.doubleTapArtworkAction
 
     fun setAutoOpenPlayer(value: Boolean) {
         appSettingsRepository.setAutoOpenPlayer(value)
@@ -107,5 +108,9 @@ class SettingsViewModel @Inject constructor(
 
     fun clearUiFont() {
         appSettingsRepository.setUiFontPath(null)
+    }
+
+    fun setDoubleTapArtworkAction(action: dev.nami.domain.GestureAction) {
+        appSettingsRepository.setDoubleTapArtworkAction(action)
     }
 }

@@ -716,6 +716,8 @@ private object NoOpSettingsRepository : dev.nami.domain.SettingsRepository {
     override fun setLyricsFontPath(path: String?) {}
     override val uiFontPath = MutableStateFlow<String?>(null)
     override fun setUiFontPath(path: String?) {}
+    override val doubleTapArtworkAction = MutableStateFlow(dev.nami.domain.GestureAction.NONE)
+    override fun setDoubleTapArtworkAction(action: dev.nami.domain.GestureAction) {}
     override val eqEnabled = MutableStateFlow(false)
     override fun setEqEnabled(value: Boolean) {}
     override val eqBandGains = MutableStateFlow(emptyList<Float>())
