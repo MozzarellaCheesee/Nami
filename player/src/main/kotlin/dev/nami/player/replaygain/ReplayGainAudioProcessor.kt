@@ -1,9 +1,11 @@
 package dev.nami.player.replaygain
 
-import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.BaseAudioProcessor
-import dev.nami.player.toPcm16
+import dev.nami.player.asFloatOutput
+import dev.nami.player.normalizedSampleCount
+import dev.nami.player.readNormalized
+import dev.nami.player.requireNamiDspInput
 import java.nio.ByteBuffer
 import kotlin.math.pow
 
@@ -35,28 +37,33 @@ class ReplayGainAudioProcessor : BaseAudioProcessor() {
         fun dbToLinear(gainDb: Float?): Float = if (gainDb == null) 1f else 10f.pow(gainDb / 20f)
     }
 
+    private var inputIsFloat = false
+    private var scratch = FloatArray(0)
+
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
-        if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT) {
-            throw AudioProcessor.UnhandledAudioFormatException(inputAudioFormat)
-        }
+        inputIsFloat = inputAudioFormat.requireNamiDspInput()
         configured = true
-        return inputAudioFormat
+        return inputAudioFormat.asFloatOutput()
     }
 
     override fun isActive(): Boolean = configured && (enabled || boostDb != 0f)
 
     override fun queueInput(inputBuffer: ByteBuffer) {
-        val remaining = inputBuffer.remaining()
-        if (remaining == 0) return
-        val output = replaceOutputBuffer(remaining)
-        val inShorts = inputBuffer.asShortBuffer()
-        val outShorts = output.asShortBuffer()
+        val sampleCount = inputBuffer.normalizedSampleCount(inputIsFloat)
+        if (sampleCount == 0) return
+        if (scratch.size < sampleCount) scratch = FloatArray(sampleCount)
+        inputBuffer.readNormalized(scratch, sampleCount, inputIsFloat)
+
+        // Усиление здесь НЕ ограничивается: клип делает только финальный квантователь, один раз.
+        // Ограничить тут значило бы срезать пик, который следующая стадия (например, EQ с
+        // отрицательным гейном) всё равно вернула бы в диапазон.
         val gain = totalGainLinear()
-        while (inShorts.hasRemaining()) {
-            outShorts.put((inShorts.get() * gain).toPcm16())
-        }
+        val output = replaceOutputBuffer(sampleCount * 4)
+        val outFloats = output.asFloatBuffer()
+        for (i in 0 until sampleCount) outFloats.put(scratch[i] * gain)
+
         inputBuffer.position(inputBuffer.limit())
-        output.position(remaining).flip()
+        output.position(sampleCount * 4).flip()
     }
 
     override fun onReset() {

@@ -35,10 +35,13 @@ class ConvolutionAudioProcessorTest {
         inputBuffer.flip()
         processor.queueInput(inputBuffer)
 
+        // Стадии DSP отдают нормализованный float (см. Pcm16.kt) - домножаем обратно на полную
+        // шкалу, чтобы сравнивать в тех же единицах, в которых задан вход.
         val out = ArrayList<Float>()
         fun drain() {
             val buffer = processor.output
-            while (buffer.hasRemaining()) out.add(buffer.short.toFloat())
+            val floats = buffer.asFloatBuffer()
+            while (floats.hasRemaining()) out.add(floats.get() * 32768f)
         }
         drain()
         processor.queueEndOfStream()
@@ -123,10 +126,10 @@ class ConvolutionAudioProcessorTest {
         input.forEach { inputBuffer.putShort(it.toInt().toShort()) }
         inputBuffer.flip()
         processor.queueInput(inputBuffer)
-        val buffer = processor.output
+        val floats = processor.output.asFloatBuffer()
         var i = 0
-        while (buffer.hasRemaining()) {
-            assertEquals(input[i], buffer.short.toFloat(), "отсчёт $i должен быть нетронутым")
+        while (floats.hasRemaining()) {
+            assertTrue(abs(floats.get() * 32768f - input[i]) <= 1f, "отсчёт $i должен быть нетронутым")
             i++
         }
     }

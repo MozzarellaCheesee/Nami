@@ -32,8 +32,18 @@ import dev.nami.player.replaygain.ReplayGainAudioProcessor
  *     were doing nothing (commit d8ba977).
  *
  * So the DSP runs on the int16 stream the sink hands us anyway (ToInt16Pcm -> channel mapping ->
- * trimming -> these three -> silence-skipping -> Sonic). Same real DSP, on the path the device is
- * actually known to play correctly. */
+ * trimming -> наши процессоры -> silence-skipping -> Sonic). Same real DSP, on the path the device
+ * is actually known to play correctly.
+ *
+ * Это НЕ означает, что тракт 16-битный. Float-точность взята там, где она действительно что-то
+ * решает - внутри самой цепочки: каждый процессор Nami принимает int16 или float и отдаёт float,
+ * а замыкающий DitherAudioProcessor единственный возвращает поток в int16, подмешивая дизер прямо
+ * перед округлением. Итого одно квантование на всю цепочку вместо пяти и настоящий in-quantizer
+ * дизер - подробнее в Pcm16.kt. Обе проблемы выше касаются флага синка, а не арифметики, поэтому
+ * они этой схеме не мешают.
+ *
+ * Порядок в массиве обязателен: DitherAudioProcessor идёт последним, потому что после наших
+ * процессоров media3 ставит silence-skipping и Sonic, а те принимают только int16. */
 @UnstableApi
 class NamiRenderersFactory(
     context: Context,

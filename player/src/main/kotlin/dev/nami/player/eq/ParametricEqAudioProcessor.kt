@@ -1,9 +1,11 @@
 package dev.nami.player.eq
 
-import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.BaseAudioProcessor
-import dev.nami.player.toPcm16
+import dev.nami.player.asFloatOutput
+import dev.nami.player.normalizedSampleCount
+import dev.nami.player.readNormalized
+import dev.nami.player.requireNamiDspInput
 import java.nio.ByteBuffer
 
 /** Этап 4's parametric EQ - a 9-band graphic EQ (ISO-ish octave centers: 63/125/250/500/1k/2k/
@@ -53,37 +55,41 @@ class ParametricEqAudioProcessor : BaseAudioProcessor() {
         coeffs = Array(BAND_FREQS_HZ.size) { i -> BiquadCoefficients.peaking(sampleRateHz, BAND_FREQS_HZ[i], gains[i], BAND_Q) }
     }
 
+    private var inputIsFloat = false
+    private var scratch = FloatArray(0)
+
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
-        if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT) {
-            throw AudioProcessor.UnhandledAudioFormatException(inputAudioFormat)
-        }
+        inputIsFloat = inputAudioFormat.requireNamiDspInput()
         sampleRateHz = inputAudioFormat.sampleRate
         states = Array(BAND_FREQS_HZ.size) { Array(inputAudioFormat.channelCount) { BiquadState() } }
         recomputeCoefficients()
-        return inputAudioFormat
+        return inputAudioFormat.asFloatOutput()
     }
 
     override fun isActive(): Boolean = enabled && sampleRateHz > 0
 
     override fun queueInput(inputBuffer: ByteBuffer) {
-        val remaining = inputBuffer.remaining()
-        if (remaining == 0) return
+        val sampleCount = inputBuffer.normalizedSampleCount(inputIsFloat)
+        if (sampleCount == 0) return
         val channelCount = states.getOrNull(0)?.size ?: return
-        val output = replaceOutputBuffer(remaining)
-        val inShorts = inputBuffer.asShortBuffer()
-        val outShorts = output.asShortBuffer()
+        if (scratch.size < sampleCount) scratch = FloatArray(sampleCount)
+        inputBuffer.readNormalized(scratch, sampleCount, inputIsFloat)
+
+        val output = replaceOutputBuffer(sampleCount * 4)
+        val outFloats = output.asFloatBuffer()
         val currentCoeffs = coeffs
         var channel = 0
-        while (inShorts.hasRemaining()) {
-            var sample = inShorts.get().toFloat()
+        for (i in 0 until sampleCount) {
+            var sample = scratch[i]
             for (band in BAND_FREQS_HZ.indices) {
                 sample = states[band][channel].process(sample, currentCoeffs[band])
             }
-            outShorts.put(sample.toPcm16())
+            outFloats.put(sample)
             channel = (channel + 1) % channelCount
         }
+
         inputBuffer.position(inputBuffer.limit())
-        output.position(remaining).flip()
+        output.position(sampleCount * 4).flip()
     }
 
     override fun onFlush() {

@@ -1,10 +1,12 @@
 package dev.nami.player.convolution
 
-import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.BaseAudioProcessor
 import dev.nami.player.analysis.Fft
-import dev.nami.player.toPcm16
+import dev.nami.player.asFloatOutput
+import dev.nami.player.normalizedSampleCount
+import dev.nami.player.readNormalized
+import dev.nami.player.requireNamiDspInput
 import java.nio.ByteBuffer
 
 /** П.md §9 "свёртка с импульсной характеристикой" - равномерно секционированная свёртка методом
@@ -72,14 +74,15 @@ class ConvolutionAudioProcessor : BaseAudioProcessor() {
     private var accRe = DoubleArray(0)
     private var accIm = DoubleArray(0)
 
+    private var inputIsFloat = false
+    private var scratch = FloatArray(0)
+
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
-        if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT) {
-            throw AudioProcessor.UnhandledAudioFormatException(inputAudioFormat)
-        }
+        inputIsFloat = inputAudioFormat.requireNamiDspInput()
         sampleRateHz = inputAudioFormat.sampleRate
         channelCount = inputAudioFormat.channelCount
         prepareImpulse()
-        return inputAudioFormat
+        return inputAudioFormat.asFloatOutput()
     }
 
     /** Раскладывает импульс по секциям и считает их спектры - один раз на конфигурацию, а не на
@@ -149,18 +152,20 @@ class ConvolutionAudioProcessor : BaseAudioProcessor() {
     override fun isActive(): Boolean = enabled && partitionCount > 0 && sampleRateHz > 0
 
     override fun queueInput(inputBuffer: ByteBuffer) {
-        val remaining = inputBuffer.remaining()
-        if (remaining == 0) return
-        val inShorts = inputBuffer.asShortBuffer()
-        val frameCount = remaining / 2 / channelCount
+        val sampleCount = inputBuffer.normalizedSampleCount(inputIsFloat)
+        if (sampleCount == 0) return
+        if (scratch.size < sampleCount) scratch = FloatArray(sampleCount)
+        inputBuffer.readNormalized(scratch, sampleCount, inputIsFloat)
+        val frameCount = sampleCount / channelCount
 
         // Сколько целых блоков сможем выдать с учётом уже накопленного хвоста. Выход короче
         // входа на неполный блок - это разрешено контрактом AudioProcessor (так же ведёт себя
         // штатный пропуск тишины), а недостающее догоняется на следующих буферах.
         val totalFrames = pendingCount + frameCount
         val blocks = totalFrames / BLOCK
-        val output = replaceOutputBuffer(blocks * BLOCK * channelCount * 2)
-        val outShorts = output.asShortBuffer()
+        val outputBytes = blocks * BLOCK * channelCount * 4
+        val output = replaceOutputBuffer(outputBytes)
+        val outFloats = output.asFloatBuffer()
 
         var framesRead = 0
         while (framesRead < frameCount) {
@@ -168,7 +173,7 @@ class ConvolutionAudioProcessor : BaseAudioProcessor() {
             val take = minOf(BLOCK - pendingCount, frameCount - framesRead)
             for (i in 0 until take) {
                 for (channel in 0 until channelCount) {
-                    pending[channel][pendingCount + i] = inShorts.get().toFloat()
+                    pending[channel][pendingCount + i] = scratch[(framesRead + i) * channelCount + channel]
                 }
             }
             pendingCount += take
@@ -179,14 +184,14 @@ class ConvolutionAudioProcessor : BaseAudioProcessor() {
             // Блок обработан на месте в pending - выкладываем и запоминаем как «предыдущий».
             for (i in 0 until BLOCK) {
                 for (channel in 0 until channelCount) {
-                    outShorts.put(pending[channel][i].toPcm16())
+                    outFloats.put(pending[channel][i])
                 }
             }
             pendingCount = 0
         }
 
         inputBuffer.position(inputBuffer.limit())
-        output.position(blocks * BLOCK * channelCount * 2).flip()
+        output.position(outputBytes).flip()
     }
 
     /** Конец потока: в pending обычно лежит неполный блок. Без этого хвост до 46 мс просто
@@ -199,14 +204,15 @@ class ConvolutionAudioProcessor : BaseAudioProcessor() {
                 java.util.Arrays.fill(pending[channel], tail, BLOCK, 0f)
             }
             processBlock()
-            val output = replaceOutputBuffer(tail * channelCount * 2)
-            val outShorts = output.asShortBuffer()
+            val outputBytes = tail * channelCount * 4
+            val output = replaceOutputBuffer(outputBytes)
+            val outFloats = output.asFloatBuffer()
             for (i in 0 until tail) {
                 for (channel in 0 until channelCount) {
-                    outShorts.put(pending[channel][i].toPcm16())
+                    outFloats.put(pending[channel][i])
                 }
             }
-            output.position(tail * channelCount * 2).flip()
+            output.position(outputBytes).flip()
             pendingCount = 0
         }
     }
