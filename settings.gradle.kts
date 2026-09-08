@@ -32,4 +32,5 @@ include(
     ":feature:search",
     ":feature:playlists",
     ":feature:trash",
+    ":baselineprofile",
 )

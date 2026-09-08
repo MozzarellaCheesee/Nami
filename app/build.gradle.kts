@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.baselineprofile)
 }
 
 // versionCode was hardcoded at 1 for every dev build this whole project - Android's package
@@ -97,6 +98,10 @@ dependencies {
     implementation(libs.glance.appwidget)
     implementation(libs.glance.material3)
     implementation(libs.coil.compose)
+    // Ставит baseline-профиль в ART при первом запуске - без него сам файл профиля в APK
+    // ни на что не влияет.
+    implementation(libs.androidx.profileinstaller)
+    baselineProfile(project(":baselineprofile"))
     ksp(libs.hilt.compiler)
 
     debugImplementation(libs.compose.ui.tooling)
