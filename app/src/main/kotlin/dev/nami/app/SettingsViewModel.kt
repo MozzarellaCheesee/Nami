@@ -45,6 +45,12 @@ class SettingsViewModel @Inject constructor(
     val scrobblingEnabled: StateFlow<Boolean> = appSettingsRepository.scrobblingEnabled
     val airPlayEnabled: StateFlow<Boolean> = appSettingsRepository.airPlayEnabled
     fun setAirPlayEnabled(value: Boolean) = appSettingsRepository.setAirPlayEnabled(value)
+    val yandexStationEnabled: StateFlow<Boolean> = appSettingsRepository.yandexStationEnabled
+    fun setYandexStationEnabled(value: Boolean) = appSettingsRepository.setYandexStationEnabled(value)
+    val yandexOAuthToken: StateFlow<String?> = appSettingsRepository.yandexOAuthToken
+    fun setYandexOAuthToken(token: String?) = appSettingsRepository.setYandexOAuthToken(token)
+    val yandexClientId: StateFlow<String?> = appSettingsRepository.yandexClientId
+    fun setYandexClientId(value: String?) = appSettingsRepository.setYandexClientId(value)
     val listenBrainzToken: StateFlow<String?> = appSettingsRepository.listenBrainzToken
     val nowPlayingShowTechInfo: StateFlow<Boolean> = appSettingsRepository.nowPlayingShowTechInfo
     val nowPlayingShowShuffle: StateFlow<Boolean> = appSettingsRepository.nowPlayingShowShuffle

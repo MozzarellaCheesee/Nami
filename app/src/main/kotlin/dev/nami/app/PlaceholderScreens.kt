@@ -412,6 +412,12 @@ fun SettingsPlayerScreen(
     val miniPlayerSideSwipe by viewModel.miniPlayerSideSwipeAction.collectAsState()
     val layoutPreset by viewModel.nowPlayingLayoutPreset.collectAsState()
     val airPlayEnabled by viewModel.airPlayEnabled.collectAsState()
+    val yandexEnabled by viewModel.yandexStationEnabled.collectAsState()
+    val yandexToken by viewModel.yandexOAuthToken.collectAsState()
+    val yandexClientId by viewModel.yandexClientId.collectAsState()
+    var yandexTokenText by remember(yandexToken) { mutableStateOf(yandexToken.orEmpty()) }
+    var yandexClientIdText by remember(yandexClientId) { mutableStateOf(yandexClientId.orEmpty()) }
+    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
 
     SettingsSubScreenScaffold(title = "Плеер", onBack = onBack) {
         NowPlayingPresetRow(
@@ -572,6 +578,62 @@ fun SettingsPlayerScreen(
                 trailing = { NamiSwitch(checked = airPlayEnabled, onCheckedChange = viewModel::setAirPlayEnabled) },
                 onClick = { viewModel.setAirPlayEnabled(!airPlayEnabled) },
             )
+            SettingsRow(
+                icon = Icons.Outlined.Cast,
+                title = "Трансляция на Яндекс Станцию (Beta)",
+                subtitle = "Протокол Glagol неофициальный: Яндекс вправе сломать его без " +
+                    "предупреждения. Нужен вход в личный Яндекс ID. Пока выключено, сеть не сканируется.",
+                trailing = { NamiSwitch(checked = yandexEnabled, onCheckedChange = viewModel::setYandexStationEnabled) },
+                onClick = { viewModel.setYandexStationEnabled(!yandexEnabled) },
+            )
+        }
+        // Вход появляется только при включённом тумблере: без трансляции на Станцию токен
+        // Яндекс ID приложению не нужен и просить его незачем.
+        if (yandexEnabled) {
+            SettingsCard(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Text(
+                        text = "Вход идёт в вашем браузере, приложение не видит пароль. Заведите своё " +
+                            "приложение на oauth.yandex.ru (нужны права \"Яндекс.Станция\"), впишите его " +
+                            "ID ниже и нажмите Войти - браузер покажет токен, его и вставьте.",
+                        color = NamiColors.Paper40,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    androidx.compose.material3.OutlinedTextField(
+                        value = yandexClientIdText,
+                        onValueChange = { yandexClientIdText = it },
+                        label = { Text("ID приложения Яндекс ID") },
+                        singleLine = true,
+                        supportingText = { ApiKeyHint("Создать приложение: oauth.yandex.ru", "https://oauth.yandex.ru/") },
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                    )
+                    NamiPill(
+                        text = "Войти в Яндекс ID",
+                        enabled = yandexClientIdText.isNotBlank(),
+                        modifier = Modifier.padding(top = 12.dp),
+                        onClick = {
+                            viewModel.setYandexClientId(yandexClientIdText)
+                            uriHandler.openUri(
+                                "https://oauth.yandex.ru/authorize?response_type=token" +
+                                    "&client_id=${yandexClientIdText.trim()}" +
+                                    "&redirect_uri=https://oauth.yandex.ru/verification_code",
+                            )
+                        },
+                    )
+                    androidx.compose.material3.OutlinedTextField(
+                        value = yandexTokenText,
+                        onValueChange = { yandexTokenText = it },
+                        label = { Text("OAuth-токен") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                    )
+                    NamiPill(
+                        text = "Сохранить токен",
+                        modifier = Modifier.padding(top = 12.dp),
+                        onClick = { viewModel.setYandexOAuthToken(yandexTokenText) },
+                    )
+                }
+            }
         }
     }
 }

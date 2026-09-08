@@ -230,6 +230,11 @@ interface SettingsRepository {
     val yandexOAuthToken: StateFlow<String?>
     fun setYandexOAuthToken(token: String?)
 
+    /** client_id приложения пользователя на oauth.yandex.ru. Секретом не является (он публичен по
+     * определению OAuth), поэтому лежит рядом с остальными настройками, а не в шифрованном файле. */
+    val yandexClientId: StateFlow<String?>
+    fun setYandexClientId(value: String?)
+
     /** П.md §14 "Главный экран - конструктор" - см. HomeBlock.kt. Порядок списка = порядок
      * отображения. */
     val homeBlocks: StateFlow<List<HomeBlockConfig>>

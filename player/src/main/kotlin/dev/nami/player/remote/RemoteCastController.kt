@@ -81,6 +81,11 @@ class RemoteCastController @Inject constructor(
         settings.airPlayEnabled
             .onEach { on -> if (on) addDiscovery(AirPlayDiscovery(context)) else removeDiscovery(RemoteKind.AIRPLAY) }
             .launchIn(scope)
+        settings.yandexStationEnabled
+            .onEach { on ->
+                if (on) addDiscovery(YandexStationDiscovery(context, settings)) else removeDiscovery(RemoteKind.YANDEX)
+            }
+            .launchIn(scope)
     }
 
     /** true, пока играем на приёмнике - владелец не должен сам переставлять плеер сессии. */

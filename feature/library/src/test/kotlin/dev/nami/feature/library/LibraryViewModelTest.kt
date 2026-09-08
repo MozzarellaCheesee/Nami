@@ -786,6 +786,8 @@ private object NoOpSettingsRepository : dev.nami.domain.SettingsRepository {
     override fun setYandexStationEnabled(value: Boolean) {}
     override val yandexOAuthToken = MutableStateFlow<String?>(null)
     override fun setYandexOAuthToken(token: String?) {}
+    override val yandexClientId = MutableStateFlow<String?>(null)
+    override fun setYandexClientId(value: String?) {}
     override val listenBrainzToken = MutableStateFlow<String?>(null)
     override fun setListenBrainzToken(token: String?) {}
     override val homeBlocks = MutableStateFlow(dev.nami.domain.DEFAULT_HOME_BLOCKS)
