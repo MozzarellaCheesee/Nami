@@ -22,6 +22,19 @@
                  a known class of bug with navigation-compose's AnimatedContent-based NavHost.
                  Disabled until that's fixed upstream; back falls through to the classic,
                  immediate-pop dispatcher our screens already assume. -->
+
+            <!-- П.md §2 "Share-target на audio/*" - "поделиться" a file from Telegram/a browser/
+                 a file manager straight into the library, one or several at once. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="audio/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="audio/*" />
+            </intent-filter>
         </activity>
 
         <!-- Icon picker (Settings): each alias targets the same MainActivity, just with its own

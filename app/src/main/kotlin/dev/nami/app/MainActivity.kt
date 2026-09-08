@@ -50,6 +50,20 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         if (intent.getBooleanExtra(EXTRA_OPEN_PLAYER, false)) openPlayerSignal.value++
+        handleShareIntent(intent)
+    }
+
+    // П.md §2 "Share-target на audio MIME type" - ACTION_SEND/SEND_MULTIPLE from another app
+    // (Telegram, a file manager, a browser's download). Uses the same importFiles(uris) pipeline
+    // as the file picker - LibraryRepositoryImpl copies each into private storage immediately, so
+    // the temporary read grant this intent carries only needs to outlive that one copy.
+    private fun handleShareIntent(intent: Intent) {
+        val uris = when (intent.action) {
+            Intent.ACTION_SEND -> intent.getParcelableExtra<android.net.Uri>(Intent.EXTRA_STREAM)?.let { listOf(it) }
+            Intent.ACTION_SEND_MULTIPLE -> intent.getParcelableArrayListExtra<android.net.Uri>(Intent.EXTRA_STREAM)
+            else -> null
+        }
+        if (!uris.isNullOrEmpty()) libraryViewModel.importFiles(uris.map { it.toString() })
     }
 
     private val pickFiles = registerForActivityResult(
@@ -122,6 +136,7 @@ class MainActivity : ComponentActivity() {
         // across an update could still leave it in that state).
         IconPicker.ensureValidState(this)
         if (intent.getBooleanExtra(EXTRA_OPEN_PLAYER, false)) openPlayerSignal.value++
+        handleShareIntent(intent)
         val importProgress = libraryViewModel.uiState
             .map { it.importProgress }
             .stateIn(lifecycleScope, SharingStarted.Eagerly, libraryViewModel.uiState.value.importProgress)
