@@ -58,7 +58,10 @@ class NowPlayingViewModel @Inject constructor(
     private val momentsRepository: MomentsRepository? = null,
     // Same reasoning - only used for saved A-B loops.
     private val loopsRepository: LoopsRepository? = null,
+    // Same reasoning - only used for MiniPlayer's слепое-прослушивание mask.
+    private val blindListenState: BlindListenState? = null,
 ) : ViewModel() {
+    val blindModeActive: StateFlow<Boolean> = blindListenState?.active ?: MutableStateFlow(false)
 
     private val waveformDiskCache = WaveformCache(context)
 

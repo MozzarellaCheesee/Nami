@@ -10,8 +10,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.SkipNext
@@ -67,7 +70,13 @@ fun BlindListenScreen(onBack: () -> Unit, viewModel: BlindListenViewModel = hilt
                         if (uiState.revealed && track.albumArtworkPath != null) {
                             AsyncImage(model = track.albumArtworkPath, contentDescription = null, modifier = Modifier.fillMaxSize())
                         } else {
-                            Text("？", color = NamiColors.Paper40, style = MaterialTheme.typography.displayLarge)
+                            Text(
+                                "？",
+                                color = NamiColors.Paper40,
+                                style = MaterialTheme.typography.displayLarge,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                modifier = Modifier.fillMaxSize().wrapContentSize(Alignment.Center),
+                            )
                         }
                     }
 
@@ -87,6 +96,15 @@ fun BlindListenScreen(onBack: () -> Unit, viewModel: BlindListenViewModel = hilt
                     androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(24.dp))
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        val isLiked by viewModel.isCurrentTrackLiked.collectAsState()
+                        IconButton(onClick = viewModel::toggleLike) {
+                            Icon(
+                                if (isLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                contentDescription = if (isLiked) "Убрать из любимых" else "В любимые",
+                                tint = if (isLiked) NamiColors.Shu else NamiColors.Paper100,
+                                modifier = Modifier.size(32.dp),
+                            )
+                        }
                         IconButton(onClick = viewModel::togglePlayback) {
                             Icon(
                                 if (isPlaying) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,

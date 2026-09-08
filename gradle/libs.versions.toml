@@ -50,6 +50,8 @@ androidx-room-testing = { module = "androidx.room:room-testing", version.ref = "
 androidx-test-core = { module = "androidx.test:core-ktx", version = "1.6.1" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 androidx-documentfile = { module = "androidx.documentfile:documentfile", version = "1.0.1" }
+glance-appwidget = { module = "androidx.glance:glance-appwidget", version = "1.1.1" }
+glance-material3 = { module = "androidx.glance:glance-material3", version = "1.1.1" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

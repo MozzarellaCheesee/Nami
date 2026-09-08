@@ -115,6 +115,18 @@
             </intent-filter>
         </activity-alias>
 
+        <!-- Группа E "виджеты" - минимальный Glance-виджет, текущий трек + play/pause/next. -->
+        <receiver
+            android:name=".widget.NamiWidgetReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/nami_widget_info" />
+        </receiver>
+
         <!-- Группа D "карточка трека (экспорт-картинка)" - нужен content:// Uri чтобы поделиться
              сгенерированной картинкой в другое приложение (ACTION_SEND не примет file://). -->
         <provider

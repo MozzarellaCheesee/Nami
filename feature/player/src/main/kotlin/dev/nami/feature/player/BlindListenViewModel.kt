@@ -8,8 +8,15 @@ import dev.nami.domain.LibraryRepository
 import dev.nami.domain.PlayableTrack
 import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerRepository
+import dev.nami.domain.PlaylistRepository
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -20,6 +27,8 @@ import javax.inject.Inject
 class BlindListenViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
     private val playerRepository: PlayerRepository,
+    private val playlistRepository: PlaylistRepository,
+    private val blindListenState: BlindListenState,
 ) : ViewModel() {
     data class UiState(
         val current: Track? = null,
@@ -31,8 +40,25 @@ class BlindListenViewModel @Inject constructor(
     val uiState: StateFlow<UiState> = _uiState
     val playbackState: StateFlow<PlaybackState> = playerRepository.state
 
+    val isCurrentTrackLiked: StateFlow<Boolean> = _uiState
+        .map { it.current?.id }
+        .distinctUntilChanged()
+        .filterNotNull()
+        .flatMapLatest { playlistRepository.isTrackLiked(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
     init {
+        blindListenState.setActive(true)
         next()
+    }
+
+    fun toggleLike() {
+        val id = _uiState.value.current?.id ?: return
+        viewModelScope.launch { playlistRepository.toggleLike(id) }
+    }
+
+    override fun onCleared() {
+        blindListenState.setActive(false)
     }
 
     fun next() {

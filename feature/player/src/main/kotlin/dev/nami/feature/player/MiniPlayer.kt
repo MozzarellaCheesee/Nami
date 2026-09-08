@@ -64,6 +64,7 @@ fun MiniPlayer(
 ) {
     val state by viewModel.playbackState.collectAsState()
     val queue by viewModel.queue.collectAsState()
+    val blindMode by viewModel.blindModeActive.collectAsState()
     val playing = state as? PlaybackState.Playing
     val density = LocalDensity.current
     val expandThresholdPx = with(density) { EXPAND_THRESHOLD_DP.dp.toPx() }
@@ -103,7 +104,7 @@ fun MiniPlayer(
     Box(modifier = Modifier.fillMaxWidth().height(60.dp).clipToBounds()) {
         // Same ambient-blur idea as Now Playing, scaled down: the current track's own artwork,
         // blurred and dimmed, instead of a flat Ink800 bar.
-        val backgroundArtworkPath = queue.nowPlaying?.artworkPath
+        val backgroundArtworkPath = if (blindMode) null else queue.nowPlaying?.artworkPath
         if (backgroundArtworkPath != null) {
             AsyncImage(
                 model = backgroundArtworkPath,
@@ -162,7 +163,10 @@ fun MiniPlayer(
                 2 -> queue.upcoming.firstOrNull()?.track
                 else -> queue.nowPlaying
             }
-            MiniPlayerTrackBlock(track = track)
+            // Слепое прослушивание (группа D) - иначе MiniPlayer сразу палит то, что экран
+            // BlindListenScreen специально прячет.
+            val masked = if (blindMode && track != null) track.copy(title = "???", artistName = null, artworkPath = null) else track
+            MiniPlayerTrackBlock(track = masked)
         }
         val isFavorite by viewModel.isCurrentTrackLiked.collectAsState()
         Box(
