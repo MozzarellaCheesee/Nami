@@ -22,6 +22,7 @@ import dev.nami.domain.SettingsRepository
 import dev.nami.domain.ShuffleMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
@@ -240,29 +241,40 @@ class PlayerRepositoryImpl @Inject constructor(
     // to "play just this slice of a file": position/duration it reports are already relative to
     // the clip, and reaching the clip's end fires the same MEDIA_ITEM_TRANSITION_REASON_AUTO as a
     // normal track ending -- no separate polling/seek-on-boundary logic needed anywhere else.
-    private fun PlayableTrack.toMediaItem(): MediaItem = MediaItem.Builder()
-        .setMediaId(id.value)
-        .setUri(path)
-        .apply {
-            val start = cueStartMs
-            if (start != null) {
-                setClippingConfiguration(
-                    MediaItem.ClippingConfiguration.Builder()
-                        .setStartPositionMs(start)
-                        .apply { cueEndMs?.let { setEndPositionMs(it) } }
-                        .build(),
-                )
-            }
+    // Группа E "экран блокировки" -- setArtworkUri with a bare filesystem path doesn't resolve
+    // for the system (SystemUI/lockscreen renders this MediaSession's metadata in its own
+    // process, which can't read our app-private file by a schemeless path). setArtworkData with
+    // the raw bytes sidesteps cross-process file access entirely -- the same MediaSession/
+    // MediaMetadata already feeds the OS lock screen media control automatically, no separate
+    // lock-screen UI of our own to build.
+    private suspend fun PlayableTrack.toMediaItem(): MediaItem {
+        val artworkBytes = artworkPath?.let { path ->
+            withContext(Dispatchers.IO) { runCatching { java.io.File(path).readBytes() }.getOrNull() }
         }
-        .setMediaMetadata(
-            MediaMetadata.Builder()
-                .setTitle(title)
-                .setArtist(artistName)
-                .apply { artworkPath?.let { setArtworkUri(android.net.Uri.parse(it)) } }
-                .setExtras(android.os.Bundle().apply { putString("format", format) })
-                .build(),
-        )
-        .build()
+        return MediaItem.Builder()
+            .setMediaId(id.value)
+            .setUri(path)
+            .apply {
+                val start = cueStartMs
+                if (start != null) {
+                    setClippingConfiguration(
+                        MediaItem.ClippingConfiguration.Builder()
+                            .setStartPositionMs(start)
+                            .apply { cueEndMs?.let { setEndPositionMs(it) } }
+                            .build(),
+                    )
+                }
+            }
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(title)
+                    .setArtist(artistName)
+                    .apply { artworkBytes?.let { setArtworkData(it, MediaMetadata.PICTURE_TYPE_FRONT_COVER) } }
+                    .setExtras(android.os.Bundle().apply { putString("format", format) })
+                    .build(),
+            )
+            .build()
+    }
 
     // Cold start only -- fires once, right after the controller connects, and only if the player
     // actually has nothing loaded (a live/backgrounded-but-alive service already has its own real

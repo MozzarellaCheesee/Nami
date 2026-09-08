@@ -10,13 +10,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.QuestionMark
 import androidx.compose.material.icons.outlined.SkipNext
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -70,12 +70,14 @@ fun BlindListenScreen(onBack: () -> Unit, viewModel: BlindListenViewModel = hilt
                         if (uiState.revealed && track.albumArtworkPath != null) {
                             AsyncImage(model = track.albumArtworkPath, contentDescription = null, modifier = Modifier.fillMaxSize())
                         } else {
-                            Text(
-                                "？",
-                                color = NamiColors.Paper40,
-                                style = MaterialTheme.typography.displayLarge,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                modifier = Modifier.fillMaxSize().wrapContentSize(Alignment.Center),
+                            // A text glyph (even ASCII "?") sits off-center within its own line
+                            // box depending on font metrics -- an Icon is drawn to fill its exact
+                            // bounding box, no font-dependent guesswork needed to center it.
+                            Icon(
+                                Icons.Outlined.QuestionMark,
+                                contentDescription = null,
+                                tint = NamiColors.Paper40,
+                                modifier = Modifier.size(96.dp),
                             )
                         }
                     }

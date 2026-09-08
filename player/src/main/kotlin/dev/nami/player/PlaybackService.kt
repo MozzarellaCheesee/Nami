@@ -9,14 +9,22 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.CommandButton
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionCommands
+import androidx.media3.session.SessionResult
+import com.google.common.collect.ImmutableList
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
 import dagger.hilt.android.AndroidEntryPoint
 import dev.nami.core.model.TrackId
 import dev.nami.domain.LibraryRepository
 import dev.nami.domain.OutputProfile
 import dev.nami.domain.PlaybackState
+import dev.nami.domain.PlaylistRepository
 import dev.nami.domain.SettingsRepository
 import dev.nami.player.dither.DitherAudioProcessor
 import dev.nami.player.eq.NamiRenderersFactory
@@ -50,6 +58,8 @@ private class DspChain {
     val eq = ParametricEqAudioProcessor()
     val dither = DitherAudioProcessor()
 }
+
+private const val ACTION_TOGGLE_LIKE = "dev.nami.ACTION_TOGGLE_LIKE"
 
 @AndroidEntryPoint
 class PlaybackService : MediaSessionService() {
@@ -92,6 +102,7 @@ class PlaybackService : MediaSessionService() {
     // same listener object both times, not a fresh one that'd be easy to double-add by accident.
     private val replayGainListener = object : Player.Listener {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            scope.launch { refreshLikeButton() }
             val trackId = mediaItem?.mediaId?.let(::TrackId) ?: return
             scope.launch { updateReplayGainForCurrentTrack(trackId) }
             scope.launch { updateEndingFadeForCurrentTrack(trackId) }
@@ -101,6 +112,57 @@ class PlaybackService : MediaSessionService() {
 
     @Inject lateinit var settingsRepository: SettingsRepository
     @Inject lateinit var libraryRepository: LibraryRepository
+    @Inject lateinit var playlistRepository: PlaylistRepository
+
+    /** Группа E "системный мини-плеер" -- лайк-кнопка в уведомлении/на экране блокировки, не
+     * только в своём собственном MiniPlayer. Media3's MediaSession.Callback is the extension
+     * point for a custom action beyond the standard play/pause/skip set. */
+    private val likeCommand = SessionCommand(ACTION_TOGGLE_LIKE, Bundle.EMPTY)
+
+    private fun likeButton(liked: Boolean) = CommandButton.Builder(CommandButton.ICON_UNDEFINED)
+        .setDisplayName(if (liked) "Убрать из любимых" else "В любимые")
+        .setSessionCommand(likeCommand)
+        .setIconResId(if (liked) R.drawable.ic_like_filled else R.drawable.ic_like_outline)
+        .build()
+
+    private suspend fun refreshLikeButton() {
+        val trackId = (player.currentMediaItem?.mediaId)?.takeIf { it.isNotEmpty() }?.let(::TrackId) ?: return
+        val liked = playlistRepository.isTrackLiked(trackId).first()
+        mediaSession.setCustomLayout(ImmutableList.of(likeButton(liked)))
+    }
+
+    private val sessionCallback = object : MediaSession.Callback {
+        override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
+            val connectionResult = MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+                .setAvailableSessionCommands(
+                    MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS.buildUpon()
+                        .add(likeCommand)
+                        .build(),
+                )
+                .build()
+            scope.launch { refreshLikeButton() }
+            return connectionResult
+        }
+
+        override fun onCustomCommand(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            customCommand: SessionCommand,
+            args: Bundle,
+        ): ListenableFuture<SessionResult> {
+            if (customCommand.customAction == ACTION_TOGGLE_LIKE) {
+                val trackId = player.currentMediaItem?.mediaId?.takeIf { it.isNotEmpty() }?.let(::TrackId)
+                if (trackId != null) {
+                    scope.launch {
+                        playlistRepository.toggleLike(trackId)
+                        refreshLikeButton()
+                    }
+                }
+                return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+            }
+            return Futures.immediateFuture(SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED))
+        }
+    }
 
     /** What the EQ chain and player volume should actually be right now -- either the user's own
      * manual EQ, or (when Этап 4's per-device profiles are on) the profile matching the currently
@@ -140,7 +202,10 @@ class PlaybackService : MediaSessionService() {
             openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        mediaSession = MediaSession.Builder(this, player).setSessionActivity(sessionActivity).build()
+        mediaSession = MediaSession.Builder(this, player)
+            .setSessionActivity(sessionActivity)
+            .setCallback(sessionCallback)
+            .build()
 
         // Without this, Media3 falls back to its own bundled default (a generic circle-with-play
         // -triangle icon) for the small icon shown in the status bar and the media notification.
