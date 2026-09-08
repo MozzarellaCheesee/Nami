@@ -42,6 +42,7 @@ fun ArtistAllTracksScreen(
     onPlayTracks: (tracks: List<Track>, artistName: String?, startIndex: Int) -> Unit,
     onAddToQueue: (Track, artistName: String?) -> Unit,
     onShowTrackInfo: (TrackId) -> Unit,
+    onCompareVersions: (TrackId, TrackId) -> Unit,
     viewModel: ArtistDetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -80,14 +81,26 @@ fun ArtistAllTracksScreen(
                         isPlaying = track.id == nowPlaying?.trackId && nowPlaying?.isPlaying == true,
                     )
                     if (group.size > 1) {
-                        Text(
-                            text = if (isExpanded) "Свернуть версии" else "+${group.size - 1} версии",
-                            color = NamiColors.Shu,
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier
-                                .padding(start = 68.dp, top = 2.dp, bottom = 4.dp)
-                                .clickable { expandedGroups[groupKey] = !isExpanded },
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = if (isExpanded) "Свернуть версии" else "+${group.size - 1} версии",
+                                color = NamiColors.Shu,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier
+                                    .padding(start = 68.dp, top = 2.dp, bottom = 4.dp)
+                                    .clickable { expandedGroups[groupKey] = !isExpanded },
+                            )
+                            if (group.size == 2) {
+                                Text(
+                                    text = "· сравнить вслепую",
+                                    color = NamiColors.Paper40,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier
+                                        .padding(start = 6.dp, top = 2.dp, bottom = 4.dp)
+                                        .clickable { onCompareVersions(group[0].id, group[1].id) },
+                                )
+                            }
+                        }
                     }
                 }
                 if (isExpanded && group.size > 1) {

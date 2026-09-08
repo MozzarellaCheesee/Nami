@@ -88,6 +88,7 @@ fun AlbumDetailScreen(
     onDeleted: () -> Unit,
     onShowTrackInfo: (TrackId) -> Unit,
     onShowAlbumInfo: (AlbumId) -> Unit,
+    onCompareVersions: (TrackId, TrackId) -> Unit,
     viewModel: AlbumDetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -240,14 +241,26 @@ fun AlbumDetailScreen(
                                 isPlaying = track.id == nowPlaying?.trackId && nowPlaying?.isPlaying == true,
                             )
                             if (group.size > 1) {
-                                Text(
-                                    text = if (isExpanded) "Свернуть версии" else "+${group.size - 1} версии",
-                                    color = NamiColors.Shu,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    modifier = Modifier
-                                        .padding(start = 68.dp, top = 2.dp, bottom = 4.dp)
-                                        .clickable { expandedGroups[groupKey] = !isExpanded },
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = if (isExpanded) "Свернуть версии" else "+${group.size - 1} версии",
+                                        color = NamiColors.Shu,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier
+                                            .padding(start = 68.dp, top = 2.dp, bottom = 4.dp)
+                                            .clickable { expandedGroups[groupKey] = !isExpanded },
+                                    )
+                                    if (group.size == 2) {
+                                        Text(
+                                            text = "· сравнить вслепую",
+                                            color = NamiColors.Paper40,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            modifier = Modifier
+                                                .padding(start = 6.dp, top = 2.dp, bottom = 4.dp)
+                                                .clickable { onCompareVersions(group[0].id, group[1].id) },
+                                        )
+                                    }
+                                }
                             }
                         }
                         if (isExpanded && group.size > 1) {

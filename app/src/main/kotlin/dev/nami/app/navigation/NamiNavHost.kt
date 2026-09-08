@@ -82,6 +82,7 @@ private const val ROUTE_LIBRARY_HEALTH = "library_health"
 private const val ROUTE_STATS = "stats"
 private const val ROUTE_WATCHED_FOLDERS = "watched_folders"
 private const val ROUTE_TRACK_INFO = "track_info/{trackId}"
+private const val ROUTE_AB_COMPARE = "ab_compare/{trackIdA}/{trackIdB}"
 private const val ROUTE_ALBUM_INFO = "album_info/{albumId}"
 private const val ROUTE_ARTIST_INFO = "artist_info/{artistId}"
 private const val ROUTE_AUDIO_TRACT = "audio_tract"
@@ -284,6 +285,15 @@ fun NamiNavHost(
                 dev.nami.feature.library.TrackInfoScreen(onBack = { navController.popBackStack() })
             }
             composable(
+                ROUTE_AB_COMPARE,
+                arguments = listOf(
+                    navArgument("trackIdA") { type = NavType.StringType },
+                    navArgument("trackIdB") { type = NavType.StringType },
+                ),
+            ) {
+                dev.nami.feature.player.ABCompareRoute(onBack = { navController.popBackStack() })
+            }
+            composable(
                 ROUTE_ALBUM_INFO,
                 arguments = listOf(navArgument("albumId") { type = NavType.StringType }),
             ) {
@@ -332,6 +342,7 @@ fun NamiNavHost(
                     onDeleted = { navController.popBackStack() },
                     onShowTrackInfo = { trackId -> navController.navigate("track_info/${trackId.value}") },
                     onShowAlbumInfo = { albumId -> navController.navigate("album_info/${albumId.value}") },
+                    onCompareVersions = { a, b -> navController.navigate("ab_compare/${a.value}/${b.value}") },
                 )
             }
             composable(
@@ -398,6 +409,7 @@ fun NamiNavHost(
                     },
                     onAddToQueue = { track, artistName -> nowPlayingViewModel.addToQueue(track, artistName) },
                     onShowTrackInfo = { trackId -> navController.navigate("track_info/${trackId.value}") },
+                    onCompareVersions = { a, b -> navController.navigate("ab_compare/${a.value}/${b.value}") },
                 )
                 }
             }
