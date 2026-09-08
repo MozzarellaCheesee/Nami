@@ -54,6 +54,7 @@ fun MomentsAndLoopsSheet(
     onMarkLoopStart: () -> Unit,
     onMarkLoopEnd: (startMs: Long) -> Unit,
     onClearLoop: () -> Unit,
+    onExportClip: (startMs: Long, endMs: Long) -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -95,6 +96,12 @@ fun MomentsAndLoopsSheet(
                         color = NamiColors.Wakaba,
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(start = 8.dp).weight(1f),
+                    )
+                    Text(
+                        "Экспорт",
+                        color = NamiColors.Ai,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.clickable { onExportClip(activeLoop.startMs, activeLoop.endMs) }.padding(end = 12.dp),
                     )
                     Text(
                         "Убрать",

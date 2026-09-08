@@ -46,7 +46,7 @@ class NowPlayingViewModel @Inject constructor(
     // Nullable with a default so plain-JVM unit tests (no Robolectric in this project) can keep
     // constructing this ViewModel with just the two repositories, same as before this field
     // existed - WaveformCache itself no-ops (returns null / does nothing) when context is null.
-    @ApplicationContext context: Context? = null,
+    @ApplicationContext private val context: Context? = null,
     // Also nullable/defaulted for the same reason - only used for the night-mode pill, every
     // existing test constructs this ViewModel with just the two repositories.
     private val settingsRepository: SettingsRepository? = null,
@@ -117,6 +117,29 @@ class NowPlayingViewModel @Inject constructor(
 
     fun clearLoop() {
         viewModelScope.launch { playerRepository.setActiveLoop(null) }
+    }
+
+    private val _clipExportUri = kotlinx.coroutines.flow.MutableStateFlow<android.net.Uri?>(null)
+    val clipExportUri: StateFlow<android.net.Uri?> = _clipExportUri
+
+    /** Group D "экспорт клипа (аудио)" - см. AudioClipExporter. Video is out of scope. */
+    fun exportClip(startMs: Long, endMs: Long) {
+        val ctx = context ?: return
+        val trackId = (playerRepository.state.value as? PlaybackState.Playing)?.trackId ?: return
+        viewModelScope.launch {
+            val track = libraryRepository.track(trackId).first() ?: return@launch
+            val uri = withContext(Dispatchers.IO) {
+                val dir = java.io.File(ctx.cacheDir, "shares").apply { mkdirs() }
+                val file = java.io.File(dir, "clip.wav")
+                if (!dev.nami.player.AudioClipExporter.exportClip(track.path, startMs, endMs, file)) return@withContext null
+                androidx.core.content.FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
+            }
+            _clipExportUri.value = uri
+        }
+    }
+
+    fun clipExportUriShown() {
+        _clipExportUri.value = null
     }
 
     val currentTrackSavedLoops: StateFlow<List<SavedLoop>> = playerRepository.state
