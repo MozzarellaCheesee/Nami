@@ -25,7 +25,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
@@ -77,6 +79,18 @@ class LocalShareRepositoryImpl @Inject constructor(
     private var guestJob: Job? = null
     private val listenTogetherCacheDir get() = File(context.cacheDir, "listen_together").apply { mkdirs() }
     private val cachedFilesByTrackId = mutableMapOf<String, File>()
+
+    init {
+        // Пока раздача (Wi-Fi Drop) запущена (dropTrack != null), она следует за играющим
+        // треком автоматически - раньше setDropTrack() вызывался только один раз вручную и
+        // раздача навсегда замирала на том треке, даже когда хост давно переключился на другой.
+        scope.launch {
+            playerRepository.queue.map { it.nowPlaying?.id }.distinctUntilChanged().collect { id ->
+                if (_dropTrack.value == null) return@collect
+                _dropTrack.value = id?.let { runCatching { libraryRepository.track(it).first() }.getOrNull() }
+            }
+        }
+    }
 
     // ------------------------------------------------------------------ server
 

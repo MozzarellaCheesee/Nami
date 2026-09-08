@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -16,6 +18,12 @@ val gitCommitCount = providers.exec {
     commandLine("git", "rev-list", "--count", "HEAD")
 }.standardOutput.asText.get().trim().toIntOrNull() ?: 1
 
+val localProps = Properties()
+run {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { localProps.load(it) }
+}
+
 android {
     namespace = "dev.nami.app"
     compileSdk = 35
@@ -25,6 +33,25 @@ android {
         targetSdk = 35
         versionCode = gitCommitCount
         versionName = "0.1.0"
+    }
+    // Пароли берутся из local.properties (не в git, см. secrets/) - сборка release без них
+    // просто не подписывается, а не падает, чтобы обычный debug-цикл не требовал ключ.
+    signingConfigs {
+        create("release") {
+            val storePass = localProps.getProperty("nami.keystore.storePassword")
+            if (storePass != null) {
+                storeFile = rootProject.file("secrets/nami.jks")
+                storePassword = storePass
+                keyAlias = localProps.getProperty("nami.keystore.keyAlias")
+                keyPassword = localProps.getProperty("nami.keystore.keyPassword")
+            }
+        }
+    }
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = false
+        }
     }
     buildFeatures { compose = true }
     compileOptions {
