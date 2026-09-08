@@ -4,14 +4,18 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,8 +37,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -49,7 +55,17 @@ import dev.nami.domain.HomeBlockConfig
 import dev.nami.domain.HomeBlockType
 
 /** П.md §14 "Главный экран - конструктор" - см. HomeViewModel doc. Каждый включённый блок -
- * заголовок + до 10 строк-треков (или один альбом/строка статистики), в порядке из настроек. */
+ * заголовок + своё представление, в порядке из настроек.
+ *
+ * Раньше все блоки были одинаковыми вертикальными строками, и экран читался как один длинный
+ * список списков, а не как дашборд. Теперь вид зависит от смысла блока: подборки треков -
+ * горизонтальная лента карточек (компактнее по вертикали, блоки отличимы друг от друга и
+ * влезает несколько блоков сразу), случайный альбом - одна крупная карточка, статистика дня -
+ * плашка с крупными цифрами. Плейлисты-закладки остались строками: у них смысл в списке имён,
+ * а не в обложках.
+ *
+ * Вид на блок (лента/сетка/список) настройкой, как хочет план, НЕ сделан - это ещё один слой
+ * настроек поверх настроек; сначала важнее, чтобы вид по умолчанию был приличным. */
 @Composable
 fun HomeScreen(
     onTrackClick: (TrackId) -> Unit,
@@ -77,28 +93,41 @@ fun HomeScreen(
                 when (block.type) {
                     HomeBlockType.CONTINUE_LISTENING -> state.continueListening?.let { track ->
                         item { HomeSectionHeader("Продолжить слушать") }
-                        item { HomeTrackRow(track.title, track.artistName, track.albumArtworkPath, onClick = { onTrackClick(track.id) }) }
+                        item { HomeHeroRow(track.title, track.artistName, track.albumArtworkPath, onClick = { onTrackClick(track.id) }) }
                     }
                     HomeBlockType.RECENTLY_ADDED -> if (state.recentlyAdded.isNotEmpty()) {
                         item { HomeSectionHeader("Недавно добавленное") }
-                        items(state.recentlyAdded, key = { "added-" + it.id.value }) { track ->
-                            HomeTrackRow(track.title, track.artistName, track.albumArtworkPath, onClick = { onTrackClick(track.id) })
+                        item {
+                            HomeCardStrip(state.recentlyAdded, key = { "added-" + it.id.value }) { track ->
+                                HomeTrackCard(track.title, track.artistName, track.albumArtworkPath) { onTrackClick(track.id) }
+                            }
                         }
                     }
                     HomeBlockType.TOP_WEEK -> if (state.topWeek.isNotEmpty()) {
                         item { HomeSectionHeader("Топ недели") }
-                        items(state.topWeek, key = { "top-" + it.trackId.value }) { stat ->
-                            HomeTrackRow(stat.title, stat.artistName, stat.albumArtworkPath, onClick = { onTrackClick(stat.trackId) })
+                        item {
+                            HomeCardStrip(state.topWeek, key = { "top-" + it.trackId.value }) { stat ->
+                                // Номер в топе прямо на обложке - иначе лента ничем не отличается
+                                // от "недавно добавленного", а весь смысл блока в порядке.
+                                HomeTrackCard(
+                                    stat.title,
+                                    stat.artistName,
+                                    stat.albumArtworkPath,
+                                    rank = state.topWeek.indexOf(stat) + 1,
+                                ) { onTrackClick(stat.trackId) }
+                            }
                         }
                     }
                     HomeBlockType.RANDOM_ALBUM -> state.randomAlbum?.let { album ->
                         item { HomeSectionHeader("Случайный альбом") }
-                        item { HomeTrackRow(album.title, album.artistName, album.artworkPath, onClick = { onAlbumClick(album.id) }) }
+                        item { HomeAlbumCard(album.title, album.artistName, album.artworkPath) { onAlbumClick(album.id) } }
                     }
                     HomeBlockType.FORGOTTEN -> if (state.forgotten.isNotEmpty()) {
                         item { HomeSectionHeader("Давно не слушал") }
-                        items(state.forgotten, key = { "forgotten-" + it.id.value }) { track ->
-                            HomeTrackRow(track.title, track.artistName, track.albumArtworkPath, onClick = { onTrackClick(track.id) })
+                        item {
+                            HomeCardStrip(state.forgotten, key = { "forgotten-" + it.id.value }) { track ->
+                                HomeTrackCard(track.title, track.artistName, track.albumArtworkPath) { onTrackClick(track.id) }
+                            }
                         }
                     }
                     HomeBlockType.QUICK_TAGS -> if (state.quickTags.isNotEmpty()) {
@@ -118,8 +147,10 @@ fun HomeScreen(
                                 }
                             }
                         }
-                        items(state.tagTracks, key = { "tag-" + it.id.value }) { track ->
-                            HomeTrackRow(track.title, track.artistName, track.albumArtworkPath, onClick = { onTrackClick(track.id) })
+                        item {
+                            HomeCardStrip(state.tagTracks, key = { "tag-" + it.id.value }) { track ->
+                                HomeTrackCard(track.title, track.artistName, track.albumArtworkPath) { onTrackClick(track.id) }
+                            }
                         }
                     }
                     HomeBlockType.BOOKMARKED_PLAYLISTS -> if (state.bookmarkedPlaylists.isNotEmpty()) {
@@ -141,14 +172,7 @@ fun HomeScreen(
                     }
                     HomeBlockType.STATS_TODAY -> state.statsToday?.let { stats ->
                         item { HomeSectionHeader("Статистика дня") }
-                        item {
-                            Text(
-                                "${stats.totalMinutes} мин · ${stats.distinctTracks} треков · ${stats.distinctArtists} исполнителей",
-                                color = NamiColors.Paper70,
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-                            )
-                        }
+                        item { HomeStatsCard(stats.totalMinutes, stats.distinctTracks, stats.distinctArtists) }
                     }
                 }
             }
@@ -175,6 +199,152 @@ private fun HomeSectionHeader(title: String) {
         style = MaterialTheme.typography.labelMedium,
         modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 4.dp),
     )
+}
+
+/** Горизонтальная лента карточек - общая обёртка для всех трековых блоков, чтобы отступы и
+ * интервал были одинаковыми и задавались в одном месте. */
+@Composable
+private fun <T> HomeCardStrip(items: List<T>, key: (T) -> Any, card: @Composable (T) -> Unit) {
+    LazyRow(
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+    ) {
+        items(items, key = key) { item -> card(item) }
+    }
+}
+
+/** Мини-карточка трека под ленту - тот же визуальный язык, что у AlbumGridItem в библиотеке
+ * (квадратная обложка со скруглением обложки, под ней две строки текста), только фиксированной
+ * ширины, потому что в ленте нет сетки, которая задала бы ширину сама. */
+@Composable
+private fun HomeTrackCard(title: String, subtitle: String?, artworkPath: String?, rank: Int? = null, onClick: () -> Unit) {
+    Column(modifier = Modifier.width(CARD_WIDTH).clickable(onClick = onClick)) {
+        Box(
+            modifier = Modifier
+                .size(CARD_WIDTH)
+                .background(NamiColors.Ink700, RoundedCornerShape(NamiRadius.AlbumArt)),
+        ) {
+            if (artworkPath != null) {
+                AsyncImage(
+                    model = artworkPath,
+                    contentDescription = title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(NamiRadius.AlbumArt)),
+                )
+            }
+            if (rank != null) {
+                Text(
+                    "$rank",
+                    color = NamiColors.Paper100,
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(6.dp)
+                        .background(NamiColors.Ink900.copy(alpha = 0.72f), RoundedCornerShape(NamiRadius.AlbumArt))
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                )
+            }
+        }
+        Text(
+            title,
+            color = NamiColors.Paper100,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+        subtitle?.let {
+            Text(it, color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+private val CARD_WIDTH = 132.dp
+
+/** "Продолжить слушать" - один трек, поэтому не лента, а широкая карточка во всю ширину: это
+ * единственное действие блока, и оно должно быть самой заметной кнопкой на экране. */
+@Composable
+private fun HomeHeroRow(title: String, subtitle: String?, artworkPath: String?, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 4.dp)
+            .background(NamiColors.Ink800, RoundedCornerShape(NamiRadius.Card))
+            .clickable(onClick = onClick)
+            .padding(12.dp),
+    ) {
+        Box(modifier = Modifier.size(56.dp).background(NamiColors.Ink700, RoundedCornerShape(NamiRadius.AlbumArt))) {
+            if (artworkPath != null) {
+                AsyncImage(
+                    model = artworkPath,
+                    contentDescription = title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(NamiRadius.AlbumArt)),
+                )
+            }
+        }
+        Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+            Text(title, color = NamiColors.Paper100, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            subtitle?.let { Text(it, color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        }
+    }
+}
+
+/** Случайный альбом - крупная обложка в половину ширины экрана рядом с названием: блок про
+ * "посмотри на эту обложку", маленькая картинка убивает весь смысл. */
+@Composable
+private fun HomeAlbumCard(title: String, subtitle: String?, artworkPath: String?, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 4.dp)
+            .background(NamiColors.Ink800, RoundedCornerShape(NamiRadius.Card))
+            .clickable(onClick = onClick)
+            .padding(12.dp),
+    ) {
+        Box(modifier = Modifier.size(112.dp).background(NamiColors.Ink700, RoundedCornerShape(NamiRadius.AlbumArt))) {
+            if (artworkPath != null) {
+                AsyncImage(
+                    model = artworkPath,
+                    contentDescription = title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(NamiRadius.AlbumArt)),
+                )
+            }
+        }
+        Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
+            Text(title, color = NamiColors.Paper100, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            subtitle?.let { Text(it, color = NamiColors.Paper70, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        }
+    }
+}
+
+/** Статистика дня - плашка с тремя крупными числами вместо одной серой строки текста: цифру
+ * видно с полуметра, строку "42 мин · 13 треков · 7 исполнителей" надо читать. */
+@Composable
+private fun HomeStatsCard(minutes: Int, tracks: Int, artists: Int) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 4.dp)
+            .background(NamiColors.Ink800, RoundedCornerShape(NamiRadius.Card))
+            .padding(vertical = 16.dp),
+    ) {
+        StatCell(minutes.toString(), "минут")
+        StatCell(tracks.toString(), "треков")
+        StatCell(artists.toString(), "исполнителей")
+    }
+}
+
+@Composable
+private fun RowScope.StatCell(value: String, label: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+        Text(value, color = NamiColors.Paper100, style = MaterialTheme.typography.titleLarge)
+        Text(label, color = NamiColors.Paper40, style = MaterialTheme.typography.labelSmall)
+    }
 }
 
 @Composable
