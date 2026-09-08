@@ -248,6 +248,26 @@ val MIGRATION_22_23 = object : Migration(22, 23) {
     }
 }
 
+/** П.md §3 -- пользовательские цветные теги (Tag/TrackTag), отдельно от genre. */
+val MIGRATION_23_24 = object : Migration(23, 24) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS tags (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, colorArgb INTEGER NOT NULL)")
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS track_tags (
+                trackId TEXT NOT NULL,
+                tagId TEXT NOT NULL,
+                PRIMARY KEY(trackId, tagId),
+                FOREIGN KEY(trackId) REFERENCES tracks(id) ON DELETE CASCADE,
+                FOREIGN KEY(tagId) REFERENCES tags(id) ON DELETE CASCADE
+            )
+            """.trimIndent(),
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_track_tags_trackId ON track_tags(trackId)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_track_tags_tagId ON track_tags(tagId)")
+    }
+}
+
 val MIGRATION_14_15 = object : Migration(14, 15) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL(

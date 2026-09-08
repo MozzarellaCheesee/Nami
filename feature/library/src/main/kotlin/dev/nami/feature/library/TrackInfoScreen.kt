@@ -1,6 +1,7 @@
 package dev.nami.feature.library
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,6 +15,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.outlined.ArrowBack
@@ -33,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -51,6 +55,9 @@ fun TrackInfoScreen(onBack: () -> Unit, viewModel: TrackInfoViewModel = hiltView
     val album by viewModel.album.collectAsState()
 
     var editField by remember { mutableStateOf<TrackInfoField?>(null) }
+    var showAddTagDialog by remember { mutableStateOf(false) }
+    val trackTags by viewModel.trackTags.collectAsState()
+    val allTags by viewModel.allTags.collectAsState()
 
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
@@ -78,6 +85,11 @@ fun TrackInfoScreen(onBack: () -> Unit, viewModel: TrackInfoViewModel = hiltView
                 InfoRow("Заметка", current.note ?: "—", onClick = { editField = TrackInfoField.Note })
                 RatingRow(current.rating, onRate = viewModel::setRating)
             }
+            TagsSection(
+                trackTags = trackTags,
+                onRemove = viewModel::removeTag,
+                onAddClick = { showAddTagDialog = true },
+            )
             InfoSection(title = "Файл") {
                 InfoRow("Формат", current.format)
                 InfoRow("Длительность", formatDuration(current.durationMs))
@@ -110,9 +122,124 @@ fun TrackInfoScreen(onBack: () -> Unit, viewModel: TrackInfoViewModel = hiltView
         TrackInfoField.Note -> TextEditDialog("Заметка", track?.note.orEmpty(), multiline = true, onSave = { viewModel.setNote(it.ifBlank { null }) }, onDismiss = { editField = null })
         null -> Unit
     }
+    if (showAddTagDialog) {
+        AddTagDialog(
+            existingTags = allTags.filterNot { tag -> trackTags.any { it.id == tag.id } },
+            onPickExisting = { tagId -> viewModel.assignTag(tagId); showAddTagDialog = false },
+            onCreate = { name, color -> viewModel.createAndAssignTag(name, color); showAddTagDialog = false },
+            onDismiss = { showAddTagDialog = false },
+        )
+    }
 }
 
 private enum class TrackInfoField { Title, Artist, Album, Year, Genre, Note }
+
+/** П.md §3's Tag/TrackTag -- several color-coded tags per track, separate from the single genre
+ * string. Removable chips + one "+" that opens [AddTagDialog]. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun TagsSection(trackTags: List<dev.nami.domain.Tag>, onRemove: (dev.nami.domain.TagId) -> Unit, onAddClick: () -> Unit) {
+    Text(
+        "Теги",
+        color = NamiColors.Paper40,
+        style = MaterialTheme.typography.labelMedium,
+        modifier = Modifier.padding(top = 20.dp, bottom = 8.dp),
+    )
+    androidx.compose.foundation.layout.FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        trackTags.forEach { tag ->
+            Row(
+                modifier = Modifier
+                    .background(androidx.compose.ui.graphics.Color(tag.colorArgb).copy(alpha = 0.2f), RoundedCornerShape(16.dp))
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(tag.name, color = androidx.compose.ui.graphics.Color(tag.colorArgb), style = MaterialTheme.typography.bodySmall)
+                Icon(
+                    Icons.Outlined.Close,
+                    contentDescription = "Убрать тег",
+                    tint = androidx.compose.ui.graphics.Color(tag.colorArgb),
+                    modifier = Modifier.padding(start = 6.dp).size(14.dp).clickable { onRemove(tag.id) },
+                )
+            }
+        }
+        Row(
+            modifier = Modifier
+                .background(NamiColors.Ink800, RoundedCornerShape(16.dp))
+                .clickable(onClick = onAddClick)
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Outlined.Add, contentDescription = null, tint = NamiColors.Paper70, modifier = Modifier.size(14.dp))
+            Text("Тег", color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 4.dp))
+        }
+    }
+}
+
+@Composable
+private fun AddTagDialog(
+    existingTags: List<dev.nami.domain.Tag>,
+    onPickExisting: (dev.nami.domain.TagId) -> Unit,
+    onCreate: (name: String, colorArgb: Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    val swatches = listOf(
+        NamiColors.Shu.toArgb(), NamiColors.Ai.toArgb(), NamiColors.Kin.toArgb(), NamiColors.Wakaba.toArgb(),
+    )
+    var selectedColor by remember { mutableStateOf(swatches.first()) }
+
+    NamiAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Добавить тег") },
+        text = {
+            Column {
+                if (existingTags.isNotEmpty()) {
+                    Text("Существующие", color = NamiColors.Paper40, style = MaterialTheme.typography.labelSmall)
+                    existingTags.forEach { tag ->
+                        Text(
+                            tag.name,
+                            color = androidx.compose.ui.graphics.Color(tag.colorArgb),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.fillMaxWidth().clickable { onPickExisting(tag.id) }.padding(vertical = 8.dp),
+                        )
+                    }
+                    Text("Новый", color = NamiColors.Paper40, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 8.dp))
+                }
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    placeholder = { Text("Название тега") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+                Row(modifier = Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    swatches.forEach { colorArgb ->
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .background(androidx.compose.ui.graphics.Color(colorArgb), androidx.compose.foundation.shape.CircleShape)
+                                .then(
+                                    if (colorArgb == selectedColor) {
+                                        Modifier.border(2.dp, NamiColors.Paper100, androidx.compose.foundation.shape.CircleShape)
+                                    } else {
+                                        Modifier
+                                    },
+                                )
+                                .clickable { selectedColor = colorArgb },
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { if (name.isNotBlank()) onCreate(name.trim(), selectedColor) }) { Text("Создать") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+    )
+}
 
 @Composable
 internal fun InfoSection(title: String, content: @Composable () -> Unit) {

@@ -10,6 +10,7 @@ import dev.nami.core.database.dao.PlayHistoryDao
 import dev.nami.core.database.dao.PlaylistDao
 import dev.nami.core.database.dao.PlaylistTrackDao
 import dev.nami.core.database.dao.SearchDao
+import dev.nami.core.database.dao.TagDao
 import dev.nami.core.database.dao.TrackDao
 import dev.nami.core.database.dao.VocabularyDao
 import dev.nami.core.database.entity.AlbumArtistCrossRef
@@ -20,7 +21,9 @@ import dev.nami.core.database.entity.MomentEntity
 import dev.nami.core.database.entity.PlayHistoryEntity
 import dev.nami.core.database.entity.PlaylistEntity
 import dev.nami.core.database.entity.PlaylistTrackEntity
+import dev.nami.core.database.entity.TagEntity
 import dev.nami.core.database.entity.TrackEntity
+import dev.nami.core.database.entity.TrackTagEntity
 import dev.nami.core.database.entity.VocabularyEntity
 
 @Database(
@@ -28,8 +31,9 @@ import dev.nami.core.database.entity.VocabularyEntity
         TrackEntity::class, ArtistEntity::class, AlbumEntity::class,
         PlaylistEntity::class, PlaylistTrackEntity::class, AlbumArtistCrossRef::class,
         VocabularyEntity::class, MomentEntity::class, LoopEntity::class, PlayHistoryEntity::class,
+        TagEntity::class, TrackTagEntity::class,
     ],
-    version = 23,
+    version = 24,
     exportSchema = true,
 )
 abstract class NamiDatabase : RoomDatabase() {
@@ -43,4 +47,5 @@ abstract class NamiDatabase : RoomDatabase() {
     abstract fun momentDao(): MomentDao
     abstract fun loopDao(): LoopDao
     abstract fun playHistoryDao(): PlayHistoryDao
+    abstract fun tagDao(): TagDao
 }

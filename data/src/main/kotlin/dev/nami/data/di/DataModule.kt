@@ -11,6 +11,7 @@ import dev.nami.data.AppSettingsRepository
 import dev.nami.data.LoopsRepositoryImpl
 import dev.nami.data.MomentsRepositoryImpl
 import dev.nami.data.PlaylistRepositoryImpl
+import dev.nami.data.TagRepositoryImpl
 import dev.nami.data.TrashRepositoryImpl
 import dev.nami.data.VocabularyRepositoryImpl
 import dev.nami.data.search.SearchRepositoryImpl
@@ -22,6 +23,7 @@ import dev.nami.domain.MomentsRepository
 import dev.nami.domain.PlaylistRepository
 import dev.nami.domain.SearchRepository
 import dev.nami.domain.SettingsRepository
+import dev.nami.domain.TagRepository
 import dev.nami.domain.TrashRepository
 import dev.nami.domain.VocabularyRepository
 import javax.inject.Singleton
@@ -68,4 +70,8 @@ abstract class DataModule {
     @Binds
     @Singleton
     abstract fun bindLoopsRepository(impl: LoopsRepositoryImpl): LoopsRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindTagRepository(impl: TagRepositoryImpl): TagRepository
 }

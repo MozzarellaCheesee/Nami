@@ -8,6 +8,9 @@ import dev.nami.core.model.Album
 import dev.nami.core.model.Track
 import dev.nami.core.model.TrackId
 import dev.nami.domain.LibraryRepository
+import dev.nami.domain.Tag
+import dev.nami.domain.TagId
+import dev.nami.domain.TagRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flatMapLatest
@@ -23,9 +26,31 @@ import javax.inject.Inject
 class TrackInfoViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val libraryRepository: LibraryRepository,
+    private val tagRepository: TagRepository,
 ) : ViewModel() {
 
     private val trackId = TrackId(requireNotNull(savedStateHandle.get<String>("trackId")))
+
+    val trackTags: StateFlow<List<Tag>> = tagRepository.tagsForTrack(trackId)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val allTags: StateFlow<List<Tag>> = tagRepository.tags()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun createAndAssignTag(name: String, colorArgb: Int) {
+        viewModelScope.launch {
+            val id = tagRepository.createTag(name, colorArgb)
+            tagRepository.assignTag(trackId, id)
+        }
+    }
+
+    fun assignTag(tagId: TagId) {
+        viewModelScope.launch { tagRepository.assignTag(trackId, tagId) }
+    }
+
+    fun removeTag(tagId: TagId) {
+        viewModelScope.launch { tagRepository.unassignTag(trackId, tagId) }
+    }
 
     val track: StateFlow<Track?> = libraryRepository.track(trackId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
