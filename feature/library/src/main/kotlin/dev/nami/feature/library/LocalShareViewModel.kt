@@ -62,6 +62,16 @@ class LocalShareViewModel @Inject constructor(
     fun startWifiDirectDiscovery() = repository.startWifiDirectDiscovery()
     fun connectWifiDirect(peer: WifiDirectPeer) = repository.connectWifiDirect(peer)
 
+    /** NSD-автопоиск запускается в init() ещё до того, как экран успевает спросить
+     * NEARBY_WIFI_DEVICES/ACCESS_FINE_LOCATION - на Android 13+ без этого разрешения система
+     * тихо не отдаёт вообще ни одного найденного устройства (не ошибка, просто пустой список),
+     * так что после получения разрешения поиск нужно перезапустить, иначе он так и останется
+     * "включённым", но слепым. */
+    fun restartDiscovery() {
+        repository.stopDiscovery()
+        repository.startDiscovery()
+    }
+
     fun createInternetInvite() {
         viewModelScope.launch {
             _internetLinkError.value = null

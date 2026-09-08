@@ -85,8 +85,11 @@ fun LocalShareScreen(
     var internetPasteText by remember { mutableStateOf("") }
     val clipboard = LocalClipboardManager.current
 
-    // Wi-Fi Direct нужно ACCESS_FINE_LOCATION до Android 13, NEARBY_WIFI_DEVICES начиная с 13 -
-    // тот же паттерн запроса разрешения, что у сканера QR (LocalShareScanScreen).
+    // То же разрешение нужно не только Wi-Fi Direct, но и обычному NSD-автопоиску (Wi-Fi Drop/
+    // синхронизация/слушать вместе): на Android 13+ NsdManager без NEARBY_WIFI_DEVICES тихо не
+    // находит вообще ничего (не падает, не предупреждает - просто пустой discoveredDevices). До
+    // 13 то же самое было ACCESS_FINE_LOCATION. Раньше разрешение просилось только по кнопке
+    // Wi-Fi Direct, поэтому обычный сценарий "слушать вместе" молча не работал без неё.
     val context = LocalContext.current
     val wifiDirectPermission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.NEARBY_WIFI_DEVICES else Manifest.permission.ACCESS_FINE_LOCATION
     var hasWifiDirectPermission by remember {
@@ -94,7 +97,10 @@ fun LocalShareScreen(
     }
     val wifiDirectPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         hasWifiDirectPermission = granted
-        if (granted) viewModel.startWifiDirectDiscovery()
+        if (granted) {
+            viewModel.startWifiDirectDiscovery()
+            viewModel.restartDiscovery()
+        }
     }
 
     var showQr by remember { mutableStateOf(false) }
@@ -106,7 +112,14 @@ fun LocalShareScreen(
         }
     }
     androidx.compose.runtime.LaunchedEffect(Unit) {
-        if (hasWifiDirectPermission) viewModel.startWifiDirectDiscovery()
+        if (hasWifiDirectPermission) {
+            viewModel.startWifiDirectDiscovery()
+        } else {
+            // Спрашиваем сразу при открытии экрана, а не только по кнопке Wi-Fi Direct - без
+            // этого NSD-автопоиск (Wi-Fi Drop/синхронизация/слушать вместе) остаётся слепым на
+            // Android 13+, см. комментарий у объявления разрешения выше.
+            wifiDirectPermissionLauncher.launch(wifiDirectPermission)
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
