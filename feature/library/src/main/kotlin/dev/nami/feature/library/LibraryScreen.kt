@@ -29,6 +29,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Done
@@ -97,6 +98,7 @@ fun LibraryScreen(
     onArtistClick: (ArtistId) -> Unit,
     onImportRequested: () -> Unit,
     onImportFolderRequested: () -> Unit,
+    onImportZipRequested: () -> Unit,
     onShowTrackInfo: (TrackId) -> Unit,
     importProgress: StateFlow<ImportProgress?>,
     // Bumped by the bottom nav's Library tab so re-tapping it while already here (or from any
@@ -246,6 +248,14 @@ fun LibraryScreen(
                                 Icon(Icons.Outlined.LibraryAdd, contentDescription = "Создать альбом", modifier = Modifier.size(18.dp))
                             }
                         }
+                        FloatingActionButton(
+                            onClick = onImportZipRequested,
+                            modifier = Modifier.size(36.dp),
+                            shape = RoundedCornerShape(14.dp),
+                        ) {
+                            Icon(Icons.Outlined.Archive, contentDescription = "Импортировать .zip", modifier = Modifier.size(18.dp))
+                        }
+                        androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(12.dp))
                         FloatingActionButton(
                             onClick = onImportFolderRequested,
                             modifier = Modifier.size(36.dp),

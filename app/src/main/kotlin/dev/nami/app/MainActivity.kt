@@ -74,6 +74,10 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val pickZip = registerForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri -> uri?.let { libraryViewModel.importZip(it.toString()) } }
+
     private val pickFolder = registerForActivityResult(
         ActivityResultContracts.OpenDocumentTree(),
     ) { uri ->
@@ -170,6 +174,7 @@ class MainActivity : ComponentActivity() {
                 NamiNavHost(
                     onImportRequested = { pickFiles.launch(arrayOf("audio/*")) },
                     onImportFolderRequested = { pickFolder.launch(null) },
+                    onImportZipRequested = { pickZip.launch(arrayOf("application/zip")) },
                     importProgress = importProgress,
                     onPickPlaylistCover = { playlistId ->
                         playlistActionsViewModel.requestCoverPick(playlistId)

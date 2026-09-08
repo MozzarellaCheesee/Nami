@@ -362,6 +362,7 @@ class LibraryRepositoryImpl @Inject constructor(
     override suspend fun import(source: ImportSource): Flow<ImportProgress> = when (source) {
         is ImportSource.Files -> importFiles(source.uris)
         is ImportSource.Folder -> importFolder(source.treeUri)
+        is ImportSource.Zip -> importZip(source.uri)
     }
 
     private fun importFiles(uriStrings: List<String>): Flow<ImportProgress> = flow {
@@ -379,6 +380,45 @@ class LibraryRepositoryImpl @Inject constructor(
     private fun importFolder(treeUriString: String): Flow<ImportProgress> = flow {
         emitAll(importFolderFromGroups(folderImportScanner.scan(treeUriString.toUri())))
     }.flowOn(Dispatchers.IO)
+
+    // П.md §2 "Импорт .zip-архивов с распаковкой на лету" -- extracts each audio entry to a
+    // scratch file in cacheDir (deleted right after), then feeds it through the exact same
+    // copyAndIndex path as a picked file (a file:// Uri resolves fine through ContentResolver for
+    // reading, no FileProvider needed). Non-audio entries (readme, cover art sitting loose in the
+    // zip) are skipped rather than rejecting the whole archive.
+    private fun importZip(uriString: String): Flow<ImportProgress> = flow {
+        val musicDir = File(context.filesDir, "music").apply { mkdirs() }
+        val resolver = context.contentResolver
+        val scratchDir = File(context.cacheDir, "zip_import").apply { mkdirs() }
+        val entries = mutableListOf<Pair<String, ByteArray>>()
+        resolver.openInputStream(uriString.toUri())?.use { input ->
+            java.util.zip.ZipInputStream(input).use { zip ->
+                var entry = zip.nextEntry
+                while (entry != null) {
+                    if (!entry.isDirectory && isAudioFileName(entry.name)) {
+                        entries.add(entry.name to zip.readBytes())
+                    }
+                    zip.closeEntry()
+                    entry = zip.nextEntry
+                }
+            }
+        }
+        entries.forEachIndexed { index, (name, bytes) ->
+            val scratchFile = File(scratchDir, "${UUID.randomUUID()}_${name.substringAfterLast('/')}")
+            scratchFile.writeBytes(bytes)
+            try {
+                val result = copyAndIndex(resolver, android.net.Uri.fromFile(scratchFile), musicDir)
+                result?.albumId?.let { syncAlbumIsSingle(it) }
+            } finally {
+                scratchFile.delete()
+            }
+            emit(ImportProgress(done = index + 1, total = entries.size))
+        }
+    }.flowOn(Dispatchers.IO)
+
+    private fun isAudioFileName(name: String): Boolean =
+        listOf(".mp3", ".flac", ".m4a", ".aac", ".ogg", ".opus", ".wav", ".aiff", ".wv", ".ape", ".dsf", ".dff")
+            .any { name.endsWith(it, ignoreCase = true) }
 
     internal fun importFolderFromGroups(groups: List<AudioGroup>): Flow<ImportProgress> = flow {
         val musicDir = File(context.filesDir, "music").apply { mkdirs() }

@@ -91,6 +91,7 @@ private const val ROUTE_EQUALIZER = "equalizer"
 fun NamiNavHost(
     onImportRequested: () -> Unit,
     onImportFolderRequested: () -> Unit,
+    onImportZipRequested: () -> Unit,
     importProgress: StateFlow<ImportProgress?>,
     onPickPlaylistCover: (PlaylistId) -> Unit,
     onExportPlaylist: (PlaylistId) -> Unit,
@@ -187,6 +188,7 @@ fun NamiNavHost(
                     onArtistClick = { artistId -> navController.navigate("artist/${artistId.value}") },
                     onImportRequested = onImportRequested,
                     onImportFolderRequested = onImportFolderRequested,
+                    onImportZipRequested = onImportZipRequested,
                     onShowTrackInfo = { trackId -> navController.navigate("track_info/${trackId.value}") },
                     importProgress = importProgress,
                     resetSignal = libraryTabResetSignal,
