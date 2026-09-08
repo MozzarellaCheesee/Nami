@@ -152,10 +152,15 @@ fun MiniPlayer(
     ) {
         // 0 = previous, 1 = current, 2 = next - HorizontalPager owns its own horizontal drag
         // here, so it lives inside the Row without conflicting with the Row's own vertical one.
+        // §13: свайп вбок настраивается. NONE просто запрещает пейджеру ловить горизонтальный
+        // драг - страницы и вся логика settle/автопродвижения остаются на месте, поэтому
+        // переключатель не может рассинхронизировать пейджер с очередью.
+        val sideSwipeAction by viewModel.miniPlayerSideSwipeAction.collectAsState()
         HorizontalPager(
             state = pagerState,
             pageSpacing = 16.dp,
             beyondViewportPageCount = 1,
+            userScrollEnabled = sideSwipeAction == dev.nami.domain.GestureAction.SKIP_NEXT,
             modifier = Modifier.weight(1f).clipToBounds(),
         ) { page ->
             val track = when (page) {

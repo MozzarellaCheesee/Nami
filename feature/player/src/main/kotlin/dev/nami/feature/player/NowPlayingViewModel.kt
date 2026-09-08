@@ -103,6 +103,10 @@ class NowPlayingViewModel @Inject constructor(
     val nowPlayingCompactCover: StateFlow<Boolean> = settingsRepository?.nowPlayingCompactCover ?: MutableStateFlow(false)
     val nowPlayingLineProgress: StateFlow<Boolean> = settingsRepository?.nowPlayingLineProgress ?: MutableStateFlow(false)
 
+    /** §13 "действия свайпов настраиваются" - свайп вбок по мини-плееру, см. MiniPlayer. */
+    val miniPlayerSideSwipeAction: StateFlow<dev.nami.domain.GestureAction> =
+        settingsRepository?.miniPlayerSideSwipeAction ?: MutableStateFlow(dev.nami.domain.GestureAction.SKIP_NEXT)
+
     private val _requestShowLyrics = MutableSharedFlow<Unit>()
     val requestShowLyrics = _requestShowLyrics.asSharedFlow()
 

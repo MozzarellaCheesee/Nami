@@ -9,6 +9,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.displayCutoutPadding
@@ -99,6 +100,9 @@ private const val ROUTE_ALBUM_INFO = "album_info/{albumId}"
 private const val ROUTE_ARTIST_INFO = "artist_info/{artistId}"
 private const val ROUTE_AUDIO_TRACT = "audio_tract"
 private const val ROUTE_EQUALIZER = "equalizer"
+// Роуты вкладок из BottomTab: строки обязаны совпадать с BottomTab.route.
+private const val ROUTE_VOCABULARY = "vocabulary"
+private const val ROUTE_BOTTOM_TABS = "settings/tabs"
 
 
 @Composable
@@ -122,6 +126,9 @@ fun NamiNavHost(
     // есть и Context, и AppSettingsRepository), NavHost только показывает экран.
     batteryHintPending: Boolean = false,
     onBatteryHintShown: () -> Unit = {},
+    // П.md §29-31: на широком экране (Medium/Expanded, >600dp) вкладки уезжают в NavigationRail
+    // слева. Считает MainActivity через calculateWindowSizeClass, сюда приходит готовый признак.
+    useNavigationRail: Boolean = false,
     navController: NavHostController = rememberNavController(),
 ) {
     // Scoped here (Activity-level ViewModelStoreOwner), not inside a nav destination,
@@ -154,6 +161,12 @@ fun NamiNavHost(
     val settingsViewModel: SettingsViewModel = hiltViewModel()
     val autoOpenPlayer by settingsViewModel.autoOpenPlayer.collectAsState()
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
+    // П.md §13 - состав/порядок вкладок из настроек. take(MAX) на случай списка из старого бэкапа:
+    // конструктор больше пяти включить не даёт, но панель не должна ломаться, если данные пришли
+    // мимо него.
+    val bottomTabConfigs by settingsViewModel.bottomTabs.collectAsState()
+    val bottomTabLabelsHidden by settingsViewModel.bottomTabLabelsHidden.collectAsState()
+    val bottomTabs = bottomTabConfigs.filter { it.enabled }.map { it.tab }.take(dev.nami.domain.MAX_BOTTOM_TABS)
 
     // Now Playing is deliberately NOT a NavHost destination: NavHost only keeps its current
     // destination's composition alive, so pushing a "now_playing" route used to dispose the
@@ -228,8 +241,49 @@ fun NamiNavHost(
     // while Paging reloaded from scratch every time.
     var libraryTabResetSignal by remember { mutableIntStateOf(0) }
 
+    // Вынесено из NamiBottomBar, потому что теперь у обработчика два вызывающих - панель снизу и
+    // рельса слева. Логика перехода одна и та же, дублировать её было бы прямым путём к тому, что
+    // на планшете вкладки ведут себя иначе, чем на телефоне.
+    val onTabSelected: (String) -> Unit = { route ->
+        // Pop the back stack directly down to this tab's own root, however deep the
+        // current screen is nested (playlist detail, a settings sub-screen, Search ->
+        // Artist, etc.) - succeeds (returns true) only when `route` is actually already
+        // on the live stack, i.e. this tab is the one currently open. More direct and
+        // reliable than navigate()'s popUpTo()/launchSingleTop/restoreState combo (tried
+        // first here): that combo is meant for jumping BETWEEN independent nested graphs,
+        // and on this app's single flat stack it just navigated to the target route
+        // without actually clearing whatever was pushed on top of it, so re-tapping a tab
+        // while inside one of its sub-screens silently did nothing.
+        if (!navController.popBackStack(route, inclusive = false)) {
+            // Not on the stack at all yet - this is a real switch to a different tab.
+            navController.navigate(route) {
+                popUpTo(ROUTE_LIBRARY) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
+        }
+        if (route == ROUTE_LIBRARY) {
+            libraryViewModel.selectTab(LibraryTab.TRACKS)
+            libraryTabResetSignal++
+        }
+        if (route == ROUTE_SEARCH) searchViewModel.onQueryChange("")
+    }
+
     Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
-    Column(modifier = Modifier.statusBarsPadding().displayCutoutPadding()) {
+    Row(modifier = Modifier.fillMaxSize()) {
+    // Рельса вне Column с контентом, а не внутри - она должна занимать всю высоту окна, включая
+    // область статус-бара, иначе на планшете сверху остаётся пустая полоса.
+    if (useNavigationRail) {
+        NamiNavRail(
+            tabs = bottomTabs,
+            showLabels = !bottomTabLabelsHidden,
+            currentRoute = currentRoute,
+            onTabSelected = onTabSelected,
+        )
+    }
+    // weight(1f) обязателен: без него контент в Row получил бы ширину по содержимому, а не всю
+    // оставшуюся после рельсы, и на широком экране прижался бы к левому краю.
+    Column(modifier = Modifier.weight(1f).statusBarsPadding().displayCutoutPadding()) {
         NavHost(
             navController = navController,
             startDestination = ROUTE_LIBRARY,
@@ -365,7 +419,16 @@ fun NamiNavHost(
                 SettingsAppearanceScreen(
                     onBack = { navController.popBackStack() },
                     onThemeEditorClick = { navController.navigate(ROUTE_THEME_EDITOR) },
+                    onBottomTabsClick = { navController.navigate(ROUTE_BOTTOM_TABS) },
                 )
+            }
+            composable(ROUTE_BOTTOM_TABS) {
+                dev.nami.app.BottomTabsScreen(onBack = { navController.popBackStack() })
+            }
+            // Словарь уже был экраном, но открывался только изнутри лирики - как вкладка это тот
+            // же самый Composable, просто со своим роутом.
+            composable(ROUTE_VOCABULARY) {
+                dev.nami.feature.player.VocabularyScreen(onBack = { navController.popBackStack() })
             }
             composable(ROUTE_THEME_EDITOR) {
                 dev.nami.app.ThemeEditorScreen(onBack = { navController.popBackStack() })
@@ -607,34 +670,18 @@ fun NamiNavHost(
         ) {
             MiniPlayer(onExpand = { showNowPlaying = true }, viewModel = nowPlayingViewModel)
         }
-        NamiBottomBar(
-            currentRoute = currentRoute,
-            onTabSelected = { route ->
-                // Pop the back stack directly down to this tab's own root, however deep the
-                // current screen is nested (playlist detail, a settings sub-screen, Search ->
-                // Artist, etc.) - succeeds (returns true) only when `route` is actually already
-                // on the live stack, i.e. this tab is the one currently open. More direct and
-                // reliable than navigate()'s popUpTo()/launchSingleTop/restoreState combo (tried
-                // first here): that combo is meant for jumping BETWEEN independent nested graphs,
-                // and on this app's single flat stack it just navigated to the target route
-                // without actually clearing whatever was pushed on top of it, so re-tapping a tab
-                // while inside one of its sub-screens silently did nothing.
-                if (!navController.popBackStack(route, inclusive = false)) {
-                    // Not on the stack at all yet - this is a real switch to a different tab.
-                    navController.navigate(route) {
-                        popUpTo(ROUTE_LIBRARY) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                }
-                if (route == ROUTE_LIBRARY) {
-                    libraryViewModel.selectTab(LibraryTab.TRACKS)
-                    libraryTabResetSignal++
-                }
-                if (route == ROUTE_SEARCH) searchViewModel.onQueryChange("")
-            },
-            modifier = Modifier.navigationBarsPadding(),
-        )
+        // На широком экране те же вкладки уже стоят слева в рельсе - вторая копия снизу была бы
+        // просто дублем.
+        if (!useNavigationRail) {
+            NamiBottomBar(
+                tabs = bottomTabs,
+                showLabels = !bottomTabLabelsHidden,
+                currentRoute = currentRoute,
+                onTabSelected = onTabSelected,
+                modifier = Modifier.navigationBarsPadding(),
+            )
+        }
+    }
     }
 
     AnimatedVisibility(

@@ -1,10 +1,13 @@
 package dev.nami.app
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -13,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -274,7 +278,12 @@ internal fun SettingsSubScreenScaffold(title: String, onBack: () -> Unit, conten
 }
 
 @Composable
-fun SettingsAppearanceScreen(onBack: () -> Unit, onThemeEditorClick: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
+fun SettingsAppearanceScreen(
+    onBack: () -> Unit,
+    onThemeEditorClick: () -> Unit,
+    onBottomTabsClick: () -> Unit,
+    viewModel: SettingsViewModel = hiltViewModel(),
+) {
     val context = LocalContext.current
     var selectedIcon by remember { mutableStateOf(IconPicker.current(context)) }
     var pendingIcon by remember { mutableStateOf<LauncherIcon?>(null) }
@@ -300,6 +309,12 @@ fun SettingsAppearanceScreen(onBack: () -> Unit, onThemeEditorClick: () -> Unit,
                 title = "Редактор темы",
                 trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
                 onClick = onThemeEditorClick,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Tune,
+                title = "Вкладки нижней панели",
+                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
+                onClick = onBottomTabsClick,
             )
             SettingsRow(
                 icon = Icons.Outlined.FontDownload,
@@ -426,8 +441,14 @@ fun SettingsPlayerScreen(
     val nowPlayingShowRepeat by viewModel.nowPlayingShowRepeat.collectAsState()
     val nowPlayingCompactCover by viewModel.nowPlayingCompactCover.collectAsState()
     val nowPlayingLineProgress by viewModel.nowPlayingLineProgress.collectAsState()
+    val miniPlayerSideSwipe by viewModel.miniPlayerSideSwipeAction.collectAsState()
+    val layoutPreset by viewModel.nowPlayingLayoutPreset.collectAsState()
 
     SettingsSubScreenScaffold(title = "Плеер", onBack = onBack) {
+        NowPlayingPresetRow(
+            selected = layoutPreset,
+            onSelect = viewModel::applyNowPlayingPreset,
+        )
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
             SettingsRow(
                 icon = Icons.Outlined.PlayCircleOutline,
@@ -502,6 +523,32 @@ fun SettingsPlayerScreen(
                     viewModel.setDoubleTapArtworkAction(next)
                 },
             )
+            // §13 "действия свайпов настраиваются". Значений ровно два, а не весь GestureAction:
+            // свайп по мини-плееру двусторонний (влево/вправо), и единственное действие, у
+            // которого есть осмысленные обе стороны - листание трека. "Лайк влево и лайк вправо"
+            // действием не является, поэтому остальные варианты сюда не пускаем.
+            SettingsRow(
+                icon = Icons.Outlined.Tune,
+                title = "Свайп вбок по мини-плееру",
+                trailing = {
+                    Text(
+                        text = when (miniPlayerSideSwipe) {
+                            dev.nami.domain.GestureAction.SKIP_NEXT -> "Листать треки"
+                            else -> "Ничего"
+                        },
+                        color = NamiColors.Paper40,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                },
+                onClick = {
+                    val next = if (miniPlayerSideSwipe == dev.nami.domain.GestureAction.SKIP_NEXT) {
+                        dev.nami.domain.GestureAction.NONE
+                    } else {
+                        dev.nami.domain.GestureAction.SKIP_NEXT
+                    }
+                    viewModel.setMiniPlayerSideSwipeAction(next)
+                },
+            )
             SettingsRow(
                 icon = Icons.Outlined.GraphicEq,
                 title = "Показывать техинфо трека (формат/битрейт)",
@@ -539,6 +586,100 @@ fun SettingsPlayerScreen(
                 onClick = onBlockOrderClick,
             )
         }
+    }
+}
+
+/** П.md §17 "5 готовых пресетов макета". Карточка не отдельный режим экрана, а кнопка "записать
+ * сразу весь набор переключателей ниже" - поэтому она стоит НАД списком: пресет выбирают первым,
+ * дальше правят по одному. CUSTOM своей карточки не имеет: это не выбор, а состояние "трогали
+ * переключатели руками", и нажать на него было бы нечем. */
+@Composable
+private fun NowPlayingPresetRow(
+    selected: dev.nami.domain.NowPlayingLayoutPreset,
+    onSelect: (dev.nami.domain.NowPlayingLayoutPreset) -> Unit,
+) {
+    val presets = listOf(
+        dev.nami.domain.NowPlayingLayoutPreset.CLASSIC to "Классический",
+        dev.nami.domain.NowPlayingLayoutPreset.BIG_COVER to "Крупная обложка",
+        dev.nami.domain.NowPlayingLayoutPreset.COMPACT to "Компактный",
+        dev.nami.domain.NowPlayingLayoutPreset.LYRICS_FIRST to "Лирика-первая",
+        dev.nami.domain.NowPlayingLayoutPreset.MINIMAL to "Минимал",
+    )
+    Text(
+        text = "Макет плеера",
+        color = NamiColors.Paper70,
+        style = MaterialTheme.typography.bodySmall,
+        modifier = Modifier.padding(start = 20.dp, top = 4.dp, bottom = 8.dp),
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        presets.forEach { (preset, label) ->
+            val isActive = preset == selected
+            Column(
+                modifier = Modifier
+                    .width(104.dp)
+                    .clip(RoundedCornerShape(NamiRadius.Card))
+                    .background(NamiColors.Ink800)
+                    .border(
+                        width = if (isActive) 2.dp else 1.dp,
+                        color = if (isActive) NamiColors.Shu else NamiColors.Ink500,
+                        shape = RoundedCornerShape(NamiRadius.Card),
+                    )
+                    .clickable { onSelect(preset) }
+                    .padding(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                PresetThumbnail(preset)
+                Text(
+                    text = label,
+                    color = if (isActive) NamiColors.Shu else NamiColors.Paper70,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
+}
+
+/** Схематичная «превьюшка» пресета: прямоугольник обложки нужного размера плюс полоски на месте
+ * названия/прогресса/транспорта. Рисуется из значений самого пресета, а не задаётся картинкой -
+ * иначе превью разъедется с раскладкой при первой же правке layoutOf(). */
+@Composable
+private fun PresetThumbnail(preset: dev.nami.domain.NowPlayingLayoutPreset) {
+    val layout = dev.nami.domain.layoutOf(preset)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .clip(RoundedCornerShape(NamiRadius.Chip))
+            .background(NamiColors.Ink900)
+            .padding(6.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(if (layout.compactCover) 0.42f else 0.72f)
+                .height(if (layout.compactCover) 14.dp else 24.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(NamiColors.Paper40),
+        )
+        layout.blockOrder.filter { it != dev.nami.domain.NowPlayingBlock.TECH_INFO || layout.showTechInfo }
+            .take(3)
+            .forEach { block ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(if (block == dev.nami.domain.NowPlayingBlock.PROGRESS) 0.86f else 0.56f)
+                        .height(3.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(NamiColors.Ink500),
+                )
+            }
     }
 }
 

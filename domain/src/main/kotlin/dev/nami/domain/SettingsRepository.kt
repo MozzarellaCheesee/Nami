@@ -289,6 +289,50 @@ interface SettingsRepository {
      * чтобы кнопка "сбросить всё" в редакторе не смешивала разделы в одну необратимую операцию. */
     fun resetThemeShapeAndDensity()
 
+    /** П.md §13 "Таб-бар настраиваемый" - весь список из восьми вкладок в порядке показа, с
+     * флагом включения (см. [BottomTabConfig]). Хранится и читается ровно как [homeBlocks].
+     * Ограничение 3-5 включённых держит UI конструктора, репозиторий значение не правит. */
+    val bottomTabs: StateFlow<List<BottomTabConfig>>
+    fun setBottomTabs(tabs: List<BottomTabConfig>)
+
+    /** §13 "может скрыть подписи" - иконки без текста. */
+    val bottomTabLabelsHidden: StateFlow<Boolean>
+    fun setBottomTabLabelsHidden(value: Boolean)
+
+    /** §13 "действия свайпов настраиваются" - свайп вбок по мини-плееру. Осмысленных значений
+     * ровно два: SKIP_NEXT (как было - листание пейджера меняет трек) и NONE (пейджер не ловит
+     * горизонтальный драг). Остальные [GestureAction] здесь бессмысленны: свайп двусторонний, а
+     * "лайк влево и лайк вправо" - не действие. Свайп вверх (полный плеер) не настраивается: это
+     * единственный способ раскрыть плеер жестом. */
+    val miniPlayerSideSwipeAction: StateFlow<GestureAction>
+    fun setMiniPlayerSideSwipeAction(action: GestureAction)
+
+    /** П.md §17 "5 готовых пресетов макета". Только индикатор "что выбрали последним" - источник
+     * правды по-прежнему сами переключатели (см. [NowPlayingLayoutPreset]). */
+    val nowPlayingLayoutPreset: StateFlow<NowPlayingLayoutPreset>
+    fun setNowPlayingLayoutPreset(preset: NowPlayingLayoutPreset)
+
+    /** П.md §9 "кроссфид для наушников" - см. CrossfeedAudioProcessor. Выключен по умолчанию,
+     * как и остальные DSP-тумблеры Аудиотракта. */
+    val crossfeedEnabled: StateFlow<Boolean>
+    fun setCrossfeedEnabled(value: Boolean)
+
+    /** П.md §11 "Тест устройства" - готовая строка результата последнего прогона (человекочитаемая
+     * таблица частот). Хранится как есть: она только показывается пользователю, автоматический
+     * выбор частоты на её основе не сделан. */
+    val deviceAudioProfile: StateFlow<String?>
+    fun setDeviceAudioProfile(value: String?)
+
+    /** П.md §9 "свёртка с импульсной характеристикой" - см. ConvolutionAudioProcessor. */
+    val convolutionEnabled: StateFlow<Boolean>
+    fun setConvolutionEnabled(value: Boolean)
+
+    /** Абсолютный путь к WAV с импульсом внутри files/ir/ (файл копируется туда при выборе через
+     * SAF - держать сам SAF-Uri нельзя, разрешение на него переживает не каждую перезагрузку, а
+     * читать импульс приходится на каждой перестройке аудиоконвейера). null - импульс не выбран. */
+    val convolutionIrPath: StateFlow<String?>
+    fun setConvolutionIrPath(value: String?)
+
     companion object {
         const val STANDS4_DAILY_LIMIT = 100
     }

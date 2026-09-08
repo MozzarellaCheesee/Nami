@@ -23,10 +23,14 @@ import kotlinx.coroutines.flow.onEach
  * Also where Этап 10's other two pieces stop: DoP (DSD-over-PCM bit-packing, see
  * dev.nami.player.dsd.DopEncoder) exists as a standalone, unit-tested encoder but isn't wired to
  * a real DSD decode path (no .dsf/.dff parser in this codebase yet - that's a separate,
- * unstarted piece, not silently faked here); a full custom UAC2 isochronous-transfer driver
- * (План.md's own "самая тяжёлая часть проекта") was not attempted at all - it needs real USB
- * hardware to develop against and per-chip (XMOS/Savitech/ESS) workarounds that can't be written
- * correctly without one, let alone verified unsupervised.
+ * unstarted piece, not silently faked here).
+ *
+ * Про свой UAC2-драйвер (План.md's own "самая тяжёлая часть проекта"): разбор дескрипторов и
+ * определение форматов устройства сделаны и покрыты тестами - см. dev.nami.player.usb. Самого
+ * вывода звука мимо AudioTrack там нет, и упирается это не в объём работы, а в платформу:
+ * изохронной передачи, которой USB Audio передаёт PCM, в публичном API Android нет вовсе
+ * (доступны только bulk/control/interrupt). Подробности и путь обхода через NDK - в доке
+ * UsbAudioDescriptors.
  */
 class BitPerfectUsbController(
     private val context: Context,

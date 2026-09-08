@@ -58,6 +58,8 @@ private class DspChain {
     val replayGain = ReplayGainAudioProcessor()
     val eq = ParametricEqAudioProcessor()
     val dither = DitherAudioProcessor()
+    val crossfeed = dev.nami.player.crossfeed.CrossfeedAudioProcessor()
+    val convolution = dev.nami.player.convolution.ConvolutionAudioProcessor()
 }
 
 private const val ACTION_TOGGLE_LIKE = "dev.nami.ACTION_TOGGLE_LIKE"
@@ -260,9 +262,11 @@ class PlaybackService : MediaSessionService() {
             settingsRepository.replayGainEnabled,
             settingsRepository.ditherEnabled,
             settingsRepository.playbackGainDb,
-        ) { eq, replayGain, dither, boostDb ->
-            eq || replayGain || dither || boostDb != 0f
+            settingsRepository.crossfeedEnabled,
+        ) { eq, replayGain, dither, boostDb, crossfeed ->
+            eq || replayGain || dither || boostDb != 0f || crossfeed
         }
+            .combine(settingsRepository.convolutionEnabled) { effectsOn, convolution -> effectsOn || convolution }
             .combine(settingsRepository.hiFiEnabled) { effectsOn, hiFi -> effectsOn to hiFi }
             .combine(settingsRepository.outputProfilesEnabled) { (effectsOn, hiFi), profilesEnabled ->
                 !hiFi && (effectsOn || profilesEnabled)
@@ -312,6 +316,31 @@ class PlaybackService : MediaSessionService() {
             }
             .launchIn(scope)
 
+        // Кроссфид и свёртка: тот же приём, что у дизера выше - тумблер вступает в силу только на
+        // перестройке конвейера DefaultAudioSink, поэтому подталкиваем её сиком на месте.
+        settingsRepository.crossfeedEnabled
+            .onEach { enabled ->
+                val wasEnabled = dsp.crossfeed.enabled
+                dsp.crossfeed.enabled = enabled
+                if (enabled != wasEnabled && player.playbackState != Player.STATE_IDLE) {
+                    player.seekTo(player.currentPosition)
+                }
+            }
+            .launchIn(scope)
+
+        // Файл импульса читается тут, а не в процессоре: разбор WAV - это диск и аллокации, в
+        // аудиопотоке им не место.
+        combine(settingsRepository.convolutionEnabled, settingsRepository.convolutionIrPath) { enabled, path -> enabled to path }
+            .onEach { (enabled, path) ->
+                reloadImpulseResponse(path)
+                val wasActive = dsp.convolution.isActive()
+                dsp.convolution.enabled = enabled
+                if (dsp.convolution.isActive() != wasActive && player.playbackState != Player.STATE_IDLE) {
+                    player.seekTo(player.currentPosition)
+                }
+            }
+            .launchIn(scope)
+
         settingsRepository.replayGainEnabled
             .onEach { enabled ->
                 val wasActive = dsp.replayGain.isActive()
@@ -342,6 +371,8 @@ class PlaybackService : MediaSessionService() {
                 settingsRepository.replayGainEnabled.value ||
                 settingsRepository.ditherEnabled.value ||
                 settingsRepository.playbackGainDb.value != 0f ||
+                settingsRepository.crossfeedEnabled.value ||
+                settingsRepository.convolutionEnabled.value ||
                 settingsRepository.outputProfilesEnabled.value
             )
 
@@ -355,6 +386,22 @@ class PlaybackService : MediaSessionService() {
         replayGain.enabled = settingsRepository.replayGainEnabled.value
         replayGain.boostDb = settingsRepository.playbackGainDb.value
         replayGain.setGainDb(currentTrackGainDb)
+        crossfeed.enabled = settingsRepository.crossfeedEnabled.value
+        convolution.enabled = settingsRepository.convolutionEnabled.value
+        convolution.impulseResponse = loadedImpulseResponse
+    }
+
+    /** Разобранный импульс держим на сервисе, а не в процессоре: цепочка пересоздаётся на каждом
+     * кроссфейде и смене sink, а разбор WAV с ресемплингом - это десятки миллисекунд и мегабайты,
+     * которые незачем повторять. Перечитывается только когда пользователь сменил файл. */
+    private var loadedImpulseResponse: dev.nami.player.convolution.ImpulseResponse? = null
+    private var loadedImpulsePath: String? = null
+
+    private fun reloadImpulseResponse(path: String?) {
+        if (path == loadedImpulsePath) return
+        loadedImpulsePath = path
+        loadedImpulseResponse = path?.let { dev.nami.player.convolution.IrWavLoader.load(java.io.File(it)) }
+        dsp.convolution.impulseResponse = loadedImpulseResponse
     }
 
     private fun buildPlayer(useCustomSink: Boolean, handleAudioFocus: Boolean = true): ExoPlayer {
@@ -375,7 +422,7 @@ class PlaybackService : MediaSessionService() {
             .setBackBuffer(/* backBufferDurationMs = */ 60_000, /* retainBackBufferFromKeyframe = */ true)
             .build()
         val builder = if (useCustomSink) {
-            ExoPlayer.Builder(this, NamiRenderersFactory(this, chain.replayGain, chain.eq, chain.dither))
+            ExoPlayer.Builder(this, NamiRenderersFactory(this, chain.replayGain, chain.eq, chain.dither, chain.crossfeed, chain.convolution))
         } else {
             ExoPlayer.Builder(this)
         }

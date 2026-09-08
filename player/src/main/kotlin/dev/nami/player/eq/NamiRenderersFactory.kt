@@ -5,6 +5,8 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
+import dev.nami.player.convolution.ConvolutionAudioProcessor
+import dev.nami.player.crossfeed.CrossfeedAudioProcessor
 import dev.nami.player.dither.DitherAudioProcessor
 import dev.nami.player.replaygain.ReplayGainAudioProcessor
 
@@ -30,20 +32,44 @@ import dev.nami.player.replaygain.ReplayGainAudioProcessor
  *     were doing nothing (commit d8ba977).
  *
  * So the DSP runs on the int16 stream the sink hands us anyway (ToInt16Pcm -> channel mapping ->
- * trimming -> these three -> silence-skipping -> Sonic). Same real DSP, on the path the device is
- * actually known to play correctly. */
+ * trimming -> наши процессоры -> silence-skipping -> Sonic). Same real DSP, on the path the device
+ * is actually known to play correctly.
+ *
+ * Это НЕ означает, что тракт 16-битный. Float-точность взята там, где она действительно что-то
+ * решает - внутри самой цепочки: каждый процессор Nami принимает int16 или float и отдаёт float,
+ * а замыкающий DitherAudioProcessor единственный возвращает поток в int16, подмешивая дизер прямо
+ * перед округлением. Итого одно квантование на всю цепочку вместо пяти и настоящий in-quantizer
+ * дизер - подробнее в Pcm16.kt. Обе проблемы выше касаются флага синка, а не арифметики, поэтому
+ * они этой схеме не мешают.
+ *
+ * Порядок в массиве обязателен: DitherAudioProcessor идёт последним, потому что после наших
+ * процессоров media3 ставит silence-skipping и Sonic, а те принимают только int16. */
 @UnstableApi
 class NamiRenderersFactory(
     context: Context,
     private val replayGainProcessor: ReplayGainAudioProcessor,
     private val eqProcessor: ParametricEqAudioProcessor,
     private val ditherProcessor: DitherAudioProcessor,
+    private val crossfeedProcessor: CrossfeedAudioProcessor,
+    private val convolutionProcessor: ConvolutionAudioProcessor,
 ) : DefaultRenderersFactory(context) {
 
     override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink =
         DefaultAudioSink.Builder(context)
             .setEnableFloatOutput(false)
             .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-            .setAudioProcessors(arrayOf(replayGainProcessor, eqProcessor, ditherProcessor))
+            // Порядок: уровень -> тембр -> комната (IR) -> наушники (кроссфид) -> дизер.
+            // Свёртка с IR стоит до кроссфида, потому что импульс комнаты описывает то, что
+            // происходит со звуком ДО ушей слушателя, а кроссфид моделирует уже саму голову.
+            // Дизер обязан быть последним: он маскирует ошибку округления всех, кто выше.
+            .setAudioProcessors(
+                arrayOf(
+                    replayGainProcessor,
+                    eqProcessor,
+                    convolutionProcessor,
+                    crossfeedProcessor,
+                    ditherProcessor,
+                ),
+            )
             .build()
 }

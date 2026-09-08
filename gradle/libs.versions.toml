@@ -29,6 +29,8 @@ compose-ui = { module = "androidx.compose.ui:ui" }
 compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
 compose-material3 = { module = "androidx.compose.material3:material3" }
+# Версия не указана намеренно - приходит из compose-bom, как и остальной material3.
+compose-material3-windowsize = { module = "androidx.compose.material3:material3-window-size-class" }
 compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
 navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "navigation" }
 media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3" }

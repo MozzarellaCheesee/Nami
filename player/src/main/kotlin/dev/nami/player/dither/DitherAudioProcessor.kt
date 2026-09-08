@@ -3,57 +3,83 @@ package dev.nami.player.dither
 import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.BaseAudioProcessor
-import dev.nami.player.toPcm16
+import dev.nami.player.LSB16
+import dev.nami.player.PCM16_FULL_SCALE
+import dev.nami.player.normalizedToPcm16
+import dev.nami.player.requireNamiDspInput
 import java.nio.ByteBuffer
 import kotlin.random.Random
 
-/** Этап 4's dithering - TPDF (triangular-PDF) dither at one LSB of the 16-bit stream, sitting
- * last in the chain after ReplayGain and the EQ. Off by default, same Beta/opt-in posture as the
- * rest of Аудиотракт.
+/** Замыкающая стадия DSP-цепочки Nami: единственное место, где сигнал возвращается в int16, и
+ * заодно TPDF-дизер (Этап 4).
  *
- * Honest about what this is: DefaultAudioSink's int pipeline hands every processor an ENCODING_
- * PCM_16BIT buffer, so by the time we see the samples the upstream stages have already rounded
- * their own output back to 16 bits. This therefore adds a ±1 LSB triangular noise floor that
- * decorrelates (masks) the quantization error those stages introduce, rather than being textbook
- * in-quantizer dither applied at the moment of requantization. Audibly it does the job it's there
- * for - turning correlated rounding artifacts on EQ'd/gain-adjusted audio into unshaped hiss --
- * but it is not a substitute for a higher-precision output path.
+ * Раньше это был просто «дизер поверх уже 16-битного потока»: DefaultAudioSink отдавал каждому
+ * процессору int16, поэтому к моменту дизера сигнал успевал округлиться на каждой стадии выше, и
+ * шум лишь маскировал уже сделанную ошибку. Теперь стадии выше отдают float (см. Pcm16.kt), а
+ * округление происходит ровно здесь и ровно один раз - то есть дизер подмешивается ДО
+ * квантования и стал настоящим in-quantizer дизером, каким он и должен быть.
  *
- * ponytail: true in-quantizer dither would mean merging ReplayGain/EQ/dither into a single
- * processor that keeps float precision internally and only quantizes once at the end. Worth doing
- * if the noise floor ever measurably matters; not worth the coupling before then. */
+ * Активность устроена так, чтобы процессор не встревал зря и при этом гарантировал int16 на
+ * выходе цепочки (дальше в конвейере media3 стоят пропуск тишины и Sonic, а они принимают
+ * только int16):
+ *  - вход float (значит, выше работала хоть одна DSP-стадия) - активен всегда, иначе float утёк
+ *    бы дальше и конвейер упал бы на несовместимом формате;
+ *  - вход int16 и дизер включён - активен, добавляет шум и переквантует;
+ *  - вход int16 и дизер выключен - неактивен, поток идёт мимо нетронутым. */
 class DitherAudioProcessor : BaseAudioProcessor() {
 
     @Volatile var enabled: Boolean = false
     private var configured = false
+    private var inputIsFloat = false
 
     private val random = Random(System.nanoTime())
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
-        if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT) {
-            throw AudioProcessor.UnhandledAudioFormatException(inputAudioFormat)
-        }
+        inputIsFloat = inputAudioFormat.requireNamiDspInput()
         configured = true
-        return inputAudioFormat
+        // Всегда int16: это выход всей DSP-цепочки Nami наружу, в штатную часть конвейера media3.
+        return AudioProcessor.AudioFormat(
+            inputAudioFormat.sampleRate,
+            inputAudioFormat.channelCount,
+            C.ENCODING_PCM_16BIT,
+        )
     }
 
-    override fun isActive(): Boolean = enabled && configured
+    override fun isActive(): Boolean = configured && (inputIsFloat || enabled)
 
     override fun queueInput(inputBuffer: ByteBuffer) {
         val remaining = inputBuffer.remaining()
         if (remaining == 0) return
-        val output = replaceOutputBuffer(remaining)
-        val inShorts = inputBuffer.asShortBuffer()
+        val bytesPerSample = if (inputIsFloat) 4 else 2
+        val sampleCount = remaining / bytesPerSample
+        val outputBytes = sampleCount * 2
+        val output = replaceOutputBuffer(outputBytes)
         val outShorts = output.asShortBuffer()
-        while (inShorts.hasRemaining()) {
-            // Sum of two independent uniform(-0.5, 0.5) draws = triangular distribution, the
-            // standard TPDF dither construction. One LSB of 16-bit PCM is 1.0 in short units.
-            val noise = random.nextFloat() - 0.5f + random.nextFloat() - 0.5f
-            outShorts.put((inShorts.get() + noise).toPcm16())
+        val addDither = enabled
+
+        if (inputIsFloat) {
+            val inFloats = inputBuffer.asFloatBuffer()
+            for (i in 0 until sampleCount) {
+                val sample = inFloats.get()
+                outShorts.put(if (addDither) (sample + tpdfNoise()).normalizedToPcm16() else sample.normalizedToPcm16())
+            }
+        } else {
+            // Вход уже 16-битный - сюда попадаем только при включённом дизере (см. isActive).
+            val inShorts = inputBuffer.asShortBuffer()
+            for (i in 0 until sampleCount) {
+                val sample = inShorts.get() / PCM16_FULL_SCALE
+                outShorts.put((sample + tpdfNoise()).normalizedToPcm16())
+            }
         }
+
         inputBuffer.position(inputBuffer.limit())
-        output.position(remaining).flip()
+        output.position(outputBytes).flip()
     }
+
+    /** Сумма двух независимых равномерных величин даёт треугольное распределение - стандартная
+     * конструкция TPDF-дизера. Амплитуда - один младший разряд 16-битного потока. */
+    private fun tpdfNoise(): Float =
+        (random.nextFloat() - 0.5f + random.nextFloat() - 0.5f) * LSB16
 
     override fun onReset() {
         configured = false
