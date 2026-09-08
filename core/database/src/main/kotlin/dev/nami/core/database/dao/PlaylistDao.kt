@@ -31,7 +31,7 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlists WHERE id = :id")
     suspend fun findById(id: String): PlaylistEntity?
 
-    /** Snapshot of every non-deleted playlist for export/backup -- see BackupRepository. */
+    /** Snapshot of every non-deleted playlist for export/backup - see BackupRepository. */
     @Query("SELECT * FROM playlists WHERE deletedAt IS NULL")
     suspend fun allRaw(): List<PlaylistEntity>
 
@@ -39,7 +39,7 @@ interface PlaylistDao {
     fun findByIdFlow(id: String): Flow<PlaylistEntity?>
 
     /** The one Liked-songs playlist, if it's ever been created (see PlaylistRepositoryImpl.
-     * ensureLikedPlaylist) -- null before the user's first like. */
+     * ensureLikedPlaylist) - null before the user's first like. */
     @Query("SELECT * FROM playlists WHERE isLiked = 1 AND deletedAt IS NULL LIMIT 1")
     suspend fun findLikedPlaylist(): PlaylistEntity?
 

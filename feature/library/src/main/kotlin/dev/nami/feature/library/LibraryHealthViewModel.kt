@@ -40,7 +40,7 @@ class LibraryHealthViewModel @Inject constructor(
         }
     }
 
-    /** Missing-file rows are just soft-deleted like any other delete -- TrashFileStore's own
+    /** Missing-file rows are just soft-deleted like any other delete - TrashFileStore's own
      * moveToTrash/deletePermanently already no-op cleanly when the source file isn't there. */
     fun deleteTrack(id: TrackId) {
         viewModelScope.launch {

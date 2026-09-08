@@ -71,7 +71,7 @@ import kotlin.math.roundToInt
 // floating square cover that shrinks into a circular avatar next to the title as the track list
 // scrolls up. Not shared code with those screens: feature:library already depends on
 // feature:playlists (AddToPlaylistDialog), so the reverse dependency needed to reuse their
-// composables directly isn't available -- CollapsingHeaderState itself lives in
+// composables directly isn't available - CollapsingHeaderState itself lives in
 // core:designsystem and IS shared (see that file).
 private val HEADER_MAX_HEIGHT = 280.dp
 private val HEADER_MIN_HEIGHT = 56.dp
@@ -195,7 +195,7 @@ fun PlaylistDetailScreen(
                             track = track,
                             onClick = { onPlayTracks(uiState.tracks, index) },
                             // Smart playlist tracks aren't rows in playlist_tracks (they're
-                            // computed by SmartPlaylistEvaluator) -- there's nothing to remove.
+                            // computed by SmartPlaylistEvaluator) - there's nothing to remove.
                             onRemove = if (isSmart) null else { { viewModel.removeTrack(track.id) } },
                         )
                     }
@@ -204,7 +204,7 @@ fun PlaylistDetailScreen(
         }
 
         run {
-            // Same bleed/slide/crossfade math as AlbumDetailScreen's identical block -- see that
+            // Same bleed/slide/crossfade math as AlbumDetailScreen's identical block - see that
             // screen for the full rationale on each term.
             val bleed = rootOffset.y * (1f - progress)
             val currentWidthPx = lerp(screenWidthPx, avatarSizePx, progress)
@@ -333,8 +333,8 @@ private fun tracksWord(count: Int): String {
     }
 }
 
-/** Styled to match TrackListItem's (feature:library) look and feel -- same artwork-box size,
- * text colors/styles, ContextActionSheet-based overflow -- without actually depending on that
+/** Styled to match TrackListItem's (feature:library) look and feel - same artwork-box size,
+ * text colors/styles, ContextActionSheet-based overflow - without actually depending on that
  * module: feature:library already depends on feature:playlists (AddToPlaylistDialog), so the
  * reverse dependency needed to reuse TrackListItem directly isn't available without a bigger
  * module reshuffle out of scope here. */

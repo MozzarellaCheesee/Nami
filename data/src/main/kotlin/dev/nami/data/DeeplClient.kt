@@ -6,11 +6,11 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 
-/** DeepL API -- each user's own key (Settings -> Лирика), free-tier keys end in ":fx" and live on
+/** DeepL API - each user's own key (Settings -> Лирика), free-tier keys end in ":fx" and live on
  * api-free.deepl.com, paid keys on api.deepl.com. Noticeably better JA->RU than the on-device
- * MLKit model (the whole point of adding this as an alternative, not a replacement -- MLKit stays
+ * MLKit model (the whole point of adding this as an alternative, not a replacement - MLKit stays
  * the offline/keyless fallback). One HTTP call for the whole batch of (already sentence-grouped,
- * see SentenceGrouper) lines -- DeepL's own API accepts multiple `text` params per request. */
+ * see SentenceGrouper) lines - DeepL's own API accepts multiple `text` params per request. */
 object DeeplClient {
     private const val TIMEOUT_MS = 10_000
 

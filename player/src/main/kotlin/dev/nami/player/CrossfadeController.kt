@@ -11,13 +11,13 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.PI
 
-/** Этап 4's crossfade -- a REAL overlap: for the last FADE_MS of a track a second ExoPlayer is
+/** Этап 4's crossfade - a REAL overlap: for the last FADE_MS of a track a second ExoPlayer is
  * already playing the next queue item from its own position 0, the two volumes cross on an
  * equal-power curve, and the outgoing player is released once it has faded to silence.
  *
  * Why it was rewritten: the previous version faded the single player's `volume` down over a track's
  * last 3 seconds and back up over the next track's first 3 seconds. That is verifiably applied (the
- * volume really does ramp 1.0 -> 0.0 -> 1.0 on the device), but it is not a crossfade at all -- the
+ * volume really does ramp 1.0 -> 0.0 -> 1.0 on the device), but it is not a crossfade at all - the
  * two ramps are sequential, so it removes music instead of overlapping it, and both windows sit
  * exactly where most tracks are already fading out / silently leading in. Result: nothing audible,
  * reported as "кроссфейд не работает" several times over. One ExoPlayer decodes one item at a time,
@@ -31,7 +31,7 @@ import kotlin.math.PI
  * The overlap is confined to the fade itself: outside it there is still exactly one player, and
  * with the setting off (the default) nothing here touches playback at all. */
 class CrossfadeController(
-    // Lambda, not a fixed instance -- PlaybackService swaps out the live ExoPlayer (see swapPlayer()
+    // Lambda, not a fixed instance - PlaybackService swaps out the live ExoPlayer (see swapPlayer()
     // and the handover below), and this always needs the CURRENT one.
     private val player: () -> ExoPlayer,
     private val settingsRepository: SettingsRepository,
@@ -43,14 +43,14 @@ class CrossfadeController(
     private val promote: (ExoPlayer) -> Unit,
     /** Releases the faded-out player and gives audio focus back to the surviving one. */
     private val retire: (ExoPlayer) -> Unit,
-    /** Этап 6's "умный кроссфейд" gate -- true means it's fine to start the overlap for the
+    /** Этап 6's "умный кроссфейд" gate - true means it's fine to start the overlap for the
      * CURRENT track (checked once, right as the fade window is entered). Defaults to always-true
      * so callers that don't care about this (existing tests) see identical behavior to before. */
     private val isCrossfadeSuitable: () -> Boolean = { true },
 ) {
     private var outgoing: ExoPlayer? = null
 
-    /** Hard ceiling (0..1) multiplied into every volume value this controller writes -- this is
+    /** Hard ceiling (0..1) multiplied into every volume value this controller writes - this is
      * the single owner of `player.volume` while crossfade exists (it runs every tick regardless
      * of whether the crossfade setting is on), so per-device volume-limit profiles set this
      * instead of writing player.volume directly. That's the fix for the ceiling racing an
@@ -62,7 +62,7 @@ class CrossfadeController(
             while (isActive) {
                 delay(TICK_MS)
                 // A single bad tick (e.g. the player instance mid-swapPlayer()) must not kill
-                // this loop for the rest of the session -- without a catch here, any exception
+                // this loop for the rest of the session - without a catch here, any exception
                 // propagates out of the while loop and the whole coroutine just quietly stops,
                 // silently disabling crossfade for good with nothing to restart it.
                 try {
@@ -74,7 +74,7 @@ class CrossfadeController(
         }
     }
 
-    /** Ends an in-flight crossfade immediately, releasing the outgoing player -- needed when the DSP
+    /** Ends an in-flight crossfade immediately, releasing the outgoing player - needed when the DSP
      * sink swaps mid-fade (PlaybackService.swapPlayer), when the setting is turned off, and on
      * service teardown, so a second ExoPlayer can never outlive the fade that created it. */
     fun cancel() {
@@ -83,7 +83,7 @@ class CrossfadeController(
         try {
             player().volume = volumeCeiling
         } catch (e: Exception) {
-            // Player already released / not built yet -- nothing to restore.
+            // Player already released / not built yet - nothing to restore.
         }
     }
 
@@ -96,7 +96,7 @@ class CrossfadeController(
         }
 
         val durationMs = current.duration
-        // Progress through the overlap, measured on the INCOMING track's own position -- it starts
+        // Progress through the overlap, measured on the INCOMING track's own position - it starts
         // at 0 by construction, so this stays exact even if it spent a moment buffering first.
         val progress = (current.currentPosition.toFloat() / FADE_MS).coerceIn(0f, 1f)
 
@@ -127,7 +127,7 @@ class CrossfadeController(
         // Also covers the incoming player's own fade-in (its position is inside the first FADE_MS),
         // which is the exact complement of the fadeOut() applied to the outgoing one above.
         // The tail half of volumeFor() (this track's own ending) is skipped when the smart gate
-        // rejected an overlap and there IS a next item to reach -- otherwise this single-player
+        // rejected an overlap and there IS a next item to reach - otherwise this single-player
         // ramp would quietly fade out exactly the "abrupt, don't fade" ending isCrossfadeSuitable()
         // was checking for in the first place, defeating the whole point of the gate.
         val skipTailFade = outgoing == null && current.hasNextMediaItem() &&

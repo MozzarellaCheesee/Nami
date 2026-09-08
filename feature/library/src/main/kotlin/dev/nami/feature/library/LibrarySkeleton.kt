@@ -20,9 +20,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.nami.core.designsystem.NamiColors
 
-/** Design mock 4.26 "Skeleton -- загрузка библиотеки" -- shown while Paging's initial page is
+/** Design mock 4.26 "Skeleton - загрузка библиотеки" - shown while Paging's initial page is
  * still loading (LoadState.Loading), instead of the same "empty library" message a genuinely
- * empty library shows (those used to be indistinguishable -- itemCount == 0 either way). */
+ * empty library shows (those used to be indistinguishable - itemCount == 0 either way). */
 @Composable
 fun LibrarySkeleton() {
     val transition = rememberInfiniteTransition(label = "skeleton-shimmer")

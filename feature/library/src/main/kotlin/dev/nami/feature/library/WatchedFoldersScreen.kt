@@ -28,7 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
 
-/** П.md §2 "Режим наблюдения за папкой" -- SAF trees to keep re-scanning. No true background
+/** П.md §2 "Режим наблюдения за папкой" - SAF trees to keep re-scanning. No true background
  * watch exists for SAF trees on Android (see LibraryViewModel.rescanWatchedFolders's own doc) --
  * rescanned on cold start, plus a manual refresh here. */
 @Composable
@@ -47,7 +47,7 @@ fun WatchedFoldersScreen(
             Text("Отслеживаемые папки", color = NamiColors.Paper100, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 8.dp))
         }
         Text(
-            "Пересканируются при каждом запуске приложения -- фонового слежения за папками на Android нет.",
+            "Пересканируются при каждом запуске приложения - фонового слежения за папками на Android нет.",
             color = NamiColors.Paper40,
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 12.dp),

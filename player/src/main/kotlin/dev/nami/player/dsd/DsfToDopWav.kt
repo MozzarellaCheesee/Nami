@@ -6,7 +6,7 @@ import java.nio.ByteOrder
 
 /** Bridges [DsfParser] + [DopEncoder] to something Media3 can actually play: a standard 24-bit
  * PCM .wav file carrying DoP-packed DSD. This is the "wire it to a real playback path" this
- * codebase was missing -- rather than writing a custom Extractor/MediaSource for raw DSD (a much
+ * codebase was missing - rather than writing a custom Extractor/MediaSource for raw DSD (a much
  * bigger, riskier piece for a format that can't be verified without real DSD-capable hardware),
  * this converts once at import time and lets the existing WAV extractor + normal DSP pipeline
  * handle it exactly like any other imported track. A DAC that recognizes DoP's marker bytes will
@@ -14,7 +14,7 @@ import java.nio.ByteOrder
  * inaudible-as-such) PCM, per the DoP spec's whole design.
  *
  * Cost of this approach: the converted file is exactly as large as the DoP stream it carries (no
- * compression), and it's a one-time transcode rather than true real-time streaming decode -- a
+ * compression), and it's a one-time transcode rather than true real-time streaming decode - a
  * fully streamed path would need the custom Extractor mentioned above. */
 object DsfToDopWav {
 
@@ -42,7 +42,7 @@ object DsfToDopWav {
             }
         }
 
-        // DoP packs 2 DSD bytes (16 bits) per 24-bit PCM frame -- see DopEncoder's own doc.
+        // DoP packs 2 DSD bytes (16 bits) per 24-bit PCM frame - see DopEncoder's own doc.
         val dopSampleRateHz = audio.sampleRateHz / 16
         return wavHeader(dopSampleRateHz, channelCount, bitsPerSample = 24, dataSize = pcmData.size) + pcmData
     }

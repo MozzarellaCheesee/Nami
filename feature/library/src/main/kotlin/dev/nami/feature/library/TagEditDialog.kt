@@ -26,13 +26,13 @@ import dev.nami.core.designsystem.NamiAlertDialog
 import dev.nami.domain.MusicBrainzCandidate
 import kotlinx.coroutines.launch
 
-/** A3 "Редактор тегов" (П.md §23.20) -- artist/album/year/genre fields, blank = leave unchanged
+/** A3 "Редактор тегов" (П.md §23.20) - artist/album/year/genre fields, blank = leave unchanged
  * for that field (see LibraryRepositoryImpl.batchEditTracks for exact per-field semantics, e.g.
  * year with no album name applies to each track's existing album). Same dialog for one track
- * (⋮ "Редактировать теги" on a single row) or many (selection-mode batch edit) -- [trackCount]
+ * (⋮ "Редактировать теги" on a single row) or many (selection-mode batch edit) - [trackCount]
  * only changes the title, the field semantics don't care how many tracks are behind them.
  * "Найти в MusicBrainz" searches by a manually typed title/artist and prefills the form from the
- * picked result -- no per-track auto-detection, even the single-track case leaves this manual so
+ * picked result - no per-track auto-detection, even the single-track case leaves this manual so
  * the same code path covers both. */
 @Composable
 internal fun TagEditDialog(
@@ -55,7 +55,7 @@ internal fun TagEditDialog(
         title = { Text(if (trackCount == 1) "Редактировать теги" else "Редактировать теги ($trackCount)") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Пустое поле -- не менять.", style = MaterialTheme.typography.bodySmall)
+                Text("Пустое поле - не менять.", style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(
                     value = artistName, onValueChange = { artistName = it },
                     label = { Text("Исполнитель") }, singleLine = true, modifier = Modifier.fillMaxWidth(),

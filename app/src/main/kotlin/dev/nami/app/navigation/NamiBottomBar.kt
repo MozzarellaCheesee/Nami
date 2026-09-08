@@ -39,7 +39,7 @@ fun NamiBottomBar(currentRoute: String?, onTabSelected: (String) -> Unit, modifi
         // background must come BEFORE (outer of) the incoming `modifier` (navigationBarsPadding):
         // a draw modifier paints the node's final resolved size regardless of where it sits in
         // the chain, so putting it first here means it also covers the padding inset added by
-        // `modifier` -- background-after-padding only paints the inner content, leaving the
+        // `modifier` - background-after-padding only paints the inner content, leaving the
         // inset transparent and dependent on whatever happens to be drawn behind it.
         modifier = Modifier
             .background(NamiColors.Ink900)

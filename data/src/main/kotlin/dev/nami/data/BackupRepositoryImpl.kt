@@ -21,7 +21,7 @@ private const val PREFS_NAME = "nami_settings"
 
 /** П.md §2 "Полный экспорт в .zip". Собирает содержимое приватной папки с музыкой (аудио + все
  * lrc/перевод/romaji/word-timing sidecar-файлы уже лежат там же) и JSON-манифест с метаданными,
- * которых в файлах нет -- треки из БД, плейлисты, теги, настройки. */
+ * которых в файлах нет - треки из БД, плейлисты, теги, настройки. */
 class BackupRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val trackDao: TrackDao,

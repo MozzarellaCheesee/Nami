@@ -12,11 +12,11 @@ import kotlinx.coroutines.flow.StateFlow
  * План.md §16/§20). Same simplification the existing BitPerfectUsbController/BluetoothCodecReader
  * already use: Android has no public "give me the currently routed device" query that works
  * before an AudioTrack exists, so this picks the highest-priority CONNECTED output device instead
- * of the literally-routed one -- USB DAC > Bluetooth > wired > speaker, on the reasoning that a
+ * of the literally-routed one - USB DAC > Bluetooth > wired > speaker, on the reasoning that a
  * USB DAC or BT headset being connected at all is a much stronger signal than a wired jack that
  * might just be a charging accessory's audio pins.
  *
- * Registers one AudioDeviceCallback for its whole lifetime -- construct once per service/process
+ * Registers one AudioDeviceCallback for its whole lifetime - construct once per service/process
  * (PlaybackService owns one), not per screen. */
 class OutputDeviceDetector(private val context: Context) {
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager

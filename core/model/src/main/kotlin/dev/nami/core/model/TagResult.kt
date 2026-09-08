@@ -12,9 +12,9 @@ data class TagResult(
     val durationMs: Long,
     val artwork: ByteArray?,
     val artworkMime: String?,
-    /** Embedded USLT/LYRICS/©lyr tag text, raw -- may be a full LRC blob or plain unsynced text. */
+    /** Embedded USLT/LYRICS/©lyr tag text, raw - may be a full LRC blob or plain unsynced text. */
     val lyrics: String? = null,
-    /** For the "Аудиотракт" screen -- null for formats lofty can't report a bit depth for
+    /** For the "Аудиотракт" screen - null for formats lofty can't report a bit depth for
      * (lossy codecs mostly). */
     val sampleRateHz: Int? = null,
     val bitDepth: Int? = null,

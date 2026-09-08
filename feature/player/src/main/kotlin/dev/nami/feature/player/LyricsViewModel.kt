@@ -42,9 +42,9 @@ data class WordLookup(
     val token: WordToken,
     val entries: List<DictionaryEntry>,
     val contextLine: String,
-    // Same index as entries -- JMdict's own glosses are English, translated to Russian through
+    // Same index as entries - JMdict's own glosses are English, translated to Russian through
     // the same DeepL/MLKit pipeline the vocabulary save already uses (see addToVocabulary's own
-    // doc for why). Empty until the translation call returns -- the popup shows the English gloss
+    // doc for why). Empty until the translation call returns - the popup shows the English gloss
     // immediately rather than blocking on it.
     val translatedGlosses: List<String> = emptyList(),
 )
@@ -128,7 +128,7 @@ class LyricsViewModel @Inject constructor(
     private val _isFetchingOnline = MutableStateFlow(false)
     private val _showTranslation = MutableStateFlow(false)
     private val _isTranslating = MutableStateFlow(false)
-    // Live, not cached -- unlike translation/romaji, tokenizing one line with Kuromoji is fast
+    // Live, not cached - unlike translation/romaji, tokenizing one line with Kuromoji is fast
     // enough that furigana doesn't need generation/caching at all, just a display toggle.
     private val _showFurigana = MutableStateFlow(false)
     private val _showRomaji = MutableStateFlow(false)
@@ -136,7 +136,7 @@ class LyricsViewModel @Inject constructor(
     private val _wordLookup = MutableStateFlow<WordLookup?>(null)
     private val _isPreciseSyncing = MutableStateFlow(false)
     private val _preciseSyncProgress = MutableStateFlow(0f)
-    // Never re-hit LRCLIB for a track once tried this session, hit or miss -- there is no
+    // Never re-hit LRCLIB for a track once tried this session, hit or miss - there is no
     // "retry automatically forever" here, only the one manual re-check the user can trigger from
     // the empty state (also routed through fetchOnline, but that call bypasses this guard).
     private val triedOnlineFetch = mutableSetOf<TrackId>()
@@ -220,14 +220,14 @@ class LyricsViewModel @Inject constructor(
             .launchIn(viewModelScope)
     }
 
-    /** Also callable directly from the UI's "Искать в сети" retry -- passing the current track's
+    /** Also callable directly from the UI's "Искать в сети" retry - passing the current track's
      * own already-known fields lets a miss be retried without re-adding the guard above. */
     fun retryOnlineFetch() {
         val tl = trackAndLyrics.value ?: return
         fetchOnline(tl.trackId, tl.path, tl.title, tl.artistName, tl.durationMs)
     }
 
-    /** The explicit "Искать в STANDS4" button -- never fired automatically, see
+    /** The explicit "Искать в STANDS4" button - never fired automatically, see
      * [LyricsUiState.stands4Configured]'s doc for why. */
     fun searchStands4() {
         val tl = trackAndLyrics.value ?: return
@@ -274,7 +274,7 @@ class LyricsViewModel @Inject constructor(
         if (tl.translation == null) runTranslation(tl.path, tl.lyrics)
     }
 
-    /** Long-press on the translate button: re-runs it even if a (possibly bad -- garbled by an
+    /** Long-press on the translate button: re-runs it even if a (possibly bad - garbled by an
      * old bug, or just wrong) cached translation already exists, overwriting the cache. */
     fun forceRetranslate() {
         val tl = trackAndLyrics.value
@@ -336,12 +336,12 @@ class LyricsViewModel @Inject constructor(
         }
     }
 
-    /** Splits a line into tappable words -- used for both the furigana ruby-text layout and the
+    /** Splits a line into tappable words - used for both the furigana ruby-text layout and the
      * word-tap dictionary lookup below, so the two always agree on word boundaries. */
     suspend fun tokenizeLine(line: String): List<WordToken> = lyricsRepository.tokenizeLine(line)
 
     /** Tap a word in the lyrics -> look it up by its dictionary (base) form, not the conjugated
-     * surface form actually printed -- JMdict headwords are citation forms ("食べる", not "食べた"). */
+     * surface form actually printed - JMdict headwords are citation forms ("食べる", not "食べた"). */
     fun lookupWord(token: WordToken, contextLine: String) {
         viewModelScope.launch {
             val entries = dictionaryRepository.lookup(token.baseForm)
@@ -360,14 +360,14 @@ class LyricsViewModel @Inject constructor(
         _wordLookup.value = null
     }
 
-    /** "В словарик" from the word lookup popup -- saved with the line/track it came from, per
+    /** "В словарик" from the word lookup popup - saved with the line/track it came from, per
      * План.md's "слова из песен с контекстной строкой и ссылкой на трек".
      *
-     * JMdict (the only bundled dictionary) is Japanese-ENGLISH, not Japanese-Russian -- there's no
+     * JMdict (the only bundled dictionary) is Japanese-ENGLISH, not Japanese-Russian - there's no
      * free offline JA-RU dictionary to bundle instead. [meaning] arrives in English; translate it
      * to Russian through the same DeepL/MLKit pipeline lyrics translation already uses (DeepL if
      * the user configured a key, MLKit offline otherwise) before saving, so the vocabulary itself
-     * doesn't stay English. Falls back to the English gloss if translation fails -- still useful,
+     * doesn't stay English. Falls back to the English gloss if translation fails - still useful,
      * just not translated. */
     fun addToVocabulary(word: String, reading: String, meaning: String, contextLine: String) {
         val trackTitle = uiState.value.trackTitle ?: return
@@ -381,7 +381,7 @@ class LyricsViewModel @Inject constructor(
         viewModelScope.launch { playerRepository.seek(ms) }
     }
 
-    /** "Точная синхронизация" -- runs on-device whisper.cpp word-level alignment over the actual
+    /** "Точная синхронизация" - runs on-device whisper.cpp word-level alignment over the actual
      * track audio and replaces the linear-interpolation karaoke sweep with real timing. Downloads
      * the ~500MB model on first use. Arm64-v8a only (gated in the UI via preciseSyncSupported). */
     fun runPreciseSync() {
@@ -410,7 +410,7 @@ class LyricsViewModel @Inject constructor(
     }
 
     /** Manual sync: [lineTexts] in order, [stampedMs] the position captured for each as the user
-     * tapped through the track -- same length, zipped 1:1 into the saved .lrc. */
+     * tapped through the track - same length, zipped 1:1 into the saved .lrc. */
     fun saveManualSync(lineTexts: List<String>, stampedMs: List<Long>) {
         val path = uiState.value.trackPath ?: return
         val lines = lineTexts.indices.map { i -> LyricLine(stampedMs.getOrElse(i) { 0L }, lineTexts[i]) }
@@ -423,7 +423,7 @@ class LyricsViewModel @Inject constructor(
     private val _lyricsFileImportFailed = MutableStateFlow(false)
     val lyricsFileImportFailed: StateFlow<Boolean> = _lyricsFileImportFailed
 
-    /** "Загрузить из файла" -- [uri] is whatever the user picked via the system file picker. */
+    /** "Загрузить из файла" - [uri] is whatever the user picked via the system file picker. */
     fun importLyricsFile(uri: Uri) {
         val path = uiState.value.trackPath ?: return
         viewModelScope.launch {

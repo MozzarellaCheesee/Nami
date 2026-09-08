@@ -20,7 +20,7 @@ class BiquadCoefficientsTest {
         val state = BiquadState()
 
         // Feed enough cycles of the filter's own center frequency for the transient to settle,
-        // then compare steady-state output amplitude to input amplitude -- a +6dB peaking filter
+        // then compare steady-state output amplitude to input amplitude - a +6dB peaking filter
         // at its own center should land close to a factor of 2x (dBToLinear(6) ~= 1.995).
         val samples = 4000
         var maxIn = 0f

@@ -6,7 +6,7 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-// versionCode was hardcoded at 1 for every dev build this whole project -- Android's package
+// versionCode was hardcoded at 1 for every dev build this whole project - Android's package
 // installer can silently refuse to reinstall an APK whose versionCode isn't strictly higher than
 // what's already on the device (no error shown on many OEMs, it just doesn't update), which means
 // a locally sideloaded test build could be running stale code indefinitely. Derive it from the

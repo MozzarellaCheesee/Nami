@@ -15,7 +15,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import dev.nami.core.designsystem.NamiAlertDialog
 
 /** Empty field clears the year (some releases genuinely don't have one) rather than rejecting
- * the save -- this is the only field on the album where "unset" is a valid, common answer. */
+ * the save - this is the only field on the album where "unset" is a valid, common answer. */
 @Composable
 fun EditYearDialog(
     currentYear: Int?,

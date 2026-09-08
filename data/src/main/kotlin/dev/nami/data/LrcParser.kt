@@ -4,9 +4,9 @@ import dev.nami.core.model.LyricLine
 import dev.nami.core.model.Lyrics
 
 /** Standard LRC (`[mm:ss.xx]text`), tolerant of "enhanced LRC" word-level tags
- * (`<mm:ss.xx>word`) -- those are stripped rather than used, karaoke-level per-word timing is a
+ * (`<mm:ss.xx>word`) - those are stripped rather than used, karaoke-level per-word timing is a
  * later pass. A line can carry more than one time tag (`[00:12.00][00:45.00]text`, a repeated
- * chorus) -- each becomes its own line at that timestamp. */
+ * chorus) - each becomes its own line at that timestamp. */
 object LrcParser {
     private val lineTimeTag = Regex("""\[(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?\]""")
     private val wordTimeTag = Regex("""<\d{1,3}:\d{2}(?:[.:]\d{1,3})?>""")

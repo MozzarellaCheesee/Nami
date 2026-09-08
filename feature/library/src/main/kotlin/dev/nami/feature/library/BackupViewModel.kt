@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** П.md §2 "Полный экспорт в .zip" -- отдельная ViewModel, не часть LibraryViewModel, чтобы не
+/** П.md §2 "Полный экспорт в .zip" - отдельная ViewModel, не часть LibraryViewModel, чтобы не
  * плодить очередной конструкторский параметр там (и не чинить 10 тестовых fake-ов ради одной
  * кнопки в Настройках). */
 @HiltViewModel

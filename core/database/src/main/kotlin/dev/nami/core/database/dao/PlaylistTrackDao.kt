@@ -14,7 +14,7 @@ interface PlaylistTrackDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(entry: PlaylistTrackEntity)
 
-    /** Snapshot of every playlist-track entry for export/backup -- see BackupRepository. */
+    /** Snapshot of every playlist-track entry for export/backup - see BackupRepository. */
     @Query("SELECT * FROM playlist_tracks ORDER BY playlistId, position")
     suspend fun allRaw(): List<PlaylistTrackEntity>
 
@@ -24,7 +24,7 @@ interface PlaylistTrackDao {
     @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM playlist_tracks WHERE playlistId = :playlistId")
     suspend fun nextPosition(playlistId: String): Int
 
-    /** Reactive "is trackId in the (one) Liked playlist" -- joins through playlists.isLiked
+    /** Reactive "is trackId in the (one) Liked playlist" - joins through playlists.isLiked
      * rather than taking a playlistId directly, so it stays correct even if the Liked playlist
      * doesn't exist yet (nothing liked yet: the join finds nothing, false) without the caller
      * needing to know/cache its id first. */

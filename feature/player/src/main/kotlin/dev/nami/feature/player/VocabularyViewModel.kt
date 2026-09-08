@@ -37,7 +37,7 @@ class VocabularyViewModel @Inject constructor(
         viewModelScope.launch { vocabularyRepository.remove(id) }
     }
 
-    /** CSV straight into Downloads via MediaStore -- no storage permission needed on API 29+,
+    /** CSV straight into Downloads via MediaStore - no storage permission needed on API 29+,
      * and Anki's plain-CSV importer reads it directly (word, reading, meaning, line, track). */
     fun exportCsv() {
         viewModelScope.launch {

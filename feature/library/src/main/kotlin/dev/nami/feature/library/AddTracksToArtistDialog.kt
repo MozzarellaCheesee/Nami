@@ -15,7 +15,7 @@ import androidx.paging.compose.itemKey
 import dev.nami.core.designsystem.NamiAlertDialog
 import dev.nami.core.model.ArtistId
 
-/** Existing library tracks only -- adding a brand new (not-yet-imported) file to a specific
+/** Existing library tracks only - adding a brand new (not-yet-imported) file to a specific
  * artist isn't something the app can do without also picking where it lives on disk; that's just
  * a normal folder/file import (already tags the artist from its own metadata), not this dialog. */
 @Composable
@@ -33,7 +33,7 @@ fun AddTracksToArtistDialog(
             LazyColumn(modifier = Modifier.height(420.dp)) {
                 items(count = tracks.itemCount, key = tracks.itemKey { it.id.value }) { index ->
                     val track = tracks[index] ?: return@items
-                    // Already this artist's track -- adding it again would be a no-op.
+                    // Already this artist's track - adding it again would be a no-op.
                     if (track.artistId == artistId) return@items
                     TrackListItem(track = track, onClick = { viewModel.addTrack(track.id, artistId) })
                 }

@@ -30,11 +30,11 @@ private const val BAR_WIDTH_DP = 2
 private const val BAR_GAP_DP = 1
 private const val MOMENT_HIT_RADIUS_DP = 12
 
-/** One "Метки моментов" marker on the scrubber -- see WaveformScrubber's `moments` param. */
+/** One "Метки моментов" marker on the scrubber - see WaveformScrubber's `moments` param. */
 data class MomentMarker(val id: Long, val fraction: Float, val colorArgb: Int)
 
 /** Placeholder shape shown before the real scan (see WaveformScanner/NowPlayingViewModel.waveform)
- * finishes, or if it fails -- deterministic per-track so it doesn't visibly jitter between
+ * finishes, or if it fails - deterministic per-track so it doesn't visibly jitter between
  * recompositions while loading, but NOT real amplitude data. */
 private fun barHeights(seedKey: String): List<Float> {
     val random = Random(seedKey.hashCode())
@@ -55,11 +55,11 @@ fun WaveformScrubber(
     onProgressPreview: (Float) -> Unit = {},
     onPreviewEnd: () -> Unit = {},
     // Real per-track amplitude (WaveformScanner), one value per bar, same size as the placeholder
-    // -- null while it's still decoding or if the scan failed, in which case the placeholder
+    // - null while it's still decoding or if the scan failed, in which case the placeholder
     // shape below is what's actually drawn.
     realHeights: List<Float>? = null,
-    // План.md §22.1 "Метки моментов" -- drawn as a thin full-height tick (not a dot sitting on
-    // the bar it lands on, which reads badly against an uneven waveform -- a dot's vertical
+    // План.md §22.1 "Метки моментов" - drawn as a thin full-height tick (not a dot sitting on
+    // the bar it lands on, which reads badly against an uneven waveform - a dot's vertical
     // position has to pick some bar height to sit at, and any choice looks arbitrary/misaligned
     // next to neighboring bars of a different height; a full-height line has no such problem).
     // Tapping near one (see MOMENT_HIT_RADIUS_DP) calls onMomentClick instead of seeking, so
@@ -67,7 +67,7 @@ fun WaveformScrubber(
     moments: List<MomentMarker> = emptyList(),
     onLongPress: (Float) -> Unit = {},
     onMomentClick: (Long) -> Unit = {},
-    // Design mock 4.22 "Моменты и петли" -- the active A-B loop drawn as a translucent region on
+    // Design mock 4.22 "Моменты и петли" - the active A-B loop drawn as a translucent region on
     // the waveform itself, not just described in text above it. Null when no loop is active.
     loopRange: ClosedFloatingPointRange<Float>? = null,
 ) {
@@ -78,10 +78,10 @@ fun WaveformScrubber(
 
     // Without this, the placeholder shape (deliberately made to look like a plausible waveform,
     // so it isn't a flat boring bar) silently morphs into the real one the instant the scan
-    // finishes -- indistinguishable from a random unexplained UI change, since nothing marked
+    // finishes - indistinguishable from a random unexplained UI change, since nothing marked
     // the placeholder as "still loading" in the first place. Two cues instead: a slow alpha pulse
     // on the not-yet-real shape (this bar is a stand-in, not final data), and a smooth animated
-    // crossfade -- not an instant swap -- once the real one arrives, so the transition itself
+    // crossfade - not an instant swap - once the real one arrives, so the transition itself
     // reads as "this finished loading" rather than "something just changed".
     val loadingPulse by rememberInfiniteTransition(label = "waveform-loading-pulse").animateFloat(
         initialValue = 0.35f,
@@ -94,7 +94,7 @@ fun WaveformScrubber(
     // Bars actually drawn morph from whatever was PREVIOUSLY on screen to targetHeights, whether
     // that's the same track's placeholder finishing its scan or a totally different track's shape
     // (switching tracks used to just hard-cut to the next track's bars, even when its real
-    // waveform was already cached and ready). Not keyed by seedKey -- it has to survive a track
+    // waveform was already cached and ready). Not keyed by seedKey - it has to survive a track
     // change to have something to morph FROM. Captures the animation's own current interpolated
     // position as the new start point (not the old target) so an overlapping second change
     // doesn't jump backward.

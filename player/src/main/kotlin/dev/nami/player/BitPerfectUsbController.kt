@@ -17,14 +17,14 @@ import kotlinx.coroutines.flow.onEach
  * matching USB device, at the cost of every other in-app effect (EQ, ReplayGain, crossfade) also
  * being bypassed, per План.md's own warning. Requires a vendor HAL flag most phones don't ship,
  * so this silently no-ops (stays on the normal mixed path) on anything that can't actually do it
- * -- there is no UI feedback for "didn't work" beyond that, matching the honest framing that this
+ * - there is no UI feedback for "didn't work" beyond that, matching the honest framing that this
  * is opportunistic, not guaranteed, hardware support.
  *
  * Also where Этап 10's other two pieces stop: DoP (DSD-over-PCM bit-packing, see
  * dev.nami.player.dsd.DopEncoder) exists as a standalone, unit-tested encoder but isn't wired to
- * a real DSD decode path (no .dsf/.dff parser in this codebase yet -- that's a separate,
+ * a real DSD decode path (no .dsf/.dff parser in this codebase yet - that's a separate,
  * unstarted piece, not silently faked here); a full custom UAC2 isochronous-transfer driver
- * (План.md's own "самая тяжёлая часть проекта") was not attempted at all -- it needs real USB
+ * (План.md's own "самая тяжёлая часть проекта") was not attempted at all - it needs real USB
  * hardware to develop against and per-chip (XMOS/Savitech/ESS) workarounds that can't be written
  * correctly without one, let alone verified unsupervised.
  */
@@ -41,7 +41,7 @@ class BitPerfectUsbController(
 
     private fun tryEnable() {
         if (Build.VERSION.SDK_INT >= 34) enableBitPerfect()
-        // Below API 34, AudioMixerAttributes doesn't exist -- the setting stays on (so it takes
+        // Below API 34, AudioMixerAttributes doesn't exist - the setting stays on (so it takes
         // effect if the device is later updated) but has no effect here.
     }
 
@@ -58,7 +58,7 @@ class BitPerfectUsbController(
             }
         } catch (e: Exception) {
             // Reflects real vendor sightings of half-implemented AIDL Audio HALs (План.md's own
-            // "известны случаи полного отсутствия звука") -- fail closed, never crash playback
+            // "известны случаи полного отсутствия звука") - fail closed, never crash playback
             // over an optional hi-res path.
             null
         } ?: return

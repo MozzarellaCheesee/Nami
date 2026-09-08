@@ -69,7 +69,7 @@ class WhisperAlignerImpl @Inject constructor(
             if (!isSupported() || !isModelDownloaded()) return@withContext null
             val pcm = AudioPcmDecoder.decodeTo16kMono(audioPath) ?: return@withContext null
             // whisper.cpp's own progress lives in a global (single-alignment-at-a-time) counter
-            // on the Rust side -- poll it from a side coroutine while the blocking JNI call runs,
+            // on the Rust side - poll it from a side coroutine while the blocking JNI call runs,
             // a full track on a phone CPU takes minutes and the UI would otherwise look hung.
             val pollJob = launch {
                 while (isActive) {
@@ -78,7 +78,7 @@ class WhisperAlignerImpl @Inject constructor(
                 }
             }
             try {
-                // Raw little-endian bytes, not pcm.toList() -- List<Float> forces uniffi's
+                // Raw little-endian bytes, not pcm.toList() - List<Float> forces uniffi's
                 // generated binding to box every sample as a java.lang.Float one at a time,
                 // which OOMs a stock heap for a full track's worth of 16kHz samples.
                 val pcmBytes = ByteBuffer.allocate(pcm.size * 4).order(ByteOrder.LITTLE_ENDIAN)

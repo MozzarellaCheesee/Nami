@@ -12,9 +12,9 @@ import dev.nami.core.designsystem.NamiColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** Extracted swatches skew gray on near-monochrome art -- Дизайн.md явно требует форсировать
+/** Extracted swatches skew gray on near-monochrome art - Дизайн.md явно требует форсировать
  * насыщенность, чтобы такие обложки не сводили акцент к серому. Пол по насыщенности, пол/потолок
- * по светлоте -- чтобы акцент оставался читаемым, не почти-чёрным и не почти-белым. */
+ * по светлоте - чтобы акцент оставался читаемым, не почти-чёрным и не почти-белым. */
 private fun forceSaturation(color: Color): Color {
     val hsl = FloatArray(3)
     ColorUtils.colorToHSL(color.toArgb(), hsl)
@@ -38,7 +38,7 @@ fun rememberArtworkAccentColor(artworkPath: String?): Color {
 
 private suspend fun extractAccentColor(path: String): Color = withContext(Dispatchers.IO) {
     try {
-        // Downsample aggressively -- this only feeds a color average, not a display image.
+        // Downsample aggressively - this only feeds a color average, not a display image.
         val options = BitmapFactory.Options().apply { inSampleSize = 4 }
         val bitmap = BitmapFactory.decodeFile(path, options) ?: return@withContext NamiColors.Shu
         val palette = Palette.from(bitmap).generate()

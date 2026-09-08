@@ -5,18 +5,18 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import kotlin.math.sqrt
 
-/** Этап 6's "умный кроссфейд" (План.md §22.9) -- decides whether a track's own ending already
+/** Этап 6's "умный кроссфейд" (План.md §22.9) - decides whether a track's own ending already
  * fades out naturally. A track that plays loud right up to a hard cut sounds chopped if
  * crossfade's own ~5s ramp starts on top of it; a track that already trails off on its own blends
  * fine. BPM/key-matching (the other half of "уместно" from the plan) isn't implemented anywhere
- * in this codebase yet -- this covers only the ending-shape half, documented as a partial
+ * in this codebase yet - this covers only the ending-shape half, documented as a partial
  * implementation, not a silent gap. */
 object TrackEndingAnalyzer {
     private const val TAIL_WINDOW_MS = 6_000L
     /** Tail RMS below this fraction of the track's own peak-bucket RMS counts as "already fading". */
     private const val NATURAL_FADE_THRESHOLD = 0.35
 
-    /** Null on any decode failure (fails closed, same as ReplayGainScanner) -- callers should
+    /** Null on any decode failure (fails closed, same as ReplayGainScanner) - callers should
      * treat null the same as "assume abrupt" (crossfade still applies, matching today's
      * behavior) rather than blocking crossfade on an unreadable file. */
     fun endsWithNaturalFade(path: String): Boolean? {
@@ -38,7 +38,7 @@ object TrackEndingAnalyzer {
             codec.configure(format, null, null, 0)
             codec.start()
 
-            // Bucketed like WaveformScanner -- one RMS value per ~500ms, so "the tail" and "the
+            // Bucketed like WaveformScanner - one RMS value per ~500ms, so "the tail" and "the
             // loudest part elsewhere in the track" are both real aggregates, not single samples.
             val bucketMs = 500L
             val bucketCount = ((durationUs / 1000) / bucketMs).toInt().coerceAtLeast(1)

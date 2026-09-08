@@ -7,7 +7,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 
-/** MusicBrainz's public search API (П.md §23.20's "автозаполнение из MusicBrainz") -- keyless,
+/** MusicBrainz's public search API (П.md §23.20's "автозаполнение из MusicBrainz") - keyless,
  * like LRCLIB, but their usage policy requires a real identifying User-Agent (not the generic
  * one LrcLibClient/Stands4Client use) and a self-imposed ~1 request/second rate limit, enforced
  * here rather than left to the caller to remember. */
@@ -55,7 +55,7 @@ object MusicBrainzClient {
                 connectTimeout = TIMEOUT_MS
                 readTimeout = TIMEOUT_MS
                 requestMethod = "GET"
-                // MusicBrainz's API policy requires app name + version + contact -- a generic
+                // MusicBrainz's API policy requires app name + version + contact - a generic
                 // User-Agent gets silently rate-limited or blocked.
                 setRequestProperty("User-Agent", "Nami/1.0 (offline music player, no contact URL yet)")
                 try {

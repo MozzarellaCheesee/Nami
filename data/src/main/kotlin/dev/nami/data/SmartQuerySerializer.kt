@@ -8,7 +8,7 @@ import dev.nami.domain.SmartSortField
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Same plain-org.json approach as AppSettingsRepository's Session serialization -- one small
+/** Same plain-org.json approach as AppSettingsRepository's Session serialization - one small
  * JSON blob in a TEXT column, no separate rules table needed for something this size. */
 object SmartQuerySerializer {
     fun serialize(query: SmartQuery): String {
@@ -30,7 +30,7 @@ object SmartQuerySerializer {
         }.toString()
     }
 
-    /** Null on any parse failure -- a corrupted/hand-edited value just means "no rules match
+    /** Null on any parse failure - a corrupted/hand-edited value just means "no rules match
      * anything" at the call site, not a crash. */
     fun parse(json: String): SmartQuery? = runCatching {
         val root = JSONObject(json)

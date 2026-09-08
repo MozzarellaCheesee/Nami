@@ -37,9 +37,9 @@ class SearchViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(SearchUiState())
     val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
 
-    // Shown while the query is blank, so the screen isn't just an empty prompt -- same data the
+    // Shown while the query is blank, so the screen isn't just an empty prompt - same data the
     // Library tab already previews (recentAlbums/featuredArtists), just browsable from Search too.
-    // null (not emptyList()) until the DB actually answers -- otherwise the "empty" initial value
+    // null (not emptyList()) until the DB actually answers - otherwise the "empty" initial value
     // of a StateFlow reads as "library has nothing", flashing the "Начните вводить" placeholder
     // for one frame before the real (non-empty) list arrives.
     val browseAlbums: StateFlow<List<AlbumSummary>?> =
@@ -49,7 +49,7 @@ class SearchViewModel @Inject constructor(
 
     private val queryFlow = MutableStateFlow("")
 
-    // In-memory only (not persisted) -- a nice-to-have recall of this session's own searches,
+    // In-memory only (not persisted) - a nice-to-have recall of this session's own searches,
     // not a durable history feature (Дизайн.md's mock shows it as a light convenience, not
     // something worth a DB table + migration for).
     private val recentQueries = LinkedHashSet<String>()
@@ -66,7 +66,7 @@ class SearchViewModel @Inject constructor(
             .onEach { results ->
                 _uiState.value = _uiState.value.copy(results = results)
                 // Records a search once it actually found something, debounced (200ms of no
-                // typing) -- not on every keystroke, which would fill the list with fragments
+                // typing) - not on every keystroke, which would fill the list with fragments
                 // instead of finished searches.
                 if (results.isNotEmpty()) rememberQuery(_uiState.value.query)
             }

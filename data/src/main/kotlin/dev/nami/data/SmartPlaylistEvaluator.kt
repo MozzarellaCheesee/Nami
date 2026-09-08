@@ -11,7 +11,7 @@ import java.io.File
 /** Evaluates a [SmartQuery] against the whole library in plain Kotlin (not translated to SQL) --
  * the rule set is small and the field list mixes a DB column (genre), a derived value (days since
  * a timestamp) and a filesystem check (HAS_LYRICS), so a single WHERE-clause builder would need
- * three different query strategies anyway. All rules AND together -- the plan's own examples
+ * three different query strategies anyway. All rules AND together - the plan's own examples
  * ("жанр = X И playCount > 5 И добавлено за 30 дней") never show OR, so this doesn't build a
  * combinator UI has no use for. */
 object SmartPlaylistEvaluator {
@@ -35,7 +35,7 @@ object SmartPlaylistEvaluator {
         SmartField.DURATION_SEC -> compareNumbers((track.durationMs / 1000).toDouble(), rule.operator, rule.value)
         SmartField.ADDED_DAYS_AGO -> compareNumbers(daysSince(track.dateAdded, nowMs), rule.operator, rule.value)
         SmartField.LAST_PLAYED_DAYS_AGO -> {
-            // Never-played reads as "infinitely long ago" -- so "не играло 180+ дней" also
+            // Never-played reads as "infinitely long ago" - so "не играло 180+ дней" also
             // catches tracks that have literally never played, which is the intent of a
             // "забытое"-style preset, not an edge case to special-case around.
             val days = track.lastPlayed?.let { daysSince(it, nowMs) } ?: Double.MAX_VALUE

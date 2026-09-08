@@ -71,7 +71,7 @@ private fun sortLabel(field: SmartSortField): String = when (field) {
     SmartSortField.DURATION -> "Длительность"
 }
 
-/** П.md's `SmartPlaylistEditor(playlistId?)` route -- "конструктор правил на чипах" from §20:
+/** П.md's `SmartPlaylistEditor(playlistId?)` route - "конструктор правил на чипах" from §20:
  * presets for the common cases, plus add-a-rule-at-a-time for anything else. Rules always AND
  * together (see SmartPlaylistEvaluator's own doc for why no OR combinator exists). */
 @Composable

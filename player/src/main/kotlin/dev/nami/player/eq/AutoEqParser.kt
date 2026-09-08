@@ -8,10 +8,10 @@ import kotlin.math.ln
  * (ParametricEqAudioProcessor.BAND_FREQS_HZ).
  *
  * AutoEQ profiles are arbitrary-Fc/arbitrary-Q biquads (typically 5-10 of them) correcting a
- * specific headphone's measured response -- this app's EQ only has 9 fixed-frequency peaking
+ * specific headphone's measured response - this app's EQ only has 9 fixed-frequency peaking
  * bands, so an exact conversion isn't possible. This buckets each filter's gain onto whichever of
  * the 9 fixed bands is closest to it on a log-frequency scale (ties/overlaps sum), which is a real
- * approximation, not the original curve -- close enough to be useful, not claimed to be exact. Q
+ * approximation, not the original curve - close enough to be useful, not claimed to be exact. Q
  * is ignored entirely for the same reason (nothing to map it onto). */
 object AutoEqParser {
     private val FILTER_LINE = Regex(
@@ -21,7 +21,7 @@ object AutoEqParser {
     private val PREAMP_LINE = Regex("""Preamp:\s*(-?[\d.]+)\s*dB""", RegexOption.IGNORE_CASE)
 
     /** Returns null if the text contains no recognizable filter lines at all (not a
-     * ParametricEQ.txt file, or empty) -- caller should show "не удалось распознать файл". */
+     * ParametricEQ.txt file, or empty) - caller should show "не удалось распознать файл". */
     fun parse(text: String): List<Float>? {
         val bandFreqs = ParametricEqAudioProcessor.BAND_FREQS_HZ
         val bandGains = FloatArray(bandFreqs.size)

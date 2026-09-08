@@ -50,7 +50,7 @@ class PlaylistRepositoryImpl @Inject constructor(
     override fun tracksInPlaylist(id: PlaylistId): Flow<List<Track>> = flow {
         val playlist = playlistDao.findById(id.value)
         if (playlist?.isSmart == true) {
-            // Re-evaluated fresh on every collection (each screen open), not cached -- see
+            // Re-evaluated fresh on every collection (each screen open), not cached - see
             // PlaylistRepository.createSmartPlaylist's own doc.
             val query = playlist.smartQueryJson?.let(SmartQuerySerializer::parse)
             val allTracks = trackDao.allOrderedWithArtwork().map { it.toDomain() }
@@ -66,11 +66,11 @@ class PlaylistRepositoryImpl @Inject constructor(
         return PlaylistId(id)
     }
 
-    // Rename/delete/cover all guarded server-side too, not just hidden in the UI -- the Liked
+    // Rename/delete/cover all guarded server-side too, not just hidden in the UI - the Liked
     // playlist's name and heart cover are fixed and it can't be trashed, matching Spotify's own
     // Liked Songs. Silent no-ops (fail closed) rather than throwing: the UI is expected to never
     // offer these actions for it in the first place, so reaching here at all means something
-    // upstream didn't check -- not worth crashing over.
+    // upstream didn't check - not worth crashing over.
     override suspend fun renamePlaylist(id: PlaylistId, name: String) {
         if (playlistDao.findById(id.value)?.isLiked == true) return
         playlistDao.rename(id.value, name)
@@ -150,7 +150,7 @@ class PlaylistRepositoryImpl @Inject constructor(
 
     override fun parseSmartQuery(json: String): SmartQuery? = SmartQuerySerializer.parse(json)
 
-    /** Finds the one Liked playlist, creating it (with its own fixed name -- see [LIKED_PLAYLIST_NAME])
+    /** Finds the one Liked playlist, creating it (with its own fixed name - see [LIKED_PLAYLIST_NAME])
      * the first time anything is ever liked. Idempotent: a second call while one already exists
      * just returns its id. */
     private suspend fun ensureLikedPlaylist(): PlaylistId {

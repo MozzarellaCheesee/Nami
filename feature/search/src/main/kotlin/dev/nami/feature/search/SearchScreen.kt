@@ -85,7 +85,7 @@ fun SearchScreen(
     }
     val resultsListState = rememberLazyListState()
     // Defocusing (and hiding the keyboard) as soon as the list starts scrolling, same as most
-    // search screens -- tapping a result also defocuses (each result's onClick below), but a
+    // search screens - tapping a result also defocuses (each result's onClick below), but a
     // scroll with no tap needs its own trigger.
     LaunchedEffect(resultsListState.isScrollInProgress) {
         if (resultsListState.isScrollInProgress) unfocusSearchField()
@@ -160,7 +160,7 @@ fun SearchScreen(
                         )
                     }
                 }
-                // Only the real empty-library case, not "still loading" -- both flows have
+                // Only the real empty-library case, not "still loading" - both flows have
                 // reported back (non-null) and came back empty.
                 if (uiState.recentQueries.isEmpty() && browseAlbums != null && browseAlbums.isEmpty() &&
                     browseArtists != null && browseArtists.isEmpty()
@@ -246,7 +246,7 @@ fun SearchScreen(
     }
 }
 
-/** "Больше" opens this instead of a separate nav destination -- it's the exact same result data
+/** "Больше" opens this instead of a separate nav destination - it's the exact same result data
  * already in memory, just without the preview cap, so there's nothing to navigate to/load. */
 @Composable
 private fun ExpandedSectionScreen(

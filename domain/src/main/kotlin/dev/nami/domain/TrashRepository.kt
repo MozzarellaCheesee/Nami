@@ -20,7 +20,7 @@ interface TrashRepository {
     fun trashedAlbums(): Flow<List<TrashedAlbum>>
     suspend fun restoreTrack(id: TrackId)
     suspend fun restorePlaylist(id: PlaylistId)
-    /** Also restores every track of the album currently in trash -- an album and its tracks are
+    /** Also restores every track of the album currently in trash - an album and its tracks are
      * trashed together as one action (see LibraryRepository.deleteAlbum), so restoring it undoes
      * the whole thing rather than leaving an "empty" restored album with no playable tracks. */
     suspend fun restoreAlbum(id: AlbumId)

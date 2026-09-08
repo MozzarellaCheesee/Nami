@@ -24,7 +24,7 @@ data class SmartPlaylistEditorUiState(
 )
 
 /** [existingPlaylistId] is null when creating a new smart playlist (nav arg "playlistId" absent
- * or blank), matching the plan's own `SmartPlaylistEditor(playlistId?)` route -- editing an
+ * or blank), matching the plan's own `SmartPlaylistEditor(playlistId?)` route - editing an
  * existing one loads its current query once and Save calls updateSmartQuery instead of create. */
 @HiltViewModel
 class SmartPlaylistEditorViewModel @Inject constructor(

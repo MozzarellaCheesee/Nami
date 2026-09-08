@@ -26,7 +26,7 @@ val nativeCrateDir = rootProject.file("native/whisper-align")
 val generatedBindingsDir = layout.buildDirectory.dir("generated/uniffi")
 
 // whisper.cpp is heavy to cross-compile (its own CMake/C++ build via the NDK toolchain, on
-// top of the usual cargo-ndk clang setup) -- the exact env this needs was worked out by hand
+// top of the usual cargo-ndk clang setup) - the exact env this needs was worked out by hand
 // against this machine's NDK/CMake install; see android-arm64.toolchain.cmake next to the crate.
 // arm64-v8a only: real-time-ish Whisper inference on a 32-bit device would be unusably slow
 // anyway, and this cuts the native build matrix in half.
@@ -46,7 +46,7 @@ val cargoNdkBuild by tasks.registering(Exec::class) {
     environment("CMAKE_GENERATOR", "MinGW Makefiles")
     environment("CMAKE_MAKE_PROGRAM", "C:/gcc/bin/make.exe")
     // A machine-wide CXX/CC/CMAKE(_C(XX)_COMPILER) env var (set outside this project, for an
-    // unrelated MinGW toolchain) otherwise leaks in and hijacks this cross-compile -- setting
+    // unrelated MinGW toolchain) otherwise leaks in and hijacks this cross-compile - setting
     // them to "" still leaves them "present but empty" to the build script (Ok("") is not
     // Err), so they must be removed from the map outright. Windows env vars are effectively
     // case-insensitive but Gradle's environment map isn't guaranteed to normalize case for
@@ -59,7 +59,7 @@ val cargoNdkBuild by tasks.registering(Exec::class) {
         "build", "--release",
     )
     // whisper.cpp is built as a static lib linked into our cdylib, but that cdylib still
-    // dynamically links libc++_shared.so (the NDK's C++ runtime) -- without shipping it
+    // dynamically links libc++_shared.so (the NDK's C++ runtime) - without shipping it
     // alongside, dlopen fails at runtime with "library libc++_shared.so not found".
     doLast {
         copy {

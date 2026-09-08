@@ -47,11 +47,11 @@ import javax.inject.Inject
  * chip, so it can open Now Playing directly instead of whatever screen the user left. */
 const val EXTRA_OPEN_PLAYER = "dev.nami.player.OPEN_PLAYER"
 
-/** Session extra bumped once per crossfade handover -- see PlaybackService.promoteIncomingPlayer. */
+/** Session extra bumped once per crossfade handover - see PlaybackService.promoteIncomingPlayer. */
 const val EXTRA_CROSSFADE_HANDOVER = "dev.nami.player.CROSSFADE_HANDOVER"
 
 /** The three custom AudioProcessors belonging to ONE built ExoPlayer. Grouped only so it's obvious
- * they are created and replaced together -- sharing a set across two simultaneously-playing players
+ * they are created and replaced together - sharing a set across two simultaneously-playing players
  * (which a crossfade creates) would have both audio threads writing the same processor state. */
 private class DspChain {
     val replayGain = ReplayGainAudioProcessor()
@@ -67,7 +67,7 @@ class PlaybackService : MediaSessionService() {
     private lateinit var mediaSession: MediaSession
     // One chain per built player, never shared: a crossfade has two ExoPlayers (so two
     // DefaultAudioSinks, on two audio threads) live at once, and AudioProcessors are stateful --
-    // BaseAudioProcessor's single output buffer, the EQ's per-channel biquad histories -- so one
+    // BaseAudioProcessor's single output buffer, the EQ's per-channel biquad histories - so one
     // shared set would be written by both pipelines at the same time.
     private var dsp = DspChain()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -79,12 +79,12 @@ class PlaybackService : MediaSessionService() {
     private var currentTrackGainDb: Float? = null
     private lateinit var outputDeviceDetector: OutputDeviceDetector
 
-    // Этап 6's "умный кроссфейд" -- per-track result of TrackEndingAnalyzer, checked once when
+    // Этап 6's "умный кроссфейд" - per-track result of TrackEndingAnalyzer, checked once when
     // the fade window is entered (CrossfadeController's isCrossfadeSuitable). true (apply
     // crossfade) is the default/fail-open value: unscanned yet, smart mode off, or a decode
     // failure all fall back to today's unconditional behavior rather than silently disabling
     // crossfade for every track. In-memory only, capped, same reasoning as NowPlayingViewModel's
-    // waveform cache -- this is a per-session convenience, not data worth a DB migration for.
+    // waveform cache - this is a per-session convenience, not data worth a DB migration for.
     private var currentEndsWithNaturalFade = true
     private val endingFadeCache = LinkedHashMap<String, Boolean>()
 
@@ -98,7 +98,7 @@ class PlaybackService : MediaSessionService() {
         .build()
 
     // Per-track ReplayGain scan lives on the player instance's own listener list, re-attached to
-    // whichever ExoPlayer is current after a swapPlayer() -- kept as a field so it's the exact
+    // whichever ExoPlayer is current after a swapPlayer() - kept as a field so it's the exact
     // same listener object both times, not a fresh one that'd be easy to double-add by accident.
     private val replayGainListener = object : Player.Listener {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -114,7 +114,7 @@ class PlaybackService : MediaSessionService() {
     @Inject lateinit var libraryRepository: LibraryRepository
     @Inject lateinit var playlistRepository: PlaylistRepository
 
-    /** Группа E "системный мини-плеер" -- лайк-кнопка в уведомлении/на экране блокировки, не
+    /** Группа E "системный мини-плеер" - лайк-кнопка в уведомлении/на экране блокировки, не
      * только в своём собственном MiniPlayer. Media3's MediaSession.Callback is the extension
      * point for a custom action beyond the standard play/pause/skip set. */
     private val likeCommand = SessionCommand(ACTION_TOGGLE_LIKE, Bundle.EMPTY)
@@ -164,10 +164,10 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
-    /** What the EQ chain and player volume should actually be right now -- either the user's own
+    /** What the EQ chain and player volume should actually be right now - either the user's own
      * manual EQ, or (when Этап 4's per-device profiles are on) the profile matching the currently
      * detected output route. Profiles fully replace the manual EQ while active rather than
-     * layering on top of it -- mixing "your own EQ" and "this device's EQ" would need the two to
+     * layering on top of it - mixing "your own EQ" and "this device's EQ" would need the two to
      * somehow compose, and there's no principled way to do that (a doubled bass boost isn't what
      * either setting asked for). */
     private data class EffectiveEq(val gainsDb: List<Float>, val enabled: Boolean, val volumeLimitPercent: Int)
@@ -190,7 +190,7 @@ class PlaybackService : MediaSessionService() {
         // Without a session activity, the system media notification/status-bar chip has nothing
         // to launch on tap. EXTRA_OPEN_PLAYER tells MainActivity to open Now Playing directly
         // instead of just the last screen the user left.
-        // Can't reference MainActivity's class directly -- it lives in the :app module, which
+        // Can't reference MainActivity's class directly - it lives in the :app module, which
         // depends on :player, not the other way around.
         val openIntent = Intent().apply {
             setClassName(packageName, "dev.nami.app.MainActivity")
@@ -225,7 +225,7 @@ class PlaybackService : MediaSessionService() {
         BitPerfectUsbController(this, settingsRepository, scope)
 
         // Whether ANY effect that needs the custom DSP sink is on right now (and Hi-Fi isn't
-        // vetoing all of them). The sink is only ever built when actually needed -- but the user
+        // vetoing all of them). The sink is only ever built when actually needed - but the user
         // still shouldn't have to restart the app to feel a toggle, so instead of gating this once
         // at cold start, swapPlayer() rebuilds the live ExoPlayer instance (mediaSession.setPlayer,
         // preserving queue/position/playWhenReady) the moment this flips.
@@ -247,7 +247,7 @@ class PlaybackService : MediaSessionService() {
 
         // Этап 4's parametric EQ (Beta) and per-device profiles (also Этап 4, Beta): gains apply
         // live (see ParametricEqAudioProcessor), but the on/off switch itself only takes effect on
-        // DefaultAudioSink's next pipeline rebuild -- force one via a same-position seek so
+        // DefaultAudioSink's next pipeline rebuild - force one via a same-position seek so
         // flipping a toggle (or the output route changing) is felt right away instead of "starting
         // with the next track". swapPlayer() above already gives a fresh pipeline when the sink
         // itself needed to change; this seek covers flips that don't (e.g. gains changing, or
@@ -296,7 +296,7 @@ class PlaybackService : MediaSessionService() {
             }
             .launchIn(scope)
 
-        // "Усиление воспроизведения" -- flat library-wide boost, live regardless of ReplayGain's
+        // "Усиление воспроизведения" - flat library-wide boost, live regardless of ReplayGain's
         // own toggle (see ReplayGainAudioProcessor.isActive()).
         settingsRepository.playbackGainDb
             .onEach { boostDb ->
@@ -335,7 +335,7 @@ class PlaybackService : MediaSessionService() {
         usingCustomSink = useCustomSink
         val chain = newDspChain()
         dsp = chain
-        // Local files only, no network wait -- widen the buffer window so several tracks
+        // Local files only, no network wait - widen the buffer window so several tracks
         // ahead/behind the current one stay decoded and ready, instead of ExoPlayer's default
         // which only keeps a small window and drops the back buffer entirely (causing a visible
         // stall on skipNext/skipPrevious).
@@ -365,7 +365,7 @@ class PlaybackService : MediaSessionService() {
      *
      * Audio focus is deliberately NOT handled by this one. A second focus request from the same app
      * makes the framework tell the first requester it lost focus, and ExoPlayer's AudioFocusManager
-     * would then pause the track we are in the middle of fading out -- the crossfade would cut
+     * would then pause the track we are in the middle of fading out - the crossfade would cut
      * instead of blend. promoteIncomingPlayer() re-arms focus once it's the only player left. */
     private fun buildIncomingPlayer(): ExoPlayer? {
         val old = player
@@ -406,7 +406,7 @@ class PlaybackService : MediaSessionService() {
 
     /** Swaps the live ExoPlayer for one built with (or without) the custom float-output sink,
      * carrying the queue/position/playback state across so the listener never hears a gap or a
-     * restart -- this is what lets EQ/ReplayGain/dither/playback-gain engage immediately instead
+     * restart - this is what lets EQ/ReplayGain/dither/playback-gain engage immediately instead
      * of needing an app restart, without going back to forcing float output unconditionally
      * (that's what caused the chipmunk-pitch regression). */
     private fun swapPlayer(useCustomSink: Boolean) {
@@ -443,7 +443,7 @@ class PlaybackService : MediaSessionService() {
         val gain = if (cachedGain != null) {
             cachedGain
         } else {
-            // Blocking decode -- runs on Dispatchers.Default so it doesn't touch Main.immediate,
+            // Blocking decode - runs on Dispatchers.Default so it doesn't touch Main.immediate,
             // which the rest of this scope (and the player itself) lives on.
             val scanned = kotlinx.coroutines.withContext(Dispatchers.Default) { ReplayGainScanner.scan(track.path) }
             if (scanned != null) libraryRepository.setTrackReplayGain(trackId, scanned)
@@ -455,7 +455,7 @@ class PlaybackService : MediaSessionService() {
 
     private suspend fun updateEndingFadeForCurrentTrack(trackId: TrackId) {
         // Fails open (stays true, crossfade applies as it always did) rather than doing the
-        // decode work at all when the setting is off -- this analysis is pure overhead unless
+        // decode work at all when the setting is off - this analysis is pure overhead unless
         // "умный кроссфейд" is actually on.
         if (!settingsRepository.smartCrossfadeEnabled.value) {
             currentEndsWithNaturalFade = true
@@ -475,14 +475,14 @@ class PlaybackService : MediaSessionService() {
         currentEndsWithNaturalFade = naturalFade
     }
 
-    /** BPM/key (План.md §3), cached on the track once scanned -- never re-scanned. Runs
+    /** BPM/key (План.md §3), cached on the track once scanned - never re-scanned. Runs
      * unconditionally on every play (not gated behind a setting like the other two scans) since
      * QueueBuilder's autoQueue rules (План.md §22.13) need it available for any track without a
-     * separate "did you enable this" toggle -- it's cheap to skip once cached, same file already
+     * separate "did you enable this" toggle - it's cheap to skip once cached, same file already
      * gets fully decoded once for ReplayGain regardless. */
     private suspend fun scanBpmKeyIfMissing(trackId: TrackId) {
         val track = libraryRepository.track(trackId).first() ?: return
-        // Both fields are always written together below -- requiring both present here (not
+        // Both fields are always written together below - requiring both present here (not
         // "either") avoids a stuck-forever gap where a partial result (say the tempo estimator
         // failed but the key one didn't) permanently skips ever retrying the field that failed.
         if (track.bpm != null && track.musicalKey != null) return

@@ -7,7 +7,7 @@ import dev.nami.player.toPcm16
 import java.nio.ByteBuffer
 import kotlin.random.Random
 
-/** Этап 4's dithering -- TPDF (triangular-PDF) dither at one LSB of the 16-bit stream, sitting
+/** Этап 4's dithering - TPDF (triangular-PDF) dither at one LSB of the 16-bit stream, sitting
  * last in the chain after ReplayGain and the EQ. Off by default, same Beta/opt-in posture as the
  * rest of Аудиотракт.
  *
@@ -16,7 +16,7 @@ import kotlin.random.Random
  * their own output back to 16 bits. This therefore adds a ±1 LSB triangular noise floor that
  * decorrelates (masks) the quantization error those stages introduce, rather than being textbook
  * in-quantizer dither applied at the moment of requantization. Audibly it does the job it's there
- * for -- turning correlated rounding artifacts on EQ'd/gain-adjusted audio into unshaped hiss --
+ * for - turning correlated rounding artifacts on EQ'd/gain-adjusted audio into unshaped hiss --
  * but it is not a substitute for a higher-precision output path.
  *
  * ponytail: true in-quantizer dither would mean merging ReplayGain/EQ/dither into a single

@@ -17,7 +17,7 @@ interface MomentDao {
     @Query("DELETE FROM moments WHERE id = :id")
     suspend fun delete(id: Long)
 
-    // Backs the "лучшие моменты" playlist (План.md §22.1) -- every moment across the whole
+    // Backs the "лучшие моменты" playlist (План.md §22.1) - every moment across the whole
     // library, newest first, so a track that's had several moments dropped on it appears once
     // per moment (each one is its own 30s-clip queue entry, not deduplicated).
     @Query("SELECT * FROM moments ORDER BY createdAt DESC")

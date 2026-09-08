@@ -28,7 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
 
-/** Album counterpart of TrackInfoScreen -- same shared InfoSection/InfoRow/TextEditDialog. */
+/** Album counterpart of TrackInfoScreen - same shared InfoSection/InfoRow/TextEditDialog. */
 @Composable
 fun AlbumInfoScreen(onBack: () -> Unit, viewModel: AlbumInfoViewModel = hiltViewModel()) {
     val album by viewModel.album.collectAsState()

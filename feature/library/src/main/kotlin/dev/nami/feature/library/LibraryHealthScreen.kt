@@ -46,9 +46,9 @@ import dev.nami.domain.HealthArtistRef
 import dev.nami.domain.HealthTrackRef
 import dev.nami.domain.LibraryHealthReport
 
-/** П.md §23.18 "Здоровье библиотеки" -- one card per diagnosed category, tap to expand and see
+/** П.md §23.18 "Здоровье библиотеки" - one card per diagnosed category, tap to expand and see
  * the actual tracks, with a real fix action where one exists (missing files / duplicates). No
- * "фейковый hi-res" category -- see LibraryHealthReport's own doc for why. */
+ * "фейковый hi-res" category - see LibraryHealthReport's own doc for why. */
 @Composable
 fun LibraryHealthScreen(onBack: () -> Unit, viewModel: LibraryHealthViewModel = hiltViewModel()) {
     val report by viewModel.report.collectAsState()

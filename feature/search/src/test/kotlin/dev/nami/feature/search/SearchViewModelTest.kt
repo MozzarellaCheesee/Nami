@@ -30,7 +30,7 @@ import kotlin.test.assertTrue
 class SearchViewModelTest {
     private val dispatcher = StandardTestDispatcher()
 
-    // Only recentAlbums/featuredArtists are ever read by SearchViewModel -- everything else here
+    // Only recentAlbums/featuredArtists are ever read by SearchViewModel - everything else here
     // errors loudly if a test path ever ends up calling it, instead of silently returning junk.
     private val fakeLibraryRepository = object : LibraryRepository {
         override suspend fun libraryHealthReport() = error("unused")

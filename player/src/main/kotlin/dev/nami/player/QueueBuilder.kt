@@ -41,7 +41,7 @@ private const val ARTIST_SPACING_WINDOW = 5
 private const val MAX_ADJACENT_BPM_DIFF = 40f
 private const val SKIP_COUNT_THRESHOLD = 3
 
-/** Этап 6's "правила автоочереди" (План.md §22.13) -- a best-effort local repair pass over an
+/** Этап 6's "правила автоочереди" (План.md §22.13) - a best-effort local repair pass over an
  * already-ordered (e.g. shuffled) list, not a full constraint solver: for each position that
  * violates a rule against what's already placed before it, this looks forward for the nearest
  * later track that WOULD satisfy every rule there and swaps it in. If nothing later fits, the
@@ -63,7 +63,7 @@ fun applyAutoQueueRules(tracks: List<Track>): List<Track> {
     for (i in 1 until result.size) {
         if (fitsAt(result, i, result[i], allowSkipped = true)) continue
         // Only ever searches j > i, so swapping list[j] into position i never touches or
-        // reorders anything before i -- the window/previous-track checks below can read straight
+        // reorders anything before i - the window/previous-track checks below can read straight
         // from the untouched list instead of simulating the move on a copy each time.
         val swapIndex = (i + 1 until result.size).firstOrNull { j -> fitsAt(result, i, result[j], allowSkipped = false) }
             ?: (i + 1 until result.size).firstOrNull { j -> fitsAt(result, i, result[j], allowSkipped = true) }
@@ -75,7 +75,7 @@ fun applyAutoQueueRules(tracks: List<Track>): List<Track> {
     return result
 }
 
-/** Whether [candidate] would be an acceptable fit at [index] in [list] -- checked against the
+/** Whether [candidate] would be an acceptable fit at [index] in [list] - checked against the
  * list's own contents at positions < index (which a forward-only swap search never disturbs), not
  * against whatever is currently sitting at index itself. */
 private fun fitsAt(list: List<Track>, index: Int, candidate: Track, allowSkipped: Boolean): Boolean {

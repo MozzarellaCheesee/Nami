@@ -12,7 +12,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import dev.nami.player.bluetooth.BluetoothCodecReader
 
-/** Live version of [BluetoothCodecReader.isBluetoothOutputActive] -- that was a one-shot
+/** Live version of [BluetoothCodecReader.isBluetoothOutputActive] - that was a one-shot
  * `remember {}` read before, so connecting/disconnecting a Bluetooth device while the Аудиотракт
  * screen was already open never updated the badge without leaving and reopening the screen.
  * AudioManager's own AudioDeviceCallback fires on every output device add/remove (Bluetooth

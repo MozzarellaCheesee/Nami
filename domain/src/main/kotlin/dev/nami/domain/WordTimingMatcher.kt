@@ -4,7 +4,7 @@ import dev.nami.core.model.Lyrics
 import dev.nami.core.model.WordTiming
 
 /** Buckets Whisper's own (globally-timed, whole-track) word list back onto each [LyricLine] by
- * time range rather than by matching text -- Whisper's transcription doesn't reliably match the
+ * time range rather than by matching text - Whisper's transcription doesn't reliably match the
  * LRC's own text (different romanization, mistranscribed words, etc), but both are real
  * timestamps against the same audio, so "which line was the current one when this word was
  * sung" is a simple range check and never needs the text to agree. */

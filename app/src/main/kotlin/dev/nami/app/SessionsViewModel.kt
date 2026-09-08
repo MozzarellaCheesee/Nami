@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** План.md §22.11 "Сессии" -- captures the current EQ/crossfade state under a name, and later
+/** План.md §22.11 "Сессии" - captures the current EQ/crossfade state under a name, and later
  * re-applies it plus (optionally) starts a sleep timer, all in one tap. Lives in :app (not
  * :feature:player) because it's the only place that already has both SettingsRepository (EQ,
  * crossfade) and PlayerRepository (sleep timer) in the same graph without adding a new

@@ -16,7 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 /** Dark-card snackbar matching the rest of the app's palette instead of Material3's default
- * light/grey theming (Design mock 4.27 -- "Трек удалён из очереди" / "Отменить" in Shu). Swap-in
+ * light/grey theming (Design mock 4.27 - "Трек удалён из очереди" / "Отменить" in Shu). Swap-in
  * replacement for [SnackbarHost] wherever a Scaffold declares one. */
 @Composable
 fun NamiSnackbarHost(hostState: SnackbarHostState, modifier: Modifier = Modifier) {

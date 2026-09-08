@@ -30,7 +30,7 @@ fun AddTracksToAlbumDialog(
             LazyColumn(modifier = Modifier.height(420.dp)) {
                 items(count = tracks.itemCount, key = tracks.itemKey { it.id.value }) { index ->
                     val track = tracks[index] ?: return@items
-                    // Already in this album -- adding it again would be a no-op, hide it instead
+                    // Already in this album - adding it again would be a no-op, hide it instead
                     // of leaving a dead tap in the list.
                     if (track.albumId == albumId) return@items
                     TrackListItem(track = track, onClick = { viewModel.addTrack(track.id, albumId) })

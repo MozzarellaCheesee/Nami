@@ -32,7 +32,7 @@ private fun formatMs(ms: Long): String {
     return "%d:%02d".format(totalSeconds / 60, totalSeconds % 60)
 }
 
-/** Design mock 4.22 "Моменты и петли" -- one combined sheet instead of the waveform's own
+/** Design mock 4.22 "Моменты и петли" - one combined sheet instead of the waveform's own
  * long-press dialog and the separate A-B LoopSheet living in two different places. Shows the
  * track's waveform with both the moments and the active loop drawn right on it, the loop's
  * current range, every labeled moment as a row, and two actions to add more of either. */
@@ -112,7 +112,7 @@ fun MomentsAndLoopsSheet(
                 }
             } else if (pendingLoopStartMs != null) {
                 Text(
-                    "Точка A: ${formatMs(pendingLoopStartMs)} -- дослушай до конца и отметь снова",
+                    "Точка A: ${formatMs(pendingLoopStartMs)} - дослушай до конца и отметь снова",
                     color = NamiColors.Paper70,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(top = 12.dp),
@@ -126,7 +126,7 @@ fun MomentsAndLoopsSheet(
                 modifier = Modifier.padding(top = 24.dp, bottom = 4.dp),
             )
             if (moments.isEmpty()) {
-                Text("Пока нет меток -- долгий тап по волне или кнопка ниже", color = NamiColors.Paper40, style = MaterialTheme.typography.bodySmall)
+                Text("Пока нет меток - долгий тап по волне или кнопка ниже", color = NamiColors.Paper40, style = MaterialTheme.typography.bodySmall)
             } else {
                 moments.sortedBy { it.positionMs }.forEach { moment ->
                     Row(

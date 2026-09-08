@@ -13,7 +13,7 @@ interface TagDao {
     @Query("SELECT * FROM tags ORDER BY name ASC")
     fun observeAll(): Flow<List<TagEntity>>
 
-    /** Snapshot for export/backup -- see BackupRepository. */
+    /** Snapshot for export/backup - see BackupRepository. */
     @Query("SELECT * FROM tags ORDER BY name ASC")
     suspend fun allRaw(): List<TagEntity>
 

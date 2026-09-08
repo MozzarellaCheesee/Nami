@@ -92,18 +92,18 @@ private const val DISMISS_THRESHOLD_DP = 120
 // between sung lines.
 private const val GAP_MS = 5000L
 // How far INTO that gap (as a fraction) before assuming the vocalist is actually done and it's
-// safe to show "nothing playing" -- a fixed millisecond guess (the original approach) was wrong
+// safe to show "nothing playing" - a fixed millisecond guess (the original approach) was wrong
 // for any line whose actual sung duration didn't match the guess, cutting the highlight before
 // the line was finished. Scaling with the gap's own size adapts to lines of very different length
 // without needing per-line duration data.
 private const val GAP_FRACTION_BEFORE_SILENT = 1.00f
 // Extra grace period after a line's own last known word ends (real word timings only) before
-// calling it silence -- singing that trails slightly past the last detected word shouldn't
+// calling it silence - singing that trails slightly past the last detected word shouldn't
 // instantly dim the line and pop the note icon in.
 private const val WORD_TIMING_GAP_GRACE_MS = 2000L
 
 /** Three of План.md's four "18. Экран лирики" modes (furigana, romaji triplet, karaoke word
- * highlight) and its dictionary/Anki/LRCLIB pieces aren't here -- this is the load-bearing first
+ * highlight) and its dictionary/Anki/LRCLIB pieces aren't here - this is the load-bearing first
  * slice: parse/show/auto-scroll/tap-to-seek synced lyrics from a local .lrc, and a manual
  * tap-to-stamp editor for tracks that don't have one yet. */
 @OptIn(ExperimentalFoundationApi::class)
@@ -123,7 +123,7 @@ fun LyricsScreen(
     var showEditor by remember { mutableStateOf(false) }
     var showVocabulary by remember { mutableStateOf(false) }
     val lyricsFileImportFailed by viewModel.lyricsFileImportFailed.collectAsState()
-    // Loaded once per path, not on every recomposition -- Font(File) does real I/O/parsing.
+    // Loaded once per path, not on every recomposition - Font(File) does real I/O/parsing.
     val lyricsFontFamily = remember(uiState.lyricsFontPath) {
         uiState.lyricsFontPath?.let {
             androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(java.io.File(it)))
@@ -142,7 +142,7 @@ fun LyricsScreen(
     val isPlaying = (playbackState as? dev.nami.domain.PlaybackState.Playing)?.isPlaying == true
     // The karaoke sweep needs frame-smooth position, not just "however often the player was
     // last polled" (100ms polling still visibly stepped). Interpolate between polls using real
-    // elapsed time instead of polling faster -- every poll re-anchors this to the authoritative
+    // elapsed time instead of polling faster - every poll re-anchors this to the authoritative
     // value (so drift/seeks/pauses never accumulate), and each frame in between just adds
     // wall-clock time on top, which is free.
     var smoothPositionMs by remember { mutableStateOf(uiState.positionMs) }
@@ -159,7 +159,7 @@ fun LyricsScreen(
     }
     val scope = rememberCoroutineScope()
     // Swipe-to-dismiss used to manually animate dragOffsetY to screenHeightPx and only THEN call
-    // onBack() -- meant to look like one continuous slide, but that coroutine sometimes never
+    // onBack() - meant to look like one continuous slide, but that coroutine sometimes never
     // reached onBack() at all (composable disposed/recomposed mid-animation cancels it, and a
     // spring's "close enough" settling can also just take a while), leaving showLyrics stuck
     // true forever: the screen sat fully slid off-screen but never actually closed, so
@@ -167,7 +167,7 @@ fun LyricsScreen(
     // dragOffsetY resets to 0 in the same breath so only the outer AnimatedVisibility's own exit
     // transition (in NamiNavHost) animates the slide-down, instead of two competing animations.
     fun dismiss() {
-        // Not resetting dragOffsetY here -- doing so snapped the screen back to the top for one
+        // Not resetting dragOffsetY here - doing so snapped the screen back to the top for one
         // frame (visible as a jump/teleport) before AnimatedVisibility's own exit transition
         // started sliding it back down from 0. Leaving it wherever the swipe left it means the
         // screen is already most of the way off-screen when the exit transition takes over.
@@ -175,7 +175,7 @@ fun LyricsScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize().offset { IntOffset(0, dragOffsetY.roundToInt()) }) {
-        // Same ambient blurred-artwork backdrop as Now Playing -- the dark scrim on top keeps
+        // Same ambient blurred-artwork backdrop as Now Playing - the dark scrim on top keeps
         // contrast/legibility regardless of how light the artwork itself is, no per-pixel text
         // color logic needed, it's the same trick the rest of the app already relies on.
         val backgroundArtworkPath = queue.nowPlaying?.artworkPath
@@ -206,7 +206,7 @@ fun LyricsScreen(
             ),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
-            // Straight to onBack(), not dismiss() -- dismiss()'s manual slide-then-flip coroutine
+            // Straight to onBack(), not dismiss() - dismiss()'s manual slide-then-flip coroutine
             // was a source of "the screen stays open forever after this" reports (its own
             // animate() apparently doesn't always run to completion), and the outer
             // AnimatedVisibility in NamiNavHost already animates the same slide-down on its own
@@ -265,7 +265,7 @@ fun LyricsScreen(
                         color = NamiColors.Shu,
                         modifier = Modifier.padding(top = 12.dp).clickable { viewModel.retryOnlineFetch() },
                     )
-                    // STANDS4 is never tried automatically -- it burns the user's own daily quota,
+                    // STANDS4 is never tried automatically - it burns the user's own daily quota,
                     // see LyricsUiState.stands4Configured's doc. No key configured -> no button at
                     // all, instead of one that would just silently miss every time.
                     if (uiState.stands4Configured) {
@@ -324,7 +324,7 @@ fun LyricsScreen(
         )
     }
 
-    // Overlay, not part of the Column above -- sits on top of the lyrics list instead of
+    // Overlay, not part of the Column above - sits on top of the lyrics list instead of
     // pushing it down when it slides out. Anchored under the "..." button (header row height
     // plus statusbar inset), icons stacked vertically per Ф user request.
     androidx.compose.animation.AnimatedVisibility(
@@ -417,7 +417,7 @@ fun LyricsScreen(
                 Icon(Icons.Outlined.Fullscreen, contentDescription = "Полноэкранный режим", tint = NamiColors.Paper70)
             }
             // Real per-word timing (on-device whisper.cpp) instead of the linear-interpolation
-            // karaoke sweep -- arm64-v8a only, and a ~500MB one-time model download, so this is
+            // karaoke sweep - arm64-v8a only, and a ~500MB one-time model download, so this is
             // opt-in and hidden entirely when unsupported rather than failing at runtime.
             if (uiState.preciseSyncSupported) {
                 if (uiState.isPreciseSyncing) {
@@ -440,12 +440,12 @@ fun LyricsScreen(
         }
     }
 
-        // Дизайн.md "один смелый акцент" -- вертикальная японская строка (縦書き) с названием
-        // трека вдоль правого края. Настоящий тategaki -- иероглифы стоят прямо, один под другим
+        // Дизайн.md "один смелый акцент" - вертикальная японская строка (縦書き) с названием
+        // трека вдоль правого края. Настоящий тategaki - иероглифы стоят прямо, один под другим
         // сверху вниз, а не повёрнутая набок горизонтальная строка. Чисто декоративная, ни на что
-        // не реагирует -- единственная такая деталь во всём приложении.
+        // не реагирует - единственная такая деталь во всём приложении.
         queue.nowPlaying?.title?.let { title ->
-            // Ограничение по высоте экрана, не по числу символов -- разные названия трека не
+            // Ограничение по высоте экрана, не по числу символов - разные названия трека не
             // должны выезжать за верх/низ. "…" последним символом, если обрезали.
             val maxChars = ((LocalConfiguration.current.screenHeightDp.dp - 32.dp) / 20.dp).toInt().coerceAtLeast(1)
             val chars = title.toCharArray().filterNot { it.isWhitespace() }
@@ -600,8 +600,8 @@ private fun FullscreenLyricsOverlay(
     }
 }
 
-/** Дизайн.md "Карточка словаря" -- всплывает над лирикой, ширина 300, r16, фон `--ink-700`,
- * паддинг 16 -- отдельная плавающая карточка, не системный AlertDialog. */
+/** Дизайн.md "Карточка словаря" - всплывает над лирикой, ширина 300, r16, фон `--ink-700`,
+ * паддинг 16 - отдельная плавающая карточка, не системный AlertDialog. */
 @Composable
 private fun WordLookupDialog(lookup: WordLookup, onDismiss: () -> Unit, onAddToVocabulary: (String) -> Unit) {
     androidx.compose.ui.window.Dialog(
@@ -670,17 +670,17 @@ private fun SyncedLyricsList(
     wordSelectMode: Boolean,
     onWordTap: (dev.nami.core.model.WordToken, String) -> Unit,
 ) {
-    // Study mode (Beta): translation hidden per line until tapped -- forces actually recalling
+    // Study mode (Beta): translation hidden per line until tapped - forces actually recalling
     // the meaning instead of passively reading it alongside the original every time. Resets
     // per track (new remember key) rather than persisting across tracks/sessions.
     val revealedTranslations = remember(lyrics) { mutableStateMapOf<Int, Boolean>() }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    // Plain recomputation, not derivedStateOf -- derivedStateOf's lambda was captured once (by
+    // Plain recomputation, not derivedStateOf - derivedStateOf's lambda was captured once (by
     // remember(lyrics), which only re-runs when the LYRICS change) and kept reading whatever
     // `positionMs` happened to be at that first composition forever after, so the highlighted
     // line and autoscroll never advanced. This recomposes with `positionMs` normally instead.
-    // -1 (not coerced to 0) before the first line's own timestamp -- vocals commonly start well
+    // -1 (not coerced to 0) before the first line's own timestamp - vocals commonly start well
     // into the track, and clamping to 0 was lighting up line one as "currently playing" the whole
     // silent intro.
     val rawIndex = if (positionMs < (lyrics.lines.firstOrNull()?.timeMs ?: 0L)) {
@@ -689,12 +689,12 @@ private fun SyncedLyricsList(
         lyrics.lines.indexOfLast { it.timeMs <= positionMs }
     }
     // Instrumental gap: the next line is far enough away, and enough time has passed since the
-    // current one started, that nobody is actually singing right now -- don't keep the last line
+    // current one started, that nobody is actually singing right now - don't keep the last line
     // lit as "active" through it.
     val nextLine = lyrics.lines.getOrNull(rawIndex + 1)
     val currentLine = lyrics.lines.getOrNull(rawIndex)
     // With real word timings for the current line, "singing has actually stopped" is just
-    // "past the last known word's end" -- no more guessing a fixed fraction of the gap, which
+    // "past the last known word's end" - no more guessing a fixed fraction of the gap, which
     // was wrong (too early or too late) whenever a line's actual sung duration didn't match
     // that guess, including flagging a gap as silent while the vocalist was still singing.
     val currentLineWords = wordTimings?.getOrNull(rawIndex)
@@ -707,12 +707,12 @@ private fun SyncedLyricsList(
         }
     val currentIndex = if (inGap) -1 else rawIndex
     var lastCentered by remember { mutableIntStateOf(-1) }
-    // Scrolls by the raw (gap-inclusive) index -- during an instrumental break there's no active
+    // Scrolls by the raw (gap-inclusive) index - during an instrumental break there's no active
     // line to highlight, but the list should still be sitting at the last line that played, not
     // jump back to the top because the highlight temporarily went to -1.
     //
     // "-2 items back" (an earlier version of this) put the active line near the top, not centered
-    // -- it assumed every item was the same fixed height, which isn't true here (romaji/
+    // - it assumed every item was the same fixed height, which isn't true here (romaji/
     // translation lines make some rows taller than others). Real centering: scroll to the item
     // first, then measure where it actually landed and correct by the leftover pixel delta so its
     // center lines up with the viewport's center regardless of row height.
@@ -741,7 +741,7 @@ private fun SyncedLyricsList(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Nothing is "active" right now (before the first line, or an instrumental gap) -- a
+        // Nothing is "active" right now (before the first line, or an instrumental gap) - a
         // quiet note icon instead of leaving the last line looking like it's still being sung.
         androidx.compose.animation.AnimatedVisibility(
             visible = currentIndex == -1,
@@ -762,7 +762,7 @@ private fun SyncedLyricsList(
             modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp),
         ) {
             itemsIndexed(lyrics.lines) { index, line ->
-                // Distance from the active line, not just "current or not" -- lines fade out the
+                // Distance from the active line, not just "current or not" - lines fade out the
                 // further they are from what's playing, same falloff as most karaoke-style lyric
                 // views (Apple/YT Music), instead of a flat dim/bright split.
                 val distance = kotlin.math.abs(index - currentIndex)
@@ -773,7 +773,7 @@ private fun SyncedLyricsList(
                     else -> 0.15f
                 }
                 val isCurrent = distance == 0
-                // Animated, not an instant cut -- alpha/scale ease between lines as the active
+                // Animated, not an instant cut - alpha/scale ease between lines as the active
                 // one changes, same spirit as the karaoke-style reference (a smooth handoff, not
                 // a hard flip from one line to the next).
                 val alpha by animateFloatAsState(targetAlpha, tween(350), label = "lyric-line-alpha")
@@ -785,7 +785,7 @@ private fun SyncedLyricsList(
                         .clickable { onLineClick(line.timeMs) }
                         .padding(vertical = 14.dp),
                 ) {
-                    // План.md's romaji/original/translation triplet -- romaji goes above the
+                    // План.md's romaji/original/translation triplet - romaji goes above the
                     // original line, translation below it.
                     romaji?.getOrNull(index)?.let { romajiText ->
                         Text(
@@ -797,8 +797,8 @@ private fun SyncedLyricsList(
                         )
                     }
                     // Real per-word span (from an on-device Whisper alignment pass, "точная
-                    // синхронизация") when available -- otherwise the linear on-device estimate
-                    // (no free source for real word-level timing otherwise exists -- checked;
+                    // синхронизация") when available - otherwise the linear on-device estimate
+                    // (no free source for real word-level timing otherwise exists - checked;
                     // Musixmatch/Suno-class APIs need a paid key, Spotify/Yandex internal
                     // endpoints are unofficial ToS violations), sweeping evenly across the line
                     // between its own timestamp and the next line's.
@@ -815,7 +815,7 @@ private fun SyncedLyricsList(
                         else -> ((positionMs - line.timeMs).toFloat() / (itemNextLine.timeMs - line.timeMs).toFloat()).coerceIn(0f, 1f)
                     }
                     // Some .lrc files use a literal "..." line to mark a no-vocals stretch
-                    // (instrumental break, intro) instead of just leaving a timing gap -- same
+                    // (instrumental break, intro) instead of just leaving a timing gap - same
                     // "nothing is being sung" meaning as the gap-detected note icon above, so it
                     // gets the same icon instead of rendering three dots as if they were lyrics.
                     if (line.text.trim().let { it == "..." || it == "…" }) {
@@ -836,7 +836,7 @@ private fun SyncedLyricsList(
                             fontFamily = fontFamily,
                             tokenizeLine = tokenizeLine,
                             // Off: words aren't individually clickable at all, so the line's own
-                            // clickable (seek) is the only thing that can react to the tap -- no
+                            // clickable (seek) is the only thing that can react to the tap - no
                             // separate onLineClick call needed here in that case, unlike when word
                             // selection is on and the word's own clickable would otherwise eat it.
                             wordSelectMode = wordSelectMode,
@@ -858,7 +858,7 @@ private fun SyncedLyricsList(
                                 .padding(top = 2.dp)
                                 .then(
                                     if (studyModeEnabled && !revealed) {
-                                        // Also seeks (like the word-tap case above) -- this Text
+                                        // Also seeks (like the word-tap case above) - this Text
                                         // sits inside the line's own clickable, which would
                                         // otherwise never see the tap at all.
                                         Modifier.clickable {
@@ -874,7 +874,7 @@ private fun SyncedLyricsList(
                 }
             }
         }
-        // No separate edge-fade box here anymore -- it was a second scrim stacked on top of the
+        // No separate edge-fade box here anymore - it was a second scrim stacked on top of the
         // screen's own ambient one (0.72 alpha over 0.72 alpha compounds to ~0.92, reading as a
         // flat near-opaque patch right at the header/transport seams instead of "the same
         // background"). The per-line alpha falloff above already does the fade-into-background
@@ -883,7 +883,7 @@ private fun SyncedLyricsList(
 }
 
 /** One rendering for original-text lines: tokenized live (Kuromoji, via [tokenizeLine]) into
- * words -- the SAME split used for both the furigana ruby-text overlay and for tap-to-dictionary,
+ * words - the SAME split used for both the furigana ruby-text overlay and for tap-to-dictionary,
  * so a reading is always positioned directly above the exact kanji it belongs to (one word, one
  * column, reading on top) rather than two independently-computed segmentations drifting apart. */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
@@ -917,7 +917,7 @@ private fun TappableLine(
             cumulative = tokenEnd
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                // Off: no clickable on the word at all -- letting the tap fall through to the
+                // Off: no clickable on the word at all - letting the tap fall through to the
                 // line's own clickable (seek) instead of eating it for a dictionary popup nobody
                 // asked for right now.
                 modifier = if (wordSelectMode) Modifier.clickable { onWordTap(token) } else Modifier,
@@ -984,7 +984,7 @@ private fun LyricsTransportBar(
 }
 
 /** Paste plain lines, then tap "Отметить" through the track once to stamp each line's timestamp
- * from the current playback position -- the offline equivalent of План.md's "играешь трек,
+ * from the current playback position - the offline equivalent of План.md's "играешь трек,
  * тапаешь на каждой строке" sync editor. */
 @Composable
 private fun ManualSyncEditor(

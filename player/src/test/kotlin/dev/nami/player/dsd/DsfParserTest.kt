@@ -9,7 +9,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 /** Builds a minimal, spec-shaped synthetic DSF byte buffer (2 channels, tiny block size) rather
- * than shipping a real fixture -- this is testing the parser's byte-layout logic, not decoding an
+ * than shipping a real fixture - this is testing the parser's byte-layout logic, not decoding an
  * actual recording. */
 private fun buildDsf(
     channelNum: Int = 2,

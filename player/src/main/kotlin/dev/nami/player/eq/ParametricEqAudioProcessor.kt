@@ -6,16 +6,16 @@ import androidx.media3.common.audio.BaseAudioProcessor
 import dev.nami.player.toPcm16
 import java.nio.ByteBuffer
 
-/** Этап 4's parametric EQ -- a 9-band graphic EQ (ISO-ish octave centers: 63/125/250/500/1k/2k/
+/** Этап 4's parametric EQ - a 9-band graphic EQ (ISO-ish octave centers: 63/125/250/500/1k/2k/
  * 4k/8k/16k Hz, peaking filters at Q=1.0), real DSP on the actual PCM stream, wired into
  * DefaultAudioSink via NamiRenderersFactory, gated off by default (Settings -> Аудиотракт, Beta)
  * since this is the one processor sitting directly in the path of every second of audio the app
- * ever plays -- a subtle bug here means "everything sounds wrong", not "one feature is broken".
+ * ever plays - a subtle bug here means "everything sounds wrong", not "one feature is broken".
  *
  * Operates on ENCODING_PCM_16BIT, which is what DefaultAudioSink's int pipeline (ToInt16Pcm ->
  * channel mapping -> trimming -> here) actually hands a custom processor. See
  * NamiRenderersFactory's doc for why the float variant of this was both inert and actively broken.
- * The biquad itself runs on the raw sample value as a Float (±32768 range) -- a linear filter
+ * The biquad itself runs on the raw sample value as a Float (±32768 range) - a linear filter
  * doesn't care about the scale, so there's no normalization step to get wrong. */
 class ParametricEqAudioProcessor : BaseAudioProcessor() {
 
@@ -32,13 +32,13 @@ class ParametricEqAudioProcessor : BaseAudioProcessor() {
 
     // Kept as dB, not only as computed coefficients: the biquad math needs a sample rate, which is
     // only known once onConfigure() runs. Settings' StateFlow emits its stored gains the moment the
-    // service collects it -- i.e. before any audio format is known -- and the old code just dropped
+    // service collects it - i.e. before any audio format is known - and the old code just dropped
     // that emission on the floor, so saved EQ gains stayed inert until the user physically moved a
     // slider again. Remembering them here and recomputing on configure fixes that, and is also what
     // lets a freshly built processor (one per player, see PlaybackService) start out correct.
     @Volatile private var gainsDb: List<Float> = List(BAND_FREQS_HZ.size) { 0f }
 
-    /** Called from Settings' live flow -- one gain per band in BAND_FREQS_HZ order, dB, ±12
+    /** Called from Settings' live flow - one gain per band in BAND_FREQS_HZ order, dB, ±12
      * typical range. Recomputes coefficients immediately; @Volatile field swap means the audio
      * thread picks up the new filter on its very next buffer, no restart needed. */
     fun setGains(gainsDb: List<Float>) {

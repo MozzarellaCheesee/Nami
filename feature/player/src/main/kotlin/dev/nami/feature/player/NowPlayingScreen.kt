@@ -151,22 +151,22 @@ fun NowPlayingScreen(
         clipShareContext.startActivity(android.content.Intent.createChooser(intent, "Поделиться клипом"))
         viewModel.clipExportUriShown()
     }
-    // Local-only stub -- no "favorites" concept exists in the domain layer yet, so this doesn't
+    // Local-only stub - no "favorites" concept exists in the domain layer yet, so this doesn't
     // persist across tracks/sessions. Resets whenever the playing track changes.
     // Real, not a stub: backed by the Любимые треки system playlist (PlaylistRepository.
-    // isTrackLiked/toggleLike) -- see LikedPlaylistCover for the playlist's own heart cover.
+    // isTrackLiked/toggleLike) - see LikedPlaylistCover for the playlist's own heart cover.
     val isFavorite by viewModel.isCurrentTrackLiked.collectAsState()
     // Real, not a stub: viewModel.shuffleEnabled reflects the live queue's actual order (see
-    // PlayerRepository.setShuffleEnabled) -- toggling this really reorders/restores the queue.
+    // PlayerRepository.setShuffleEnabled) - toggling this really reorders/restores the queue.
     val shuffleEnabled by viewModel.shuffleEnabled.collectAsState()
-    // Real ExoPlayer repeat mode -- OFF/ALL/ONE, cycled by cycleRepeatMode().
+    // Real ExoPlayer repeat mode - OFF/ALL/ONE, cycled by cycleRepeatMode().
     val repeatMode by viewModel.repeatMode.collectAsState()
-    // Real, persisted -- see SettingsRepository.nightModeEnabled. Read up here (not just at the
+    // Real, persisted - see SettingsRepository.nightModeEnabled. Read up here (not just at the
     // pill row further down) so the ambient backdrop below can react to it too.
     val nightModeEnabled by viewModel.nightModeEnabled.collectAsState()
 
     // Shared by the swipe gesture and the chevron button so both dismiss paths always finish
-    // the slide-down themselves before popping -- see the comment on the swipe branch below.
+    // the slide-down themselves before popping - see the comment on the swipe branch below.
     fun collapseAnimated() {
         scope.launch {
             animate(dragOffsetY, screenHeightPx) { value, _ -> dragOffsetY = value }
@@ -180,11 +180,11 @@ fun NowPlayingScreen(
             .offset { IntOffset(0, dragOffsetY.roundToInt()) },
     ) {
         // Ambient background: the current track's own artwork, heavily blurred, dimmed under a
-        // dark scrim for text legibility -- for atmosphere, per Дизайн.md's "тихое" restraint
+        // dark scrim for text legibility - for atmosphere, per Дизайн.md's "тихое" restraint
         // this stays a backdrop, never competing with the actual artwork/controls on top of it.
         val backgroundArtworkPath = queue.nowPlaying?.artworkPath
         // Sticks to the last real artwork through a momentary null (artworkPath briefly unset
-        // between tracks while the new one resolves) instead of unmounting AsyncImage -- an
+        // between tracks while the new one resolves) instead of unmounting AsyncImage - an
         // unmount/remount is an instant cut with no crossfade at all, since Coil has nothing to
         // fade FROM once the composable is gone. Keeping it mounted continuously is what lets
         // Coil's own crossfade actually run when the real new artwork shows up.
@@ -193,12 +193,12 @@ fun NowPlayingScreen(
             if (backgroundArtworkPath != null) lastArtworkPath = backgroundArtworkPath
         }
         val displayArtworkPath = backgroundArtworkPath ?: lastArtworkPath
-        // Solid backing UNDER the crossfading art -- Crossfade fades the old layer's alpha down
+        // Solid backing UNDER the crossfading art - Crossfade fades the old layer's alpha down
         // while fading the new one up, so mid-transition both are partially transparent at once;
         // without an opaque backer behind them, whatever's actually behind this screen (Library,
         // MiniPlayer) briefly showed through the gap.
         Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900))
-        // Explicit Compose Crossfade, not Coil's own ImageRequest.crossfade() -- that one relies
+        // Explicit Compose Crossfade, not Coil's own ImageRequest.crossfade() - that one relies
         // on Coil recognizing successive loads on the same AsyncImage as a transition, which in
         // practice here (through Coil3's compose integration) never visibly cross-dissolved,
         // always reading as an instant cut. A real two-layer alpha fade at the Compose level
@@ -231,13 +231,13 @@ fun NowPlayingScreen(
                 },
                 onDragStopped = { velocity ->
                     if (dragOffsetY > dismissThresholdPx || velocity > 2000f) {
-                        // Finish sliding fully off-screen ourselves, THEN pop -- popping first
+                        // Finish sliding fully off-screen ourselves, THEN pop - popping first
                         // (tried before) let the Library screen and MiniPlayer underneath
                         // become visible/interactive while this screen was still mid-slide on
                         // top of them, and stacked AnimatedVisibility's own exit slide on top of
                         // this one's offset, compounding into a visible gap/glitch. Popping only
                         // once this is already fully off-screen makes AnimatedVisibility's exit
-                        // (now instant, see NamiNavHost) invisible -- there's nothing left to see.
+                        // (now instant, see NamiNavHost) invisible - there's nothing left to see.
                         animate(dragOffsetY, screenHeightPx) { value, _ -> dragOffsetY = value }
                         onCollapse()
                     } else {
@@ -261,7 +261,7 @@ fun NowPlayingScreen(
                 Icon(Icons.Outlined.MoreVert, contentDescription = "Ещё", tint = NamiColors.Paper100)
             }
         }
-        // Slide-up sheet instead of a dropdown -- same pattern as everywhere else's "..." menu,
+        // Slide-up sheet instead of a dropdown - same pattern as everywhere else's "..." menu,
         // but with a header (cover/title/artist + a real system-volume slider) on top of the
         // action list, same shape as a platform media output sheet.
         if (showOverflowMenu) {
@@ -300,7 +300,7 @@ fun NowPlayingScreen(
             }
         }
         // Аудиотракт (and, from inside it, Эквалайзер) appear right here as a sliding-up sheet
-        // instead of navigating to a separate screen -- same content (AudioTractBody/
+        // instead of navigating to a separate screen - same content (AudioTractBody/
         // EqualizerBody) the standalone routes use, just embedded. showEqualizerInSheet swaps
         // which body the ONE sheet shows instead of stacking a second ModalBottomSheet on top.
         if (showAudioTractSheet) {
@@ -433,14 +433,14 @@ fun NowPlayingScreen(
                     2 -> queue.upcoming.firstOrNull()?.track
                     else -> queue.nowPlaying
                 }
-                // No track for this slot (start/end of queue) -- nothing to peek at all, not a
+                // No track for this slot (start/end of queue) - nothing to peek at all, not a
                 // gray placeholder square (combined with the edgeGuard above, which already stops
                 // the drag from ever settling here).
                 if (track == null) return@HorizontalPager
                 val accentColor = rememberArtworkAccentColor(track.artworkPath)
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                     // Soft accent glow behind the artwork, per Дизайн.md's "мягкое свечение
-                    // цветом акцента" -- Compose has no CSS box-shadow, so a blurred radial
+                    // цветом акцента" - Compose has no CSS box-shadow, so a blurred radial
                     // gradient sitting behind the artwork approximates it (Modifier.blur needs
                     // API 31+; on older devices it degrades to an unblurred soft-edged gradient,
                     // still reading as a glow). Color is that page's own dominant/vibrant tone
@@ -526,7 +526,7 @@ fun NowPlayingScreen(
                 onDismiss = { pendingMomentFraction = null },
             )
         }
-        // Tapping a marker (WaveformScrubber's own hit-test) is the only way to manage one -- see
+        // Tapping a marker (WaveformScrubber's own hit-test) is the only way to manage one - see
         // "как убирать метки и управлять ими": jump there, or delete it.
         selectedMoment?.let { moment ->
             ContextActionSheet(
@@ -557,7 +557,7 @@ fun NowPlayingScreen(
         }
         // Five rounded-square blocks, shrinking away from the center: play (72) > prev/next (56)
         // > shuffle/repeat (44). Shuffle is real (see shuffleEnabled above); repeat is still a
-        // visual-only stub -- no loop behavior wired yet, a separate task.
+        // visual-only stub - no loop behavior wired yet, a separate task.
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
@@ -618,13 +618,13 @@ fun NowPlayingScreen(
             )
         }
         // Format badge sits below the transport controls per Дизайн.md §4.3 (mockup order:
-        // controls, then format badge row, then the pill row) -- was above the scrubber before.
+        // controls, then format badge row, then the pill row) - was above the scrubber before.
         // Detail string (bitrate/sample-rate-bit-depth/size) needs the full Track (byte size,
-        // duration), not just QueueTrack's format string -- falls back to just the format badge
+        // duration), not just QueueTrack's format string - falls back to just the format badge
         // until currentTrackDetails' lookup resolves, and stays format-only if it never does.
         queue.nowPlaying?.format?.let { format ->
             // BPM/key (BpmKeyAnalyzer) land here live once a background scan finishes, sometimes
-            // well after the badge is already on screen -- an instant text swap would read as the
+            // well after the badge is already on screen - an instant text swap would read as the
             // chip randomly resizing/changing under the user. animateContentSize smooths the
             // width change, AnimatedContent crossfades the text itself instead of a hard cut.
             Box(
@@ -672,8 +672,8 @@ fun NowPlayingScreen(
             NowPlayingPill(text = "Текст", icon = Icons.Outlined.Subject, onClick = onLyricsClick, modifier = Modifier.weight(1f))
         }
     }
-    // Real night-mode effect, drawn LAST so it dims everything -- cover art, transport controls,
-    // text -- not just the ambient backdrop peeking around the edges (that was the previous,
+    // Real night-mode effect, drawn LAST so it dims everything - cover art, transport controls,
+    // text - not just the ambient backdrop peeking around the edges (that was the previous,
     // barely-visible version: a scrim placed under the foreground content only tinted what showed
     // through the gaps). No pointerInput/clickable here, so touches still pass straight through
     // to the buttons underneath.
@@ -720,7 +720,7 @@ private fun TransportBlock(
     onClick: () -> Unit,
     filled: Boolean = false,
     active: Boolean = false,
-    // "1" for repeat-one -- sits inside the Repeat icon's own loop (dead center, same spot the
+    // "1" for repeat-one - sits inside the Repeat icon's own loop (dead center, same spot the
     // real RepeatOne glyph draws its digit) instead of a separate corner badge, reusing the plain
     // Repeat icon rather than pulling in material-icons-extended for a glyph nothing else needs.
     badgeText: String? = null,
@@ -757,17 +757,17 @@ private fun TransportBlock(
 }
 
 // A slower, explicitly-eased spec for every programmatic page transition (skip buttons, the
-// auto-advance replay below) -- the default animateScrollToPage spec reads as an abrupt snap at
+// auto-advance replay below) - the default animateScrollToPage spec reads as an abrupt snap at
 // this page size, distinct from the naturally-smooth motion a real finger drag already gets from
 // the pager's own fling physics.
 internal val TRACK_SLIDE_SPEC = tween<Float>(durationMillis = 420, easing = androidx.compose.animation.core.FastOutSlowInEasing)
 
 // Fires the actual track change once the pager settles on the previous/next page (0/2), then
-// snaps it back to the center page (1) with no animation -- page 1 now shows the NEW current
+// snaps it back to the center page (1) with no animation - page 1 now shows the NEW current
 // track, so nothing visibly moves. Landing on 0/2 with nothing to show there (start/end of
 // queue) just snaps back without skipping. suppressSkip is true while
 // LaunchedEffectAutoAdvance below is doing its own page-0-to-1 replay for a track that ALREADY
-// changed on its own -- that replay's own scrollToPage(0) would otherwise be misread as a manual
+// changed on its own - that replay's own scrollToPage(0) would otherwise be misread as a manual
 // swipe-to-previous and trigger a real (wrong, double) skip.
 @Composable
 internal fun LaunchedEffectSettlePage(
@@ -794,10 +794,10 @@ internal fun LaunchedEffectSettlePage(
 }
 
 /** Replays the same slide the pager plays for a manual swipe/skip, but for a track that just
- * ended and auto-advanced on its own -- otherwise the cover just silently jumps to the next
+ * ended and auto-advanced on its own - otherwise the cover just silently jumps to the next
  * track with no motion at all. By the time this fires, queue.previousTrack/nowPlaying already
  * hold the right data for the "just finished" and "now playing" tracks (the transition already
- * happened for real) -- page 0 already shows exactly what page 1 used to show, so jumping there
+ * happened for real) - page 0 already shows exactly what page 1 used to show, so jumping there
  * instantly and animating back to 1 IS the transition, no second real skip involved. */
 @Composable
 internal fun LaunchedEffectAutoAdvance(
@@ -809,7 +809,7 @@ internal fun LaunchedEffectAutoAdvance(
     var seenInitial by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(autoAdvanceSignal) {
         if (!seenInitial) {
-            // Skip the value this StateFlow starts with -- only react to it actually changing.
+            // Skip the value this StateFlow starts with - only react to it actually changing.
             seenInitial = true
             return@LaunchedEffect
         }
@@ -850,7 +850,7 @@ private fun formatDuration(ms: Long): String {
     return "%d:%02d".format(minutes, seconds)
 }
 
-/** "FLAC · 24 бит · 96 кГц · 1411 кбит/с · 42.3 МБ" -- as much as we actually know about the
+/** "FLAC · 24 бит · 96 кГц · 1411 кбит/с · 42.3 МБ" - as much as we actually know about the
  * file, not guessed. Bitrate is average (fileSize*8/duration), same approximation любой player
  * uses for a non-VBR-analyzed file; container overhead makes it a slight overestimate, close
  * enough to be useful. */
@@ -867,7 +867,7 @@ private fun formatBadgeDetail(format: String, track: dev.nami.core.model.Track?)
             val mb = bytes / 1024.0 / 1024.0
             add("%.1f МБ".format(mb))
         }
-        // BpmKeyAnalyzer's cached result (Этап 6, П.md §3) -- null until the track has actually
+        // BpmKeyAnalyzer's cached result (Этап 6, П.md §3) - null until the track has actually
         // played once and gotten scanned, same lazy-cache lifecycle as replayGainDb.
         track?.bpm?.let { add("${it.roundToInt()} BPM") }
         track?.musicalKey?.let { add(it) }
@@ -875,7 +875,7 @@ private fun formatBadgeDetail(format: String, track: dev.nami.core.model.Track?)
     return parts.joinToString(" · ")
 }
 
-/** Long-press on the scrubber (План.md §22.1) -- name it, pick a color, done. Colors are fixed
+/** Long-press on the scrubber (План.md §22.1) - name it, pick a color, done. Colors are fixed
  * swatches rather than a full picker: a moment marker is a tiny dot on the waveform, a handful of
  * clearly distinct hues reads better there than any color a full picker could produce. */
 @Composable
@@ -920,7 +920,7 @@ private fun AddMomentDialog(onSave: (label: String, colorArgb: Int, isChapter: B
                         )
                     }
                 }
-                // План.md §22.16 "Главы и закладки" -- same marker, flagged as a navigation
+                // План.md §22.16 "Главы и закладки" - same marker, flagged as a navigation
                 // point rather than a "best part" highlight (see MomentEntity.isChapter).
                 Row(
                     verticalAlignment = Alignment.CenterVertically,

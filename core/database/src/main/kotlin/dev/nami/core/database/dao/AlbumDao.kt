@@ -90,7 +90,7 @@ interface AlbumDao {
     @Query("UPDATE albums SET title = :title WHERE id = :id")
     suspend fun updateTitle(id: String, title: String)
 
-    // Unconditional -- unlike setArtworkPath (import's "only if null" writer), this is for the
+    // Unconditional - unlike setArtworkPath (import's "only if null" writer), this is for the
     // user explicitly replacing an album's cover.
     @Query("UPDATE albums SET artworkPath = :path WHERE id = :id")
     suspend fun updateArtworkPath(id: String, path: String)
@@ -151,7 +151,7 @@ interface AlbumDao {
     )
     suspend fun allForIndexing(): List<AlbumListRow>
 
-    // Здоровье библиотеки (П.md §23.18) -- needs `year`, which AlbumListRow doesn't carry.
+    // Здоровье библиотеки (П.md §23.18) - needs `year`, which AlbumListRow doesn't carry.
     @Query("SELECT id, year FROM albums WHERE deletedAt IS NULL")
     suspend fun allIdsAndYears(): List<AlbumIdYearRow>
 

@@ -5,7 +5,7 @@ import android.media.AudioManager
 
 /** The one publicly-readable fact about the device's own output chain: the rate AudioFlinger's
  * mixer actually runs at. Everything above it (whether a given track then gets resampled) is
- * arithmetic on that plus the file's own sample rate -- which is why the Аудиотракт screen can
+ * arithmetic on that plus the file's own sample rate - which is why the Аудиотракт screen can
  * finally say something true in its "Ресемплинг" row instead of a hardcoded "нет".
  *
  * PROPERTY_OUTPUT_SAMPLE_RATE is a hint for the *primary* output and can be wrong or absent for a

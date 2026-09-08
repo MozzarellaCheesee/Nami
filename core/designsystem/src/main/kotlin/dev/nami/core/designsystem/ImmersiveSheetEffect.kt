@@ -20,14 +20,14 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 
 /**
  * Call once inside ANY ModalBottomSheet/Dialog's own content lambda (must be inside it, not
- * above the ModalBottomSheet/Dialog call -- see the inline comment below for why that placement
+ * above the ModalBottomSheet/Dialog call - see the inline comment below for why that placement
  * is load-bearing). Every sheet in the app needs this same fix, so it's factored out here instead
- * of copy-pasted into each one -- ContextActionSheet had it duplicated before, and the two sheets
+ * of copy-pasted into each one - ContextActionSheet had it duplicated before, and the two sheets
  * added afterwards (Аудиотракт, Таймер сна) were never given the same fix, so the system bars
  * popped back in and shoved their content around exactly like before this existed.
  *
  * ModalBottomSheet/Dialog opens its own separate Android Window, which doesn't inherit
- * MainActivity's immersive (hidden system bars) state -- the nav/status bar pops back in every
+ * MainActivity's immersive (hidden system bars) state - the nav/status bar pops back in every
  * time a sheet opens, and (the part that actually shoves content around) that window defaults to
  * decorFitsSystemWindows(true): the instant the nav bar shows, the system resizes/insets the
  * sheet's own content to sit above it, visibly shifting everything up for that one frame.

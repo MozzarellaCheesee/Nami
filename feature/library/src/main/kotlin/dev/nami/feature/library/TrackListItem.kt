@@ -92,7 +92,7 @@ fun TrackListItem(
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
-    // Swipe-to-queue: only when the caller actually gave us an add-to-queue action -- every call
+    // Swipe-to-queue: only when the caller actually gave us an add-to-queue action - every call
     // site already passes null for it when nothing is playing (there's no "current track" to
     // queue after), so that's the same condition this reuses to decide whether the gesture exists
     // at all, not a separate flag to keep in sync.
@@ -235,7 +235,7 @@ private fun subtitleFor(track: Track): String {
     val parts = listOfNotNull(
         track.artistName,
         duration,
-        // Only shown once a track has actually been played -- a "0 прослушиваний" badge on
+        // Only shown once a track has actually been played - a "0 прослушиваний" badge on
         // every never-played row would just be noise.
         if (track.playCount > 0) "${track.playCount} ${playsWord(track.playCount)}" else null,
     )

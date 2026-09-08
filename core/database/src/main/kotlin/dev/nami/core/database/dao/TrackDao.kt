@@ -52,7 +52,7 @@ interface TrackDao {
     )
     suspend fun findByIdWithArtwork(id: String): TrackWithArtwork?
 
-    // Reactive twin of findByIdWithArtwork -- Room auto-invalidates this on any write to `tracks`
+    // Reactive twin of findByIdWithArtwork - Room auto-invalidates this on any write to `tracks`
     // (BpmKeyAnalyzer's cached result, ReplayGain, skip count, a rename...), so a screen watching
     // the currently playing track picks up a background scan finishing without needing a fresh
     // track selection to re-trigger a one-shot lookup.
@@ -71,7 +71,7 @@ interface TrackDao {
     @Query("SELECT * FROM tracks WHERE path = :path AND deletedAt IS NULL LIMIT 1")
     suspend fun findByPath(path: String): TrackEntity?
 
-    // "IS" (not "=") so NULL artistId/albumId compare equal to NULL -- most tracks with no
+    // "IS" (not "=") so NULL artistId/albumId compare equal to NULL - most tracks with no
     // tag-resolved artist/album still shouldn't get re-imported as a "new" duplicate.
     @Query(
         """
@@ -89,7 +89,7 @@ interface TrackDao {
     @Query("SELECT COUNT(*) FROM tracks")
     suspend fun count(): Int
 
-    /** Snapshot of every non-deleted track for export/backup -- see BackupRepository. */
+    /** Snapshot of every non-deleted track for export/backup - see BackupRepository. */
     @Query("SELECT * FROM tracks WHERE deletedAt IS NULL")
     suspend fun allRaw(): List<TrackEntity>
 
@@ -106,7 +106,7 @@ interface TrackDao {
     )
     suspend fun tracksForAlbum(albumId: String): List<TrackWithArtwork>
 
-    // Reactive twin of tracksForAlbum -- AlbumDetailScreen needs to see add/remove/rename live,
+    // Reactive twin of tracksForAlbum - AlbumDetailScreen needs to see add/remove/rename live,
     // same reasoning as tracksForArtist's Flow version.
     @Query(
         """
@@ -132,7 +132,7 @@ interface TrackDao {
         ORDER BY albums.year DESC, albums.title ASC, tracks.discNo ASC, tracks.trackNo ASC
         """,
     )
-    // Flow, not suspend -- Room auto-reruns this and re-emits whenever the tracks table changes,
+    // Flow, not suspend - Room auto-reruns this and re-emits whenever the tracks table changes,
     // so play counts (and anything else) update live on this screen without leaving/reentering.
     fun tracksForArtist(artistId: String): Flow<List<TrackWithArtwork>>
 
@@ -181,11 +181,11 @@ interface TrackDao {
     @Query("UPDATE tracks SET rating = :rating WHERE id = :id")
     suspend fun updateRating(id: String, rating: Int?)
 
-    // Only ever set once -- firstPlayed IS NULL guards against a later play overwriting it.
+    // Only ever set once - firstPlayed IS NULL guards against a later play overwriting it.
     @Query("UPDATE tracks SET firstPlayed = :timestamp WHERE id = :id AND firstPlayed IS NULL")
     suspend fun setFirstPlayedIfUnset(id: String, timestamp: Long)
 
-    // Unconditional -- unlike setArtworkPath (import's "only if null" writer), this is for the
+    // Unconditional - unlike setArtworkPath (import's "only if null" writer), this is for the
     // user explicitly replacing a track's own (albumless) cover.
     @Query("UPDATE tracks SET artworkPath = :path WHERE id = :id")
     suspend fun updateArtworkPath(id: String, path: String)
@@ -194,7 +194,7 @@ interface TrackDao {
     @Query("UPDATE tracks SET albumId = :albumId WHERE id = :id")
     suspend fun setAlbumId(id: String, albumId: String?)
 
-    // Drives the "single" auto-tag -- see LibraryRepositoryImpl.syncAlbumIsSingle.
+    // Drives the "single" auto-tag - see LibraryRepositoryImpl.syncAlbumIsSingle.
     @Query("SELECT COUNT(*) FROM tracks WHERE albumId = :albumId AND deletedAt IS NULL")
     suspend fun countByAlbum(albumId: String): Int
 
@@ -206,7 +206,7 @@ interface TrackDao {
     fun trashedTracksFlow(): Flow<List<TrackEntity>>
 
     // Drives album-level trash cascade (LibraryRepositoryImpl.deleteAlbum/TrashRepositoryImpl.
-    // restoreAlbum) -- every track belonging to an album, trashed or not, id only.
+    // restoreAlbum) - every track belonging to an album, trashed or not, id only.
     @Query("SELECT id FROM tracks WHERE albumId = :albumId")
     suspend fun trackIdsForAlbum(albumId: String): List<String>
 

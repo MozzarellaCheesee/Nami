@@ -13,7 +13,7 @@ import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Full JMdict (218k+ entries, every one -- not a common-words-only cut) bundled as a
+/** Full JMdict (218k+ entries, every one - not a common-words-only cut) bundled as a
  * ~46MB read-only SQLite asset (built from scriptin/jmdict-simplified's jmdict-eng release).
  * SQLiteDatabase can't open a file straight out of the APK's assets, so the first lookup copies
  * it once into app-private storage; every lookup after that just opens the copy. */

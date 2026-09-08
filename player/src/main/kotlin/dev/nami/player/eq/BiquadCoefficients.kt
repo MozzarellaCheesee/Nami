@@ -15,7 +15,7 @@ data class BiquadCoefficients(
     companion object {
         val IDENTITY = BiquadCoefficients(1f, 0f, 0f, 0f, 0f)
 
-        /** Peaking (bell) filter -- what a "band" in a graphic/parametric EQ actually is. */
+        /** Peaking (bell) filter - what a "band" in a graphic/parametric EQ actually is. */
         fun peaking(sampleRateHz: Int, freqHz: Float, gainDb: Float, q: Float): BiquadCoefficients {
             if (gainDb == 0f) return IDENTITY
             val a = 10.0.pow(gainDb / 40.0)
@@ -41,7 +41,7 @@ data class BiquadCoefficients(
     }
 }
 
-/** Per-channel filter state (Direct Form I needs the last 2 in/out samples) -- one instance per
+/** Per-channel filter state (Direct Form I needs the last 2 in/out samples) - one instance per
  * audio channel, since a stereo signal's left/right histories must never mix. */
 class BiquadState {
     private var x1 = 0f

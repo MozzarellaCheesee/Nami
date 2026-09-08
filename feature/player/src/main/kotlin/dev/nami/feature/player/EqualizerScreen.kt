@@ -51,7 +51,7 @@ private val BAND_FREQS_HZ = ParametricEqAudioProcessor.BAND_FREQS_HZ
 private fun freqLabel(freqHz: Float): String =
     if (freqHz >= 1000f) "${(freqHz / 1000f).toInt()} кГц" else "${freqHz.toInt()} Гц"
 
-/** План.md §4.7 -- 9-band graphic EQ (63Hz..16kHz), a real gain curve drawn from the actual band
+/** План.md §4.7 - 9-band graphic EQ (63Hz..16kHz), a real gain curve drawn from the actual band
  * values, six fixed presets plus an auto-detected "Пользовательский" state, and a card per band
  * with a live slider. */
 @Composable
@@ -63,7 +63,7 @@ fun EqualizerScreen(onBack: () -> Unit, viewModel: AudioTractViewModel = hiltVie
     }
 }
 
-/** Same content as [EqualizerScreen] but without the outer status-bar padding -- reused inline
+/** Same content as [EqualizerScreen] but without the outer status-bar padding - reused inline
  * inside NowPlayingScreen's Аудиотракт bottom sheet, where [onBack] steps back to that sheet's
  * Аудиотракт body instead of a real nav pop. */
 @Composable
@@ -208,7 +208,7 @@ private fun PresetPill(label: String, selected: Boolean, enabled: Boolean = true
     }
 }
 
-/** Real frequency-response curve, not decorative -- sums all 9 peaking bands' actual gain at each
+/** Real frequency-response curve, not decorative - sums all 9 peaking bands' actual gain at each
  * drawn frequency (log-spaced 20Hz..20kHz), same bell-shape math the DSP itself uses. */
 @Composable
 private fun EqCurve(gains: List<Float>, modifier: Modifier = Modifier) {
@@ -221,7 +221,7 @@ private fun EqCurve(gains: List<Float>, modifier: Modifier = Modifier) {
         fun gainAt(freqHz: Float): Float =
             BAND_FREQS_HZ.indices.sumOf { i ->
                 // Same bell curve shape a peaking biquad traces (Q-scaled Gaussian in log-freq
-                // space) -- not the exact same numbers a biquad's actual frequency response would
+                // space) - not the exact same numbers a biquad's actual frequency response would
                 // show, but the same visual shape for the same reason: it peaks at the band's
                 // center frequency and falls off symmetrically in octaves either side.
                 val octaves = ln(freqHz / BAND_FREQS_HZ[i]) / ln(2f)
@@ -235,7 +235,7 @@ private fun EqCurve(gains: List<Float>, modifier: Modifier = Modifier) {
             return w * (ln(freqHz) - logMin) / (logMax - logMin)
         }
 
-        // Clamped -- gainAt() sums ALL bands' bell contributions at a point, which can exceed
+        // Clamped - gainAt() sums ALL bands' bell contributions at a point, which can exceed
         // +-12dB where two boosted neighbors overlap even though no single band goes past that,
         // and an unclamped y would draw the curve past the canvas's own top/bottom edge.
         fun yFor(gainDb: Float): Float = (midY - (gainDb / maxDb) * midY).coerceIn(0f, h)
@@ -273,8 +273,8 @@ private fun EqCurve(gains: List<Float>, modifier: Modifier = Modifier) {
         drawPath(fillPath, color = NamiColors.Shu.copy(alpha = 0.10f))
         drawPath(path, color = NamiColors.Shu, style = Stroke(width = 4f, cap = StrokeCap.Round))
 
-        // yFor(gainAt(freqHz)) -- the same COMBINED value the line itself is drawn from at that x,
-        // not yFor(gains[i]) (that band's own raw gain alone) -- those two only match when every
+        // yFor(gainAt(freqHz)) - the same COMBINED value the line itself is drawn from at that x,
+        // not yFor(gains[i]) (that band's own raw gain alone) - those two only match when every
         // other band is at 0dB. With neighbors set, the line sits at the sum of all bells at this
         // frequency while the dot used to sit at just this one band's value, visibly off the line.
         BAND_FREQS_HZ.forEachIndexed { i, freqHz ->

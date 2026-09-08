@@ -11,22 +11,22 @@ import kotlin.math.sqrt
 data class BpmKeyResult(val bpm: Float?, val musicalKey: String?)
 
 /** Этап 6/§22.13's "правила автоочереди" needs a BPM/key signal that doesn't exist anywhere in
- * this codebase yet -- this is that signal, real DSP, not a stub:
+ * this codebase yet - this is that signal, real DSP, not a stub:
  *
  * **BPM**: a short-time RMS envelope (11.6ms hops) of the decoded mono signal, half-wave
  * rectified onset strength (positive energy jumps = likely beats), then autocorrelation of that
- * onset curve over the lag range for 50-200 BPM -- the lag with the strongest self-similarity is
+ * onset curve over the lag range for 50-200 BPM - the lag with the strongest self-similarity is
  * the beat period. This is a simplified, single-pass version of standard onset-based tempo
- * estimation (no multi-band onset detection, no dynamic-programming beat tracking) -- honest
+ * estimation (no multi-band onset detection, no dynamic-programming beat tracking) - honest
  * about being an estimate, not a claim of DJ-software-grade accuracy.
  *
  * **Key**: a chromagram (12 pitch-class bins) built from windowed FFT magnitude spectra, then
  * correlated against the Krumhansl-Schmuckler major/minor key profiles for all 12 roots (24
- * candidates) -- the classic, well-documented approach, not a novel algorithm.
+ * candidates) - the classic, well-documented approach, not a novel algorithm.
  *
  * Both only look at the first [ANALYSIS_DURATION_MS] of the track (bounds memory/CPU for a full
- * decode+FFT pass) -- a real limitation for tracks that change tempo/key partway through, not
- * pretended away. Null fields on any decode failure or an unreadable/too-short result -- fails
+ * decode+FFT pass) - a real limitation for tracks that change tempo/key partway through, not
+ * pretended away. Null fields on any decode failure or an unreadable/too-short result - fails
  * closed, same as ReplayGainScanner/TrackEndingAnalyzer in this same package. */
 object BpmKeyAnalyzer {
     private const val ANALYSIS_DURATION_MS = 90_000L
@@ -55,7 +55,7 @@ object BpmKeyAnalyzer {
 
     /** Decodes up to [ANALYSIS_DURATION_MS] of the track, downmixed to mono float samples. Reuses
      * the same MediaExtractor/MediaCodec decode loop shape as ReplayGainScanner/
-     * TrackEndingAnalyzer in this package -- platform decoder, no extra native dependency. */
+     * TrackEndingAnalyzer in this package - platform decoder, no extra native dependency. */
     private fun decodeMono(path: String): DecodedMono? {
         val extractor = MediaExtractor()
         return try {
@@ -124,7 +124,7 @@ object BpmKeyAnalyzer {
             codec.stop()
             codec.release()
 
-            if (written < sampleRate) return null // less than 1s decoded -- too short to analyze
+            if (written < sampleRate) return null // less than 1s decoded - too short to analyze
             DecodedMono(output.copyOf(written), sampleRate)
         } catch (e: Exception) {
             null
@@ -145,7 +145,7 @@ object BpmKeyAnalyzer {
             }
             envelope[i] = sqrt(sumSquares / ENVELOPE_HOP_SAMPLES)
         }
-        // Half-wave rectified onset strength -- only positive energy jumps count as likely beats.
+        // Half-wave rectified onset strength - only positive energy jumps count as likely beats.
         val onset = DoubleArray(envelopeSize)
         for (i in 1 until envelopeSize) onset[i] = max(0.0, envelope[i] - envelope[i - 1])
 

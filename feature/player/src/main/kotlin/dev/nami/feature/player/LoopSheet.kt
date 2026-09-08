@@ -40,7 +40,7 @@ private fun formatMs(ms: Long): String {
 }
 
 /** План.md §22.2 "A-B петли с сохранением": mark A at the current position, keep listening/
- * scrubbing to where B should be, mark B (which activates the loop immediately -- see
+ * scrubbing to where B should be, mark B (which activates the loop immediately - see
  * PlayerRepository.activeLoop), optionally save it under a name, or pick up a previously saved
  * one for this track. */
 @OptIn(ExperimentalMaterial3Api::class)

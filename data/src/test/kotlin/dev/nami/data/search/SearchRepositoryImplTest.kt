@@ -8,10 +8,10 @@ package dev.nami.data.search
  * with UnsatisfiedLinkError on Windows native binaries). The brief's test drives Room +
  * Robolectric end-to-end through SearchDao's real FTS5 MATCH queries, so it hits the same wall.
  * The FTS5 SQL itself is already covered by hand in Task 1's SearchDaoTest (raw sqlite-jdbc).
- * This test instead covers SearchRepositoryImpl's own logic -- what rows it reads from
+ * This test instead covers SearchRepositoryImpl's own logic - what rows it reads from
  * TrackDao/AlbumDao/ArtistDao during rebuildIndex, how it maps query text to
  * SearchQueryParser/FtsQueryBuilder calls and picks the right SearchDao method, and how
- * SearchResultRow maps to SearchResult -- using fake DAOs (the same anonymous-object style as
+ * SearchResultRow maps to SearchResult - using fake DAOs (the same anonymous-object style as
  * MetadataResolverTest.kt) instead of a real Room database.
  */
 

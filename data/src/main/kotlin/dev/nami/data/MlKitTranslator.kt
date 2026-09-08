@@ -11,7 +11,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-// This song's lyrics (and plenty of others) mix Japanese and English -- often as a whole English
+// This song's lyrics (and plenty of others) mix Japanese and English - often as a whole English
 // line by itself, or "日本語 (English paraphrase)". A single JA->RU translator either garbles the
 // English part or silently skips English-only lines entirely (an earlier version of this file did
 // that, which just meant no translation at all for those lines). Two translators, one per
@@ -25,7 +25,7 @@ object MlKitTranslator {
         return try {
             ja.downloadModelIfNeeded(DownloadConditions.Builder().build()).await()
             en.downloadModelIfNeeded(DownloadConditions.Builder().build()).await()
-            // See SentenceGrouper's doc -- a lyric line split mid-sentence across two .lrc
+            // See SentenceGrouper's doc - a lyric line split mid-sentence across two .lrc
             // timings needs the whole sentence for grammar, not the fragment alone.
             val result = arrayOfNulls<String>(lines.size)
             SentenceGrouper.group(lines).forEach { group ->
@@ -53,7 +53,7 @@ object MlKitTranslator {
 
     private suspend fun translateLine(line: String, ja: Translator, en: Translator): String {
         if (line.isBlank()) return line
-        // "日本語 (English aside)" -- translate each half with the translator that actually
+        // "日本語 (English aside)" - translate each half with the translator that actually
         // matches its language instead of feeding the whole mixed line to one of them.
         val match = PARENTHETICAL.find(line)
         if (match != null) {
@@ -70,7 +70,7 @@ object MlKitTranslator {
         return translator.translate(text).await()
     }
 
-    // ML Kit returns Play Services Tasks, not coroutines/futures -- kotlinx-coroutines-play-services
+    // ML Kit returns Play Services Tasks, not coroutines/futures - kotlinx-coroutines-play-services
     // would be one dependency for exactly this one bridge; a dozen lines of suspendCancellableCoroutine
     // does the same job without it.
     private suspend fun <T> Task<T>.await(): T = suspendCancellableCoroutine { cont ->

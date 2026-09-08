@@ -104,7 +104,7 @@ fun LibraryScreen(
     onShareCard: (Track) -> Unit,
     importProgress: StateFlow<ImportProgress?>,
     // Bumped by the bottom nav's Library tab so re-tapping it while already here (or from any
-    // other tab/detail screen) doesn't just switch back to the Tracks tab -- it scrolls that
+    // other tab/detail screen) doesn't just switch back to the Tracks tab - it scrolls that
     // list back to the top too, actually landing on "the main screen with tracks", not wherever
     // it was left scrolled to.
     resetSignal: Int = 0,
@@ -533,7 +533,7 @@ private fun TrackListContent(
     // long-press): a long-press with no further movement selects just that row; keeping the
     // finger down and dragging over other rows extends the selection to the range between the
     // anchor row and the finger's row. This has to be the ONLY long-press detector in the
-    // touched region -- if TrackListItem also registered its own onLongClick, both detectors
+    // touched region - if TrackListItem also registered its own onLongClick, both detectors
     // would race for the same long-press on the same pointer stream and this one would starve
     // (Compose delivers pointer events to the child first, which consumes them detecting its
     // own long-press, leaving nothing for the parent to see). Auto-scrolls near the edges.
@@ -631,7 +631,7 @@ private fun TrackListContent(
                             // long-press-with-no-movement (the parent gesture above only
                             // consumes movement, not a plain release) and would otherwise fire
                             // its own click right after this row was just made the drag anchor
-                            // -- toggling it straight back off. Swallow that one ghost click.
+                            // - toggling it straight back off. Swallow that one ghost click.
                             if (track.id != dragAnchorId) {
                                 if (selectionMode) onToggleSelection(track.id) else onTrackClick(track.id)
                             }
@@ -640,7 +640,7 @@ private fun TrackListContent(
                         isSelected = track.id in selectedTrackIds,
                         onAddToPlaylist = if (selectionMode) null else { { onAddToPlaylist(track.id) } },
                         onLikeTrack = if (selectionMode) null else { { onLikeTrack(track.id) } },
-                        // Only shown while something's actually playing -- queueing behind
+                        // Only shown while something's actually playing - queueing behind
                         // nothing playing doesn't map to anything meaningful for the user to
                         // picture happening.
                         onAddToQueue = if (selectionMode || nowPlaying == null) null else { { onAddToQueueTrack(track) } },
@@ -804,7 +804,7 @@ private fun EmptyLibraryMessage() {
     }
 }
 
-/** План.md §22.17 "Заметки к треку" -- free-text personal comment. Multiline OutlinedTextField
+/** План.md §22.17 "Заметки к треку" - free-text personal comment. Multiline OutlinedTextField
  * (RenameDialog's is deliberately singleLine, wrong shape for this), otherwise same
  * NamiAlertDialog styling as every other text-entry dialog in the app. */
 @Composable

@@ -16,7 +16,7 @@ import javax.inject.Inject
 
 data class AlbumInfoStats(val trackCount: Int, val totalDurationMs: Long)
 
-/** Album counterpart of TrackInfoViewModel -- same "each field edits itself, saves immediately"
+/** Album counterpart of TrackInfoViewModel - same "each field edits itself, saves immediately"
  * shape, backed by the same LibraryRepository methods AlbumDetailScreen's own menu already uses
  * (renameAlbum/setAlbumYear/setAlbumIsSingle). */
 @HiltViewModel

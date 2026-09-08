@@ -50,9 +50,9 @@ import dev.nami.player.output.AudioOutputInfo
 
 private data class ChainNode(val name: String, val detail: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
 
-/** План.md §4.6 -- one screen, a vertical chain diagram of exactly what's happening to the
+/** План.md §4.6 - one screen, a vertical chain diagram of exactly what's happening to the
  * audio right now (файл -> декодер -> обработка -> ресемплинг -> вывод), plus a status card
- * explaining why bit-perfect is or isn't active. Thin wrapper around [AudioTractBody] -- the
+ * explaining why bit-perfect is or isn't active. Thin wrapper around [AudioTractBody] - the
  * standalone full-screen route (status bar padding + real back navigation). */
 @Composable
 fun AudioTractScreen(onBack: () -> Unit, onOpenEqualizer: () -> Unit, viewModel: AudioTractViewModel = hiltViewModel()) {
@@ -68,7 +68,7 @@ fun AudioTractScreen(onBack: () -> Unit, onOpenEqualizer: () -> Unit, viewModel:
     }
 }
 
-/** The actual content, no outer screen chrome (no back button/status-bar padding) -- reused
+/** The actual content, no outer screen chrome (no back button/status-bar padding) - reused
  * as-is both by [AudioTractScreen] (the full-screen route) and by NowPlayingScreen's overflow
  * menu, which shows this same content inline in a bottom sheet instead of navigating away. */
 @Composable
@@ -281,7 +281,7 @@ private fun deviceTypeLabel(type: dev.nami.domain.OutputDeviceType): String = wh
 }
 
 /** One collapsible per-device profile card: a preset picker (reusing the same fixed EqPreset set
- * as the main equalizer -- a full 9-slider editor per device would be a lot of chrome for a
+ * as the main equalizer - a full 9-slider editor per device would be a lot of chrome for a
  * feature most people set once and forget) plus a volume ceiling slider. */
 @Composable
 private fun OutputProfileRow(
@@ -375,7 +375,7 @@ private fun GainPill(label: String, selected: Boolean, onClick: () -> Unit) {
     }
 }
 
-// Real per-format info, not a static label -- codec name (from the file's own format) plus
+// Real per-format info, not a static label - codec name (from the file's own format) plus
 // whether it's lossless, both actually true facts about what's playing right now.
 private val LOSSLESS_FORMATS = setOf("flac", "wav", "alac", "ape", "wv", "tak", "aiff", "dsf", "dff")
 

@@ -9,7 +9,7 @@ import dev.nami.player.dither.DitherAudioProcessor
 import dev.nami.player.replaygain.ReplayGainAudioProcessor
 
 /** Only override point DefaultRenderersFactory exposes for inserting custom AudioProcessors into
- * the real playback path -- everything else (video/text/metadata renderers, codec selection)
+ * the real playback path - everything else (video/text/metadata renderers, codec selection)
  * stays whatever DefaultRenderersFactory already does. Chain order: ReplayGain (level-match
  * first) -> EQ (tone-shape) -> Dither (last, right before the sink hands the buffer to AudioTrack).
  *
@@ -24,7 +24,7 @@ import dev.nami.player.replaygain.ReplayGainAudioProcessor
  *     supported, and `MediaCodecAudioRenderer.getMediaFormat()` then sets KEY_PCM_ENCODING=4 on the
  *     platform decoder. When a vendor MediaCodec accepts that key but does not echo `pcm-encoding`
  *     back in its output format, media3's `onOutputFormatChanged` falls back to ENCODING_PCM_16BIT
- *     -- so a 4-byte-per-sample buffer gets read as 2-byte samples: exactly 2x the frame count,
+ *     - so a 4-byte-per-sample buffer gets read as 2-byte samples: exactly 2x the frame count,
  *     i.e. double speed, an octave up, with the float bit patterns themselves audible as noise.
  *     That is the reported symptom, precisely, and it's why it happened even when the processors
  *     were doing nothing (commit d8ba977).

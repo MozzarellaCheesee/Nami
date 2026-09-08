@@ -17,7 +17,7 @@ import javax.inject.Inject
 
 data class ArtistInfoStats(val albumCount: Int, val trackCount: Int, val totalDurationMs: Long)
 
-/** Artist counterpart of TrackInfoViewModel/AlbumInfoViewModel -- name is the only real editable
+/** Artist counterpart of TrackInfoViewModel/AlbumInfoViewModel - name is the only real editable
  * field an Artist row has (photo already has its own picker flow on ArtistDetailScreen). */
 @HiltViewModel
 class ArtistInfoViewModel @Inject constructor(

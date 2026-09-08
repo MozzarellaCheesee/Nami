@@ -6,7 +6,7 @@ import android.media.MediaFormat
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-/** Decodes a local audio file to 16kHz mono f32 PCM -- the exact format whisper.cpp requires.
+/** Decodes a local audio file to 16kHz mono f32 PCM - the exact format whisper.cpp requires.
  * Whole-track decode into memory (a 4-minute track is ~15MB as f32 mono @16kHz), which is fine
  * since this only runs once per track, on explicit user request. */
 object AudioPcmDecoder {
@@ -87,7 +87,7 @@ object AudioPcmDecoder {
                 pos += chunk.size
             }
             // Frees the (same-size) chunk list before allocating the mono/resampled buffers below
-            // -- otherwise all three live at once, multiplying peak memory for no reason.
+            // - otherwise all three live at once, multiplying peak memory for no reason.
             pcmChunks.clear()
 
             val mono = downmixToMono(interleaved, srcChannels)
@@ -96,7 +96,7 @@ object AudioPcmDecoder {
             extractor.release()
             return null
         } catch (e: OutOfMemoryError) {
-            // A long/high-channel-count track can need a genuinely large buffer here -- this is
+            // A long/high-channel-count track can need a genuinely large buffer here - this is
             // one optional feature (precise sync) failing gracefully, not a reason to take the
             // whole app process down with it. Exception doesn't catch Error/OutOfMemoryError, so
             // this needs its own clause.
@@ -119,7 +119,7 @@ object AudioPcmDecoder {
         return mono
     }
 
-    // ponytail: linear interpolation, not a proper sinc/polyphase resampler -- whisper.cpp only
+    // ponytail: linear interpolation, not a proper sinc/polyphase resampler - whisper.cpp only
     // needs "close enough" audio for transcription, not audiophile fidelity.
     private fun resampleLinear(input: FloatArray, srcRate: Int, dstRate: Int): FloatArray {
         if (srcRate == dstRate) return input

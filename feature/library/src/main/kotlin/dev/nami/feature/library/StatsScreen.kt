@@ -41,7 +41,7 @@ import java.util.Locale
 
 private const val WINDOW_DAYS = 120
 
-/** B1 "Статистика" (Design mock 4.8) -- one dark card: header numbers (actually-listened, not
+/** B1 "Статистика" (Design mock 4.8) - one dark card: header numbers (actually-listened, not
  * library totals), the contribution grid, an hour-of-day bar chart, and this week's top tracks.
  * All Canvas/Compose, no chart library, same approach as the waveform scrubber. */
 @Composable
@@ -59,7 +59,7 @@ fun StatsScreen(onBack: () -> Unit, viewModel: StatsViewModel = hiltViewModel())
             Text("Статистика", color = NamiColors.Paper100, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 8.dp))
         }
 
-        // Fixed-height Column had no way to show everything on a shorter screen -- content below
+        // Fixed-height Column had no way to show everything on a shorter screen - content below
         // the fold was just clipped/squished instead of scrollable.
         Column(
             modifier = Modifier
@@ -145,7 +145,7 @@ private fun ContributionGrid(days: List<DayActivity>, modifier: Modifier = Modif
     val today = remember { LocalDate.now().toEpochDay() }
     val weekFields = WeekFields.of(Locale.getDefault())
 
-    // Columns = weeks, rows = day-of-week -- same layout as GitHub's own grid. Oldest day first
+    // Columns = weeks, rows = day-of-week - same layout as GitHub's own grid. Oldest day first
     // so the grid reads left-to-right like a timeline.
     val firstDay = today - (WINDOW_DAYS - 1)
     val firstDow = LocalDate.ofEpochDay(firstDay).get(weekFields.dayOfWeek()) - 1
@@ -185,7 +185,7 @@ private fun colorForMinutes(minutes: Int) = when {
     else -> NamiColors.Wakaba
 }
 
-/** 24 bars, one per hour of day -- real data (PlayHistory.playedAt hour bucket), not a guessed
+/** 24 bars, one per hour of day - real data (PlayHistory.playedAt hour bucket), not a guessed
  * "night owl" heuristic. Every bar has a visible floor line and every 6th hour is labeled so the
  * chart reads as "time of day" and not just "bars of different heights". */
 @Composable
@@ -194,7 +194,7 @@ private fun HourOfDayChart(hours: List<Int>, modifier: Modifier = Modifier) {
     Column(modifier = modifier.fillMaxWidth()) {
         Canvas(modifier = Modifier.fillMaxWidth().height(56.dp)) {
             val barWidth = size.width / hours.size
-            // Floor line -- without it a bar for "0 minutes" is invisible (zero height), reading
+            // Floor line - without it a bar for "0 minutes" is invisible (zero height), reading
             // as a gap rather than "nothing happened this hour".
             drawLine(
                 color = NamiColors.Ink700,

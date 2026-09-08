@@ -9,12 +9,12 @@ import kotlin.math.pow
 
 /** Applies the current track's scanned ReplayGain (see ReplayGainScanner) as a flat linear
  * multiply on the int16 PCM stream. Same isActive()-only-checked-on-(re)build caveat as
- * ParametricEqAudioProcessor -- gain updates apply live, on/off needs a seek/track-change. */
+ * ParametricEqAudioProcessor - gain updates apply live, on/off needs a seek/track-change. */
 class ReplayGainAudioProcessor : BaseAudioProcessor() {
 
     @Volatile var enabled: Boolean = false
     @Volatile private var trackGainDb: Float? = null
-    // "Усиление воспроизведения" (Выкл/+3dB/+6dB) -- a flat library-wide boost, independent of
+    // "Усиление воспроизведения" (Выкл/+3dB/+6dB) - a flat library-wide boost, independent of
     // ReplayGain's per-track measured gain. Applies even when ReplayGain itself is off, since it's
     // a manual "make everything louder" knob, not a loudness-matching one.
     @Volatile var boostDb: Float = 0f

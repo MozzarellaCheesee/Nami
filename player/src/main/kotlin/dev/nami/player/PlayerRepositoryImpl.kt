@@ -54,7 +54,7 @@ class PlayerRepositoryImpl @Inject constructor(
     private val _shuffleEnabled = MutableStateFlow(false)
     override val shuffleEnabled: StateFlow<Boolean> = _shuffleEnabled
     // Snapshot of the queue's MediaItems in their pre-shuffle order, taken the moment shuffle
-    // turns on -- what setShuffleEnabled(false) restores. Null whenever shuffle is off (nothing
+    // turns on - what setShuffleEnabled(false) restores. Null whenever shuffle is off (nothing
     // to restore) or after play() starts a fresh context.
     private var preShuffleOrder: MutableList<MediaItem>? = null
 
@@ -85,16 +85,16 @@ class PlayerRepositoryImpl @Inject constructor(
     // it over whatever the controller reports for that mediaId.
     private val trackInfoByMediaId = mutableMapOf<String, MediaItemInfo>()
     // MediaController's onEvents only fires on discrete state changes (buffering, play/pause,
-    // track change, etc.) -- during steady playback that can be many seconds apart, so the
+    // track change, etc.) - during steady playback that can be many seconds apart, so the
     // scrubber/position only advanced in visible jumps instead of smoothly. Player calls must
     // happen on the main thread, hence Dispatchers.Main.
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    // Counted once per track per listen, not per skip -- "listened to" means past 30s or half the
+    // Counted once per track per listen, not per skip - "listened to" means past 30s or half the
     // track's length, whichever comes first (skips restarting scoring don't double-count since
     // this is keyed by mediaId, reset to null only on an actual track change).
     private var playCountedMediaId: String? = null
 
-    // План.md §22.10 "Умное возобновление" -- set the instant playback pauses (any way: the
+    // План.md §22.10 "Умное возобновление" - set the instant playback pauses (any way: the
     // toggle button, headphones unplugged, audio focus loss), cleared once acted on. Resuming
     // less than the threshold later continues from position as normal; resuming after it restarts
     // the track from 0, on the reasoning that a pause that long usually means "I moved on/forgot
@@ -106,7 +106,7 @@ class PlayerRepositoryImpl @Inject constructor(
         val future = MediaController.Builder(context, token)
             // A crossfade hands the session to a whole new ExoPlayer (PlaybackService.promote-
             // IncomingPlayer), which reaches a controller as a playlist change, NOT as
-            // MEDIA_ITEM_TRANSITION_REASON_AUTO -- so the cover-slide animation below would never
+            // MEDIA_ITEM_TRANSITION_REASON_AUTO - so the cover-slide animation below would never
             // fire for a crossfaded transition. The service bumps this extra on each handover.
             .setListener(object : MediaController.Listener {
                 override fun onExtrasChanged(controller: MediaController, extras: android.os.Bundle) {
@@ -129,7 +129,7 @@ class PlayerRepositoryImpl @Inject constructor(
                             if (!isPlaying) {
                                 val now = System.currentTimeMillis()
                                 pausedAtMs = now
-                                // Persisted, not just in-memory -- see SettingsRepository.
+                                // Persisted, not just in-memory - see SettingsRepository.
                                 // lastPlaybackQueueTrackIds's doc for why (a paused, backgrounded
                                 // service is killable, wiping pausedAtMs along with everything
                                 // else in-memory). The WHOLE queue, not just the current track --
@@ -156,7 +156,7 @@ class PlayerRepositoryImpl @Inject constructor(
                 )
                 scope.launch { restoreLastPlaybackIfAny() }
                 scope.launch {
-                    // 500ms was the original interval -- fine for a scrubber, but the lyrics
+                    // 500ms was the original interval - fine for a scrubber, but the lyrics
                     // screen's karaoke word-sweep visibly stepped/lagged behind the vocal at that
                     // rate (up to half a second of staleness). 100ms keeps the same cheap polling
                     // approach (no need for a smoothed/interpolated clock) while looking smooth.
@@ -177,7 +177,7 @@ class PlayerRepositoryImpl @Inject constructor(
         val positionMs = player.currentPosition
 
         // A-B loop (План.md §22.2): checked on the same 100ms tick that already polls position
-        // for the scrubber -- no separate timer. Only re-seeks once actually past the end (not
+        // for the scrubber - no separate timer. Only re-seeks once actually past the end (not
         // continuously), so it can't fight a manual seek/drag the user is mid-gesture on.
         _activeLoop.value?.let { loop ->
             if (positionMs >= loop.endMs) player.seekTo(loop.startMs)
@@ -236,19 +236,19 @@ class PlayerRepositoryImpl @Inject constructor(
         format = format,
     )
 
-    // Хвост группы C "CUE-поддержка" -- ClippingConfiguration is ExoPlayer's own built-in answer
+    // Хвост группы C "CUE-поддержка" - ClippingConfiguration is ExoPlayer's own built-in answer
     // to "play just this slice of a file": position/duration it reports are already relative to
     // the clip, and reaching the clip's end fires the same MEDIA_ITEM_TRANSITION_REASON_AUTO as a
-    // normal track ending -- no separate polling/seek-on-boundary logic needed anywhere else.
-    // Группа E "экран блокировки" -- setArtworkUri needs an actual URI scheme to resolve through
+    // normal track ending - no separate polling/seek-on-boundary logic needed anywhere else.
+    // Группа E "экран блокировки" - setArtworkUri needs an actual URI scheme to resolve through
     // Media3's own BitmapLoader (a DataSource-based loader, same one that reads the notification/
-    // lock-screen bitmap in this process) -- Uri.parse() on a bare filesystem path produces a
+    // lock-screen bitmap in this process) - Uri.parse() on a bare filesystem path produces a
     // schemeless Uri that silently fails to load, which read as "the lock screen has no artwork".
     // Uri.fromFile() gives it a real file:// scheme. First attempt at this "fixed" it by reading
-    // the whole file to bytes right here instead -- but toMediaItem() runs once per track when
+    // the whole file to bytes right here instead - but toMediaItem() runs once per track when
     // building/rebuilding the WHOLE queue, so that blocked play() on decoding every artwork file
     // in the queue before playback could even start. Fixing the actual Uri bug is both correct
-    // and free -- no eager I/O added.
+    // and free - no eager I/O added.
     private fun PlayableTrack.toMediaItem(): MediaItem = MediaItem.Builder()
         .setMediaId(id.value)
         .setUri(path)
@@ -273,7 +273,7 @@ class PlayerRepositoryImpl @Inject constructor(
         )
         .build()
 
-    // Cold start only -- fires once, right after the controller connects, and only if the player
+    // Cold start only - fires once, right after the controller connects, and only if the player
     // actually has nothing loaded (a live/backgrounded-but-alive service already has its own real
     // queue, restoring over that would be wrong). See SettingsRepository.lastPlaybackQueueTrackIds.
     private suspend fun restoreLastPlaybackIfAny() {
@@ -284,7 +284,7 @@ class PlayerRepositoryImpl @Inject constructor(
         val pausedAt = settingsRepository.lastPlaybackPausedAt.value
         if (System.currentTimeMillis() - pausedAt >= SMART_RESUME_THRESHOLD_MS) return
         val savedIndex = settingsRepository.lastPlaybackQueueIndex.value
-        // Tracks can vanish between the pause and this restore (deleted, moved) -- resolve what's
+        // Tracks can vanish between the pause and this restore (deleted, moved) - resolve what's
         // still there and keep going, rather than aborting the whole restore over one missing
         // track. The saved index has to shift to match every track dropped before it.
         var resolvedIndex = savedIndex
@@ -311,13 +311,13 @@ class PlayerRepositoryImpl @Inject constructor(
         val positionMs = settingsRepository.lastPlaybackPositionMs.value
         player.setMediaItems(playables.map { it.toMediaItem() }, startIndex, positionMs)
         player.prepare()
-        // Deliberately no play() -- restores paused, ready for the user's own tap to resume.
+        // Deliberately no play() - restores paused, ready for the user's own tap to resume.
     }
 
     override suspend fun play(tracks: List<PlayableTrack>, startIndex: Int, startMs: Long) {
         originByMediaId.clear()
         trackInfoByMediaId.clear()
-        // A fresh context starts unshuffled -- there is no "pre-shuffle order" left to restore
+        // A fresh context starts unshuffled - there is no "pre-shuffle order" left to restore
         // from a previous queue, and leaving the flag on would silently mislabel the new queue.
         _shuffleEnabled.value = false
         preShuffleOrder = null
@@ -349,7 +349,7 @@ class PlayerRepositoryImpl @Inject constructor(
     }
 
     override suspend fun skipNext() {
-        // "Избегать треков, скипнутых 3+ раз" (План.md §22.13) -- only counts as a skip when the
+        // "Избегать треков, скипнутых 3+ раз" (План.md §22.13) - only counts as a skip when the
         // user moves on well before the track would've ended naturally; skipping in the last few
         // percent is just "the track is basically over", not "I don't want to hear this".
         controller?.let { player ->
@@ -384,10 +384,10 @@ class PlayerRepositoryImpl @Inject constructor(
 
     override suspend fun addToQueue(track: PlayableTrack) {
         val player = controller ?: return
-        // No duplicates in the visible queue (current track + everything upcoming) -- repeatedly
+        // No duplicates in the visible queue (current track + everything upcoming) - repeatedly
         // swiping/tapping "add to queue" on the same row used to stack a second copy right after
         // itself every time. If it's already queued somewhere ahead, MOVE that existing item to
-        // right after the current one instead of adding a new copy -- matches "queue this next"
+        // right after the current one instead of adding a new copy - matches "queue this next"
         // even when it's already further down the list. Doesn't touch already-played history
         // before the current index; queueing the same track again once it's actually played
         // through is fine (starts a fresh copy).
@@ -395,7 +395,7 @@ class PlayerRepositoryImpl @Inject constructor(
         val existingIndex = (startIndex until player.mediaItemCount).firstOrNull { i -> player.getMediaItemAt(i).mediaId == track.id.value }
         val insertIndex = (player.currentMediaItemIndex + 1).coerceAtMost(player.mediaItemCount)
         if (existingIndex != null) {
-            // Already the current track -- "queue it right after current" is meaningless for
+            // Already the current track - "queue it right after current" is meaningless for
             // itself, leave it playing where it is.
             if (existingIndex != player.currentMediaItemIndex && existingIndex != insertIndex) {
                 player.moveMediaItem(existingIndex, insertIndex)
@@ -406,7 +406,7 @@ class PlayerRepositoryImpl @Inject constructor(
         trackInfoByMediaId[track.id.value] = track.toMediaItemInfo()
         val wasEmpty = player.mediaItemCount == 0
         player.addMediaItem(insertIndex, track.toMediaItem())
-        // Keep the pre-shuffle snapshot in sync -- otherwise a track added WHILE shuffled would
+        // Keep the pre-shuffle snapshot in sync - otherwise a track added WHILE shuffled would
         // silently vanish the moment shuffle is turned back off, since it never existed in the
         // order being restored.
         preShuffleOrder?.add(track.toMediaItem())
@@ -420,7 +420,7 @@ class PlayerRepositoryImpl @Inject constructor(
         val player = controller ?: return
         val upcoming = _queue.value.upcoming
         if (fromIndex !in upcoming.indices || toIndex !in upcoming.indices) return
-        // No origin restriction -- both manually-queued and context (album/playlist) tracks can
+        // No origin restriction - both manually-queued and context (album/playlist) tracks can
         // be reordered; ExoPlayer's timeline doesn't care which is which, and there's no reason
         // a user can't rearrange what's coming up from an album same as anything else.
         val base = player.currentMediaItemIndex + 1
@@ -459,7 +459,7 @@ class PlayerRepositoryImpl @Inject constructor(
         val currentItem = player.currentMediaItem ?: return
         if (enabled) {
             // Real reorder of the actual queue, not ExoPlayer's own shuffleModeEnabled/shuffle-
-            // order machinery -- that reorders PLAYBACK order while leaving getMediaItemAt(i)'s
+            // order machinery - that reorders PLAYBACK order while leaving getMediaItemAt(i)'s
             // linear index order untouched, which would desync it from how publishQueue() (and
             // everything downstream: MiniPlayer/NowPlaying's previous/upcoming) reads the queue.
             // Physically reordering the items keeps that whole pipeline correct for free.
@@ -481,12 +481,12 @@ class PlayerRepositoryImpl @Inject constructor(
     }
 
     /** Weighted-random permutation (Efraimidis-Spirakis: key = U^(1/weight), sort descending)
-     * biased toward tracks that haven't played in a while -- weight grows with time since
+     * biased toward tracks that haven't played in a while - weight grows with time since
      * [dev.nami.core.model.Track.lastPlayed] (never-played tracks get the max weight, same as a
      * track that hasn't played in ~30 days, so new imports surface early without dominating
      * every shuffle forever). Falls back to a flat weight (behaves like plain random) for any
      * track this couldn't look up. */
-    /** Runs the already-shuffled order through QueueBuilder's applyAutoQueueRules -- needs the
+    /** Runs the already-shuffled order through QueueBuilder's applyAutoQueueRules - needs the
      * real Track per item (artistId/albumId/bpm/skipCount live there, not on MediaItem), then maps
      * the rule-adjusted Track order back to MediaItems by id. Falls back to the untouched order
      * for any item whose Track couldn't be looked up, rather than dropping it from the queue. */
@@ -513,11 +513,11 @@ class PlayerRepositoryImpl @Inject constructor(
         return weighted.sortedByDescending { it.second }.map { it.first }
     }
 
-    /** Rearranges the live queue to [target] order using ONLY [Player.moveMediaItem] -- never
+    /** Rearranges the live queue to [target] order using ONLY [Player.moveMediaItem] - never
      * setMediaItems/remove+add, which replace the whole playlist (even an "unchanged" current
      * item) and made ExoPlayer briefly re-buffer/re-seek it: an audible stutter, and the scrubber
      * visibly snapping to 0 before jumping back to the real position. moveMediaItem is documented
-     * as a pure Timeline-metadata operation -- including for the currently playing item -- so
+     * as a pure Timeline-metadata operation - including for the currently playing item - so
      * this never touches decode/playback state or calls seekTo at all; position and playback
      * continue completely uninterrupted through the whole reorder. */
     private fun reorderTo(player: Player, target: List<MediaItem>) {

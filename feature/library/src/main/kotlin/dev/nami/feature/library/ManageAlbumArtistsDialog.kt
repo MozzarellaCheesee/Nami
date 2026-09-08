@@ -27,7 +27,7 @@ import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.model.Artist
 import dev.nami.core.model.ArtistId
 
-/** An album can be credited to more than one artist (compilations, splits, features) -- this
+/** An album can be credited to more than one artist (compilations, splits, features) - this
  * lists everyone currently credited, with a remove button each, plus a way to add more (opens
  * [PickArtistDialog] on top, so several can be added one after another without reopening this). */
 @Composable

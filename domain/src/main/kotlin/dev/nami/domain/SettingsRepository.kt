@@ -2,21 +2,21 @@ package dev.nami.domain
 
 import kotlinx.coroutines.flow.StateFlow
 
-/** Which output route is currently active -- drives per-device profiles (below). Priority when
+/** Which output route is currently active - drives per-device profiles (below). Priority when
  * more than one is physically connected: USB_DAC > BLUETOOTH > WIRED > SPEAKER (a USB DAC or BT
  * headset being connected is a much stronger signal of "this is what's playing" than a wired jack
  * that might just be a charging cable's audio pins). */
 enum class OutputDeviceType { WIRED, BLUETOOTH, USB_DAC, SPEAKER }
 
 /** План.md §22.14 "Гибкий shuffle". TRUE_RANDOM is a flat random permutation (already inherently
- * "no repeats until the cycle ends" -- it reorders the existing queue once, it doesn't resample
+ * "no repeats until the cycle ends" - it reorders the existing queue once, it doesn't resample
  * with replacement). WEIGHTED_BY_STALENESS biases toward tracks that haven't played in a while
  * (Track.lastPlayed) so a shuffle surfaces forgotten tracks more often than ones on repeat.
- * Rating-weighted isn't here yet -- Track has no rating field in this codebase. */
+ * Rating-weighted isn't here yet - Track has no rating field in this codebase. */
 enum class ShuffleMode { TRUE_RANDOM, WEIGHTED_BY_STALENESS }
 
 /** Per-device profile from План.md §16/§20: its own EQ and a volume ceiling, applied automatically
- * when the routed output changes. Crossfeed/ReplayGain-mode aren't per-profile here -- crossfeed
+ * when the routed output changes. Crossfeed/ReplayGain-mode aren't per-profile here - crossfeed
  * doesn't exist as a processor in this codebase yet, and ReplayGain mode is a single global
  * on/off, not something that plausibly differs per output device. */
 data class OutputProfile(val eqGainsDb: List<Float>, val volumeLimitPercent: Int) {
@@ -25,9 +25,9 @@ data class OutputProfile(val eqGainsDb: List<Float>, val volumeLimitPercent: Int
     }
 }
 
-/** План.md §22.11 "Сессии" -- a named bundle of settings applied in one tap ("Учёба"/"Дорога"/
+/** План.md §22.11 "Сессии" - a named bundle of settings applied in one tap ("Учёба"/"Дорога"/
  * "Сон", or the user's own). Deliberately doesn't snapshot the queue itself (that needs real
- * playlist infra to restore reliably) -- covers what the plan explicitly calls out as the other
+ * playlist infra to restore reliably) - covers what the plan explicitly calls out as the other
  * half: "свой EQ, громкость и таймером". Applying one is orchestrated by whatever screen owns
  * both this repository and PlayerRepository (the sleep timer lives on that one, not here). */
 data class Session(
@@ -38,7 +38,7 @@ data class Session(
     val sleepTimerMinutes: Int?,
 )
 
-/** App-wide preferences (SharedPreferences-backed) -- interface lives in :domain so feature
+/** App-wide preferences (SharedPreferences-backed) - interface lives in :domain so feature
  * modules that need a setting (e.g. feature:player gating karaoke) don't have to depend on
  * :data directly. */
 interface SettingsRepository {
@@ -48,13 +48,13 @@ interface SettingsRepository {
     val hideSystemBars: StateFlow<Boolean>
     fun setHideSystemBars(value: Boolean)
 
-    /** Word-level karaoke highlight sweep -- off by default (best-effort timing, not always
+    /** Word-level karaoke highlight sweep - off by default (best-effort timing, not always
      * correct), opt-in from Settings. */
     val karaokeEnabled: StateFlow<Boolean>
     fun setKaraokeEnabled(value: Boolean)
 
     /** Study mode (Beta): translation hidden per line until tapped, quiz entry point in the
-     * vocabulary screen. Off by default, same reasoning as karaoke -- opt-in, not fully polished. */
+     * vocabulary screen. Off by default, same reasoning as karaoke - opt-in, not fully polished. */
     val studyModeEnabled: StateFlow<Boolean>
     fun setStudyModeEnabled(value: Boolean)
 
@@ -72,7 +72,7 @@ interface SettingsRepository {
     val doubleTapArtworkAction: StateFlow<GestureAction>
     fun setDoubleTapArtworkAction(action: GestureAction)
 
-    /** Этап 4's parametric EQ (Beta) -- off by default: it sits directly in the path of every
+    /** Этап 4's parametric EQ (Beta) - off by default: it sits directly in the path of every
      * second of audio the app plays, so a subtle DSP bug means "everything sounds wrong" rather
      * than "one screen is broken". Bass/mid/treble in dB, ±12 typical range. */
     val eqEnabled: StateFlow<Boolean>
@@ -82,13 +82,13 @@ interface SettingsRepository {
     val eqBandGains: StateFlow<List<Float>>
     fun setEqBandGains(gainsDb: List<Float>)
 
-    /** Bit-perfect USB output (Этап 10, Beta) -- Android 14+'s AudioMixerAttributes API only,
+    /** Bit-perfect USB output (Этап 10, Beta) - Android 14+'s AudioMixerAttributes API only,
      * requires vendor HAL support most devices don't have; off by default and silently falls
      * back to the normal mixed path when the device/DAC can't actually do it. */
     val bitPerfectUsbEnabled: StateFlow<Boolean>
     fun setBitPerfectUsbEnabled(value: Boolean)
 
-    /** ReplayGain-lite (Этап 4, Beta) -- RMS-loudness normalization, not true EBU R128. Off by
+    /** ReplayGain-lite (Этап 4, Beta) - RMS-loudness normalization, not true EBU R128. Off by
      * default, same "sits in every second of audio" reasoning as EQ. */
     val replayGainEnabled: StateFlow<Boolean>
     fun setReplayGainEnabled(value: Boolean)
@@ -97,43 +97,43 @@ interface SettingsRepository {
     val ditherEnabled: StateFlow<Boolean>
     fun setDitherEnabled(value: Boolean)
 
-    /** Fade-out/fade-in "soft cut" between tracks (Этап 4, Beta) -- not a true overlapping mix,
+    /** Fade-out/fade-in "soft cut" between tracks (Этап 4, Beta) - not a true overlapping mix,
      * see CrossfadeController's own doc for why. Off by default. */
     val crossfadeEnabled: StateFlow<Boolean>
     fun setCrossfadeEnabled(value: Boolean)
 
-    /** Этап 6's "умный кроссфейд" (План.md §22.9, Beta) -- only takes effect while
+    /** Этап 6's "умный кроссфейд" (План.md §22.9, Beta) - only takes effect while
      * [crossfadeEnabled] is also on. Skips the crossfade for a track that ends abruptly (loud
      * right up to a hard cut) instead of chopping its ending early; BPM-matching (the other half
-     * of "уместно" from the plan) isn't implemented -- see TrackEndingAnalyzer's own doc. */
+     * of "уместно" from the plan) isn't implemented - see TrackEndingAnalyzer's own doc. */
     val smartCrossfadeEnabled: StateFlow<Boolean>
     fun setSmartCrossfadeEnabled(value: Boolean)
 
-    /** "Усиление воспроизведения" -- flat library-wide boost (0/3/6 dB), independent of
+    /** "Усиление воспроизведения" - flat library-wide boost (0/3/6 dB), independent of
      * per-track ReplayGain. */
     val playbackGainDb: StateFlow<Float>
     fun setPlaybackGainDb(value: Float)
 
-    /** Hi-Fi (Beta) -- "shortest path" output: while it's on, the custom DSP AudioSink is never
+    /** Hi-Fi (Beta) - "shortest path" output: while it's on, the custom DSP AudioSink is never
      * built at all, so EQ/ReplayGain/dither/усиление are bypassed and decoded samples reach
      * AudioTrack untouched by this app. It cannot promise bit-perfect (AudioFlinger still mixes
-     * and may resample -- only the separate bit-perfect USB path can skip that, and only on
+     * and may resample - only the separate bit-perfect USB path can skip that, and only on
      * hardware that supports it); what it does promise is that Nami itself adds nothing. Off by
      * default so the DSP toggles keep working as-is unless the user asks for the direct path. */
     val hiFiEnabled: StateFlow<Boolean>
     fun setHiFiEnabled(value: Boolean)
 
-    /** Now Playing's "night mode" pill -- a warmer, dimmer ambient backdrop for late-night
+    /** Now Playing's "night mode" pill - a warmer, dimmer ambient backdrop for late-night
      * listening (not a separate app-wide theme; scoped to that one screen's own blurred-artwork
      * background). Persisted so it's remembered across sessions like every other toggle here. */
     val nightModeEnabled: StateFlow<Boolean>
     fun setNightModeEnabled(value: Boolean)
 
-    /** Дизайн.md "Режим AMOLED" -- чистый #000000 вместо ink-900, поверх тёмной темы. */
+    /** Дизайн.md "Режим AMOLED" - чистый #000000 вместо ink-900, поверх тёмной темы. */
     val amoledEnabled: StateFlow<Boolean>
     fun setAmoledEnabled(value: Boolean)
 
-    /** Этап 4's "профили по устройству вывода" (Beta) -- off by default, same reasoning as EQ:
+    /** Этап 4's "профили по устройству вывода" (Beta) - off by default, same reasoning as EQ:
      * auto-switching gains/volume the instant a route changes is exactly the kind of thing that
      * needs to be opt-in, not something that surprises a user mid-listen. */
     val outputProfilesEnabled: StateFlow<Boolean>
@@ -144,7 +144,7 @@ interface SettingsRepository {
     val outputProfiles: StateFlow<Map<OutputDeviceType, OutputProfile>>
     fun setOutputProfile(type: OutputDeviceType, profile: OutputProfile)
 
-    /** STANDS4 lyrics fallback credentials -- each user's own (Settings -> Лирика), not a key
+    /** STANDS4 lyrics fallback credentials - each user's own (Settings -> Лирика), not a key
      * shared across every install: the free tier is 100 requests/day per account. Blank means
      * "not configured", the fallback silently no-ops (LRCLIB keeps working regardless). */
     val stands4Uid: StateFlow<String>
@@ -160,7 +160,7 @@ interface SettingsRepository {
     fun recordStands4Request()
 
     /** "Умное возобновление" (План.md §22.10) needs to survive the process actually dying, not
-     * just the app being backgrounded -- a paused, non-foreground PlaybackService is killable by
+     * just the app being backgrounded - a paused, non-foreground PlaybackService is killable by
      * Android at any time, wiping ExoPlayer's whole in-memory queue. Persisted here so a cold
      * start can restore the WHOLE queue (not just the one playing track) and seek to the exact
      * position (never auto-plays) if the pause was recent enough. [lastPlaybackQueueTrackIds] is
@@ -171,17 +171,17 @@ interface SettingsRepository {
     val lastPlaybackPausedAt: StateFlow<Long>
     fun setLastPlayback(queueTrackIds: List<String>, queueIndex: Int, positionMs: Long, pausedAt: Long)
 
-    /** П.md §2 "Режим наблюдения за папкой" -- SAF tree URIs to keep re-scanning. No true
-     * background inotify-style watch (Android has none for SAF trees) -- rescanned on cold start
+    /** П.md §2 "Режим наблюдения за папкой" - SAF tree URIs to keep re-scanning. No true
+     * background inotify-style watch (Android has none for SAF trees) - rescanned on cold start
      * and via a manual "Обновить" action instead. */
     val watchedFolders: StateFlow<List<String>>
     fun addWatchedFolder(treeUri: String)
     fun removeWatchedFolder(treeUri: String)
 
-    /** DeepL API key for lyrics translation (Settings -> Лирика) -- each user's own free-tier
+    /** DeepL API key for lyrics translation (Settings -> Лирика) - each user's own free-tier
      * key (500k chars/month), not shared across installs. Blank means "not configured", the
      * on-device MLKit translator (worse quality, esp. JA->RU, but keyless/offline) is used
-     * instead -- see LyricsRepositoryImpl.translateToRussian. */
+     * instead - see LyricsRepositoryImpl.translateToRussian. */
     val deeplApiKey: StateFlow<String>
     fun setDeeplApiKey(value: String)
 

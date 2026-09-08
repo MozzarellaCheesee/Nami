@@ -7,7 +7,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 
-/** Minimal client for lrclib.net's public API -- no key, no account, exactly the kind of
+/** Minimal client for lrclib.net's public API - no key, no account, exactly the kind of
  * network use План.md calls out as fine to do automatically (unlike telemetry/ads/accounts).
  * No HTTP library added for this: one GET + a JSON object is exactly what HttpURLConnection and
  * the SDK's bundled org.json already do. */
@@ -17,7 +17,7 @@ object LrcLibClient {
 
     /** Exact lookup first (fast, most likely to hit for a well-tagged file); search is the
      * fallback for anything that doesn't title/artist/duration-match precisely. Returns raw LRC
-     * text (`syncedLyrics`) only -- plain-only results aren't usable by the synced screen yet. */
+     * text (`syncedLyrics`) only - plain-only results aren't usable by the synced screen yet. */
     fun findSyncedLyrics(title: String, artistName: String?, durationMs: Long): String? {
         val durationSec = (durationMs / 1000).toInt()
         get(title, artistName, durationSec)?.let { return it }

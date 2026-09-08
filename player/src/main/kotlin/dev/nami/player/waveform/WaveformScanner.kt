@@ -5,7 +5,7 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import kotlin.math.sqrt
 
-/** Real per-track waveform for the Now Playing scrubber -- decodes the whole file once (same
+/** Real per-track waveform for the Now Playing scrubber - decodes the whole file once (same
  * MediaCodec/MediaExtractor approach as ReplayGainScanner) and reduces it to [BAR_COUNT] bucket
  * heights, so the scrubber shows this track's actual loudness contour instead of a plausible-
  * looking fake shape. */
@@ -16,9 +16,9 @@ object WaveformScanner {
     /** One RMS-loudness value per bucket (0f..1f, normalized to the track's own loudest bucket),
      * [BAR_COUNT] of them spanning the whole track. RMS, not peak: most modern masters sit at or
      * near full-scale peak almost everywhere (the loudness-war look), which made a peak-based
-     * scan draw a near-flat "brick" -- RMS tracks perceived loudness instead, which actually
+     * scan draw a near-flat "brick" - RMS tracks perceived loudness instead, which actually
      * varies through a track's quiet/loud sections and looks like a real waveform. Null on any
-     * decode failure -- fails closed, caller falls back to a placeholder shape. */
+     * decode failure - fails closed, caller falls back to a placeholder shape. */
     fun scan(path: String): List<Float>? {
         val extractor = MediaExtractor()
         return try {
@@ -64,7 +64,7 @@ object WaveformScanner {
                         val outputBuffer = codec.getOutputBuffer(outputIndex)
                         if (outputBuffer != null) {
                             // Bucket index from the buffer's own presentation time, not a running
-                            // sample count -- keeps this correct regardless of channel count or
+                            // sample count - keeps this correct regardless of channel count or
                             // whether every bucket gets exactly the same number of samples.
                             val fraction = (bufferInfo.presentationTimeUs.toDouble() / durationUs).coerceIn(0.0, 1.0)
                             val bucket = (fraction * (BAR_COUNT - 1)).toInt().coerceIn(0, BAR_COUNT - 1)
@@ -91,7 +91,7 @@ object WaveformScanner {
             val maxRms = rms.max()
             if (maxRms <= 0.0) return null
             // Normalize to the track's own loudest bucket (not absolute 0dBFS) so a quiet track
-            // still fills the scrubber. No gamma curve on top -- RMS values already span a real
+            // still fills the scrubber. No gamma curve on top - RMS values already span a real
             // range track-to-track (unlike peak), a compression curve here just flattens that
             // range back out the same way the old sqrt() did.
             val normalized = rms.map { (it / maxRms).toFloat().coerceIn(0.05f, 1f) }
@@ -103,7 +103,7 @@ object WaveformScanner {
         }
     }
 
-    /** 5-tap weighted moving average -- takes the edge off bucket-to-bucket jaggedness (adjacent
+    /** 5-tap weighted moving average - takes the edge off bucket-to-bucket jaggedness (adjacent
      * buckets can land on either side of a hard transient/silence boundary and swing wildly)
      * without eroding the track's actual loud/quiet contour, which a heavier smoothing window or
      * another gamma curve would. Edge buckets use a shorter, still-centered window instead of

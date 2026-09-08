@@ -50,7 +50,7 @@ class SettingsViewModel @Inject constructor(
         appSettingsRepository.setStudyModeEnabled(value)
     }
 
-    /** [uri] is a content:// pick -- not a stable path, so the font file is copied into app
+    /** [uri] is a content:// pick - not a stable path, so the font file is copied into app
      * storage once and only the local copy's path is kept. */
     fun pickLyricsFont(uri: Uri) {
         viewModelScope.launch {

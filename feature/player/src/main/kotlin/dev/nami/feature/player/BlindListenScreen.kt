@@ -71,7 +71,7 @@ fun BlindListenScreen(onBack: () -> Unit, viewModel: BlindListenViewModel = hilt
                             AsyncImage(model = track.albumArtworkPath, contentDescription = null, modifier = Modifier.fillMaxSize())
                         } else {
                             // A text glyph (even ASCII "?") sits off-center within its own line
-                            // box depending on font metrics -- an Icon is drawn to fill its exact
+                            // box depending on font metrics - an Icon is drawn to fill its exact
                             // bounding box, no font-dependent guesswork needed to center it.
                             Icon(
                                 Icons.Outlined.QuestionMark,

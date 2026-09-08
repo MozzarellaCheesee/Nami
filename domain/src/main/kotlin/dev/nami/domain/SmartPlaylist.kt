@@ -1,6 +1,6 @@
 package dev.nami.domain
 
-/** П.md §20 "умные плейлисты" -- fields a rule can filter on. Deliberately limited to what's
+/** П.md §20 "умные плейлисты" - fields a rule can filter on. Deliberately limited to what's
  * actually queryable from Track today: no BPM/key rule (would need every track scanned first,
  * see BpmKeyAnalyzer's lazy-scan-on-play caching), no rating (no Track.rating field exists in
  * this codebase). HAS_LYRICS checks for a sidecar .lrc file at evaluation time (not a DB column --

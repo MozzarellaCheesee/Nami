@@ -105,7 +105,7 @@ private data class DragState(
     val grabOffsetPx: Float,
 )
 
-// The same track can legitimately appear more than once in the queue -- keying purely by track id
+// The same track can legitimately appear more than once in the queue - keying purely by track id
 // then crashes LazyColumn with "Key ... was already used". Only duplicates get a disambiguating
 // suffix, so the common case keeps a fully stable, position-independent key, which is what lets
 // animateItem() recognise "same item, now elsewhere" and animate the move.
@@ -126,7 +126,7 @@ fun QueueScreen(
 ) {
     val queue by viewModel.queue.collectAsState()
     // withIndex() keeps each row's real index into `upcoming`, so move/remove stay correct even if
-    // manual and context items ever interleave -- no "manual.size" offset arithmetic to get wrong.
+    // manual and context items ever interleave - no "manual.size" offset arithmetic to get wrong.
     val manual = queue.upcoming.withIndex().filter { it.value.origin == QueueOrigin.MANUAL }
     val context = queue.upcoming.withIndex().filter { it.value.origin == QueueOrigin.CONTEXT }
     val manualKeys = dedupedKeys(manual.map { it.value }, "manual")
@@ -175,14 +175,14 @@ fun QueueScreen(
 
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     // Swipe-to-dismiss used to manually animate dragOffsetY to screenHeightPx and only THEN call
-    // onBack() -- that coroutine sometimes never reached onBack() at all (composable
+    // onBack() - that coroutine sometimes never reached onBack() at all (composable
     // disposed/recomposed mid-animation cancels it), leaving showQueue stuck true forever: the
     // screen sat fully slid off-screen but never actually closed, so reopening was a silent
     // no-op. onBack() now always fires immediately and synchronously; dragOffsetY resets to 0 in
     // the same breath so only the outer AnimatedVisibility's own exit transition (in
     // NamiNavHost) animates the slide-down, instead of two competing animations.
     fun dismiss() {
-        // Not resetting dragOffsetY here -- doing so snapped the screen back to the top for one
+        // Not resetting dragOffsetY here - doing so snapped the screen back to the top for one
         // frame (visible as a jump/teleport) before AnimatedVisibility's own exit transition
         // started sliding it back down from 0. Leaving it wherever the swipe left it means the
         // screen is already most of the way off-screen when the exit transition takes over.
@@ -190,7 +190,7 @@ fun QueueScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize().offset { IntOffset(0, dragOffsetY.roundToInt()) }) {
-        // Same ambient blurred-artwork backdrop as Now Playing/Lyrics -- one consistent look for
+        // Same ambient blurred-artwork backdrop as Now Playing/Lyrics - one consistent look for
         // every screen stacked over the player, not a flat Ink900 fill just for this one.
         val backgroundArtworkPath = queue.nowPlaying?.artworkPath
         if (backgroundArtworkPath != null) {
@@ -222,7 +222,7 @@ fun QueueScreen(
             ),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
-            // Straight to onBack(), not dismiss() -- see LyricsScreen's identical header button
+            // Straight to onBack(), not dismiss() - see LyricsScreen's identical header button
             // for why (dismiss()'s slide-then-flip coroutine could leave the screen stuck open).
             IconButton(onClick = { onBack() }) {
                 Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
@@ -238,7 +238,7 @@ fun QueueScreen(
 
         // Commits the reorder exactly once, on release. The drop slot is read from the list's own
         // layoutInfo (nearest same-section row to the floating row's centre) instead of from any
-        // accumulated pixel bookkeeping -- autoscroll therefore needs no compensation term at all.
+        // accumulated pixel bookkeeping - autoscroll therefore needs no compensation term at all.
         fun commitDrop(d: DragState) {
             val map = refsState.value
             val floatCenter = pointerY.floatValue - d.grabOffsetPx + d.heightPx / 2f
@@ -261,11 +261,11 @@ fun QueueScreen(
                     .fillMaxSize()
                     // The reorder gesture lives HERE, on the list's parent, and never on a row:
                     // a row can be disposed by LazyColumn mid-drag, which silently kills any
-                    // pointerInput it owns (no onDragEnd, no onDragCancel -- the old bug where
+                    // pointerInput it owns (no onDragEnd, no onDragCancel - the old bug where
                     // autoscroll kept running and the row stuck). This node outlives every row.
                     // It works on the Initial pass so it can claim the gesture before the list's
                     // own scroll and before SwipeToDismissBox, and it only claims after a vertical
-                    // slop inside the handle strip -- horizontal swipes are never consumed, so
+                    // slop inside the handle strip - horizontal swipes are never consumed, so
                     // swipe-to-remove (and its yellow background) stay completely untouched by a
                     // vertical drag.
                     .pointerInput(Unit) {
@@ -368,7 +368,7 @@ fun QueueScreen(
                 }
             }
 
-            // The dragged row, drawn as a sibling on top of the whole list -- not as a LazyColumn
+            // The dragged row, drawn as a sibling on top of the whole list - not as a LazyColumn
             // item with a zIndex, which is what used to put it under its neighbours and made it
             // vanish when the item got recycled. Its position is pure finger position, so it is
             // pinned 1:1 with no drift, whatever the list does underneath.
@@ -412,7 +412,7 @@ private fun QueueTrackInfo(item: QueueItem, modifier: Modifier = Modifier) {
     }
 }
 
-/** The row's visuals only -- no gestures. Shared by the in-list row and the floating dragged copy. */
+/** The row's visuals only - no gestures. Shared by the in-list row and the floating dragged copy. */
 @Composable
 private fun QueueRowContent(
     item: QueueItem,
@@ -445,7 +445,7 @@ private fun QueueRowContent(
 
 // One row style for both sections. Removal is swipe-left only (no delete button); reordering is
 // handled entirely by the parent (see the pointerInput on the LazyColumn), so this composable owns
-// no drag state -- being recycled mid-drag is harmless. While its item is the one being dragged it
+// no drag state - being recycled mid-drag is harmless. While its item is the one being dragged it
 // just renders transparent, leaving the gap the floating copy came out of.
 @Composable
 private fun QueueRow(

@@ -10,7 +10,7 @@ import androidx.compose.ui.unit.sp
  * Три гарнитуры по Дизайн.md ("Типографика"): Archivo для интерфейса на латинице, Zen Kaku
  * Gothic New для японского интерфейса, Shippori Mincho только на экране лирики.
  *
- * Archivo идёт тремя статичными начертаниями (400/500/600) вместо переменного шрифта -- ближайшее
+ * Archivo идёт тремя статичными начертаниями (400/500/600) вместо переменного шрифта - ближайшее
  * из трёх берётся и для 450/550 из шкалы, спорить о точных 450/550 в статичном шрифте бессмысленно.
  */
 object NamiFonts {
@@ -25,7 +25,7 @@ object NamiFonts {
         Font(R.font.zen_kaku_gothic_new_medium, FontWeight.Medium),
     )
 
-    /** Только для экрана лирики -- см. lyricsFontPath в SettingsRepository для
+    /** Только для экрана лирики - см. lyricsFontPath в SettingsRepository для
      * пользовательского оверрайда поверх этого дефолта. */
     val ShipporiMincho = FontFamily(
         Font(R.font.shippori_mincho_regular, FontWeight.Normal),
@@ -35,7 +35,7 @@ object NamiFonts {
 
 /** Шкала из Дизайн.md ("Типографика"): размер / начертание / межстрочный / трекинг, один
  * [TextStyle] на роль. Табличные цифры (технические данные) включены через [FontFeatureSettings]
- * на стороне вызова, где это применимо -- сама гарнитура не задаёт их автоматически. */
+ * на стороне вызова, где это применимо - сама гарнитура не задаёт их автоматически. */
 object NamiType {
     val ScreenTitle = TextStyle(
         fontFamily = NamiFonts.Archivo,

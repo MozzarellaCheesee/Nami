@@ -17,8 +17,8 @@ private const val WINDOW_DAYS = 120
 private const val TOP_WEEK_DAYS = 7
 private const val TOP_TRACKS_LIMIT = 5
 
-/** B1 "Статистика" (План.md §23.22) -- first, minimum-scope slice: the contribution grid ("готово"
- * criterion is exactly this one). Weekly-top/heatmap-by-hour are follow-ups, not built yet -- no
+/** B1 "Статистика" (План.md §23.22) - first, minimum-scope slice: the contribution grid ("готово"
+ * criterion is exactly this one). Weekly-top/heatmap-by-hour are follow-ups, not built yet - no
  * PlayHistory field exists for time-of-day (only playedAt, which a heatmap could derive later, and
  * no "top tracks this week" query beyond what's already re-derivable from the same table). */
 @HiltViewModel

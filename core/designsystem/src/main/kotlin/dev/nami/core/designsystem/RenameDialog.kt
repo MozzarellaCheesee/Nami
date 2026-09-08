@@ -11,7 +11,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 
-/** Shared rename prompt -- used for tracks/albums/artists/playlists alike so every "rename this"
+/** Shared rename prompt - used for tracks/albums/artists/playlists alike so every "rename this"
  * flow in the app looks and behaves identically instead of each feature module rolling its own. */
 @Composable
 fun RenameDialog(

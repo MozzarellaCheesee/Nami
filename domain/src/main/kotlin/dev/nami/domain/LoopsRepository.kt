@@ -12,7 +12,7 @@ data class SavedLoop(
     val createdAt: Long,
 )
 
-/** Named, persisted A-B loops (План.md §22.2) -- distinct from [PlayerRepository.activeLoop],
+/** Named, persisted A-B loops (План.md §22.2) - distinct from [PlayerRepository.activeLoop],
  * which is the live "looping right now" state. This is just the saved presets a user can
  * re-activate later. */
 interface LoopsRepository {

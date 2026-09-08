@@ -78,7 +78,7 @@ fun MiniPlayer(
     // "stuck" and unresponsive. Reset whenever the playing track identity changes.
     androidx.compose.runtime.LaunchedEffect(queue.nowPlaying?.id) { dragOffsetY = 0f }
 
-    // 3-page window: 0 = previous, 1 = current, 2 = next -- see the matching comment in
+    // 3-page window: 0 = previous, 1 = current, 2 = next - see the matching comment in
     // NowPlayingScreen for why this replaced a hand-rolled offset carousel.
     val pagerState = rememberPagerState(initialPage = 1) { 3 }
     val autoAdvanceSignal by viewModel.autoAdvanceSignal.collectAsState()
@@ -90,7 +90,7 @@ fun MiniPlayer(
 
     // The bar's own reserved height shrinks in lockstep with the downward drag (instead of
     // just visually sliding via offset while the Column keeps reserving a full 60dp slot for
-    // it) so the bottom nav bar rises to close the gap in real time -- no leftover strip of
+    // it) so the bottom nav bar rises to close the gap in real time - no leftover strip of
     // background color where the bar used to be, and nothing else visible "flying" through it.
     val fullHeightPx = with(density) { 60.dp.toPx() }
     val reservedHeightPx = (fullHeightPx - dragOffsetY.coerceAtLeast(0f)).coerceIn(0f, fullHeightPx)
@@ -137,7 +137,7 @@ fun MiniPlayer(
                         }
                         dragOffsetY > dismissThresholdPx || velocity > 2000f -> {
                             // Slide fully off-screen (finger-tracked while dragging, via the
-                            // offset above) before stopping playback -- stopping clears
+                            // offset above) before stopping playback - stopping clears
                             // queue.nowPlaying, which makes this composable disappear, so the
                             // stop has to happen only once it's already off the visible area.
                             animate(dragOffsetY, screenHeightPx) { value, _ -> dragOffsetY = value }
@@ -150,7 +150,7 @@ fun MiniPlayer(
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // 0 = previous, 1 = current, 2 = next -- HorizontalPager owns its own horizontal drag
+        // 0 = previous, 1 = current, 2 = next - HorizontalPager owns its own horizontal drag
         // here, so it lives inside the Row without conflicting with the Row's own vertical one.
         HorizontalPager(
             state = pagerState,

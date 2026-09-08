@@ -34,7 +34,7 @@ interface ArtistDao {
     fun pagingSource(): PagingSource<Int, ArtistWithPhoto>
 
     // Same shape as AlbumDao.observeRecentAlbums (also just an ORDER BY, not a real "recently
-    // added" timestamp) -- a short preview row on the Tracks tab overview, "Всё" opens the full
+    // added" timestamp) - a short preview row on the Tracks tab overview, "Всё" opens the full
     // Artists tab which is this same query without the LIMIT.
     @Query(
         """
@@ -74,7 +74,7 @@ interface ArtistDao {
     @Query("UPDATE artists SET name = :name, sortName = :name WHERE id = :id")
     suspend fun updateName(id: String, name: String)
 
-    // Unconditional -- unlike setPhotoPath (import's "only if null" writer), this is for the
+    // Unconditional - unlike setPhotoPath (import's "only if null" writer), this is for the
     // user explicitly replacing an artist's photo.
     @Query("UPDATE artists SET photoPath = :path WHERE id = :id")
     suspend fun updatePhotoPath(id: String, path: String)

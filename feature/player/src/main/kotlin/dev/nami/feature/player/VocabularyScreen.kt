@@ -35,7 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
 
-/** План.md's "свой словарик" -- words tapped in the lyrics screen, kept with their line/track,
+/** План.md's "свой словарик" - words tapped in the lyrics screen, kept with their line/track,
  * exportable as CSV for Anki import. */
 @Composable
 fun VocabularyScreen(
@@ -62,7 +62,7 @@ fun VocabularyScreen(
                     Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
                 }
                 Text(text = "Мой словарик", color = NamiColors.Paper100, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                // Study mode (Beta) gates the quiz entry point -- the quiz itself is part of
+                // Study mode (Beta) gates the quiz entry point - the quiz itself is part of
                 // "режим изучения", not a standalone always-on feature.
                 if (studyModeEnabled) {
                     IconButton(onClick = { showQuiz = true }) {

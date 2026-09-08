@@ -34,7 +34,7 @@ data class AudioTractUiState(
     val smartCrossfadeEnabled: Boolean = false,
 )
 
-/** Feeds both План.md's 4.6 "Аудиотракт" and 4.7 "Эквалайзер" screens -- same underlying state,
+/** Feeds both План.md's 4.6 "Аудиотракт" and 4.7 "Эквалайзер" screens - same underlying state,
  * split into two screens because that's how the design mock has it. */
 @HiltViewModel
 class AudioTractViewModel @Inject constructor(
@@ -43,7 +43,7 @@ class AudioTractViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
-    // Was filterIsInstance<Playing>() -- which never emits at all while nothing is playing, so
+    // Was filterIsInstance<Playing>() - which never emits at all while nothing is playing, so
     // the whole combine() below stayed stuck on its initial value forever and every toggle looked
     // like it silently reverted (it was actually saved fine, the screen just never redrew). Falls
     // back to a null track instead of blocking, so settings work regardless of playback state.

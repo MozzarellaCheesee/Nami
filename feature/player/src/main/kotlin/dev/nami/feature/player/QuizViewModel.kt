@@ -22,12 +22,12 @@ data class QuizUiState(
     val selectedIndex: Int? = null,
     val correctCount: Int = 0,
     val totalCount: Int = 0,
-    /** Fewer than 4 saved words -- not enough to build a 4-choice question. */
+    /** Fewer than 4 saved words - not enough to build a 4-choice question. */
     val notEnoughWords: Boolean = false,
 )
 
 /** План.md's "режим изучения ... квиз «вставь пропущенное слово в строку» по трекам, которые
- * слушаешь чаще всего" -- "чаще всего" would need per-track play-count join this pass didn't
+ * слушаешь чаще всего" - "чаще всего" would need per-track play-count join this pass didn't
  * add; questions are instead drawn from the whole saved vocabulary (already scoped to lines/
  * tracks the user cared enough about to save a word from), which is the same practical target
  * without a separate query. */
@@ -55,7 +55,7 @@ class QuizViewModel @Inject constructor(
     fun nextQuestion() {
         val target = pool.random()
         // The blanked prompt only makes sense if the word actually appears in its own context
-        // line -- falls back to a plain "translate this word" prompt otherwise (contextLine was
+        // line - falls back to a plain "translate this word" prompt otherwise (contextLine was
         // saved from lyrics text, but base-form vs. surface-form conjugation can mismatch).
         val prompt = if (target.contextLine.contains(target.word)) {
             target.contextLine.replace(target.word, "___")

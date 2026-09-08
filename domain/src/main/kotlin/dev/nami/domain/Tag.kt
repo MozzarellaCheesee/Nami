@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.Flow
 @JvmInline
 value class TagId(val value: String)
 
-/** П.md §3 "модель данных" -- user-defined color-coded tags, orthogonal to genre: a track can
+/** П.md §3 "модель данных" - user-defined color-coded tags, orthogonal to genre: a track can
  * carry several, genre stays a single string. */
 data class Tag(val id: TagId, val name: String, val colorArgb: Int)
 

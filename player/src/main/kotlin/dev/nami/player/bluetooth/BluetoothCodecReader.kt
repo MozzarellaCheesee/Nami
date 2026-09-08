@@ -6,7 +6,7 @@ import android.media.AudioManager
 
 /** Этап 4's Bluetooth output badge for the Аудиотракт screen's "Вывод" node. The actual codec
  * name (SBC/aptX/LDAC/...) lives behind BluetoothA2dp.getCodecStatus(), a @SystemApi hidden method
- * a regular app can't call without being a privileged system app -- not reachable from here, so
+ * a regular app can't call without being a privileged system app - not reachable from here, so
  * this only reports the real, publicly-visible fact: whether output is currently routed to a
  * Bluetooth A2DP device at all, via AudioManager (no runtime permission needed for that much). */
 object BluetoothCodecReader {

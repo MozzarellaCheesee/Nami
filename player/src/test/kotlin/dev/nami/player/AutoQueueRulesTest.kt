@@ -59,7 +59,7 @@ class AutoQueueRulesTest {
 
         val result = applyAutoQueueRules(tracks)
 
-        // Nothing else exists to swap in -- the violation is left rather than losing the track.
+        // Nothing else exists to swap in - the violation is left rather than losing the track.
         assertEquals(listOf("t1", "t2"), result.map { it.id.value })
     }
 

@@ -6,7 +6,7 @@ import android.media.MediaFormat
 import kotlin.math.log10
 import kotlin.math.sqrt
 
-/** Этап 4's ReplayGain -- NOT true EBU R128 (no K-weighting, no gating, no true-peak limiting),
+/** Этап 4's ReplayGain - NOT true EBU R128 (no K-weighting, no gating, no true-peak limiting),
  * just RMS loudness over the whole decoded track vs a -18dBFS target. Runs once per track (result
  * cached in Track.replayGainDb), decodes with the platform's own MediaCodec so it costs nothing
  * extra beyond what playback already uses. */
@@ -15,8 +15,8 @@ object ReplayGainScanner {
     private const val TARGET_DBFS = -18.0
 
     /** Returns a gain in dB to apply so the track's RMS loudness lands near TARGET_DBFS, clamped
-     * to +/-12dB (matches the EQ's own range -- anything further off is more likely a scan
-     * artifact than a real mix difference). Null on any decode failure -- fails closed, silent,
+     * to +/-12dB (matches the EQ's own range - anything further off is more likely a scan
+     * artifact than a real mix difference). Null on any decode failure - fails closed, silent,
      * same as BitPerfectUsbController. */
     fun scan(path: String): Float? {
         val extractor = MediaExtractor()
@@ -60,7 +60,7 @@ object ReplayGainScanner {
                         val outputBuffer = codec.getOutputBuffer(outputIndex)
                         if (outputBuffer != null) {
                             val shortBuffer = outputBuffer.asShortBuffer()
-                            // ponytail: PCM 16-bit only -- MediaCodec's default decoder output
+                            // ponytail: PCM 16-bit only - MediaCodec's default decoder output
                             // format on Android; good enough for a loudness estimate regardless
                             // of the source file's own bit depth.
                             while (shortBuffer.hasRemaining()) {

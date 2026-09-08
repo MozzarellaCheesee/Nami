@@ -99,17 +99,17 @@ fun ArtistDetailScreen(
     val topTracks = remember(uiState.tracks) { uiState.tracks.sortedByDescending { it.playCount }.take(TOP_TRACKS_LIMIT) }
     val visibleAlbums = uiState.albums.take(ALBUMS_COLLAPSED_LIMIT)
     // The artist entity's own photo can be unset (only backfilled for libraries imported after
-    // that fallback existed) -- fall back to any album cover so the header/avatar isn't just
+    // that fallback existed) - fall back to any album cover so the header/avatar isn't just
     // empty for every artist imported before then.
     val effectivePhotoPath = uiState.artist?.photoPath ?: uiState.albums.firstOrNull()?.artworkPath
 
     val density = LocalDensity.current
     // Square photo (matches the avatar's own aspectRatio elsewhere), not a fixed 280dp that reads
-    // as a wide rectangle on any screen wider than that -- see AlbumDetailScreen's identical fix.
+    // as a wide rectangle on any screen wider than that - see AlbumDetailScreen's identical fix.
     val headerMaxHeight = LocalConfiguration.current.screenWidthDp.dp
     val headerState = rememberCollapsingHeaderState(maxHeight = headerMaxHeight, minHeight = HEADER_MIN_HEIGHT)
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-    // Only two resting states -- fully expanded or fully collapsed. Without this, releasing
+    // Only two resting states - fully expanded or fully collapsed. Without this, releasing
     // mid-scroll left the header (and the sliding avatar/photo, whose size/shape/position are all
     // driven by collapseFraction) stuck halfway, looking like a torn, half-morphed image.
     androidx.compose.runtime.LaunchedEffect(listState.isScrollInProgress) {
@@ -119,7 +119,7 @@ fun ArtistDetailScreen(
     // Layering (bottom to top) is what makes this work: the floating photo first, the header's
     // fade gradient on top of it (so the fade is always visible against the photo, not against
     // nothing), the actual scrolling content next (transparent header-height spacer + opaque
-    // body), and the back button last so nothing -- least of all the sliding photo -- ever
+    // body), and the back button last so nothing - least of all the sliding photo - ever
     // renders over it.
     var rootOffset by remember { mutableStateOf(Offset.Zero) }
     var avatarSlotOffset by remember { mutableStateOf(Offset.Zero) }
@@ -147,7 +147,7 @@ fun ArtistDetailScreen(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.fillMaxWidth().basicMarquee(iterations = Int.MAX_VALUE),
                     )
-                    // Avatar slot plus Play/overflow laid out in a real Row next to it -- see
+                    // Avatar slot plus Play/overflow laid out in a real Row next to it - see
                     // AlbumDetailScreen's identical block for why (manual offset/size math tied
                     // to the cover's own shrink, not the actual on-screen header height, drew the
                     // buttons over the title mid-scroll).
@@ -167,7 +167,7 @@ fun ArtistDetailScreen(
                                     .padding(start = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                // Play uses topTracks -- the list actually rendered below -- not
+                                // Play uses topTracks - the list actually rendered below - not
                                 // the raw uiState.tracks (unsorted, all of them): that used to
                                 // start playback at a track other than whatever the user was
                                 // looking at, since the visible rows are sorted by play count.
@@ -278,13 +278,13 @@ fun ArtistDetailScreen(
         // the album-art radius convention) sitting at the very top (0,0); at progress 1 it's a
         // 40dp circle sitting exactly in the reserved slot below. Both endpoints and every point
         // between are driven by the same collapseFraction already resizing the header itself.
-        // Drawn AFTER the content column (not before) -- that column's own opaque background
+        // Drawn AFTER the content column (not before) - that column's own opaque background
         // would otherwise paint over the image the moment it slides down past the header line,
         // which is exactly where its landing slot lives.
         run {
             // Bleeds the fully-expanded cover up past this screen's own top edge, which
             // NamiNavHost's ambient statusBarsPadding()+displayCutoutPadding() pushed down by
-            // rootOffset.y -- otherwise that gap (the cutout's share of it doesn't collapse to 0
+            // rootOffset.y - otherwise that gap (the cutout's share of it doesn't collapse to 0
             // just because the status bar is hidden) shows as an Ink900 strip above the image.
             // rootOffset.y is the real measured value, not a guess at which inset composition
             // locals are or aren't already consumed by the ancestor padding. Tapers to 0 as the
@@ -301,7 +301,7 @@ fun ArtistDetailScreen(
                 .clip(RoundedCornerShape(cornerRadiusDp.dp))
             if (effectivePhotoPath != null) {
                 // Decode size is pinned to the header's max dimensions regardless of the
-                // currently animated display size -- Modifier.size() changing every scroll frame
+                // currently animated display size - Modifier.size() changing every scroll frame
                 // otherwise makes Coil re-resolve (and often re-decode) the target size on every
                 // frame, which showed up as visible tearing/ghosting mid-slide. Compose just
                 // scales the one decoded bitmap to fit the animated size; that's a cheap redraw,
@@ -319,7 +319,7 @@ fun ArtistDetailScreen(
                     )
                     // The gradient used to be a separate Box sized off the header's own
                     // (independently animated) height, which fell out of sync with the photo's
-                    // real position/size mid-slide -- the photo visibly poked out past the
+                    // real position/size mid-slide - the photo visibly poked out past the
                     // gradient's edge. Sharing slideModifier keeps them pixel-identical always.
                     // Fades out entirely by the time it's a small circle, where a gradient
                     // wouldn't read as anything but a smudge.
@@ -331,7 +331,7 @@ fun ArtistDetailScreen(
                     )
                 }
             } else {
-                // No photo anywhere to fall back to -- still slide/shrink a plain placeholder so
+                // No photo anywhere to fall back to - still slide/shrink a plain placeholder so
                 // the reserved slot isn't left visually empty.
                 Box(modifier = slideModifier.background(NamiColors.Ink700))
             }
@@ -340,7 +340,7 @@ fun ArtistDetailScreen(
             // the smaller inline pair next to the avatar slot once it's mostly a circle (see the
             // Row next to the avatar Spacer above).
             if (progress < 0.6f) {
-                // Height tracks headerState.heightPx -- the ACTUAL current on-screen header
+                // Height tracks headerState.heightPx - the ACTUAL current on-screen header
                 // height, not headerMaxHeightPx (constant) or currentWidthPx/currentHeightPx (the
                 // cover's own different shrink curve). Its bottom edge lands exactly where the
                 // title Column starts, so this can never draw over the title mid-scroll. See
@@ -349,11 +349,11 @@ fun ArtistDetailScreen(
                     modifier = Modifier
                         .offset { IntOffset(0, rootOffset.y.roundToInt()) }
                         .size(with(density) { screenWidthPx.toDp() }, with(density) { (headerState.heightPx + rootOffset.y).toDp() }),
-                    // Bottom of the gradient -- see AlbumDetailScreen's identical fix.
+                    // Bottom of the gradient - see AlbumDetailScreen's identical fix.
                     contentAlignment = Alignment.BottomEnd,
                 ) {
                 Row(
-                    // 44dp bottom clearance -- see AlbumDetailScreen's identical fix.
+                    // 44dp bottom clearance - see AlbumDetailScreen's identical fix.
                     modifier = Modifier.graphicsLayer { alpha = (1f - progress / 0.6f).coerceIn(0f, 1f) }.padding(bottom = 64.dp, end = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -390,7 +390,7 @@ fun ArtistDetailScreen(
 
         IconButton(
             onClick = onBack,
-            // Not extra-padded for the status bar/cutout -- this whole screen already sits below
+            // Not extra-padded for the status bar/cutout - this whole screen already sits below
             // NamiNavHost's ambient statusBarsPadding()+displayCutoutPadding(), same as the back
             // button on every other screen; only the floating cover (drawn further up, outside
             // that flow) needed the manual bleed compensation above.

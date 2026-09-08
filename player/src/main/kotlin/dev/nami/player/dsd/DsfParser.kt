@@ -3,13 +3,13 @@ package dev.nami.player.dsd
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-/** Parsed contents of a Sony DSF (.dsf) container -- the DSIFF-based, simpler of the two common
+/** Parsed contents of a Sony DSF (.dsf) container - the DSIFF-based, simpler of the two common
  * DSD file formats (the other being Philips DFF, not handled here). Spec: DSD bits are stored
  * LSB-first per byte, one byte per channel per 8 bits, in blocks of [blockSizePerChannel] bytes
  * that alternate channel-by-channel (ch0 block, ch1 block, ch0 block, ...) rather than being
  * bit-interleaved sample-by-sample.
  *
- * [dsdBytesPerChannel] is already de-interleaved -- index 0 is channel 0's whole raw DSD bitstream
+ * [dsdBytesPerChannel] is already de-interleaved - index 0 is channel 0's whole raw DSD bitstream
  * as a contiguous byte array, ready for [DopEncoder.encode]. */
 data class DsfAudio(
     val sampleRateHz: Int,
@@ -18,9 +18,9 @@ data class DsfAudio(
 )
 
 /** Parses a .dsf file's bytes into raw per-channel DSD data. Returns null for anything that isn't
- * a well-formed 1-bit-per-sample DSF this app can actually decode -- no partial/best-effort
+ * a well-formed 1-bit-per-sample DSF this app can actually decode - no partial/best-effort
  * output, since garbage DSD bits would be genuinely inaudible noise, not a degraded but usable
- * result. Not verified against real hardware (no DSD-capable DAC available to test with) -- this
+ * result. Not verified against real hardware (no DSD-capable DAC available to test with) - this
  * follows the published DSF spec, but only [DopEncoderTest]-style structural correctness is
  * unit-tested here, not "does a real DAC actually play it back as music". */
 object DsfParser {

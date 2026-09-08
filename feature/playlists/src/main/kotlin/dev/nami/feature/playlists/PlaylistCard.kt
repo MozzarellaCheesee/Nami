@@ -52,7 +52,7 @@ fun PlaylistCard(playlist: PlaylistSummary, onClick: () -> Unit, modifier: Modif
         )
         Text(
             // Smart playlists' tracks aren't rows in playlist_tracks (see SmartPlaylistEvaluator),
-            // so the LEFT JOIN COUNT() backing trackCount is always 0 for them -- showing that as
+            // so the LEFT JOIN COUNT() backing trackCount is always 0 for them - showing that as
             // "0 треков" would read as a broken/empty playlist, not what it actually is.
             text = if (playlist.isSmart) "Умный плейлист" else "${playlist.trackCount} треков",
             color = NamiColors.Paper70,

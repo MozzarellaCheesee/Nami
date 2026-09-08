@@ -3,7 +3,7 @@ package dev.nami.data
 import com.atilika.kuromoji.ipadic.Tokenizer
 
 /** Hepburn romanization of every token's reading (not just kanji-bearing ones, unlike
- * [FuriganaGenerator] -- a romaji line needs the WHOLE line spelled out, not just the kanji
+ * [FuriganaGenerator] - a romaji line needs the WHOLE line spelled out, not just the kanji
  * parts). Tokens are space-separated for readability, matching how romaji lyrics are
  * conventionally written (word-by-word), rather than one unbroken run of letters. */
 object RomajiGenerator {

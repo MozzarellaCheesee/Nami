@@ -15,7 +15,7 @@ import androidx.paging.compose.itemKey
 import dev.nami.core.designsystem.NamiAlertDialog
 import dev.nami.core.model.ArtistId
 
-/** Attach/reattach an album to an existing library artist -- picking from artists that already
+/** Attach/reattach an album to an existing library artist - picking from artists that already
  * exist (mirrors how AddTracksToArtistDialog treats new-file import as a separate concern). */
 @Composable
 fun PickArtistDialog(

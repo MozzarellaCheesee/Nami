@@ -12,9 +12,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 
-/** Spotify-style "Любимые треки" cover -- a soft gradient with a filled heart, generated instead
+/** Spotify-style "Любимые треки" cover - a soft gradient with a filled heart, generated instead
  * of a real file so it can never go stale/missing and can't be replaced (that playlist's cover
- * is permanently locked -- see PlaylistRepositoryImpl.setCoverImage's isLiked guard). Draw this
+ * is permanently locked - see PlaylistRepositoryImpl.setCoverImage's isLiked guard). Draw this
  * wherever [dev.nami.core.model.Playlist.isLiked]/[dev.nami.core.model.PlaylistSummary.isLiked]
  * is true, instead of the normal coverPath AsyncImage. */
 @Composable

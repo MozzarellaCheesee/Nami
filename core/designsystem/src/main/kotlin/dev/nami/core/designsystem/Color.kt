@@ -7,7 +7,7 @@ import androidx.compose.ui.graphics.Color
 
 /** Set by [NamiTheme] from the persisted AMOLED setting. A plain observable flag rather than a
  * CompositionLocal so the many existing call sites (`NamiColors.Ink900` used directly, not via
- * MaterialTheme.colorScheme) keep working unchanged and still recompose on toggle -- this is a
+ * MaterialTheme.colorScheme) keep working unchanged and still recompose on toggle - this is a
  * single-activity app, one global flag is enough.
  * ponytail: global flag, switch to a CompositionLocal if this ever needs to vary per-window. */
 private var amoledEnabled by mutableStateOf(false)

@@ -58,7 +58,7 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     // Default OFF: tapping a track starts playback without jumping to Now Playing, per the
-    // explicit request this setting exists for -- opening the full player is opt-in.
+    // explicit request this setting exists for - opening the full player is opt-in.
     private val _autoOpenPlayer = MutableStateFlow(prefs.getBoolean(KEY_AUTO_OPEN_PLAYER, false))
     override val autoOpenPlayer: StateFlow<Boolean> = _autoOpenPlayer
 
@@ -68,7 +68,7 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
     }
 
     // Default ON: status/nav bar hidden (immersive), matching the reference mocks' edge-to-edge
-    // look -- an explicit opt-out for anyone who wants the system bars back.
+    // look - an explicit opt-out for anyone who wants the system bars back.
     private val _hideSystemBars = MutableStateFlow(prefs.getBoolean(KEY_HIDE_SYSTEM_BARS, true))
     override val hideSystemBars: StateFlow<Boolean> = _hideSystemBars
 
@@ -79,7 +79,7 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
 
     // Default OFF: the word-level karaoke sweep is a best-effort estimate (or a Whisper pass the
     // user has to run themselves) rather than always-correct timing, so it doesn't turn on
-    // uninvited -- opt-in from Settings.
+    // uninvited - opt-in from Settings.
     private val _karaokeEnabled = MutableStateFlow(prefs.getBoolean(KEY_KARAOKE_ENABLED, false))
     override val karaokeEnabled: StateFlow<Boolean> = _karaokeEnabled
 
@@ -277,7 +277,7 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
         _deeplApiKey.value = value
     }
 
-    // Comma-joined track ids -- they're UUID-shaped (no commas of their own), same "plain
+    // Comma-joined track ids - they're UUID-shaped (no commas of their own), same "plain
     // delimited string" pattern already used elsewhere in this class, no JSON needed for a flat list.
     private val _lastPlaybackQueueTrackIds = MutableStateFlow(
         prefs.getString(KEY_LAST_PLAYBACK_QUEUE, "")?.split(",")?.filter { it.isNotBlank() } ?: emptyList(),
@@ -293,7 +293,7 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
     private val _lastPlaybackPausedAt = MutableStateFlow(prefs.getLong(KEY_LAST_PLAYBACK_PAUSED_AT, 0L))
     override val lastPlaybackPausedAt: StateFlow<Long> = _lastPlaybackPausedAt
 
-    // П.md §2 "Режим наблюдения за папкой" -- SAF tree URIs the user asked to keep in sync.
+    // П.md §2 "Режим наблюдения за папкой" - SAF tree URIs the user asked to keep in sync.
     private val _watchedFolders = MutableStateFlow(
         prefs.getString(KEY_WATCHED_FOLDERS, "")?.split(",")?.filter { it.isNotBlank() } ?: emptyList(),
     )

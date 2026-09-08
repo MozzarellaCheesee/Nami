@@ -24,11 +24,11 @@ import androidx.compose.ui.unit.dp
 data class ContextAction(val label: String, val icon: ImageVector, val onClick: () -> Unit)
 
 /**
- * Slide-up sheet for a "..." menu -- the app-wide replacement for a plain
+ * Slide-up sheet for a "..." menu - the app-wide replacement for a plain
  * [androidx.compose.material3.DropdownMenu]. Each target type (track/album/playlist/artist)
  * supplies its own [actions] list. Every row gets its icon in a soft rounded chip instead of a
  * bare glyph (more visual weight, easier to scan a long list at a glance); a row whose label
- * starts with "Удалить" is picked out in Shu -- the only warm/attention color in the palette,
+ * starts with "Удалить" is picked out in Shu - the only warm/attention color in the palette,
  * same role it already plays for "Сохранить" links elsewhere, just applied here to the one
  * consequential action in these lists instead.
  */

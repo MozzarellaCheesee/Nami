@@ -96,7 +96,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // П.md §2 "Режим наблюдения за папкой" -- same persistable-permission dance as pickFolder,
+    // П.md §2 "Режим наблюдения за папкой" - same persistable-permission dance as pickFolder,
     // but also remembers the tree so rescanWatchedFolders() (cold start / manual refresh) can
     // come back to it later.
     private val pickWatchedFolder = registerForActivityResult(
@@ -108,8 +108,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // Two pickers per cover/photo target -- system Files (SAF, arbitrary storage/providers) and
-    // the system Photo Picker (gallery-style grid, no storage permission needed) -- so "Изменить
+    // Two pickers per cover/photo target - system Files (SAF, arbitrary storage/providers) and
+    // the system Photo Picker (gallery-style grid, no storage permission needed) - so "Изменить
     // обложку" always offers both instead of jumping straight into just one of them. Both ends of
     // a pair call the exact same ViewModel callback (it only cares about the resulting Uri), so
     // adding the gallery half didn't need touching PlaylistActionsViewModel/MetadataActionsViewModel.
@@ -153,13 +153,13 @@ class MainActivity : ComponentActivity() {
         // system-drawn bar.
         enableEdgeToEdge(navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
         // Guards against the app silently vanishing from the launcher if every icon alias ever
-        // somehow ended up disabled at once (shouldn't happen -- IconPicker.select always
-        // enables one before disabling the rest -- but a crash mid-toggle or a manifest change
+        // somehow ended up disabled at once (shouldn't happen - IconPicker.select always
+        // enables one before disabling the rest - but a crash mid-toggle or a manifest change
         // across an update could still leave it in that state).
         IconPicker.ensureValidState(this)
         if (intent.getBooleanExtra(EXTRA_OPEN_PLAYER, false)) openPlayerSignal.value++
         handleShareIntent(intent)
-        // Watched folders (П.md §2) have no true background watch on Android -- rescanned once
+        // Watched folders (П.md §2) have no true background watch on Android - rescanned once
         // per cold start instead.
         libraryViewModel.rescanWatchedFolders()
         val importProgress = libraryViewModel.uiState
@@ -167,7 +167,7 @@ class MainActivity : ComponentActivity() {
             .stateIn(lifecycleScope, SharingStarted.Eagerly, libraryViewModel.uiState.value.importProgress)
         setContent {
             // Which pair of (Files, Gallery) launchers "Изменить обложку" should use once the
-            // user picks a source in the chooser below -- set by the onPickXxx callback that
+            // user picks a source in the chooser below - set by the onPickXxx callback that
             // fired, read/cleared once the chooser dialog resolves.
             var pendingImagePickSource by remember { mutableStateOf<ImagePickSource?>(null) }
             val hideSystemBars by appSettingsRepository.hideSystemBars.collectAsState()

@@ -21,7 +21,7 @@ import dev.nami.core.designsystem.NamiColors
 
 private val PRESET_MINUTES = listOf(15, 30, 45, 60)
 
-/** Real sleep timer, not a stub -- picks a duration (or cancels a running one), backed by
+/** Real sleep timer, not a stub - picks a duration (or cancels a running one), backed by
  * PlayerRepository.startSleepTimer/cancelSleepTimer which actually pauses playback when it hits
  * zero. [remainingMs] drives the live countdown/cancel row when a timer is already running. */
 @OptIn(ExperimentalMaterial3Api::class)
