@@ -39,15 +39,24 @@ const val WIDGET_CORNER_RADIUS_DP = 20
 fun widgetCorner(dp: Int = WIDGET_CORNER_RADIUS_DP) = GlanceModifier.cornerRadius(dp.dp)
 
 /** Downsampled to widget-icon size - a widget shows this small, no reason to decode a
- * multi-megapixel cover into memory for it. Null on any decode failure (missing/corrupt file). */
+ * multi-megapixel cover into memory for it. Null on any decode failure (missing/corrupt file).
+ *
+ * QueueTrack.artworkPath comes from MediaMetadata.artworkUri.toString() (see
+ * PlayerRepositoryImpl.toMediaItemInfo) - a "file:///data/..." URI STRING, not a bare filesystem
+ * path. BitmapFactory.decodeFile() only understands bare paths and silently returns null for a
+ * URI string with a scheme - this was the actual "обложка не выводилась" bug, not a missing
+ * file. Uri.parse(path).path strips the scheme back to the real path decodeFile needs. */
 fun loadArtBitmap(path: String?, targetPx: Int = 256): Bitmap? {
     if (path == null) return null
+    val filePath = if (path.contains("://")) android.net.Uri.parse(path).path else path
+    if (filePath == null) return null
     return try {
         val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(path, opts)
+        BitmapFactory.decodeFile(filePath, opts)
+        if (opts.outWidth <= 0) return null
         var sample = 1
         while (opts.outWidth / sample > targetPx * 2) sample *= 2
-        BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })
+        BitmapFactory.decodeFile(filePath, BitmapFactory.Options().apply { inSampleSize = sample })
     } catch (e: Exception) {
         null
     }
@@ -74,27 +83,10 @@ class SkipPreviousAction : ActionCallback {
     }
 }
 
-class ShufflePlayAction : ActionCallback {
+class ToggleLikeAction : ActionCallback {
     override suspend fun onAction(context: android.content.Context, glanceId: androidx.glance.GlanceId, parameters: androidx.glance.action.ActionParameters) {
-        val library = widgetLibraryRepository(context)
-        val tracks = library.allTracksOrdered()
-        if (tracks.isEmpty()) return
-        val seed = tracks.random()
-        widgetPlayerRepository(context).play(
-            listOf(
-                dev.nami.domain.PlayableTrack(
-                    id = seed.id,
-                    title = seed.title,
-                    artistName = seed.artistName,
-                    path = seed.path,
-                    artworkPath = seed.albumArtworkPath,
-                    format = seed.format,
-                ),
-            ) + tracks.filter { it.id != seed.id }.shuffled().take(30).map {
-                dev.nami.domain.PlayableTrack(id = it.id, title = it.title, artistName = it.artistName, path = it.path, artworkPath = it.albumArtworkPath, format = it.format)
-            },
-            startIndex = 0,
-        )
+        val trackId = widgetPlayerRepository(context).queue.value.nowPlaying?.id ?: return
+        widgetPlaylistRepository(context).toggleLike(trackId)
         updateAllNamiWidgets(context)
     }
 }
@@ -103,20 +95,16 @@ class ShufflePlayAction : ActionCallback {
  * state that every OTHER widget also shows, not just the one it lives on. */
 suspend fun updateAllNamiWidgets(context: android.content.Context) {
     NamiWidgetCompact().updateAll(context)
-    NamiWidgetPill().updateAll(context)
     NamiWidgetSquarePlayer().updateAll(context)
-    NamiWidgetArtOnly().updateAll(context)
-    NamiWidgetQueue().updateAll(context)
-    NamiWidgetNowPlayingText().updateAll(context)
     NamiWidgetSessions().updateAll(context)
 }
 
 @androidx.compose.runtime.Composable
-fun TransportButton(iconRes: Int, contentDescription: String, size: Dp, action: Action) {
+fun TransportButton(iconRes: Int, contentDescription: String, size: Dp, action: Action, tint: ColorProvider = WidgetTextPrimary) {
     Image(
         provider = ImageProvider(iconRes),
         contentDescription = contentDescription,
-        colorFilter = ColorFilter.tint(WidgetTextPrimary),
+        colorFilter = ColorFilter.tint(tint),
         modifier = GlanceModifier.size(size).clickable(action),
     )
 }

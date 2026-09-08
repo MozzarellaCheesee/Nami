@@ -1,0 +1,17 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="280dp"
+    android:height="100dp"
+    android:viewportWidth="280"
+    android:viewportHeight="100">
+    <!-- Фон виджета -->
+    <path android:fillColor="#FF0C0D0F" android:pathData="M20,10 h240 a10,10 0 0 1 10,10 v60 a10,10 0 0 1 -10,10 h-240 a10,10 0 0 1 -10,-10 v-60 a10,10 0 0 1 10,-10 z" />
+    <!-- Обложка-плейсхолдер -->
+    <path android:fillColor="#FF1A1B1F" android:pathData="M32,22 h56 a6,6 0 0 1 6,6 v44 a6,6 0 0 1 -6,6 h-56 a6,6 0 0 1 -6,-6 v-44 a6,6 0 0 1 6,-6 z" />
+    <path android:fillColor="#FF3A3C43" android:pathData="M50,40 l14,14 -6,6 -14,-14 z M56,52 l10,10 -6,6 -10,-10 z" />
+    <!-- prev -->
+    <path android:fillColor="#FFEDEAE4" android:pathData="M154,32 v36 l-24,-18 z M148,32 h4 v36 h-4 z" />
+    <!-- play -->
+    <path android:fillColor="#FFEDEAE4" android:pathData="M188,32 l30,18 -30,18 z" />
+    <!-- next -->
+    <path android:fillColor="#FFEDEAE4" android:pathData="M234,32 v36 l24,-18 z M240,32 h4 v36 h-4 z" />
+</vector>

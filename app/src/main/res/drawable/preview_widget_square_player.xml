@@ -1,0 +1,22 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="300dp"
+    android:height="300dp"
+    android:viewportWidth="300"
+    android:viewportHeight="300">
+    <!-- Фон - тёмная обложка -->
+    <path android:fillColor="#FF1A1B1F" android:pathData="M16,16 h268 a16,16 0 0 1 16,16 v236 a16,16 0 0 1 -16,16 h-268 a16,16 0 0 1 -16,-16 v-236 a16,16 0 0 1 16,-16 z" />
+    <!-- Затемнение снизу под текстом/транспортом -->
+    <path android:fillColor="#B3000000" android:pathData="M16,150 h268 v134 h-268 z" />
+    <!-- Название/исполнитель - плейсхолдер-полоски -->
+    <path android:fillColor="#FFEDEAE4" android:pathData="M28,166 h140 v14 h-140 z" />
+    <path android:fillColor="#FF9B9A97" android:pathData="M28,186 h90 v10 h-90 z" />
+    <!-- Лайк -->
+    <path android:fillColor="#FFC24A34" android:pathData="M254,166 c-4,-4 -10,-4 -13,0 -3,-4 -9,-4 -13,0 -4,4 -4,10 0,14 l13,13 13,-13 c4,-4 4,-10 0,-14 z" />
+    <!-- Прогресс -->
+    <path android:fillColor="#FF3A3C43" android:pathData="M28,212 h244 v6 h-244 z" />
+    <path android:fillColor="#FFC24A34" android:pathData="M28,212 h100 v6 h-100 z" />
+    <!-- Транспорт: prev/play/next -->
+    <path android:fillColor="#FFEDEAE4" android:pathData="M118,232 v36 l-24,-18 z M112,232 h4 v36 h-4 z" />
+    <path android:fillColor="#FFEDEAE4" android:pathData="M150,232 l30,18 -30,18 z" />
+    <path android:fillColor="#FFEDEAE4" android:pathData="M198,232 v36 l24,-18 z M204,232 h4 v36 h-4 z" />
+</vector>

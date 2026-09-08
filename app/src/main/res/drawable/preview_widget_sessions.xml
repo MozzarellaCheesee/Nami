@@ -1,0 +1,15 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="300dp"
+    android:height="90dp"
+    android:viewportWidth="300"
+    android:viewportHeight="90">
+    <!-- Фон -->
+    <path android:fillColor="#FF0C0D0F" android:pathData="M10,10 h280 a10,10 0 0 1 10,10 v50 a10,10 0 0 1 -10,10 h-280 a10,10 0 0 1 -10,-10 v-50 a10,10 0 0 1 10,-10 z" />
+    <!-- Три пилюли-сессии -->
+    <path android:fillColor="#FF1A1B1F" android:pathData="M24,25 h64 a10,10 0 0 1 10,10 v10 a10,10 0 0 1 -10,10 h-64 a10,10 0 0 1 -10,-10 v-10 a10,10 0 0 1 10,-10 z" />
+    <path android:fillColor="#FFEDEAE4" android:pathData="M38,38 h36 v9 h-36 z" />
+    <path android:fillColor="#FF1A1B1F" android:pathData="M118,25 h64 a10,10 0 0 1 10,10 v10 a10,10 0 0 1 -10,10 h-64 a10,10 0 0 1 -10,-10 v-10 a10,10 0 0 1 10,-10 z" />
+    <path android:fillColor="#FFEDEAE4" android:pathData="M132,38 h36 v9 h-36 z" />
+    <path android:fillColor="#FF1A1B1F" android:pathData="M212,25 h64 a10,10 0 0 1 10,10 v10 a10,10 0 0 1 -10,10 h-64 a10,10 0 0 1 -10,-10 v-10 a10,10 0 0 1 10,-10 z" />
+    <path android:fillColor="#FFEDEAE4" android:pathData="M226,38 h36 v9 h-36 z" />
+</vector>

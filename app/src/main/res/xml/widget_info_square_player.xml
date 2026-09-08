@@ -5,7 +5,7 @@
     android:targetCellWidth="3"
     android:targetCellHeight="3"
     android:updatePeriodMillis="1800000"
-    android:previewImage="@drawable/ic_launcher_wave"
+    android:previewImage="@drawable/preview_widget_square_player"
     android:initialLayout="@layout/widget_loading"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen" />
