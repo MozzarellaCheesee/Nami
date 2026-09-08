@@ -371,6 +371,10 @@ class PlaybackService : MediaSessionService() {
         return builder
             .setLoadControl(loadControl)
             .setAudioAttributes(audioAttributes, handleAudioFocus)
+            // ACTION_AUDIO_BECOMING_NOISY - без него отключение BT-наушников/выдёргивание
+            // проводных на паузу не ставило, звук просто переключался на динамик и продолжал
+            // играть вслух.
+            .setHandleAudioBecomingNoisy(true)
             .build()
     }
 
