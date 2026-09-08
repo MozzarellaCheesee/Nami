@@ -80,6 +80,31 @@ object IconPicker {
      * в [select] уже случилось и повторять его на следующем старте незачем. */
     private var pendingRefresh: LauncherIcon? = null
 
+    /** П.md §27, вторая попытка по той же жалобе "на Samsung иконка не меняется" - тихий путь
+     * ([refreshLauncherIfPending]) пользователю не помог.
+     *
+     * Что дало исследование: рабочей "тихой" техники, которая заставила бы OEM-лаунчер перечитать
+     * иконку, не существует. Всё, что публично доступно приложению - это
+     * setComponentEnabledSetting; ACTION_PACKAGE_CHANGED разослать нельзя (protected-broadcast),
+     * никакого uicache-API у платформы нет. В обсуждениях динамических иконок это описано как
+     * известное поведение: на не-Pixel лаунчерах (Samsung, MIUI, ColorOS) иконка обновляется
+     * с задержкой, после перезапуска лаунчера или вовсе после перезагрузки, и заставить их
+     * обновиться из приложения нельзя. То есть это ограничение платформы, а не наш баг.
+     *
+     * Что тут добавлено как компромисс: единственный оставшийся рычаг - смерть процесса.
+     * Она не гарантирует обновление (лаунчер - чужой процесс со своим кешем), но это самое
+     * сильное, что мы можем сделать: пакет заново поднимается системой, PACKAGE_CHANGED уже
+     * разослан, и лаунчер видит пакет "без живого процесса", а не как активную задачу.
+     * Вызывается ТОЛЬКО из явного диалога после смены иконки, где написано, что воспроизведение
+     * прервётся - молча процесс не убиваем никогда (умрёт и MediaSessionService вместе с ним).
+     *
+     * Честно: живого Samsung ни у автора правки, ни у пользователя нет, проверить нечем. */
+    fun refreshAndKillProcess(context: Context) {
+        pendingRefresh = current(context)
+        refreshLauncherIfPending(context)
+        kotlin.system.exitProcess(0)
+    }
+
     /** Self-heal for "every alias somehow ended up disabled" (should never happen given [select]
      * always enables one before disabling the rest, but a crash mid-toggle or a manifest change
      * across an app update could still leave it in that state) - with zero aliases enabled the

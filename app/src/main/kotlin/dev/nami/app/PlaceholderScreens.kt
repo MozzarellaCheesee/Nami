@@ -268,6 +268,8 @@ fun SettingsAppearanceScreen(onBack: () -> Unit, onThemeEditorClick: () -> Unit,
     val context = LocalContext.current
     var selectedIcon by remember { mutableStateOf(IconPicker.current(context)) }
     var pendingIcon by remember { mutableStateOf<LauncherIcon?>(null) }
+    // Предложение закрыть приложение показывается ПОСЛЕ смены, а не вместо неё - см. IconPicker.
+    var offerRestart by remember { mutableStateOf(false) }
     val amoledEnabled by viewModel.amoledEnabled.collectAsState()
     val uiFontPath by viewModel.uiFontPath.collectAsState()
     val pickUiFont = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -327,6 +329,14 @@ fun SettingsAppearanceScreen(onBack: () -> Unit, onThemeEditorClick: () -> Unit,
                 }
             }
         }
+        Text(
+            "Иконку рисует лаунчер из своего кеша. На Samsung, Xiaomi и других фирменных " +
+                "оболочках она может обновиться не сразу - если не изменилась, сверни " +
+                "приложение, а потом перезапусти лаунчер или телефон.",
+            color = NamiColors.Paper40,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+        )
     }
 
     pendingIcon?.let { icon ->
@@ -347,12 +357,41 @@ fun SettingsAppearanceScreen(onBack: () -> Unit, onThemeEditorClick: () -> Unit,
                         IconPicker.select(context, icon)
                         selectedIcon = icon
                         pendingIcon = null
+                        offerRestart = true
                     },
                 ) { Text("Сменить", color = NamiColors.Shu) }
             },
             dismissButton = {
                 androidx.compose.material3.TextButton(onClick = { pendingIcon = null }) {
                     Text("Отмена", color = NamiColors.Paper70)
+                }
+            },
+        )
+    }
+
+    // Тихого способа заставить чужой лаунчер перечитать иконку у приложения нет (см. IconPicker.
+    // refreshAndKillProcess) - остаётся предложить единственный оставшийся рычаг явно, с честным
+    // предупреждением про воспроизведение. Молча процесс не убиваем.
+    if (offerRestart) {
+        dev.nami.core.designsystem.NamiAlertDialog(
+            onDismissRequest = { offerRestart = false },
+            title = { Text("Иконка выбрана", color = NamiColors.Paper100) },
+            text = {
+                Text(
+                    "Лаунчер может показать её не сразу. Надёжнее всего закрыть приложение - " +
+                        "воспроизведение прервётся, зато иконка обновится с большей вероятностью. " +
+                        "Можно и не закрывать: сверни приложение и посмотри на рабочий стол.",
+                    color = NamiColors.Paper70,
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = { IconPicker.refreshAndKillProcess(context) },
+                ) { Text("Закрыть приложение", color = NamiColors.Shu) }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { offerRestart = false }) {
+                    Text("Не закрывать", color = NamiColors.Paper70)
                 }
             },
         )
