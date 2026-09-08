@@ -19,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.NamiRadius
 
 /** Design mock 4.26 "Skeleton - загрузка библиотеки" - shown while Paging's initial page is
  * still loading (LoadState.Loading), instead of the same "empty library" message a genuinely
@@ -38,7 +39,7 @@ fun LibrarySkeleton() {
         Bone(color, width = 160.dp, height = 24.dp)
         Row(modifier = Modifier.padding(top = 16.dp)) {
             repeat(3) { i ->
-                Bone(color, width = 72.dp, height = 32.dp, shape = RoundedCornerShape(16.dp), modifier = Modifier.padding(end = if (i < 2) 8.dp else 0.dp))
+                Bone(color, width = 72.dp, height = 32.dp, shape = RoundedCornerShape(NamiRadius.Card), modifier = Modifier.padding(end = if (i < 2) 8.dp else 0.dp))
             }
         }
         Bone(color, width = 200.dp, height = 16.dp, modifier = Modifier.padding(top = 20.dp))

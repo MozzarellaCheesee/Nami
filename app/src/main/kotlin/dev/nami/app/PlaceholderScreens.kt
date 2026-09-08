@@ -60,6 +60,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.NamiRadius
 
 /** Top-level Settings screen - just categories, per План.md Часть VIII. Each row opens its own
  * screen instead of everything living in one long scroll (that's what this replaced: one Column
@@ -585,7 +586,7 @@ internal fun SettingsCard(modifier: Modifier = Modifier, content: @Composable Co
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(NamiColors.Ink800, RoundedCornerShape(16.dp))
+            .background(NamiColors.Ink800, RoundedCornerShape(NamiRadius.Card))
             .padding(4.dp),
         content = content,
     )
@@ -615,7 +616,7 @@ internal fun SettingsRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(NamiRadius.Button))
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,

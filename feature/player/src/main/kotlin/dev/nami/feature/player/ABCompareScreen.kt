@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.NamiRadius
 import dev.nami.core.model.Track
 import dev.nami.domain.PlayableTrack
 import dev.nami.domain.PlaybackState
@@ -102,7 +103,7 @@ private fun VariantRow(label: String, revealedTitle: String?, isPlaying: Boolean
         modifier = Modifier
             .fillMaxWidth()
             .height(64.dp)
-            .background(if (isPlaying) NamiColors.Ink700 else NamiColors.Ink800, RoundedCornerShape(16.dp))
+            .background(if (isPlaying) NamiColors.Ink700 else NamiColors.Ink800, RoundedCornerShape(NamiRadius.Card))
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp),
     ) {

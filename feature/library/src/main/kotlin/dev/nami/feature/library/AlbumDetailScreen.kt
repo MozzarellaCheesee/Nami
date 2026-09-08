@@ -67,6 +67,7 @@ import coil3.compose.AsyncImage
 import dev.nami.core.designsystem.ContextAction
 import dev.nami.core.designsystem.ContextActionSheet
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.NamiRadius
 import dev.nami.core.model.AlbumId
 import dev.nami.core.model.Track
 import dev.nami.core.model.TrackId
@@ -181,7 +182,7 @@ fun AlbumDetailScreen(
                                 if (uiState.tracks.isNotEmpty()) {
                                     IconButton(
                                         onClick = { onPlayTracks(uiState.tracks, 0) },
-                                        modifier = Modifier.size(36.dp).background(NamiColors.Paper100, RoundedCornerShape(12.dp)),
+                                        modifier = Modifier.size(36.dp).background(NamiColors.Paper100, RoundedCornerShape(NamiRadius.Button)),
                                     ) {
                                         Icon(Icons.Filled.PlayArrow, contentDescription = "Играть альбом", tint = NamiColors.Ink900, modifier = Modifier.size(18.dp))
                                     }

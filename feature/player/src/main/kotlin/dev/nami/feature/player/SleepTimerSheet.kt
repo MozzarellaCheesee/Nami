@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.nami.core.designsystem.ImmersiveSheetEffect
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.NamiRadius
 
 private val PRESET_MINUTES = listOf(15, 30, 45, 60)
 
@@ -62,7 +63,7 @@ fun SleepTimerSheet(
                     PRESET_MINUTES.forEach { minutes ->
                         Box(
                             modifier = Modifier
-                                .background(NamiColors.Ink800, RoundedCornerShape(12.dp))
+                                .background(NamiColors.Ink800, RoundedCornerShape(NamiRadius.Button))
                                 .clickable { onStart(minutes); onDismiss() }
                                 .padding(horizontal = 16.dp, vertical = 10.dp),
                         ) {

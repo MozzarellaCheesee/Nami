@@ -38,6 +38,8 @@ class SettingsViewModel @Inject constructor(
     val nowPlayingShowTechInfo: StateFlow<Boolean> = appSettingsRepository.nowPlayingShowTechInfo
     val nowPlayingShowShuffleRepeat: StateFlow<Boolean> = appSettingsRepository.nowPlayingShowShuffleRepeat
     val themeColorOverrides: StateFlow<Map<String, String>> = appSettingsRepository.themeColorOverrides
+    val themeShapeOverrides: StateFlow<Map<String, Int>> = appSettingsRepository.themeShapeOverrides
+    val themeDensityScale: StateFlow<Float> = appSettingsRepository.themeDensityScale
 
     fun setAutoOpenPlayer(value: Boolean) {
         appSettingsRepository.setAutoOpenPlayer(value)
@@ -141,5 +143,17 @@ class SettingsViewModel @Inject constructor(
 
     fun resetThemeColors() {
         appSettingsRepository.resetThemeColors()
+    }
+
+    fun setThemeShapeOverride(token: String, dp: Int?) {
+        appSettingsRepository.setThemeShapeOverride(token, dp)
+    }
+
+    fun setThemeDensityScale(value: Float) {
+        appSettingsRepository.setThemeDensityScale(value)
+    }
+
+    fun resetThemeShapeAndDensity() {
+        appSettingsRepository.resetThemeShapeAndDensity()
     }
 }

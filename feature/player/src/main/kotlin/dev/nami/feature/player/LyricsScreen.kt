@@ -84,6 +84,7 @@ import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.model.Lyrics
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.NamiRadius
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -611,7 +612,7 @@ private fun WordLookupDialog(lookup: WordLookup, onDismiss: () -> Unit, onAddToV
         Column(
             modifier = Modifier
                 .width(300.dp)
-                .background(NamiColors.Ink700, androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                .background(NamiColors.Ink700, androidx.compose.foundation.shape.RoundedCornerShape(NamiRadius.Card))
                 .padding(16.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {

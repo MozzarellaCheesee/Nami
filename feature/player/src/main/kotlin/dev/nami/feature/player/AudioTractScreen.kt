@@ -46,6 +46,7 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.NamiRadius
 import dev.nami.core.model.Track
 import dev.nami.player.output.AudioOutputInfo
 
@@ -141,7 +142,7 @@ fun AudioTractBody(onOpenEqualizer: () -> Unit, viewModel: AudioTractViewModel =
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(64.dp)
-                                .background(NamiColors.Ink800, RoundedCornerShape(16.dp))
+                                .background(NamiColors.Ink800, RoundedCornerShape(NamiRadius.Card))
                                 .padding(horizontal = 16.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -176,7 +177,7 @@ fun AudioTractBody(onOpenEqualizer: () -> Unit, viewModel: AudioTractViewModel =
                         .padding(top = 8.dp)
                         .background(
                             if (bitPerfectBlockedByEq) NamiColors.Kin.copy(alpha = 0.12f) else NamiColors.Ink800,
-                            RoundedCornerShape(16.dp),
+                            RoundedCornerShape(NamiRadius.Card),
                         )
                         .padding(16.dp),
                 ) {
@@ -252,7 +253,7 @@ private fun ToggleRow(title: String, caption: String, checked: Boolean, onChecke
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 8.dp)
-            .background(NamiColors.Ink800, RoundedCornerShape(16.dp))
+            .background(NamiColors.Ink800, RoundedCornerShape(NamiRadius.Card))
             .clickable { onCheckedChange(!checked) }
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -296,7 +297,7 @@ private fun OutputProfileRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 8.dp)
-            .background(NamiColors.Ink800, RoundedCornerShape(16.dp))
+            .background(NamiColors.Ink800, RoundedCornerShape(NamiRadius.Card))
             .animateContentSize()
             .clickable { expanded = !expanded }
             .padding(horizontal = 16.dp, vertical = 12.dp),

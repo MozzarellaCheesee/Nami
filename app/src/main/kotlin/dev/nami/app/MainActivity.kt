@@ -174,6 +174,8 @@ class MainActivity : ComponentActivity() {
             val nightModeEnabled by appSettingsRepository.nightModeEnabled.collectAsState()
             val amoledEnabled by appSettingsRepository.amoledEnabled.collectAsState()
             val themeColorOverrides by appSettingsRepository.themeColorOverrides.collectAsState()
+            val themeShapeOverrides by appSettingsRepository.themeShapeOverrides.collectAsState()
+            val themeDensityScale by appSettingsRepository.themeDensityScale.collectAsState()
             val uiFontPath by appSettingsRepository.uiFontPath.collectAsState()
             // Loaded once per path, not on every recomposition - Font(File) does real I/O/parsing.
             val uiFontFamily = remember(uiFontPath) {
@@ -205,7 +207,13 @@ class MainActivity : ComponentActivity() {
                     controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
                 }
             }
-            NamiTheme(amoled = amoledEnabled, uiFont = uiFontFamily, colorOverrides = themeColorOverrides) {
+            NamiTheme(
+                amoled = amoledEnabled,
+                uiFont = uiFontFamily,
+                colorOverrides = themeColorOverrides,
+                shapeOverrides = themeShapeOverrides,
+                densityScale = themeDensityScale,
+            ) {
                 NamiNavHost(
                     onImportRequested = { pickFiles.launch(arrayOf("audio/*")) },
                     onImportFolderRequested = { pickFolder.launch(null) },

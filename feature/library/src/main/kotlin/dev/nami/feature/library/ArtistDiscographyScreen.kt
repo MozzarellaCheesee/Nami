@@ -44,6 +44,7 @@ import coil3.compose.AsyncImage
 import dev.nami.core.designsystem.ContextAction
 import dev.nami.core.designsystem.ContextActionSheet
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.NamiRadius
 import dev.nami.core.model.AlbumId
 import dev.nami.core.model.AlbumSummary
 import dev.nami.core.model.Track
@@ -181,7 +182,7 @@ private fun AlbumDiscographyBlock(
             Row(modifier = Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(
                     onClick = onPlayAlbum,
-                    modifier = Modifier.size(48.dp).background(NamiColors.Paper100, RoundedCornerShape(16.dp)),
+                    modifier = Modifier.size(48.dp).background(NamiColors.Paper100, RoundedCornerShape(NamiRadius.Card)),
                 ) {
                     Icon(Icons.Filled.PlayArrow, contentDescription = "Играть альбом", tint = NamiColors.Ink900)
                 }

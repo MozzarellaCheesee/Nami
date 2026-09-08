@@ -77,6 +77,7 @@ import androidx.paging.compose.itemKey
 import dev.nami.core.designsystem.ContextAction
 import dev.nami.core.designsystem.ContextActionSheet
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.NamiRadius
 import dev.nami.core.designsystem.RenameDialog
 import dev.nami.core.model.AlbumId
 import dev.nami.core.model.AlbumSummary
@@ -271,7 +272,7 @@ fun LibraryScreen(
                         FloatingActionButton(
                             onClick = onImportRequested,
                             modifier = Modifier.size(44.dp),
-                            shape = RoundedCornerShape(16.dp),
+                            shape = RoundedCornerShape(NamiRadius.Card),
                         ) {
                             Icon(Icons.Outlined.Add, contentDescription = "Импортировать файлы", modifier = Modifier.size(20.dp))
                         }

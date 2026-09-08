@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.NamiRadius
 import dev.nami.player.eq.EqPreset
 import dev.nami.player.eq.ParametricEqAudioProcessor
 import kotlin.math.ln
@@ -156,7 +157,7 @@ fun EqualizerBody(onBack: () -> Unit, viewModel: AudioTractViewModel = hiltViewM
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 12.dp)
-                            .background(NamiColors.Ink800, RoundedCornerShape(16.dp))
+                            .background(NamiColors.Ink800, RoundedCornerShape(NamiRadius.Card))
                             .padding(16.dp),
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {

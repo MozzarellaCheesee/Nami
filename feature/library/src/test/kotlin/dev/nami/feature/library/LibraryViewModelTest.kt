@@ -781,6 +781,11 @@ private object NoOpSettingsRepository : dev.nami.domain.SettingsRepository {
     override val themeColorOverrides = MutableStateFlow<Map<String, String>>(emptyMap())
     override fun setThemeColorOverride(token: String, hex: String?) {}
     override fun resetThemeColors() {}
+    override val themeShapeOverrides = MutableStateFlow<Map<String, Int>>(emptyMap())
+    override fun setThemeShapeOverride(token: String, dp: Int?) {}
+    override val themeDensityScale = MutableStateFlow(1f)
+    override fun setThemeDensityScale(value: Float) {}
+    override fun resetThemeShapeAndDensity() {}
 }
 
 private object NoOpPlaylistRepository : PlaylistRepository {

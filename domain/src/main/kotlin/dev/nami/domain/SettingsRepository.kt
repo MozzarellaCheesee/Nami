@@ -237,6 +237,20 @@ interface SettingsRepository {
     fun setThemeColorOverride(token: String, hex: String?)
     fun resetThemeColors()
 
+    /** П.md §26 "Форма" - радиус скругления в dp по токенам NamiRadius.TOKEN_* (карточки/кнопки/
+     * шиты). Тот же JSON-в-SharedPreferences, что у цветов, только значение целое, а не hex. */
+    val themeShapeOverrides: StateFlow<Map<String, Int>>
+    fun setThemeShapeOverride(token: String, dp: Int?)
+
+    /** П.md §26 "Плотность" - общий множитель вертикального ритма (NamiDensity.COMPACT/NORMAL/
+     * SPACIOUS). Применён только к высоте строки списка треков, см. doc NamiDensity. */
+    val themeDensityScale: StateFlow<Float>
+    fun setThemeDensityScale(value: Float)
+
+    /** Сброс формы и плотности к базовой теме - отдельно от [resetThemeColors], чтобы кнопка
+     * "сбросить всё" в редакторе не смешивала разделы в одну необратимую операцию. */
+    fun resetThemeShapeAndDensity()
+
     companion object {
         const val STANDS4_DAILY_LIMIT = 100
     }

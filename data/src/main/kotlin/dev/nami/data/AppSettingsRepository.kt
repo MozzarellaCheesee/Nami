@@ -56,6 +56,8 @@ private const val KEY_HOME_BLOCKS = "home_blocks" // JSON array [{type, enabled}
 private const val KEY_NOW_PLAYING_SHOW_TECH_INFO = "now_playing_show_tech_info"
 private const val KEY_NOW_PLAYING_SHOW_SHUFFLE_REPEAT = "now_playing_show_shuffle_repeat"
 private const val KEY_THEME_COLOR_OVERRIDES = "theme_color_overrides" // JSON object {token: hex}
+private const val KEY_THEME_SHAPE_OVERRIDES = "theme_shape_overrides" // JSON object {token: dp}
+private const val KEY_THEME_DENSITY_SCALE = "theme_density_scale"
 // One "<CSV of 9 gains>|<volumeLimitPercent>" string per device type.
 private fun outputProfileKey(type: OutputDeviceType) = "output_profile_${type.name}"
 
@@ -434,6 +436,40 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
         overrides.forEach { (token, hex) -> obj.put(token, hex) }
         prefs.edit { putString(KEY_THEME_COLOR_OVERRIDES, obj.toString()) }
         _themeColorOverrides.value = overrides
+    }
+
+    private val _themeShapeOverrides = MutableStateFlow(readThemeShapeOverrides())
+    override val themeShapeOverrides: StateFlow<Map<String, Int>> = _themeShapeOverrides
+    override fun setThemeShapeOverride(token: String, dp: Int?) {
+        val updated = if (dp != null) _themeShapeOverrides.value + (token to dp) else _themeShapeOverrides.value - token
+        writeThemeShapeOverrides(updated)
+    }
+
+    private val _themeDensityScale = MutableStateFlow(prefs.getFloat(KEY_THEME_DENSITY_SCALE, 1f))
+    override val themeDensityScale: StateFlow<Float> = _themeDensityScale
+    override fun setThemeDensityScale(value: Float) {
+        prefs.edit { putFloat(KEY_THEME_DENSITY_SCALE, value) }
+        _themeDensityScale.value = value
+    }
+
+    override fun resetThemeShapeAndDensity() {
+        writeThemeShapeOverrides(emptyMap())
+        setThemeDensityScale(1f)
+    }
+
+    private fun writeThemeShapeOverrides(overrides: Map<String, Int>) {
+        val obj = JSONObject()
+        overrides.forEach { (token, dp) -> obj.put(token, dp) }
+        prefs.edit { putString(KEY_THEME_SHAPE_OVERRIDES, obj.toString()) }
+        _themeShapeOverrides.value = overrides
+    }
+
+    private fun readThemeShapeOverrides(): Map<String, Int> {
+        val raw = prefs.getString(KEY_THEME_SHAPE_OVERRIDES, null) ?: return emptyMap()
+        return runCatching {
+            val obj = JSONObject(raw)
+            obj.keys().asSequence().associateWith { obj.getInt(it) }
+        }.getOrDefault(emptyMap())
     }
 
     private fun readThemeColorOverrides(): Map<String, String> {

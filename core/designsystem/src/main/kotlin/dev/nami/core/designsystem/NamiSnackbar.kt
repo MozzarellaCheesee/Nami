@@ -25,7 +25,7 @@ fun NamiSnackbarHost(hostState: SnackbarHostState, modifier: Modifier = Modifier
             modifier = Modifier
                 .padding(12.dp)
                 .fillMaxWidth()
-                .background(NamiColors.Ink800, RoundedCornerShape(12.dp))
+                .background(NamiColors.Ink800, RoundedCornerShape(NamiRadius.Button))
                 .padding(start = 16.dp, end = 8.dp, top = 14.dp, bottom = 14.dp),
             horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,

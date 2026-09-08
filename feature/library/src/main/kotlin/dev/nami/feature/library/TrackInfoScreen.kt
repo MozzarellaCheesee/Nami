@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiAlertDialog
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.NamiRadius
 import dev.nami.core.model.TrackId
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -154,7 +155,7 @@ private fun TagsSection(trackTags: List<dev.nami.domain.Tag>, onRemove: (dev.nam
         trackTags.forEach { tag ->
             Row(
                 modifier = Modifier
-                    .background(androidx.compose.ui.graphics.Color(tag.colorArgb).copy(alpha = 0.2f), RoundedCornerShape(16.dp))
+                    .background(androidx.compose.ui.graphics.Color(tag.colorArgb).copy(alpha = 0.2f), RoundedCornerShape(NamiRadius.Card))
                     .padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -169,7 +170,7 @@ private fun TagsSection(trackTags: List<dev.nami.domain.Tag>, onRemove: (dev.nam
         }
         Row(
             modifier = Modifier
-                .background(NamiColors.Ink800, RoundedCornerShape(16.dp))
+                .background(NamiColors.Ink800, RoundedCornerShape(NamiRadius.Card))
                 .clickable(onClick = onAddClick)
                 .padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -251,7 +252,7 @@ internal fun InfoSection(title: String, content: @Composable () -> Unit) {
         style = MaterialTheme.typography.labelMedium,
         modifier = Modifier.padding(top = 20.dp, bottom = 4.dp),
     )
-    Column(modifier = Modifier.fillMaxWidth().background(NamiColors.Ink800, RoundedCornerShape(12.dp))) {
+    Column(modifier = Modifier.fillMaxWidth().background(NamiColors.Ink800, RoundedCornerShape(NamiRadius.Button))) {
         content()
     }
 }

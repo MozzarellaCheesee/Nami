@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.nami.core.designsystem.NamiAlertDialog
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.NamiRadius
 import dev.nami.core.model.Artist
 import dev.nami.core.model.ArtistId
 
@@ -60,7 +61,7 @@ fun ManageAlbumArtistsDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 8.dp)
-                            .background(NamiColors.Ink700, RoundedCornerShape(12.dp)),
+                            .background(NamiColors.Ink700, RoundedCornerShape(NamiRadius.Button)),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         TextButton(onClick = { showPickArtist = true }, modifier = Modifier.fillMaxWidth()) {

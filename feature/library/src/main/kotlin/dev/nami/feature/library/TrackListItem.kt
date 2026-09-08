@@ -62,6 +62,7 @@ import coil3.compose.AsyncImage
 import dev.nami.core.designsystem.ContextAction
 import dev.nami.core.designsystem.ContextActionSheet
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.NamiDensity
 import dev.nami.core.model.Track
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
@@ -102,7 +103,7 @@ fun TrackListItem(
     val revealThresholdPx = with(density) { 72.dp.toPx() }
     val maxDragPx = with(density) { 96.dp.toPx() }
 
-    Box(modifier = modifier.fillMaxWidth().height(64.dp)) {
+    Box(modifier = modifier.fillMaxWidth().height(NamiDensity.listRowHeight)) {
         if (onAddToQueue != null) {
             Row(
                 modifier = Modifier.fillMaxHeight().padding(start = 20.dp),
@@ -118,7 +119,7 @@ fun TrackListItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(64.dp)
+                .height(NamiDensity.listRowHeight)
                 .offset { IntOffset(dragOffsetX.roundToInt(), 0) }
                 .background(NamiColors.Ink900)
                 .let { rowModifier ->

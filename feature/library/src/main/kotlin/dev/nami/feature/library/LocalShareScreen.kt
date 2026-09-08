@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.NamiRadius
 import dev.nami.domain.DiscoveredDevice
 import dev.nami.domain.InternetLinkState
 import dev.nami.domain.WifiDirectPeer
@@ -190,7 +191,7 @@ fun LocalShareScreen(
             if (guestState != null) {
                 item {
                     val g = guestState!!
-                    Column(modifier = Modifier.fillMaxWidth().background(NamiColors.Ink800, RoundedCornerShape(16.dp)).padding(16.dp)) {
+                    Column(modifier = Modifier.fillMaxWidth().background(NamiColors.Ink800, RoundedCornerShape(NamiRadius.Card)).padding(16.dp)) {
                         Text("Слушаю вместе с ${g.hostName}", color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall)
                         Text(g.trackTitle ?: "-", color = NamiColors.Paper100, style = MaterialTheme.typography.bodyLarge)
                         g.artistName?.let { Text(it, color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall) }
@@ -367,7 +368,7 @@ private fun CodeBox(code: String, onCopy: (String) -> Unit) {
     // многоточием и SelectionContainer выделял только обрезанный видимый кусок, а не весь код -
     // "Копировать" копировала бы битую строку. Теперь текст в своей прокручиваемой области
     // (весь код доступен, без обрезки), кнопка отдельной строкой во всю ширину снизу.
-    Column(modifier = Modifier.fillMaxWidth().background(NamiColors.Ink800, RoundedCornerShape(12.dp)).padding(8.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().background(NamiColors.Ink800, RoundedCornerShape(NamiRadius.Button)).padding(8.dp)) {
         SelectionContainer {
             Text(
                 code,

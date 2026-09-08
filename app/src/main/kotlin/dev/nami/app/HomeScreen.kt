@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil3.compose.AsyncImage
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.NamiRadius
 import dev.nami.core.model.AlbumId
 import dev.nami.core.model.PlaylistId
 import dev.nami.core.model.TrackId
@@ -227,7 +228,7 @@ fun HomeConstructorScreen(onBack: () -> Unit, viewModel: HomeViewModel = hiltVie
                         .onSizeChanged { rowHeightPx = it.height }
                         .background(
                             if (draggingIndex == index) NamiColors.Ink700 else Color.Transparent,
-                            RoundedCornerShape(12.dp),
+                            RoundedCornerShape(NamiRadius.Button),
                         ),
                 ) {
                     SettingsRow(
@@ -318,7 +319,7 @@ private fun TagChip(name: String, colorArgb: Int, selected: Boolean, onClick: ()
         style = MaterialTheme.typography.labelLarge,
         modifier = Modifier
             .padding(end = 8.dp)
-            .background(if (selected) tagColor else tagColor.copy(alpha = 0.24f), RoundedCornerShape(16.dp))
+            .background(if (selected) tagColor else tagColor.copy(alpha = 0.24f), RoundedCornerShape(NamiRadius.Card))
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
     )

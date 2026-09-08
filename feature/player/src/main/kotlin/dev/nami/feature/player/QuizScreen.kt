@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.NamiRadius
 
 /** План.md's "режим изучения": квиз «вставь пропущенное слово в строку» built from the saved
  * vocabulary. Beta, same as study mode itself - entry point in VocabularyScreen only shows when
@@ -82,7 +83,7 @@ fun QuizScreen(onBack: () -> Unit, viewModel: QuizViewModel = hiltViewModel()) {
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(bottom = 12.dp)
-                                    .background(backgroundColor, RoundedCornerShape(12.dp))
+                                    .background(backgroundColor, RoundedCornerShape(NamiRadius.Button))
                                     .clickable(enabled = selected == null) { viewModel.answer(index) }
                                     .padding(16.dp),
                             ) {

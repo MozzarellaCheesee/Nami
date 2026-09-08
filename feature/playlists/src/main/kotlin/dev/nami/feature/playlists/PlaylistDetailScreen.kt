@@ -61,6 +61,7 @@ import dev.nami.core.designsystem.ContextActionSheet
 import dev.nami.core.designsystem.LikedPlaylistCover
 import dev.nami.core.designsystem.NamiAlertDialog
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.NamiRadius
 import dev.nami.core.designsystem.RenameDialog
 import dev.nami.core.designsystem.rememberCollapsingHeaderState
 import dev.nami.core.model.PlaylistId
@@ -157,7 +158,7 @@ fun PlaylistDetailScreen(
                                 if (uiState.tracks.isNotEmpty()) {
                                     IconButton(
                                         onClick = { onPlayTracks(uiState.tracks, 0) },
-                                        modifier = Modifier.size(36.dp).background(NamiColors.Paper100, RoundedCornerShape(12.dp)),
+                                        modifier = Modifier.size(36.dp).background(NamiColors.Paper100, RoundedCornerShape(NamiRadius.Button)),
                                     ) {
                                         Icon(Icons.Filled.PlayArrow, contentDescription = "Играть", tint = NamiColors.Ink900, modifier = Modifier.size(18.dp))
                                     }

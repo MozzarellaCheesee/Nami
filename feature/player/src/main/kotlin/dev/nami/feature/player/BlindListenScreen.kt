@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil3.compose.AsyncImage
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.NamiRadius
 import dev.nami.domain.PlaybackState
 
 /** Группа D "слепое прослушивание" - см. BlindListenViewModel. */
@@ -64,7 +65,7 @@ fun BlindListenScreen(onBack: () -> Unit, viewModel: BlindListenViewModel = hilt
                     Box(
                         modifier = Modifier
                             .size(260.dp)
-                            .background(NamiColors.Ink700, RoundedCornerShape(16.dp)),
+                            .background(NamiColors.Ink700, RoundedCornerShape(NamiRadius.Card)),
                         contentAlignment = Alignment.Center,
                     ) {
                         if (uiState.revealed && track.albumArtworkPath != null) {

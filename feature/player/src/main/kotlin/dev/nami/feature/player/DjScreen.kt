@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.NamiRadius
 import dev.nami.core.model.Track
 import dev.nami.domain.DjDeck
 import dev.nami.domain.DjDeckState
@@ -95,7 +96,7 @@ private fun DeckCard(label: String, state: DjDeckState, onToggle: () -> Unit, mo
     Column(
         modifier = modifier
             .padding(4.dp)
-            .background(NamiColors.Ink800, RoundedCornerShape(16.dp))
+            .background(NamiColors.Ink800, RoundedCornerShape(NamiRadius.Card))
             .padding(12.dp),
     ) {
         Text("Дека $label", color = NamiColors.Paper40, style = MaterialTheme.typography.labelSmall)

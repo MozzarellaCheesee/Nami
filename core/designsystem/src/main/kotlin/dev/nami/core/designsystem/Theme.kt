@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.dp
 
 private fun buildTypography(uiFont: FontFamily?): Typography {
     fun style(base: androidx.compose.ui.text.TextStyle) = if (uiFont != null) base.copy(fontFamily = uiFont) else base
@@ -41,15 +42,28 @@ private fun namiDarkScheme() = darkColorScheme(
  * AMOLED") - отдельный тумблер поверх тёмной темы, не сама тёмная тема. [uiFont] - группа E
  * "свой шрифт интерфейса", подменяет Archivo во всех MaterialTheme.typography ролях, null =
  * стандартный. [colorOverrides] - П.md §26 "Редактор темы", токен -> hex ("#RRGGBB"/"#AARRGGBB"),
- * применяется через NamiColors.setOverride перед первой отрисовкой контента. */
+ * применяется через NamiColors.setOverride перед первой отрисовкой контента. [shapeOverrides] -
+ * §26 "Форма", токен -> радиус в dp; [densityScale] - §26 "Плотность", множитель вертикального
+ * ритма. Оба идут тем же путём, что и цвет: SideEffect -> глобальный токен-объект. */
 @Composable
-fun NamiTheme(amoled: Boolean = false, uiFont: FontFamily? = null, colorOverrides: Map<String, String> = emptyMap(), content: @Composable () -> Unit) {
+fun NamiTheme(
+    amoled: Boolean = false,
+    uiFont: FontFamily? = null,
+    colorOverrides: Map<String, String> = emptyMap(),
+    shapeOverrides: Map<String, Int> = emptyMap(),
+    densityScale: Float = 1f,
+    content: @Composable () -> Unit,
+) {
     SideEffect {
         setAmoledColors(amoled)
         NamiColors.EDITABLE_TOKENS.forEach { token ->
             val hex = colorOverrides[token]
             NamiColors.setOverride(token, if (hex != null) runCatching { androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(hex)) }.getOrNull() else null)
         }
+        NamiRadius.EDITABLE_TOKENS.forEach { token ->
+            NamiRadius.setOverride(token, shapeOverrides[token]?.dp)
+        }
+        NamiDensity.setScale(densityScale)
     }
     val typography = remember(uiFont) { buildTypography(uiFont) }
     MaterialTheme(colorScheme = namiDarkScheme(), typography = typography, content = content)

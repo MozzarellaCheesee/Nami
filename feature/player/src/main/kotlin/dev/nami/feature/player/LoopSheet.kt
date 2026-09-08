@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import dev.nami.core.designsystem.ImmersiveSheetEffect
 import dev.nami.core.designsystem.NamiAlertDialog
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.NamiRadius
 import dev.nami.domain.LoopRange
 import dev.nami.domain.SavedLoop
 
@@ -98,7 +99,7 @@ fun LoopSheet(
                     Box(
                         modifier = Modifier
                             .padding(top = 12.dp, bottom = 16.dp)
-                            .background(NamiColors.Paper100, RoundedCornerShape(12.dp))
+                            .background(NamiColors.Paper100, RoundedCornerShape(NamiRadius.Button))
                             .clickable { onMarkEndAndActivate(pendingStartMs) }
                             .padding(horizontal = 16.dp, vertical = 10.dp),
                     ) {
@@ -115,7 +116,7 @@ fun LoopSheet(
                     Box(
                         modifier = Modifier
                             .padding(top = 12.dp, bottom = 16.dp)
-                            .background(NamiColors.Ink800, RoundedCornerShape(12.dp))
+                            .background(NamiColors.Ink800, RoundedCornerShape(NamiRadius.Button))
                             .clickable { onMarkStart() }
                             .padding(horizontal = 16.dp, vertical = 10.dp),
                     ) {

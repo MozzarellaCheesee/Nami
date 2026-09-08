@@ -27,7 +27,7 @@ fun NamiAlertDialog(
         dismissButton = dismissButton,
         title = title,
         text = text,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(NamiRadius.Card),
         containerColor = NamiColors.Ink800,
         tonalElevation = 0.dp,
         titleContentColor = NamiColors.Paper100,
