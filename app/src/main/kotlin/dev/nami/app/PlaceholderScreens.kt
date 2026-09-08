@@ -33,10 +33,12 @@ import androidx.compose.material.icons.outlined.FontDownload
 import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.PlayCircleOutline
 import androidx.compose.material.icons.outlined.School
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Shuffle
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Usb
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -399,14 +401,21 @@ fun SettingsAppearanceScreen(onBack: () -> Unit, onThemeEditorClick: () -> Unit,
 }
 
 @Composable
-fun SettingsPlayerScreen(onBack: () -> Unit, onSessionsClick: () -> Unit, onDriveModeClick: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
+fun SettingsPlayerScreen(
+    onBack: () -> Unit,
+    onSessionsClick: () -> Unit,
+    onDriveModeClick: () -> Unit,
+    onBlockOrderClick: () -> Unit,
+    viewModel: SettingsViewModel = hiltViewModel(),
+) {
     val autoOpenPlayer by viewModel.autoOpenPlayer.collectAsState()
     val hideSystemBars by viewModel.hideSystemBars.collectAsState()
     val karaokeEnabled by viewModel.karaokeEnabled.collectAsState()
     val shuffleMode by viewModel.shuffleMode.collectAsState()
     val doubleTapAction by viewModel.doubleTapArtworkAction.collectAsState()
     val nowPlayingShowTechInfo by viewModel.nowPlayingShowTechInfo.collectAsState()
-    val nowPlayingShowShuffleRepeat by viewModel.nowPlayingShowShuffleRepeat.collectAsState()
+    val nowPlayingShowShuffle by viewModel.nowPlayingShowShuffle.collectAsState()
+    val nowPlayingShowRepeat by viewModel.nowPlayingShowRepeat.collectAsState()
     val nowPlayingCompactCover by viewModel.nowPlayingCompactCover.collectAsState()
     val nowPlayingLineProgress by viewModel.nowPlayingLineProgress.collectAsState()
 
@@ -493,9 +502,15 @@ fun SettingsPlayerScreen(onBack: () -> Unit, onSessionsClick: () -> Unit, onDriv
             )
             SettingsRow(
                 icon = Icons.Outlined.Shuffle,
-                title = "Кнопки перемешать/зациклить на Now Playing",
-                trailing = { NamiSwitch(checked = nowPlayingShowShuffleRepeat, onCheckedChange = viewModel::setNowPlayingShowShuffleRepeat) },
-                onClick = { viewModel.setNowPlayingShowShuffleRepeat(!nowPlayingShowShuffleRepeat) },
+                title = "Кнопка перемешать на Now Playing",
+                trailing = { NamiSwitch(checked = nowPlayingShowShuffle, onCheckedChange = viewModel::setNowPlayingShowShuffle) },
+                onClick = { viewModel.setNowPlayingShowShuffle(!nowPlayingShowShuffle) },
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Repeat,
+                title = "Кнопка зациклить на Now Playing",
+                trailing = { NamiSwitch(checked = nowPlayingShowRepeat, onCheckedChange = viewModel::setNowPlayingShowRepeat) },
+                onClick = { viewModel.setNowPlayingShowRepeat(!nowPlayingShowRepeat) },
             )
             SettingsRow(
                 icon = Icons.Outlined.Album,
@@ -508,6 +523,12 @@ fun SettingsPlayerScreen(onBack: () -> Unit, onSessionsClick: () -> Unit, onDriv
                 title = "Прогресс линией вместо волны (без меток моментов)",
                 trailing = { NamiSwitch(checked = nowPlayingLineProgress, onCheckedChange = viewModel::setNowPlayingLineProgress) },
                 onClick = { viewModel.setNowPlayingLineProgress(!nowPlayingLineProgress) },
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Tune,
+                title = "Порядок блоков плеера",
+                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
+                onClick = onBlockOrderClick,
             )
         }
     }

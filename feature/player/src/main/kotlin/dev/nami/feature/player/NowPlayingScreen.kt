@@ -170,7 +170,9 @@ fun NowPlayingScreen(
     // pill row further down) so the ambient backdrop below can react to it too.
     val nightModeEnabled by viewModel.nightModeEnabled.collectAsState()
     val showTechInfo by viewModel.nowPlayingShowTechInfo.collectAsState()
-    val showShuffleRepeat by viewModel.nowPlayingShowShuffleRepeat.collectAsState()
+    val showShuffle by viewModel.nowPlayingShowShuffle.collectAsState()
+    val showRepeat by viewModel.nowPlayingShowRepeat.collectAsState()
+    val blockOrder by viewModel.nowPlayingBlockOrder.collectAsState()
     val compactCover by viewModel.nowPlayingCompactCover.collectAsState()
     val lineProgress by viewModel.nowPlayingLineProgress.collectAsState()
 
@@ -481,37 +483,8 @@ fun NowPlayingScreen(
                 }
             }
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = queue.nowPlaying?.title ?: "Ничего не играет",
-                color = NamiColors.Paper100,
-                maxLines = 1,
-                modifier = Modifier.weight(1f).basicMarquee(iterations = Int.MAX_VALUE),
-            )
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.size(32.dp).fullBlockClickable(shape = CircleShape) { viewModel.toggleLikeCurrentTrack() },
-            ) {
-                // Лёгкий "поп" при переключении - иконка менялась мгновенно, тап частый
-                // (десятки раз в день), поэтому только едва заметный bounce, не полноценная
-                // анимация. Скачок значения (1.3 -> 1.0), не steady-state - иначе не от чего
-                // отталкиваться при каждом повторном тапе на одно и то же значение.
-                val likeScale = remember { Animatable(1f) }
-                LaunchedEffect(isFavorite) {
-                    likeScale.snapTo(1.3f)
-                    likeScale.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium))
-                }
-                Icon(
-                    imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                    contentDescription = if (isFavorite) "Убрать из избранного" else "В избранное",
-                    tint = if (isFavorite) NamiColors.Shu else NamiColors.Paper100,
-                    modifier = Modifier.scale(likeScale.value),
-                )
-            }
-        }
-        queue.nowPlaying?.artistName?.let { artistName ->
-            Text(text = artistName, color = NamiColors.Paper70)
-        }
+        // Всё, что нужно сразу нескольким секциям, считается ДО перебора порядка - иначе
+        // прогресс-бар и время под ним зависели бы от того, куда пользователь переставил блок.
         val durationMs = playing?.durationMs ?: 0L
         val actualPositionMs = playing?.positionMs ?: 0L
         val actualProgress = if (durationMs > 0) (actualPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
@@ -524,191 +497,245 @@ fun NowPlayingScreen(
         val moments by viewModel.currentTrackMoments.collectAsState()
         var pendingMomentFraction by remember { mutableStateOf<Float?>(null) }
         var selectedMoment by remember { mutableStateOf<dev.nami.domain.Moment?>(null) }
-        // П.md §17 "форма прогресс-бара" - волна или линия, подмена ровно на этом месте, всё
-        // вокруг (время под шкалой, транспорт, диалоги меток) одинаково для обоих вариантов.
-        if (lineProgress) {
-            LineScrubber(
-                progress = actualProgress,
-                onSeek = { fraction -> viewModel.seek((fraction * durationMs).toLong()) },
-                onProgressPreview = { fraction -> previewProgress = fraction },
-                onPreviewEnd = { previewProgress = null },
-                modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
-            )
-        } else {
-            WaveformScrubber(
-                seedKey = queue.nowPlaying?.id?.value ?: "",
-                progress = actualProgress,
-                onSeek = { fraction -> viewModel.seek((fraction * durationMs).toLong()) },
-                onProgressPreview = { fraction -> previewProgress = fraction },
-                onPreviewEnd = { previewProgress = null },
-                modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
-                realHeights = waveform,
-                moments = if (durationMs > 0) {
-                    moments.map { MomentMarker(it.id, it.positionMs.toFloat() / durationMs, it.colorArgb) }
-                } else {
-                    emptyList()
-                },
-                onLongPress = { fraction -> pendingMomentFraction = fraction },
-                onMomentClick = { id -> selectedMoment = moments.firstOrNull { it.id == id } },
-            )
-        }
-        pendingMomentFraction?.let { fraction ->
-            AddMomentDialog(
-                onSave = { label, colorArgb, isChapter ->
-                    viewModel.addMoment((fraction * durationMs).toLong(), label, colorArgb, isChapter)
-                    pendingMomentFraction = null
-                },
-                onDismiss = { pendingMomentFraction = null },
-            )
-        }
-        // Tapping a marker (WaveformScrubber's own hit-test) is the only way to manage one - see
-        // "как убирать метки и управлять ими": jump there, or delete it.
-        selectedMoment?.let { moment ->
-            ContextActionSheet(
-                onDismiss = { selectedMoment = null },
-                actions = listOf(
-                    ContextAction("Перейти: ${moment.label}", Icons.Rounded.PlayArrow) {
-                        viewModel.seek(moment.positionMs)
-                        selectedMoment = null
-                    },
-                    ContextAction("Удалить метку", Icons.Outlined.Delete) {
-                        viewModel.removeMoment(moment.id)
-                        selectedMoment = null
-                    },
-                ),
-            )
-        }
-        Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(
-                text = formatDuration(positionMs),
-                color = NamiColors.Paper70,
-                style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
-            )
-            Text(
-                text = "-" + formatDuration((durationMs - positionMs).coerceAtLeast(0L)),
-                color = NamiColors.Paper70,
-                style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
-            )
-        }
-        // Five rounded-square blocks, shrinking away from the center: play (72) > prev/next (56)
-        // > shuffle/repeat (44). Shuffle is real (see shuffleEnabled above); repeat is still a
-        // visual-only stub - no loop behavior wired yet, a separate task.
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (showShuffleRepeat) {
-                TransportBlock(
-                    icon = Icons.Outlined.Shuffle,
-                    size = 44.dp,
-                    active = shuffleEnabled,
-                    contentDescription = "Перемешать",
-                    onClick = { viewModel.toggleShuffle() },
-                )
-            }
-            TransportBlock(
-                icon = Icons.Rounded.SkipPrevious,
-                size = 56.dp,
-                contentDescription = "Предыдущий",
-                onClick = {
-                    // A previous track to show -> animate the pager, same as a swipe (forces the
-                    // actual previous track). Nothing to show -> fall back to the button's own
-                    // restart-if-elapsed semantics with no animation (nothing to slide to).
-                    if (queue.previousTrack != null) {
-                        scope.launch { pagerState.animateScrollToPage(0, animationSpec = TRACK_SLIDE_SPEC) }
-                    } else {
-                        viewModel.skipPrevious()
-                    }
-                },
-            )
-            TransportBlock(
-                icon = if (playing?.isPlaying == true) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                size = 72.dp,
-                filled = true,
-                contentDescription = "Играть/пауза",
-                onClick = viewModel::toggle,
-            )
-            TransportBlock(
-                icon = Icons.Rounded.SkipNext,
-                size = 56.dp,
-                contentDescription = "Следующий",
-                onClick = {
-                    if (queue.upcoming.isNotEmpty()) {
-                        scope.launch { pagerState.animateScrollToPage(2, animationSpec = TRACK_SLIDE_SPEC) }
-                    } else {
-                        viewModel.skipNext()
-                    }
-                },
-            )
-            if (showShuffleRepeat) {
-                TransportBlock(
-                    icon = Icons.Outlined.Repeat,
-                    size = 44.dp,
-                    active = repeatMode != dev.nami.domain.RepeatMode.OFF,
-                    badgeText = if (repeatMode == dev.nami.domain.RepeatMode.ONE) "1" else null,
-                    contentDescription = when (repeatMode) {
-                        dev.nami.domain.RepeatMode.OFF -> "Зациклить очередь"
-                        dev.nami.domain.RepeatMode.ALL -> "Зациклить один трек"
-                        dev.nami.domain.RepeatMode.ONE -> "Выключить цикл"
-                    },
-                    onClick = { viewModel.cycleRepeatMode() },
-                )
-            }
-        }
-        // Format badge sits below the transport controls per Дизайн.md §4.3 (mockup order:
-        // controls, then format badge row, then the pill row) - was above the scrubber before.
-        // Detail string (bitrate/sample-rate-bit-depth/size) needs the full Track (byte size,
-        // duration), not just QueueTrack's format string - falls back to just the format badge
-        // until currentTrackDetails' lookup resolves, and stays format-only if it never does.
-        if (showTechInfo) queue.nowPlaying?.format?.let { format ->
-            // BPM/key (BpmKeyAnalyzer) land here live once a background scan finishes, sometimes
-            // well after the badge is already on screen - an instant text swap would read as the
-            // chip randomly resizing/changing under the user. animateContentSize smooths the
-            // width change, AnimatedContent crossfades the text itself instead of a hard cut.
-            Box(
-                modifier = Modifier
-                    .padding(top = 40.dp)
-                    .background(NamiColors.Ai.copy(alpha = 0.14f), RoundedCornerShape(4.dp))
-                    .animateContentSize(animationSpec = tween(200)),
-            ) {
-                AnimatedContent(
-                    targetState = formatBadgeDetail(format, trackDetails),
-                    transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(150)) },
-                    label = "format-badge",
-                ) { text ->
+
+        // П.md §17 "порядок блоков". Секции ниже обложки идут одна за другой в обычном потоке
+        // Column, не завязаны ни на пейджер, ни друг на друга по layout - поэтому порядок
+        // читается из настройки, а не захардкожен здесь. Сам пейджер в списке отсутствует
+        // намеренно: он всегда сверху, см. NowPlayingBlock.
+        blockOrder.forEach { block ->
+            when (block) {
+                dev.nami.domain.NowPlayingBlock.TITLE_ARTIST -> {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = text,
-                        color = NamiColors.Ai,
-                        style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        text = queue.nowPlaying?.title ?: "Ничего не играет",
+                        color = NamiColors.Paper100,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f).basicMarquee(iterations = Int.MAX_VALUE),
+                    )
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.size(32.dp).fullBlockClickable(shape = CircleShape) { viewModel.toggleLikeCurrentTrack() },
+                    ) {
+                        // Лёгкий "поп" при переключении - иконка менялась мгновенно, тап частый
+                        // (десятки раз в день), поэтому только едва заметный bounce, не полноценная
+                        // анимация. Скачок значения (1.3 -> 1.0), не steady-state - иначе не от чего
+                        // отталкиваться при каждом повторном тапе на одно и то же значение.
+                        val likeScale = remember { Animatable(1f) }
+                        LaunchedEffect(isFavorite) {
+                            likeScale.snapTo(1.3f)
+                            likeScale.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium))
+                        }
+                        Icon(
+                            imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                            contentDescription = if (isFavorite) "Убрать из избранного" else "В избранное",
+                            tint = if (isFavorite) NamiColors.Shu else NamiColors.Paper100,
+                            modifier = Modifier.scale(likeScale.value),
+                        )
+                    }
+                }
+                queue.nowPlaying?.artistName?.let { artistName ->
+                    Text(text = artistName, color = NamiColors.Paper70)
+                }
+                }
+
+                dev.nami.domain.NowPlayingBlock.PROGRESS -> {
+                // П.md §17 "форма прогресс-бара" - волна или линия, подмена ровно на этом месте, всё
+                // вокруг (время под шкалой, транспорт, диалоги меток) одинаково для обоих вариантов.
+                if (lineProgress) {
+                    LineScrubber(
+                        progress = actualProgress,
+                        onSeek = { fraction -> viewModel.seek((fraction * durationMs).toLong()) },
+                        onProgressPreview = { fraction -> previewProgress = fraction },
+                        onPreviewEnd = { previewProgress = null },
+                        modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
+                    )
+                } else {
+                    WaveformScrubber(
+                        seedKey = queue.nowPlaying?.id?.value ?: "",
+                        progress = actualProgress,
+                        onSeek = { fraction -> viewModel.seek((fraction * durationMs).toLong()) },
+                        onProgressPreview = { fraction -> previewProgress = fraction },
+                        onPreviewEnd = { previewProgress = null },
+                        modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
+                        realHeights = waveform,
+                        moments = if (durationMs > 0) {
+                            moments.map { MomentMarker(it.id, it.positionMs.toFloat() / durationMs, it.colorArgb) }
+                        } else {
+                            emptyList()
+                        },
+                        onLongPress = { fraction -> pendingMomentFraction = fraction },
+                        onMomentClick = { id -> selectedMoment = moments.firstOrNull { it.id == id } },
                     )
                 }
+                pendingMomentFraction?.let { fraction ->
+                    AddMomentDialog(
+                        onSave = { label, colorArgb, isChapter ->
+                            viewModel.addMoment((fraction * durationMs).toLong(), label, colorArgb, isChapter)
+                            pendingMomentFraction = null
+                        },
+                        onDismiss = { pendingMomentFraction = null },
+                    )
+                }
+                // Tapping a marker (WaveformScrubber's own hit-test) is the only way to manage one - see
+                // "как убирать метки и управлять ими": jump there, or delete it.
+                selectedMoment?.let { moment ->
+                    ContextActionSheet(
+                        onDismiss = { selectedMoment = null },
+                        actions = listOf(
+                            ContextAction("Перейти: ${moment.label}", Icons.Rounded.PlayArrow) {
+                                viewModel.seek(moment.positionMs)
+                                selectedMoment = null
+                            },
+                            ContextAction("Удалить метку", Icons.Outlined.Delete) {
+                                viewModel.removeMoment(moment.id)
+                                selectedMoment = null
+                            },
+                        ),
+                    )
+                }
+                Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(
+                        text = formatDuration(positionMs),
+                        color = NamiColors.Paper70,
+                        style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                    )
+                    Text(
+                        text = "-" + formatDuration((durationMs - positionMs).coerceAtLeast(0L)),
+                        color = NamiColors.Paper70,
+                        style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                    )
+                }
+                }
+
+                dev.nami.domain.NowPlayingBlock.TRANSPORT -> {
+                // Five rounded-square blocks, shrinking away from the center: play (72) > prev/next (56)
+                // > shuffle/repeat (44). Обе крайние кнопки включаются по отдельности (П.md §17 "какие
+                // кнопки в ряду управления"), центральные три - каркас ряда, их выключать нечем и незачем.
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (showShuffle) {
+                        TransportBlock(
+                            icon = Icons.Outlined.Shuffle,
+                            size = 44.dp,
+                            active = shuffleEnabled,
+                            contentDescription = "Перемешать",
+                            onClick = { viewModel.toggleShuffle() },
+                        )
+                    }
+                    TransportBlock(
+                        icon = Icons.Rounded.SkipPrevious,
+                        size = 56.dp,
+                        contentDescription = "Предыдущий",
+                        onClick = {
+                            // A previous track to show -> animate the pager, same as a swipe (forces the
+                            // actual previous track). Nothing to show -> fall back to the button's own
+                            // restart-if-elapsed semantics with no animation (nothing to slide to).
+                            if (queue.previousTrack != null) {
+                                scope.launch { pagerState.animateScrollToPage(0, animationSpec = TRACK_SLIDE_SPEC) }
+                            } else {
+                                viewModel.skipPrevious()
+                            }
+                        },
+                    )
+                    TransportBlock(
+                        icon = if (playing?.isPlaying == true) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                        size = 72.dp,
+                        filled = true,
+                        contentDescription = "Играть/пауза",
+                        onClick = viewModel::toggle,
+                    )
+                    TransportBlock(
+                        icon = Icons.Rounded.SkipNext,
+                        size = 56.dp,
+                        contentDescription = "Следующий",
+                        onClick = {
+                            if (queue.upcoming.isNotEmpty()) {
+                                scope.launch { pagerState.animateScrollToPage(2, animationSpec = TRACK_SLIDE_SPEC) }
+                            } else {
+                                viewModel.skipNext()
+                            }
+                        },
+                    )
+                    if (showRepeat) {
+                        TransportBlock(
+                            icon = Icons.Outlined.Repeat,
+                            size = 44.dp,
+                            active = repeatMode != dev.nami.domain.RepeatMode.OFF,
+                            badgeText = if (repeatMode == dev.nami.domain.RepeatMode.ONE) "1" else null,
+                            contentDescription = when (repeatMode) {
+                                dev.nami.domain.RepeatMode.OFF -> "Зациклить очередь"
+                                dev.nami.domain.RepeatMode.ALL -> "Зациклить один трек"
+                                dev.nami.domain.RepeatMode.ONE -> "Выключить цикл"
+                            },
+                            onClick = { viewModel.cycleRepeatMode() },
+                        )
+                    }
+                }
+                }
+
+                dev.nami.domain.NowPlayingBlock.TECH_INFO -> {
+                // Format badge sits below the transport controls per Дизайн.md §4.3 (mockup order:
+                // controls, then format badge row, then the pill row) - was above the scrubber before.
+                // Detail string (bitrate/sample-rate-bit-depth/size) needs the full Track (byte size,
+                // duration), not just QueueTrack's format string - falls back to just the format badge
+                // until currentTrackDetails' lookup resolves, and stays format-only if it never does.
+                if (showTechInfo) queue.nowPlaying?.format?.let { format ->
+                    // BPM/key (BpmKeyAnalyzer) land here live once a background scan finishes, sometimes
+                    // well after the badge is already on screen - an instant text swap would read as the
+                    // chip randomly resizing/changing under the user. animateContentSize smooths the
+                    // width change, AnimatedContent crossfades the text itself instead of a hard cut.
+                    Box(
+                        modifier = Modifier
+                            .padding(top = 40.dp)
+                            .background(NamiColors.Ai.copy(alpha = 0.14f), RoundedCornerShape(4.dp))
+                            .animateContentSize(animationSpec = tween(200)),
+                    ) {
+                        AnimatedContent(
+                            targetState = formatBadgeDetail(format, trackDetails),
+                            transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(150)) },
+                            label = "format-badge",
+                        ) { text ->
+                            Text(
+                                text = text,
+                                color = NamiColors.Ai,
+                                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            )
+                        }
+                    }
+                }
+                }
+
+                dev.nami.domain.NowPlayingBlock.PILLS -> {
+                // Bottom pill row per Дизайн.md §4.3: Очередь, night mode, and lyrics ("Текст") --
+                // night mode is real (see NowPlayingViewModel.nightModeEnabled/toggleNightMode), not a
+                // stub. Очередь/Текст are rectangular with sharp corners (r4); night mode is its own
+                // small circle, set apart from the other two.
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 40.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    NowPlayingPill(
+                        text = "Очередь",
+                        icon = Icons.Outlined.QueueMusic,
+                        onClick = onQueueClick,
+                        modifier = Modifier.weight(1f),
+                    )
+                    NowPlayingPill(
+                        icon = Icons.Outlined.DarkMode,
+                        onClick = { viewModel.toggleNightMode() },
+                        shape = CircleShape,
+                        active = nightModeEnabled,
+                        modifier = Modifier.size(48.dp),
+                    )
+                    NowPlayingPill(text = "Текст", icon = Icons.Outlined.Subject, onClick = onLyricsClick, modifier = Modifier.weight(1f))
+                }
+                }
             }
-        }
-        // Bottom pill row per Дизайн.md §4.3: Очередь, night mode, and lyrics ("Текст") --
-        // night mode is real (see NowPlayingViewModel.nightModeEnabled/toggleNightMode), not a
-        // stub. Очередь/Текст are rectangular with sharp corners (r4); night mode is its own
-        // small circle, set apart from the other two.
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 40.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            NowPlayingPill(
-                text = "Очередь",
-                icon = Icons.Outlined.QueueMusic,
-                onClick = onQueueClick,
-                modifier = Modifier.weight(1f),
-            )
-            NowPlayingPill(
-                icon = Icons.Outlined.DarkMode,
-                onClick = { viewModel.toggleNightMode() },
-                shape = CircleShape,
-                active = nightModeEnabled,
-                modifier = Modifier.size(48.dp),
-            )
-            NowPlayingPill(text = "Текст", icon = Icons.Outlined.Subject, onClick = onLyricsClick, modifier = Modifier.weight(1f))
         }
     }
     // Real night-mode effect, drawn LAST so it dims everything - cover art, transport controls,

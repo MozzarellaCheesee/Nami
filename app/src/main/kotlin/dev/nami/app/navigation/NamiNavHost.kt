@@ -78,6 +78,7 @@ private const val ROUTE_SMART_PLAYLIST_EDIT_EXISTING = "smart_playlist_editor/{p
 private const val ROUTE_SETTINGS_APPEARANCE = "settings/appearance"
 private const val ROUTE_THEME_EDITOR = "settings/theme_editor"
 private const val ROUTE_SETTINGS_PLAYER = "settings/player"
+private const val ROUTE_NOW_PLAYING_BLOCKS = "settings/player/blocks"
 private const val ROUTE_SESSIONS = "settings/sessions"
 private const val ROUTE_SETTINGS_LYRICS = "settings/lyrics"
 private const val ROUTE_TRASH = "trash"
@@ -355,7 +356,11 @@ fun NamiNavHost(
                     onBack = { navController.popBackStack() },
                     onSessionsClick = { navController.navigate(ROUTE_SESSIONS) },
                     onDriveModeClick = { navController.navigate(ROUTE_DRIVE_MODE) },
+                    onBlockOrderClick = { navController.navigate(ROUTE_NOW_PLAYING_BLOCKS) },
                 )
+            }
+            composable(ROUTE_NOW_PLAYING_BLOCKS) {
+                dev.nami.app.NowPlayingBlocksScreen(onBack = { navController.popBackStack() })
             }
             composable(ROUTE_SETTINGS_LYRICS) {
                 SettingsLyricsScreen(onBack = { navController.popBackStack() })

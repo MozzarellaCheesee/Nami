@@ -36,7 +36,9 @@ class SettingsViewModel @Inject constructor(
     val scrobblingEnabled: StateFlow<Boolean> = appSettingsRepository.scrobblingEnabled
     val listenBrainzToken: StateFlow<String?> = appSettingsRepository.listenBrainzToken
     val nowPlayingShowTechInfo: StateFlow<Boolean> = appSettingsRepository.nowPlayingShowTechInfo
-    val nowPlayingShowShuffleRepeat: StateFlow<Boolean> = appSettingsRepository.nowPlayingShowShuffleRepeat
+    val nowPlayingShowShuffle: StateFlow<Boolean> = appSettingsRepository.nowPlayingShowShuffle
+    val nowPlayingShowRepeat: StateFlow<Boolean> = appSettingsRepository.nowPlayingShowRepeat
+    val nowPlayingBlockOrder: StateFlow<List<dev.nami.domain.NowPlayingBlock>> = appSettingsRepository.nowPlayingBlockOrder
     val nowPlayingCompactCover: StateFlow<Boolean> = appSettingsRepository.nowPlayingCompactCover
     val nowPlayingLineProgress: StateFlow<Boolean> = appSettingsRepository.nowPlayingLineProgress
     val themeColorOverrides: StateFlow<Map<String, String>> = appSettingsRepository.themeColorOverrides
@@ -138,8 +140,16 @@ class SettingsViewModel @Inject constructor(
         appSettingsRepository.setNowPlayingShowTechInfo(value)
     }
 
-    fun setNowPlayingShowShuffleRepeat(value: Boolean) {
-        appSettingsRepository.setNowPlayingShowShuffleRepeat(value)
+    fun setNowPlayingShowShuffle(value: Boolean) {
+        appSettingsRepository.setNowPlayingShowShuffle(value)
+    }
+
+    fun setNowPlayingShowRepeat(value: Boolean) {
+        appSettingsRepository.setNowPlayingShowRepeat(value)
+    }
+
+    fun setNowPlayingBlockOrder(order: List<dev.nami.domain.NowPlayingBlock>) {
+        appSettingsRepository.setNowPlayingBlockOrder(order)
     }
 
     fun setNowPlayingCompactCover(value: Boolean) {

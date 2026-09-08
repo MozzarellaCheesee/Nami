@@ -54,7 +54,11 @@ private const val KEY_SCROBBLING_ENABLED = "scrobbling_enabled"
 private const val KEY_LISTENBRAINZ_TOKEN = "listenbrainz_token"
 private const val KEY_HOME_BLOCKS = "home_blocks" // JSON array [{type, enabled}], see readHomeBlocks
 private const val KEY_NOW_PLAYING_SHOW_TECH_INFO = "now_playing_show_tech_info"
+// Устаревший общий ключ на обе кнопки - остался только как дефолт для двух ключей ниже.
 private const val KEY_NOW_PLAYING_SHOW_SHUFFLE_REPEAT = "now_playing_show_shuffle_repeat"
+private const val KEY_NOW_PLAYING_SHOW_SHUFFLE = "now_playing_show_shuffle"
+private const val KEY_NOW_PLAYING_SHOW_REPEAT = "now_playing_show_repeat"
+private const val KEY_NOW_PLAYING_BLOCK_ORDER = "now_playing_block_order" // CSV имён NowPlayingBlock
 private const val KEY_THEME_COLOR_OVERRIDES = "theme_color_overrides" // JSON object {token: hex}
 private const val KEY_NOW_PLAYING_COMPACT_COVER = "now_playing_compact_cover"
 private const val KEY_NOW_PLAYING_LINE_PROGRESS = "now_playing_line_progress"
@@ -421,11 +425,40 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
         _nowPlayingShowTechInfo.value = value
     }
 
-    private val _nowPlayingShowShuffleRepeat = MutableStateFlow(prefs.getBoolean(KEY_NOW_PLAYING_SHOW_SHUFFLE_REPEAT, true))
-    override val nowPlayingShowShuffleRepeat: StateFlow<Boolean> = _nowPlayingShowShuffleRepeat
-    override fun setNowPlayingShowShuffleRepeat(value: Boolean) {
-        prefs.edit { putBoolean(KEY_NOW_PLAYING_SHOW_SHUFFLE_REPEAT, value) }
-        _nowPlayingShowShuffleRepeat.value = value
+    // Раньше на обе кнопки был один переключатель - его значение и становится дефолтом для
+    // каждой из двух новых, чтобы у тех, кто их выключил, они не появились обратно.
+    private val legacyShowShuffleRepeat = prefs.getBoolean(KEY_NOW_PLAYING_SHOW_SHUFFLE_REPEAT, true)
+
+    private val _nowPlayingShowShuffle = MutableStateFlow(prefs.getBoolean(KEY_NOW_PLAYING_SHOW_SHUFFLE, legacyShowShuffleRepeat))
+    override val nowPlayingShowShuffle: StateFlow<Boolean> = _nowPlayingShowShuffle
+    override fun setNowPlayingShowShuffle(value: Boolean) {
+        prefs.edit { putBoolean(KEY_NOW_PLAYING_SHOW_SHUFFLE, value) }
+        _nowPlayingShowShuffle.value = value
+    }
+
+    private val _nowPlayingShowRepeat = MutableStateFlow(prefs.getBoolean(KEY_NOW_PLAYING_SHOW_REPEAT, legacyShowShuffleRepeat))
+    override val nowPlayingShowRepeat: StateFlow<Boolean> = _nowPlayingShowRepeat
+    override fun setNowPlayingShowRepeat(value: Boolean) {
+        prefs.edit { putBoolean(KEY_NOW_PLAYING_SHOW_REPEAT, value) }
+        _nowPlayingShowRepeat.value = value
+    }
+
+    private val _nowPlayingBlockOrder = MutableStateFlow(readNowPlayingBlockOrder())
+    override val nowPlayingBlockOrder: StateFlow<List<dev.nami.domain.NowPlayingBlock>> = _nowPlayingBlockOrder
+    override fun setNowPlayingBlockOrder(order: List<dev.nami.domain.NowPlayingBlock>) {
+        prefs.edit { putString(KEY_NOW_PLAYING_BLOCK_ORDER, order.joinToString(",") { it.name }) }
+        _nowPlayingBlockOrder.value = order
+    }
+
+    /** Имена через запятую, а не JSON: это просто список без полей. Неизвестное имя (блок из
+     * будущей версии, откат назад) отбрасывается, пропавший блок дописывается в конец - иначе у
+     * тех, кто уже трогал порядок, новые блоки не появились бы никогда. */
+    private fun readNowPlayingBlockOrder(): List<dev.nami.domain.NowPlayingBlock> {
+        val raw = prefs.getString(KEY_NOW_PLAYING_BLOCK_ORDER, null) ?: return dev.nami.domain.DEFAULT_NOW_PLAYING_BLOCKS
+        val saved = raw.split(",")
+            .mapNotNull { name -> runCatching { dev.nami.domain.NowPlayingBlock.valueOf(name.trim()) }.getOrNull() }
+            .distinct()
+        return saved + dev.nami.domain.DEFAULT_NOW_PLAYING_BLOCKS.filter { it !in saved }
     }
 
     private val _nowPlayingCompactCover = MutableStateFlow(prefs.getBoolean(KEY_NOW_PLAYING_COMPACT_COVER, false))

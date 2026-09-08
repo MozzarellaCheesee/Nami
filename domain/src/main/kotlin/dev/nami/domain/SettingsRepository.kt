@@ -219,16 +219,24 @@ interface SettingsRepository {
     val homeBlocks: StateFlow<List<HomeBlockConfig>>
     fun setHomeBlocks(blocks: List<HomeBlockConfig>)
 
-    /** П.md §17 "Now Playing - конструктор макета" - НЕ полный конструктор из плана (порядок
-     * блоков, размер обложки, форма прогресс-бара): экран собран вокруг HorizontalPager с
-     * тонкой gesture/анимационной синхронизацией (см. NowPlayingScreen.kt, история фиксов там -
-     * десятки коммитов), трогать его геометрию/порядок вслепую - реальный риск сломать то, что
-     * уже стабильно работает. Реализованы два независимых, изолированных от жестов переключателя:
-     * видимость строки техинфо (формат/битрейт) и видимость shuffle/repeat кнопок. */
+    /** П.md §17 "Now Playing - конструктор макета". Всё, что настраивается, лежит НИЖЕ обложки:
+     * сам HorizontalPager с его gesture/анимационной синхронизацией (см. NowPlayingScreen.kt,
+     * история фиксов там - десятки коммитов) не трогается ни одной из этих настроек.
+     *
+     * Видимость строки техинфо и видимость каждой из двух кнопок ряда управления по отдельности -
+     * перемешать и зациклить настраиваются независимо, раньше это был один общий переключатель. */
     val nowPlayingShowTechInfo: StateFlow<Boolean>
     fun setNowPlayingShowTechInfo(value: Boolean)
-    val nowPlayingShowShuffleRepeat: StateFlow<Boolean>
-    fun setNowPlayingShowShuffleRepeat(value: Boolean)
+    val nowPlayingShowShuffle: StateFlow<Boolean>
+    fun setNowPlayingShowShuffle(value: Boolean)
+    val nowPlayingShowRepeat: StateFlow<Boolean>
+    fun setNowPlayingShowRepeat(value: Boolean)
+
+    /** "Порядок блоков" из §17 - список секций ниже обложки в порядке показа, см.
+     * [NowPlayingBlock]. Неизвестные имена при чтении отбрасываются, пропавшие дописываются в
+     * конец - тот же приём, что у [homeBlocks]. */
+    val nowPlayingBlockOrder: StateFlow<List<NowPlayingBlock>>
+    fun setNowPlayingBlockOrder(order: List<NowPlayingBlock>)
 
     /** "Размер обложки" из §17, сделанный единственным безопасным способом: меняется только
      * боковой отступ пейджера (peekDp), из которого считается ширина страницы. Сама логика

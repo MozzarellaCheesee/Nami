@@ -776,8 +776,12 @@ private object NoOpSettingsRepository : dev.nami.domain.SettingsRepository {
     override fun setHomeBlocks(blocks: List<dev.nami.domain.HomeBlockConfig>) {}
     override val nowPlayingShowTechInfo = MutableStateFlow(true)
     override fun setNowPlayingShowTechInfo(value: Boolean) {}
-    override val nowPlayingShowShuffleRepeat = MutableStateFlow(true)
-    override fun setNowPlayingShowShuffleRepeat(value: Boolean) {}
+    override val nowPlayingShowShuffle = MutableStateFlow(true)
+    override fun setNowPlayingShowShuffle(value: Boolean) {}
+    override val nowPlayingShowRepeat = MutableStateFlow(true)
+    override fun setNowPlayingShowRepeat(value: Boolean) {}
+    override val nowPlayingBlockOrder = MutableStateFlow(dev.nami.domain.DEFAULT_NOW_PLAYING_BLOCKS)
+    override fun setNowPlayingBlockOrder(order: List<dev.nami.domain.NowPlayingBlock>) {}
     override val nowPlayingCompactCover = MutableStateFlow(false)
     override fun setNowPlayingCompactCover(value: Boolean) {}
     override val nowPlayingLineProgress = MutableStateFlow(false)

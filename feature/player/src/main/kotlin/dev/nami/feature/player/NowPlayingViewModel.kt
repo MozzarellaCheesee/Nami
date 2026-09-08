@@ -96,7 +96,10 @@ class NowPlayingViewModel @Inject constructor(
 
     /** П.md §17 "Now Playing - конструктор" (частично, см. SettingsRepository doc). */
     val nowPlayingShowTechInfo: StateFlow<Boolean> = settingsRepository?.nowPlayingShowTechInfo ?: MutableStateFlow(true)
-    val nowPlayingShowShuffleRepeat: StateFlow<Boolean> = settingsRepository?.nowPlayingShowShuffleRepeat ?: MutableStateFlow(true)
+    val nowPlayingShowShuffle: StateFlow<Boolean> = settingsRepository?.nowPlayingShowShuffle ?: MutableStateFlow(true)
+    val nowPlayingShowRepeat: StateFlow<Boolean> = settingsRepository?.nowPlayingShowRepeat ?: MutableStateFlow(true)
+    val nowPlayingBlockOrder: StateFlow<List<dev.nami.domain.NowPlayingBlock>> =
+        settingsRepository?.nowPlayingBlockOrder ?: MutableStateFlow(dev.nami.domain.DEFAULT_NOW_PLAYING_BLOCKS)
     val nowPlayingCompactCover: StateFlow<Boolean> = settingsRepository?.nowPlayingCompactCover ?: MutableStateFlow(false)
     val nowPlayingLineProgress: StateFlow<Boolean> = settingsRepository?.nowPlayingLineProgress ?: MutableStateFlow(false)
 

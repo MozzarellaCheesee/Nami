@@ -1,6 +1,8 @@
 package dev.nami.data
 
 import androidx.test.core.app.ApplicationProvider
+import dev.nami.domain.DEFAULT_NOW_PLAYING_BLOCKS
+import dev.nami.domain.NowPlayingBlock
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -43,5 +45,23 @@ class AppSettingsRepositoryTest {
         reopened.resetThemeShapeAndDensity()
         assertEquals(emptyMap(), AppSettingsRepository(context).themeShapeOverrides.value)
         assertEquals(1f, AppSettingsRepository(context).themeDensityScale.value)
+        assertEquals(1f, AppSettingsRepository(context).themeFontScale.value)
+    }
+
+    /** Порядок блоков Now Playing (П.md §17) хранится списком имён - проверяется то же, что у
+     * главного экрана: сохранённый порядок переживает перезапуск, мусор не ломает чтение, а
+     * блок, которого в сохранённом списке нет, дописывается в конец. */
+    @Test
+    fun `порядок блоков плеера переживает перезапуск и чинит неполный список`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val repo = AppSettingsRepository(context)
+
+        repo.setNowPlayingBlockOrder(listOf(NowPlayingBlock.PILLS, NowPlayingBlock.TRANSPORT))
+
+        val reopened = AppSettingsRepository(context)
+        val order = reopened.nowPlayingBlockOrder.value
+        assertEquals(listOf(NowPlayingBlock.PILLS, NowPlayingBlock.TRANSPORT), order.take(2))
+        assertEquals(DEFAULT_NOW_PLAYING_BLOCKS.size, order.size)
+        assertEquals(DEFAULT_NOW_PLAYING_BLOCKS.toSet(), order.toSet())
     }
 }
