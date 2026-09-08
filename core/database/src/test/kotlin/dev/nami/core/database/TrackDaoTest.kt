@@ -53,7 +53,7 @@ class TrackDaoTest {
 
     @Test
     fun `insertAll allows several tracks to share one path (CUE-split album image)`() = runTest {
-        // path is no longer unique -- a CUE-split album image has one physical file backing
+        // path is no longer unique - a CUE-split album image has one physical file backing
         // several track rows, each with its own cueStartMs/cueEndMs slice. See CueSheet.
         val track = TrackEntity(
             id = "t1", title = "A", artistId = null, albumId = null,

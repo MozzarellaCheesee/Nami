@@ -29,6 +29,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,9 +48,9 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** А5 -- сводный экран "всё, что известно о треке", каждое редактируемое поле открывает свой
+/** А5 - сводный экран "всё, что известно о треке", каждое редактируемое поле открывает свой
  * диалог и сохраняет сразу же (см. TrackInfoViewModel). Поля без источника правки (формат,
- * битрейт, размер, даты) -- только для чтения. */
+ * битрейт, размер, даты) - только для чтения. */
 @Composable
 fun TrackInfoScreen(onBack: () -> Unit, onStartRadio: (TrackId) -> Unit = {}, viewModel: TrackInfoViewModel = hiltViewModel()) {
     val track by viewModel.track.collectAsState()
@@ -59,6 +60,18 @@ fun TrackInfoScreen(onBack: () -> Unit, onStartRadio: (TrackId) -> Unit = {}, vi
     var showAddTagDialog by remember { mutableStateOf(false) }
     val trackTags by viewModel.trackTags.collectAsState()
     val allTags by viewModel.allTags.collectAsState()
+    val shareCardUri by viewModel.shareCardUri.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(shareCardUri) {
+        val uri = shareCardUri ?: return@LaunchedEffect
+        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+            type = "image/png"
+            putExtra(android.content.Intent.EXTRA_STREAM, uri)
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(android.content.Intent.createChooser(intent, "Поделиться карточкой"))
+        viewModel.shareCardUriShown()
+    }
 
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
@@ -93,6 +106,15 @@ fun TrackInfoScreen(onBack: () -> Unit, onStartRadio: (TrackId) -> Unit = {}, vi
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onStartRadio(current.id) }
+                    .padding(vertical = 12.dp),
+            )
+            Text(
+                text = "Поделиться карточкой трека",
+                color = NamiColors.Ai,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { viewModel.exportCard() }
                     .padding(vertical = 12.dp),
             )
             TagsSection(
@@ -144,7 +166,7 @@ fun TrackInfoScreen(onBack: () -> Unit, onStartRadio: (TrackId) -> Unit = {}, vi
 
 private enum class TrackInfoField { Title, Artist, Album, Year, Genre, Note }
 
-/** П.md §3's Tag/TrackTag -- several color-coded tags per track, separate from the single genre
+/** П.md §3's Tag/TrackTag - several color-coded tags per track, separate from the single genre
  * string. Removable chips + one "+" that opens [AddTagDialog]. */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
@@ -287,7 +309,7 @@ internal fun InfoRow(label: String, value: String, onClick: (() -> Unit)? = null
     }
 }
 
-/** П.md §3's Track.rating -- 5 tappable stars, tapping the currently-set star clears it. */
+/** П.md §3's Track.rating - 5 tappable stars, tapping the currently-set star clears it. */
 @Composable
 private fun RatingRow(rating: Int?, onRate: (Int?) -> Unit) {
     Row(

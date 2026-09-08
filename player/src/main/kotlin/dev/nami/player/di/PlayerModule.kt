@@ -17,7 +17,7 @@ abstract class PlayerModule {
     @Singleton
     abstract fun bindPlayerRepository(impl: PlayerRepositoryImpl): PlayerRepository
 
-    // Not @Singleton -- see DjRepositoryImpl's doc, one instance per DjViewModel, released with it.
+    // Not @Singleton - see DjRepositoryImpl's doc, one instance per DjViewModel, released with it.
     @Binds
     abstract fun bindDjRepository(impl: DjRepositoryImpl): DjRepository
 }

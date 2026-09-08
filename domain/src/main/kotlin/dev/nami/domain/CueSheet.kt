@@ -1,9 +1,9 @@
 package dev.nami.domain
 
-/** Хвост группы C "CUE-поддержка" -- один физический файл (образ альбома), .cue описывает где
- * начинается каждый трек. [startMs] от INDEX 01 (пропускает pregap INDEX 00, если есть) --
+/** Хвост группы C "CUE-поддержка" - один физический файл (образ альбома), .cue описывает где
+ * начинается каждый трек. [startMs] от INDEX 01 (пропускает pregap INDEX 00, если есть) -
  * [endMs] не читается из .cue (там его и нет), вызывающий код сам ставит его как startMs
- * следующего трека, для последнего трека -- null (до конца файла). */
+ * следующего трека, для последнего трека - null (до конца файла). */
 data class CueTrackInfo(
     val trackNo: Int,
     val title: String,
@@ -11,8 +11,8 @@ data class CueTrackInfo(
     val startMs: Long,
 )
 
-/** Разбирает только то, что реально нужно для нарезки на треки -- TRACK/TITLE/PERFORMER/INDEX.
- * REM-комментарии, CATALOG, множественные FILE-блоки (мульти-CD в одном .cue) не поддержаны --
+/** Разбирает только то, что реально нужно для нарезки на треки - TRACK/TITLE/PERFORMER/INDEX.
+ * REM-комментарии, CATALOG, множественные FILE-блоки (мульти-CD в одном .cue) не поддержаны -
  * второй FILE просто обрывает разбор на первом, честно возвращая уже собранные треки первого. */
 object CueSheet {
     private val indexRegex = Regex("""INDEX\s+(\d{2})\s+(\d{1,3}):(\d{2}):(\d{2})""", RegexOption.IGNORE_CASE)
@@ -38,7 +38,7 @@ object CueSheet {
             val line = rawLine.trim()
             when {
                 line.startsWith("FILE", ignoreCase = true) -> {
-                    if (sawFile) break // second FILE block -- see class doc, stop here
+                    if (sawFile) break // second FILE block - see class doc, stop here
                     sawFile = true
                 }
                 line.startsWith("TRACK", ignoreCase = true) -> {
@@ -49,7 +49,7 @@ object CueSheet {
                     currentStartMs = null
                 }
                 line.startsWith("TITLE", ignoreCase = true) -> {
-                    // Album title (before any TRACK line) is unused -- only per-track TITLE matters.
+                    // Album title (before any TRACK line) is unused - only per-track TITLE matters.
                     if (currentTrackNo != null) currentTitle = quotedRegex.find(line)?.groupValues?.get(1)
                 }
                 line.startsWith("PERFORMER", ignoreCase = true) -> {
@@ -59,7 +59,7 @@ object CueSheet {
                 line.startsWith("INDEX", ignoreCase = true) -> {
                     val match = indexRegex.find(line) ?: continue
                     val (number, mm, ss, ff) = match.destructured
-                    // INDEX 00 is the pregap -- only INDEX 01 (track's real start) matters here,
+                    // INDEX 00 is the pregap - only INDEX 01 (track's real start) matters here,
                     // and only the first INDEX 01 seen per track (some sheets repeat it).
                     if (number == "01" && currentStartMs == null) {
                         // CDDA: 75 frames/sec.

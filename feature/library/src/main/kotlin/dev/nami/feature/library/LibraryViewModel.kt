@@ -69,7 +69,7 @@ class LibraryViewModel @Inject constructor(
         batchEditTracks(ids, artistName, albumName, year, genre)
     }
 
-    /** Same TagEditDialog, single track from a row's own "⋮" menu -- [batchEditSelectedTracks]
+    /** Same TagEditDialog, single track from a row's own "⋮" menu - [batchEditSelectedTracks]
      * is just this called with the current selection. */
     fun batchEditTracks(ids: List<TrackId>, artistName: String?, albumName: String?, year: Int?, genre: String?) {
         viewModelScope.launch { libraryRepository.batchEditTracks(ids, artistName, albumName, year, genre) }
@@ -90,7 +90,7 @@ class LibraryViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(LibraryUiState())
     val uiState: StateFlow<LibraryUiState> = _uiState.asStateFlow()
 
-    // Live -- any rename/cover/artist/track change to any album updates this without needing a
+    // Live - any rename/cover/artist/track change to any album updates this without needing a
     // manual refresh call (recentAlbums() is now a Room-backed Flow, not a one-shot snapshot).
     val recentAlbums: StateFlow<List<AlbumSummary>> = libraryRepository.recentAlbums(limit = 10)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -159,7 +159,7 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
-    /** П.md §2 "Режим наблюдения за папкой" -- reruns folder import for every remembered SAF
+    /** П.md §2 "Режим наблюдения за папкой" - reruns folder import for every remembered SAF
      * tree, one at a time. No true background watch exists for SAF trees on Android, so this is
      * called on cold start and from a manual "Обновить" action instead of ever running silently
      * in the background. */
@@ -228,7 +228,7 @@ class LibraryViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(selectedTrackIds = emptySet())
     }
 
-    /** Replaces the whole selection -- used by drag-select and "select all". */
+    /** Replaces the whole selection - used by drag-select and "select all". */
     fun setSelectedTracks(ids: Set<TrackId>) {
         _uiState.value = _uiState.value.copy(selectedTrackIds = ids)
     }
@@ -281,7 +281,7 @@ class LibraryViewModel @Inject constructor(
     }
 
     /** New empty album, then hands its id back so the caller can navigate straight to its detail
-     * screen -- that screen already does everything a "create album" flow needs (rename, cover,
+     * screen - that screen already does everything a "create album" flow needs (rename, cover,
      * single/album toggle, add/remove tracks), so there's no separate composer screen. */
     fun createAlbum(onCreated: (AlbumId) -> Unit) {
         viewModelScope.launch {

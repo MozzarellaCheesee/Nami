@@ -10,7 +10,7 @@ data class PlayableTrack(
     val path: String,
     val artworkPath: String? = null,
     val format: String? = null,
-    /** Хвост группы C "CUE-поддержка" -- ненулевые, когда несколько треков делят один физический
+    /** Хвост группы C "CUE-поддержка" - ненулевые, когда несколько треков делят один физический
      * файл. Player seek'ает на cueStartMs при старте и переходит на следующий трек по достижении
      * cueEndMs, вместо естественного конца файла. */
     val cueStartMs: Long? = null,
@@ -23,7 +23,7 @@ enum class QueueOrigin { MANUAL, CONTEXT }
  * current track. Maps 1:1 to ExoPlayer's own REPEAT_MODE_* constants. */
 enum class RepeatMode { OFF, ALL, ONE }
 
-/** A-B loop range (План.md §22.2) -- while set, [PlayerRepository] seeks back to [startMs] the
+/** A-B loop range (План.md §22.2) - while set, [PlayerRepository] seeks back to [startMs] the
  * moment playback reaches [endMs], on the current track only. */
 data class LoopRange(val startMs: Long, val endMs: Long)
 
@@ -43,7 +43,7 @@ data class QueueItem(
 data class PlayerQueue(
     val nowPlaying: QueueTrack?,
     val upcoming: List<QueueItem>,
-    // Only the immediately preceding track (not a full history) -- just enough to render a
+    // Only the immediately preceding track (not a full history) - just enough to render a
     // "swipe right reveals this" preview in Now Playing/MiniPlayer without a bigger history
     // feature.
     val previousTrack: QueueTrack? = null,
@@ -57,15 +57,15 @@ interface PlayerRepository {
     val state: StateFlow<PlaybackState>
     val queue: StateFlow<PlayerQueue>
     /** Bumped when ExoPlayer advances to the next track on its own (the current one simply ended)
-     * -- as opposed to a skip button, a swipe, or a list tap, which the UI already animates for
+     * - as opposed to a skip button, a swipe, or a list tap, which the UI already animates for
      * itself. Lets Now Playing/MiniPlayer play the same slide transition for a natural track
      * change instead of the cover just silently jumping to the next one. */
     val autoAdvanceSignal: StateFlow<Int>
     /** Whether the current queue (from the currently-playing item forward) is in a shuffled
-     * order right now -- real, not a UI stub: [setShuffleEnabled] actually reorders the live
+     * order right now - real, not a UI stub: [setShuffleEnabled] actually reorders the live
      * playback queue and can restore the exact pre-shuffle order. */
     val shuffleEnabled: StateFlow<Boolean>
-    /** Real ExoPlayer repeat mode -- see [RepeatMode]. */
+    /** Real ExoPlayer repeat mode - see [RepeatMode]. */
     val repeatMode: StateFlow<RepeatMode>
     suspend fun play(tracks: List<PlayableTrack>, startIndex: Int, startMs: Long = 0)
     suspend fun toggle()
@@ -75,7 +75,7 @@ interface PlayerRepository {
      * only moving to the actual previous track on a second call. Matches standard media-player
      * "prev button" behavior. */
     suspend fun skipPrevious()
-    /** Always moves to the actual previous track, ignoring playback position -- for swipe
+    /** Always moves to the actual previous track, ignoring playback position - for swipe
      * gestures, where the elapsed-time restart of [skipPrevious] reads as "swiped but nothing
      * happened" since the first swipe just replays the current track. */
     suspend fun skipToPreviousTrack()
@@ -86,7 +86,7 @@ interface PlayerRepository {
     suspend fun removeQueueItem(index: Int)
     /** Removes any currently playing/queued item whose id is in [ids] (e.g. after a library delete). */
     suspend fun removeTracks(ids: Set<TrackId>)
-    /** Reorders the live queue in place -- true shuffles everything after (and not) the currently
+    /** Reorders the live queue in place - true shuffles everything after (and not) the currently
      * playing item, keeping that item where it is; false restores the exact order the queue had
      * the moment it was last shuffled. A no-op if [enabled] already matches the current state, or
      * if false is requested with nothing to restore (shuffle was never turned on this queue). */

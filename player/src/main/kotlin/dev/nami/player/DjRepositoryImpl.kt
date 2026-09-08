@@ -19,8 +19,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** Хвост группы C "DJ-режим" -- см. DjRepository для честного скоупа. Не @Singleton: живёт и
- * умирает вместе с DjViewModel (release() в onCleared), а не всё время работы приложения --
+/** Хвост группы C "DJ-режим" - см. DjRepository для честного скоупа. Не @Singleton: живёт и
+ * умирает вместе с DjViewModel (release() в onCleared), а не всё время работы приложения -
  * два лишних ExoPlayer постоянно в памяти того не стоят. */
 class DjRepositoryImpl @Inject constructor(@ApplicationContext context: Context) : DjRepository {
     private val playerA = ExoPlayer.Builder(context).build()
@@ -80,7 +80,7 @@ class DjRepositoryImpl @Inject constructor(@ApplicationContext context: Context)
         applyVolumes()
     }
 
-    // Equal-power-ish linear crossfade -- good enough for a manual mix, not claiming a true
+    // Equal-power-ish linear crossfade - good enough for a manual mix, not claiming a true
     // constant-loudness curve (that needs a sqrt/cosine taper, not worth it for this scope).
     private fun applyVolumes() {
         val value = _crossfade.value

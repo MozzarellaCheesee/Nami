@@ -33,7 +33,7 @@ import dev.nami.core.model.Track
 import dev.nami.domain.PlayableTrack
 import dev.nami.domain.PlaybackState
 
-/** Nav entry point -- route only carries two track ids, loads the actual [Track]s first. */
+/** Nav entry point - route only carries two track ids, loads the actual [Track]s first. */
 @Composable
 fun ABCompareRoute(onBack: () -> Unit, entryViewModel: ABCompareEntryViewModel = hiltViewModel()) {
     val (trackA, trackB) = entryViewModel.tracks.collectAsState().value
@@ -42,7 +42,7 @@ fun ABCompareRoute(onBack: () -> Unit, entryViewModel: ABCompareEntryViewModel =
     }
 }
 
-/** Хвост группы C "слепое A/B сравнение версий" -- см. ABCompareViewModel для смысла ярлыков. */
+/** Хвост группы C "слепое A/B сравнение версий" - см. ABCompareViewModel для смысла ярлыков. */
 @Composable
 fun ABCompareScreen(trackA: Track, trackB: Track, onBack: () -> Unit, viewModel: ABCompareViewModel = hiltViewModel()) {
     val uiState by viewModel.uiState.collectAsState()
@@ -65,7 +65,7 @@ fun ABCompareScreen(trackA: Track, trackB: Track, onBack: () -> Unit, viewModel:
             )
         }
         Text(
-            "Оба варианта играют под нейтральными именами -- переключай и слушай, названия раскроются отдельной кнопкой.",
+            "Оба варианта играют под нейтральными именами - переключай и слушай, названия раскроются отдельной кнопкой.",
             color = NamiColors.Paper70,
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),

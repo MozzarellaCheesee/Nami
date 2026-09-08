@@ -11,9 +11,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** Хвост группы C "слепое A/B сравнение версий" -- ждёт TrackVersionGrouper (уже есть, группирует
+/** Хвост группы C "слепое A/B сравнение версий" - ждёт TrackVersionGrouper (уже есть, группирует
  * remix/live/acoustic по названию). Играет оба варианта под нейтральными ярлыками "Вариант 1/2",
- * переключение сохраняет позицию, названия раскрываются отдельной кнопкой -- решение принимается
+ * переключение сохраняет позицию, названия раскрываются отдельной кнопкой - решение принимается
  * на слух, не по названию файла. */
 @HiltViewModel
 class ABCompareViewModel @Inject constructor(

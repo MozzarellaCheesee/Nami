@@ -112,10 +112,10 @@ fun NamiNavHost(
     // so MiniPlayer and NowPlayingScreen share the same instance and stay in sync.
     val nowPlayingViewModel: NowPlayingViewModel = hiltViewModel()
     val queue by nowPlayingViewModel.queue.collectAsState()
-    // Also hoisted here rather than scoped to the ROUTE_LIBRARY nav entry -- the bottom nav's
+    // Also hoisted here rather than scoped to the ROUTE_LIBRARY nav entry - the bottom nav's
     // Library tab needs to call selectTab(TRACKS) directly and reliably from any screen (Album/
     // Artist detail, Discography, another tab entirely). The previous approach signaled a
-    // LaunchedEffect keyed off an int bump, scoped inside the ROUTE_LIBRARY composable -- reset
+    // LaunchedEffect keyed off an int bump, scoped inside the ROUTE_LIBRARY composable - reset
     // only actually resets if that effect happens to remount and re-observe the new key at the
     // right time, which turned out not to hold up from every screen it needed to.
     val libraryViewModel: LibraryViewModel = hiltViewModel()
@@ -126,7 +126,7 @@ fun NamiNavHost(
 
     // Now Playing is deliberately NOT a NavHost destination: NavHost only keeps its current
     // destination's composition alive, so pushing a "now_playing" route used to dispose the
-    // whole Library screen (Paging, recentAlbums, scroll position, ViewModel) behind it -- every
+    // whole Library screen (Paging, recentAlbums, scroll position, ViewModel) behind it - every
     // expand/collapse paid for a full reload. Tracking it as plain state keeps Library (or
     // whatever screen was open) mounted underneath the whole time; the overlay below is purely
     // visual, and system back is wired by hand via BackHandler instead of the nav graph.
@@ -134,7 +134,7 @@ fun NamiNavHost(
     BackHandler(enabled = showNowPlaying) { showNowPlaying = false }
     var showQueue by remember { mutableStateOf(false) }
     // Registered after showNowPlaying's, so it takes priority (last-mounted BackHandler wins)
-    // while both are showing -- back should close Queue first, not skip straight past it.
+    // while both are showing - back should close Queue first, not skip straight past it.
     BackHandler(enabled = showQueue) { showQueue = false }
     var showLyrics by remember { mutableStateOf(false) }
     BackHandler(enabled = showLyrics) { showLyrics = false }
@@ -149,7 +149,7 @@ fun NamiNavHost(
     }
 
     // Bumped each time the Library tab is tapped, to reset its sub-tab to Tracks without
-    // recreating LibraryViewModel/its Paging flows -- an earlier fix used a fresh nav entry
+    // recreating LibraryViewModel/its Paging flows - an earlier fix used a fresh nav entry
     // (popUpTo inclusive) for that reset, which briefly flashed an empty list + import banner
     // while Paging reloaded from scratch every time.
     var libraryTabResetSignal by remember { mutableIntStateOf(0) }
@@ -159,7 +159,7 @@ fun NamiNavHost(
         NavHost(
             navController = navController,
             startDestination = ROUTE_LIBRARY,
-            // No clipToBounds here anymore -- it used to blanket-clip every destination to this
+            // No clipToBounds here anymore - it used to blanket-clip every destination to this
             // Column's own bounds, which also meant Album/Artist detail's cover couldn't bleed
             // up past the status-bar-height padding above (their own negative-offset trick for
             // that was otherwise correct, just clipped away before it could ever draw). The
@@ -178,7 +178,7 @@ fun NamiNavHost(
             popExitTransition = { ExitTransition.None },
         ) {
             composable(ROUTE_LIBRARY) {
-                // LibraryScreen already wraps its own list in clipToBounds() internally -- no
+                // LibraryScreen already wraps its own list in clipToBounds() internally - no
                 // extra wrap needed here.
                 LibraryScreen(
                     onTrackClick = { trackId ->
@@ -447,11 +447,11 @@ fun NamiNavHost(
                 }
             }
         }
-        // Always mounted, even while Now Playing is open/closing -- it's what Now Playing's
+        // Always mounted, even while Now Playing is open/closing - it's what Now Playing's
         // own slide-down is supposed to progressively uncover. Hiding it made it pop in
         // abruptly the moment Now Playing finished closing instead of already being there.
         // The AnimatedVisibility here only handles the very first appearance (nothing was
-        // playing, now something is) -- exit is instant because MiniPlayer's own swipe-down
+        // playing, now something is) - exit is instant because MiniPlayer's own swipe-down
         // dismiss already animates its height to 0 before queue.nowPlaying goes null (see
         // MiniPlayer.kt), so by the time this flips invisible there's nothing left to see.
         AnimatedVisibility(
@@ -466,7 +466,7 @@ fun NamiNavHost(
             onTabSelected = { route ->
                 // Pop the back stack directly down to this tab's own root, however deep the
                 // current screen is nested (playlist detail, a settings sub-screen, Search ->
-                // Artist, etc.) -- succeeds (returns true) only when `route` is actually already
+                // Artist, etc.) - succeeds (returns true) only when `route` is actually already
                 // on the live stack, i.e. this tab is the one currently open. More direct and
                 // reliable than navigate()'s popUpTo()/launchSingleTop/restoreState combo (tried
                 // first here): that combo is meant for jumping BETWEEN independent nested graphs,
@@ -474,7 +474,7 @@ fun NamiNavHost(
                 // without actually clearing whatever was pushed on top of it, so re-tapping a tab
                 // while inside one of its sub-screens silently did nothing.
                 if (!navController.popBackStack(route, inclusive = false)) {
-                    // Not on the stack at all yet -- this is a real switch to a different tab.
+                    // Not on the stack at all yet - this is a real switch to a different tab.
                     navController.navigate(route) {
                         popUpTo(ROUTE_LIBRARY) { saveState = true }
                         launchSingleTop = true
@@ -496,7 +496,7 @@ fun NamiNavHost(
         enter = slideInVertically(initialOffsetY = { fullHeight -> fullHeight }),
         // Instant exit: NowPlayingScreen always finishes its own slide-down animation (swipe
         // or the collapse chevron, both routed through the same code) before flipping this to
-        // false, so by that point the screen is already fully off-canvas -- an animated exit
+        // false, so by that point the screen is already fully off-canvas - an animated exit
         // here would just add a second, redundant slide on top of that one.
         exit = ExitTransition.None,
     ) {
@@ -520,7 +520,7 @@ fun NamiNavHost(
         )
     }
 
-    // Also plain state, not a nav destination -- was previously pushed onto the same NavHost as
+    // Also plain state, not a nav destination - was previously pushed onto the same NavHost as
     // Library/etc, which rendered it BEHIND NowPlayingScreen's overlay (drawn later, on top) since
     // that overlay isn't part of the nav graph either. Stacking this AnimatedVisibility after
     // NowPlaying's puts it on top for real.
@@ -528,7 +528,7 @@ fun NamiNavHost(
         visible = showQueue,
         enter = slideInVertically(initialOffsetY = { fullHeight -> fullHeight }),
         // Unlike NowPlaying, Queue/Lyrics don't already animate themselves off-screen before the
-        // system back gesture/button flips this to false -- their own drag-dismiss does, but
+        // system back gesture/button flips this to false - their own drag-dismiss does, but
         // hardware back skips straight to the BackHandler above, so this exit is what animates
         // that path instead of an instant cut.
         exit = slideOutVertically(targetOffsetY = { fullHeight -> fullHeight }),

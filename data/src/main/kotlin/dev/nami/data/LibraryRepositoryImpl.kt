@@ -216,9 +216,9 @@ class LibraryRepositoryImpl @Inject constructor(
     }
 
     /** Auto-tags an album "single" the moment it has exactly one (non-deleted) track, and clears
-     * the tag the moment it no longer does -- called after every mutation that can change an
+     * the tag the moment it no longer does - called after every mutation that can change an
      * album's track count (add/remove/delete a track, import). Doesn't touch albums the user
-     * never marked -- an album with 2+ tracks the user manually flagged single (if that's ever
+     * never marked - an album with 2+ tracks the user manually flagged single (if that's ever
      * allowed elsewhere) also gets un-flagged here, since "single" is defined purely by track
      * count for this app, not a separate manual-only concept. */
     private suspend fun syncAlbumIsSingle(albumId: String) {
@@ -258,7 +258,7 @@ class LibraryRepositoryImpl @Inject constructor(
         playHistoryDao.insert(PlayHistoryEntity(trackId = id.value, playedAt = playedAt, durationMs = durationMs))
     }
 
-    // Aggregated in Kotlin, not SQL -- day boundaries use the device's local timezone via
+    // Aggregated in Kotlin, not SQL - day boundaries use the device's local timezone via
     // java.time, simplest to get right there rather than in a SQLite date() expression.
     override suspend fun dailyListeningMinutes(days: Int): List<dev.nami.domain.DayActivity> {
         val since = System.currentTimeMillis() - days * 24L * 60 * 60 * 1000
@@ -267,7 +267,7 @@ class LibraryRepositoryImpl @Inject constructor(
             .map { (epochDay, rows) -> dev.nami.domain.DayActivity(epochDay, (rows.sumOf { it.durationMs } / 60_000).toInt()) }
     }
 
-    // Header numbers on the Статистика screen -- actually-listened, not library totals (see
+    // Header numbers on the Статистика screen - actually-listened, not library totals (see
     // ListeningSummary's own doc for why).
     override suspend fun listeningSummary(days: Int): dev.nami.domain.ListeningSummary {
         val since = System.currentTimeMillis() - days * 24L * 60 * 60 * 1000
@@ -306,7 +306,7 @@ class LibraryRepositoryImpl @Inject constructor(
     }
 
     override suspend fun batchEditTracks(ids: List<TrackId>, artistName: String?, albumName: String?, year: Int?, genre: String?) {
-        // Resolved once for the whole batch, not per track -- otherwise "same artist name" would
+        // Resolved once for the whole batch, not per track - otherwise "same artist name" would
         // still risk create-then-find races across tracks (find-or-create isn't atomic here).
         val resolvedArtistId = artistName?.takeIf { it.isNotBlank() }?.let { metadataResolver.resolveArtist(it) }
         val resolvedAlbumId = albumName?.takeIf { it.isNotBlank() }?.let { metadataResolver.resolveAlbum(it, resolvedArtistId, year) }
@@ -316,7 +316,7 @@ class LibraryRepositoryImpl @Inject constructor(
             if (resolvedAlbumId != null) {
                 trackDao.setAlbumId(id.value, resolvedAlbumId)
             } else if (year != null) {
-                // No new album named -- apply the year to whatever album this track is already on.
+                // No new album named - apply the year to whatever album this track is already on.
                 trackDao.findById(id.value)?.albumId?.let { albumDao.setYear(it, year) }
             }
             if (genre != null) trackDao.updateGenre(id.value, genre.takeIf { it.isNotBlank() })
@@ -382,7 +382,7 @@ class LibraryRepositoryImpl @Inject constructor(
         emitAll(importFolderFromGroups(folderImportScanner.scan(treeUriString.toUri())))
     }.flowOn(Dispatchers.IO)
 
-    // П.md §2 "Импорт .zip-архивов с распаковкой на лету" -- extracts each audio entry to a
+    // П.md §2 "Импорт .zip-архивов с распаковкой на лету" - extracts each audio entry to a
     // scratch file in cacheDir (deleted right after), then feeds it through the exact same
     // copyAndIndex path as a picked file (a file:// Uri resolves fine through ContentResolver for
     // reading, no FileProvider needed). Non-audio entries (readme, cover art sitting loose in the
@@ -502,7 +502,7 @@ class LibraryRepositoryImpl @Inject constructor(
         }
 
         // Same basename convention LyricsRepositoryImpl reads from (sibling .lrc next to the
-        // audio file) -- copied alongside so a folder import with lyrics already sitting next to
+        // audio file) - copied alongside so a folder import with lyrics already sitting next to
         // the tracks doesn't need a separate manual "load from file" step.
         if (lyricsDoc != null) {
             resolver.openInputStream(lyricsDoc.uri)?.use { input ->
@@ -525,14 +525,14 @@ class LibraryRepositoryImpl @Inject constructor(
         val title = tags?.title?.takeIf { it.isNotBlank() } ?: fallbackTitle
         val durationMs = tags?.durationMs?.takeIf { it > 0 } ?: readDurationMs(destination.path)
 
-        // Same title/artist/album/duration as an already-imported track -- treat the freshly
+        // Same title/artist/album/duration as an already-imported track - treat the freshly
         // copied file as a duplicate of it and discard the copy instead of indexing it again.
         if (trackDao.findDuplicate(title, artistId, albumId, durationMs) != null) {
             destination.delete()
             return null
         }
 
-        // CRC32, not a real audio fingerprint (chromaprint) -- cheap, exact-byte identity check
+        // CRC32, not a real audio fingerprint (chromaprint) - cheap, exact-byte identity check
         // that strengthens LibraryHealthReport's title/artist/duration dedup heuristic for the
         // common "same file, re-tagged" case, honestly not claiming to catch different rips of
         // the same recording.
@@ -562,10 +562,10 @@ class LibraryRepositoryImpl @Inject constructor(
             }
         }
 
-        // Хвост группы C "CUE-поддержка" -- .cue рядом с образом альбома разбивает этот один
+        // Хвост группы C "CUE-поддержка" - .cue рядом с образом альбома разбивает этот один
         // физический файл на несколько строк tracks, все с одним и тем же path (см.
         // TrackEntity.path's index, больше не unique) и своими cueStartMs/cueEndMs. Меньше 2
-        // разобранных треков (пустой/битый .cue) -- откатывается на обычный один трек на файл.
+        // разобранных треков (пустой/битый .cue) - откатывается на обычный один трек на файл.
         val cueTracks = cueDoc?.let { doc ->
             runCatching { resolver.openInputStream(doc.uri)?.use { it.bufferedReader().readText() } }.getOrNull()
                 ?.let(CueSheet::parse)

@@ -106,7 +106,7 @@ val MIGRATION_8_9 = object : Migration(8, 9) {
             """,
         )
         db.execSQL("CREATE INDEX IF NOT EXISTS index_album_artists_artistId ON album_artists(artistId)")
-        // Every album already had at most one artist -- seed the join table from it so existing
+        // Every album already had at most one artist - seed the join table from it so existing
         // albums keep showing their artist once queries switch to reading from this table.
         db.execSQL(
             """
@@ -135,7 +135,7 @@ val MIGRATION_9_10 = object : Migration(9, 10) {
     }
 }
 
-/** Этап 4's "Аудиотракт" screen -- existing tracks just show "неизвестно" for these until
+/** Этап 4's "Аудиотракт" screen - existing tracks just show "неизвестно" for these until
  * re-imported (a real analyzer/re-scan pass is a separate feature, not this migration's job). */
 val MIGRATION_10_11 = object : Migration(10, 11) {
     override fun migrate(db: SupportSQLiteDatabase) {
@@ -153,13 +153,13 @@ val MIGRATION_11_12 = object : Migration(11, 12) {
 
 val MIGRATION_12_13 = object : Migration(12, 13) {
     override fun migrate(db: SupportSQLiteDatabase) {
-        // Defaults to 0 (false) for every existing row -- the Liked playlist itself is created
+        // Defaults to 0 (false) for every existing row - the Liked playlist itself is created
         // lazily, the first time anything is liked, not backfilled here.
         db.execSQL("ALTER TABLE playlists ADD COLUMN isLiked INTEGER NOT NULL DEFAULT 0")
     }
 }
 
-/** Этап 6's "Метки моментов" (План.md §22.1) -- a new table, no existing columns touched. */
+/** Этап 6's "Метки моментов" (План.md §22.1) - a new table, no existing columns touched. */
 val MIGRATION_13_14 = object : Migration(13, 14) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL(
@@ -177,7 +177,7 @@ val MIGRATION_13_14 = object : Migration(13, 14) {
     }
 }
 
-/** Этап 6's "A-B петли с сохранением" (План.md §22.2) -- a new table, no existing columns touched. */
+/** Этап 6's "A-B петли с сохранением" (План.md §22.2) - a new table, no existing columns touched. */
 /** Этап 6's "заметки к треку" (План.md §22.17). */
 val MIGRATION_15_16 = object : Migration(15, 16) {
     override fun migrate(db: SupportSQLiteDatabase) {
@@ -185,14 +185,14 @@ val MIGRATION_15_16 = object : Migration(15, 16) {
     }
 }
 
-/** Этап 6's "главы и закладки" (План.md §22.16) -- reuses the moments table, see MomentEntity. */
+/** Этап 6's "главы и закладки" (План.md §22.16) - reuses the moments table, see MomentEntity. */
 val MIGRATION_16_17 = object : Migration(16, 17) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE moments ADD COLUMN isChapter INTEGER NOT NULL DEFAULT 0")
     }
 }
 
-/** Real album-level trash -- see AlbumEntity.deletedAt's own doc for why the old
+/** Real album-level trash - see AlbumEntity.deletedAt's own doc for why the old
  * EXISTS(non-deleted track)-only approach could leave a "deleted" album still visible. */
 val MIGRATION_17_18 = object : Migration(17, 18) {
     override fun migrate(db: SupportSQLiteDatabase) {
@@ -200,14 +200,14 @@ val MIGRATION_17_18 = object : Migration(17, 18) {
     }
 }
 
-/** Этап 6's "правила автоочереди" (План.md §22.13) -- tracks how often a track gets skipped. */
+/** Этап 6's "правила автоочереди" (План.md §22.13) - tracks how often a track gets skipped. */
 val MIGRATION_18_19 = object : Migration(18, 19) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE tracks ADD COLUMN skipCount INTEGER NOT NULL DEFAULT 0")
     }
 }
 
-/** BPM/тональность (План.md §3) -- BpmKeyAnalyzer's cached result per track. */
+/** BPM/тональность (План.md §3) - BpmKeyAnalyzer's cached result per track. */
 val MIGRATION_19_20 = object : Migration(19, 20) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE tracks ADD COLUMN bpm REAL")
@@ -223,7 +223,7 @@ val MIGRATION_20_21 = object : Migration(20, 21) {
     }
 }
 
-/** B1 "Статистика" (План.md §23.22) -- play history log. */
+/** B1 "Статистика" (План.md §23.22) - play history log. */
 val MIGRATION_21_22 = object : Migration(21, 22) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL(
@@ -239,7 +239,7 @@ val MIGRATION_21_22 = object : Migration(21, 22) {
     }
 }
 
-/** П.md §3 "модель данных" -- rest of Track's full field list closed out. */
+/** П.md §3 "модель данных" - rest of Track's full field list closed out. */
 val MIGRATION_22_23 = object : Migration(22, 23) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE tracks ADD COLUMN rating INTEGER")
@@ -248,7 +248,7 @@ val MIGRATION_22_23 = object : Migration(22, 23) {
     }
 }
 
-/** П.md §3 -- пользовательские цветные теги (Tag/TrackTag), отдельно от genre. */
+/** П.md §3 - пользовательские цветные теги (Tag/TrackTag), отдельно от genre. */
 val MIGRATION_23_24 = object : Migration(23, 24) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("CREATE TABLE IF NOT EXISTS tags (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, colorArgb INTEGER NOT NULL)")
@@ -268,12 +268,12 @@ val MIGRATION_23_24 = object : Migration(23, 24) {
     }
 }
 
-/** Хвост группы C "CUE-поддержка" -- несколько tracks-строк делят один физический файл. */
+/** Хвост группы C "CUE-поддержка" - несколько tracks-строк делят один физический файл. */
 val MIGRATION_24_25 = object : Migration(24, 25) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE tracks ADD COLUMN cueStartMs INTEGER")
         db.execSQL("ALTER TABLE tracks ADD COLUMN cueEndMs INTEGER")
-        // Was unique -- CUE tracks now intentionally share one path across several rows.
+        // Was unique - CUE tracks now intentionally share one path across several rows.
         db.execSQL("DROP INDEX IF EXISTS index_tracks_path")
         db.execSQL("CREATE INDEX IF NOT EXISTS index_tracks_path ON tracks(path)")
     }

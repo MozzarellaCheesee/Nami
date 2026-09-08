@@ -103,13 +103,13 @@ fun AlbumDetailScreen(
     var editTagsTrackId by remember { mutableStateOf<TrackId?>(null) }
 
     val density = LocalDensity.current
-    // The cover is square (aspectRatio 1f everywhere else it's shown -- grid, Info screen); the
+    // The cover is square (aspectRatio 1f everywhere else it's shown - grid, Info screen); the
     // header needs to match, not a fixed 280dp that reads as a wide rectangle on any screen wider
     // than that. Screen width IS the cover's width here (it fills it), so that's also its height.
     val headerMaxHeight = LocalConfiguration.current.screenWidthDp.dp
     val headerState = rememberCollapsingHeaderState(maxHeight = headerMaxHeight, minHeight = HEADER_MIN_HEIGHT)
     val listState = rememberLazyListState()
-    // Only two resting states -- fully expanded or fully collapsed. Without this, releasing
+    // Only two resting states - fully expanded or fully collapsed. Without this, releasing
     // mid-scroll left the header (and the sliding cover, whose size/shape/position are all
     // driven by collapseFraction) stuck halfway.
     LaunchedEffect(listState.isScrollInProgress) {
@@ -118,7 +118,7 @@ fun AlbumDetailScreen(
 
     // Same pattern as ArtistDetailScreen: floating cover, then gradient (sharing its exact
     // offset/size/clip so they never desync mid-slide), then the scrollable content with a
-    // transparent header-height spacer, back button drawn last -- see that screen for the full
+    // transparent header-height spacer, back button drawn last - see that screen for the full
     // rationale on each of these.
     var rootOffset by remember { mutableStateOf(Offset.Zero) }
     var avatarSlotOffset by remember { mutableStateOf(Offset.Zero) }
@@ -150,13 +150,13 @@ fun AlbumDetailScreen(
                         Text(text = year.toString(), color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall)
                     }
                     // Avatar slot (the floating cover's landing target) plus Play/overflow laid
-                    // out in a real Row right next to it -- previously these lived in a manually
+                    // out in a real Row right next to it - previously these lived in a manually
                     // offset-and-sized Box floating over the cover, sized/positioned off the
                     // COVER's own shrink math (currentWidthPx/currentHeightPx) instead of the
                     // ACTUAL on-screen header height, so mid-scroll (header already shorter than
                     // its max, cover not yet circular) that box still claimed the full original
                     // header area and drew over the title. Laying them out for real, in-flow,
-                    // next to the avatar spacer can't overlap anything above it -- Compose does
+                    // next to the avatar spacer can't overlap anything above it - Compose does
                     // that math, not manual offsets.
                     Row(modifier = Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Spacer(
@@ -167,7 +167,7 @@ fun AlbumDetailScreen(
                                 )
                                 .onGloballyPositioned { avatarSlotOffset = it.positionInRoot() - rootOffset },
                         )
-                        // Fades in only once the cover is mostly a circle -- while it's still
+                        // Fades in only once the cover is mostly a circle - while it's still
                         // large, Play/overflow live on the cover image itself instead (below).
                         if (progress > 0.6f) {
                             Row(
@@ -216,7 +216,7 @@ fun AlbumDetailScreen(
                         ),
                     )
                 }
-                // Группировка версий (План.md §23.21) -- remix/live/instrumental/acoustic of the
+                // Группировка версий (План.md §23.21) - remix/live/instrumental/acoustic of the
                 // same track collapse into one row with a "+N версий" expand toggle, instead of
                 // each cluttering the list as its own separate entry.
                 val versionGroups = remember(uiState.tracks) { dev.nami.domain.TrackVersionGrouper.group(uiState.tracks) }
@@ -291,7 +291,7 @@ fun AlbumDetailScreen(
             // displayCutoutPadding() (applied once, up in NamiNavHost) leaves even when the
             // status bar itself is hidden. Tapers to 0 as the cover collapses into the avatar slot.
             // rootOffset.y is the real measured push-down from NamiNavHost's ambient
-            // statusBarsPadding()+displayCutoutPadding() -- see ArtistDetailScreen's identical
+            // statusBarsPadding()+displayCutoutPadding() - see ArtistDetailScreen's identical
             // block for the full rationale (a composition-local-based guess at the inset was
             // wrong here; this is the actual value, not a guess).
             val bleed = rootOffset.y * (1f - progress)
@@ -330,12 +330,12 @@ fun AlbumDetailScreen(
 
             // Play/overflow live on the cover itself while it's still large, then crossfade to
             // the smaller inline pair next to the avatar slot once it's mostly a circle (see the
-            // Row next to the avatar Spacer above) -- gone from composition (not just alpha 0)
+            // Row next to the avatar Spacer above) - gone from composition (not just alpha 0)
             // past the threshold so they're not still tappable once invisible.
             if (progress < 0.6f) {
-                // Height tracks headerState.heightPx -- the ACTUAL current on-screen header
+                // Height tracks headerState.heightPx - the ACTUAL current on-screen header
                 // height (shrinks continuously as the list scrolls, all the way from
-                // HEADER_MAX_HEIGHT to HEADER_MIN_HEIGHT) -- not headerMaxHeightPx (which stays
+                // HEADER_MAX_HEIGHT to HEADER_MIN_HEIGHT) - not headerMaxHeightPx (which stays
                 // constant) and not currentWidthPx/currentHeightPx (the cover's own shrink toward
                 // the avatar, a different curve). Its bottom edge lands exactly where the title
                 // Column starts (that Column sits right after a Spacer(headerHeightDp) of the
@@ -345,7 +345,7 @@ fun AlbumDetailScreen(
                     modifier = Modifier
                         .offset { IntOffset(0, rootOffset.y.roundToInt()) }
                         .size(with(density) { screenWidthPx.toDp() }, with(density) { (headerState.heightPx + rootOffset.y).toDp() }),
-                    // Bottom of the gradient (near the box's own bottom edge), not its top -- the
+                    // Bottom of the gradient (near the box's own bottom edge), not its top - the
                     // box height already tracks headerState.heightPx (the ACTUAL current header
                     // height, not a fixed guess), so its bottom edge lands exactly where the title
                     // starts without drifting mid-scroll the way the old BottomEnd version used to
@@ -353,7 +353,7 @@ fun AlbumDetailScreen(
                     contentAlignment = Alignment.BottomEnd,
                 ) {
                     Row(
-                        // 44dp bottom clearance -- roughly the title line's own height plus a
+                        // 44dp bottom clearance - roughly the title line's own height plus a
                         // little air, so the buttons sit above where "Название альбома" actually
                         // renders instead of right at the box edge (== title's top edge, no gap).
                         modifier = Modifier.graphicsLayer { alpha = (1f - progress / 0.6f).coerceIn(0f, 1f) }.padding(bottom = 64.dp, end = 12.dp),

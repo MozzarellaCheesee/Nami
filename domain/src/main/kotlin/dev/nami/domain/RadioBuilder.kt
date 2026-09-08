@@ -3,9 +3,9 @@ package dev.nami.domain
 import dev.nami.core.model.Track
 import kotlin.random.Random
 
-/** Хвост группы C "офлайн-радио от трека" -- без сети и без реального ML-рекомендателя (см.
+/** Хвост группы C "офлайн-радио от трека" - без сети и без реального ML-рекомендателя (см.
  * этого проекта установившееся правило не выдавать эвристику за то, чем она не является):
- * похожесть считается по тому, что уже есть в библиотеке локально -- тот же артист, тот же жанр,
+ * похожесть считается по тому, что уже есть в библиотеке локально - тот же артист, тот же жанр,
  * близкий BPM. Не история прослушиваний, не аудио-анализ содержимого. */
 object RadioBuilder {
     private const val QUEUE_SIZE = 40
@@ -15,7 +15,7 @@ object RadioBuilder {
     private const val BPM_CLOSE_ENOUGH = 15f
 
     /** [seed] first, then up to [QUEUE_SIZE]-1 more tracks from [library] (seed excluded from the
-     * pool), weighted random draw favoring closer matches -- not a flat sort, so two radios from
+     * pool), weighted random draw favoring closer matches - not a flat sort, so two radios from
      * the same seed don't play in the exact same order every time. */
     fun build(seed: Track, library: List<Track>, random: Random = Random.Default): List<Track> {
         val pool = library.filter { it.id != seed.id }
@@ -26,7 +26,7 @@ object RadioBuilder {
         val target = minOf(QUEUE_SIZE, pool.size + 1)
 
         while (queue.size < target && scored.isNotEmpty()) {
-            // Weight = score+1 (so a zero-score track can still be picked, just rarely) --
+            // Weight = score+1 (so a zero-score track can still be picked, just rarely) -
             // total-weight roulette pick, same idea as a weighted shuffle.
             val totalWeight = scored.sumOf { (it.second + 1).toLong() }
             var pick = (random.nextDouble() * totalWeight).toLong()

@@ -60,7 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
 
-/** Top-level Settings screen -- just categories, per План.md Часть VIII. Each row opens its own
+/** Top-level Settings screen - just categories, per План.md Часть VIII. Each row opens its own
  * screen instead of everything living in one long scroll (that's what this replaced: one Column
  * with every setting from every category inlined, which grew unreadable as categories were added). */
 @Composable
@@ -395,7 +395,7 @@ fun SettingsLyricsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hilt
     }
 }
 
-/** Clickable "where to get this key" line -- goes in an OutlinedTextField's supportingText, right
+/** Clickable "where to get this key" line - goes in an OutlinedTextField's supportingText, right
  * under the field it belongs to, instead of one combined paragraph above a whole group of fields
  * (STANDS4's UID+Token used to share one, which didn't say which field the link was even for). */
 @Composable
@@ -497,9 +497,9 @@ private fun IconChoice(icon: LauncherIcon, selected: Boolean, onClick: () -> Uni
     }
 }
 
-/** План.md §22.11 "Сессии" -- save the current EQ/crossfade state (plus an optional sleep timer)
+/** План.md §22.11 "Сессии" - save the current EQ/crossfade state (plus an optional sleep timer)
  * under a name, re-apply any saved one in one tap. Deliberately doesn't snapshot the queue itself
- * -- see SessionsViewModel's own doc for why. */
+ * - see SessionsViewModel's own doc for why. */
 @Composable
 fun SessionsScreen(onBack: () -> Unit, viewModel: SessionsViewModel = hiltViewModel()) {
     val sessions by viewModel.sessions.collectAsState()

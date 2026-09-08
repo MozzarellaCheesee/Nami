@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
-/** Loads both tracks for [ABCompareScreen] by id -- the nav route only carries two ids, not full
+/** Loads both tracks for [ABCompareScreen] by id - the nav route only carries two ids, not full
  * Track objects. */
 @HiltViewModel
 class ABCompareEntryViewModel @Inject constructor(

@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** Хвост группы C "DJ-режим" -- см. DjRepository для честного скоупа (без битмэтчинга/темпа). */
+/** Хвост группы C "DJ-режим" - см. DjRepository для честного скоупа (без битмэтчинга/темпа). */
 @HiltViewModel
 class DjViewModel @Inject constructor(
     private val djRepository: DjRepository,

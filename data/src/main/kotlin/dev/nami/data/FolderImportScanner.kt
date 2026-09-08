@@ -93,7 +93,7 @@ class FolderImportScanner @Inject constructor(@ApplicationContext private val co
         return extension in AUDIO_EXTENSIONS
     }
 
-    /** Sibling .lrc next to an audio file (same folder, same basename) -- picked up automatically
+    /** Sibling .lrc next to an audio file (same folder, same basename) - picked up automatically
      * so a track imported from a folder that already has synced lyrics next to it doesn't need
      * the "Загрузить .lrc из файла" button at all. */
     fun findLyrics(doc: DocumentFile): DocumentFile? {
@@ -108,7 +108,7 @@ class FolderImportScanner @Inject constructor(@ApplicationContext private val co
         }
     }
 
-    /** Хвост группы C "CUE-поддержка" -- .cue лежащий рядом с образом альбома (один большой файл
+    /** Хвост группы C "CUE-поддержка" - .cue лежащий рядом с образом альбома (один большой файл
      * вместо отдельного файла на трек), тем же поиском по совпадающему имени, что и findLyrics. */
     fun findCue(doc: DocumentFile): DocumentFile? {
         val parent = doc.parentFile ?: return null

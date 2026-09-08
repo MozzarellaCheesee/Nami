@@ -32,9 +32,9 @@ import dev.nami.core.model.TrackId
 import dev.nami.domain.TrackVersionGrouper
 import dev.nami.feature.playlists.AddToPlaylistDialog
 
-/** All of an artist's tracks, most-played first -- ArtistDetailScreen's "Треки" section only
+/** All of an artist's tracks, most-played first - ArtistDetailScreen's "Треки" section only
  * shows the top 10, this is where "Все →" leads. Same remix/live/acoustic version grouping
- * (П.md §23.21) as AlbumDetailScreen -- ordering here is by play count, not track/disc number,
+ * (П.md §23.21) as AlbumDetailScreen - ordering here is by play count, not track/disc number,
  * but TrackVersionGrouper only keys off title+artist so that doesn't change what collapses. */
 @Composable
 fun ArtistAllTracksScreen(

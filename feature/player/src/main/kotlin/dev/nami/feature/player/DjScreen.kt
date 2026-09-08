@@ -33,7 +33,7 @@ import dev.nami.core.model.Track
 import dev.nami.domain.DjDeck
 import dev.nami.domain.DjDeckState
 
-/** Хвост группы C "DJ-режим" -- см. DjRepository для честного скоупа. */
+/** Хвост группы C "DJ-режим" - см. DjRepository для честного скоупа. */
 @Composable
 fun DjScreen(onBack: () -> Unit, viewModel: DjViewModel = hiltViewModel()) {
     val deckA by viewModel.deckA.collectAsState()
@@ -49,7 +49,7 @@ fun DjScreen(onBack: () -> Unit, viewModel: DjViewModel = hiltViewModel()) {
             Text("DJ-режим", color = NamiColors.Paper100, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 8.dp))
         }
         Text(
-            "Два независимых плеера и ручной кроссфейдер -- без синхронизации темпа и битмэтчинга.",
+            "Два независимых плеера и ручной кроссфейдер - без синхронизации темпа и битмэтчинга.",
             color = NamiColors.Paper70,
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
@@ -67,7 +67,7 @@ fun DjScreen(onBack: () -> Unit, viewModel: DjViewModel = hiltViewModel()) {
             )
         }
         Text(
-            "Библиотека -- жми A/B чтобы загрузить трек в деку",
+            "Библиотека - жми A/B чтобы загрузить трек в деку",
             color = NamiColors.Paper40,
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
