@@ -31,6 +31,8 @@ class SessionsViewModel @Inject constructor(
                 eqGainsDb = appSettingsRepository.eqBandGains.value,
                 crossfadeEnabled = appSettingsRepository.crossfadeEnabled.value,
                 sleepTimerMinutes = sleepTimerMinutes,
+                shuffleEnabled = playerRepository.shuffleEnabled.value,
+                repeatMode = playerRepository.repeatMode.value,
             ),
         )
     }
@@ -43,6 +45,10 @@ class SessionsViewModel @Inject constructor(
         appSettingsRepository.setEqBandGains(session.eqGainsDb)
         appSettingsRepository.setEqEnabled(true)
         appSettingsRepository.setCrossfadeEnabled(session.crossfadeEnabled)
+        viewModelScope.launch {
+            playerRepository.setShuffleEnabled(session.shuffleEnabled)
+            playerRepository.setRepeatMode(session.repeatMode)
+        }
         session.sleepTimerMinutes?.let { minutes ->
             viewModelScope.launch { playerRepository.startSleepTimer(minutes * 60_000L) }
         }

@@ -36,9 +36,12 @@ class ApplySessionAction : ActionCallback {
         settings.setEqBandGains(session.eqGainsDb)
         settings.setEqEnabled(true)
         settings.setCrossfadeEnabled(session.crossfadeEnabled)
+        val playerRepo = widgetPlayerRepository(context)
+        playerRepo.awaitReady()
+        playerRepo.setShuffleEnabled(session.shuffleEnabled)
+        playerRepo.setRepeatMode(session.repeatMode)
         session.sleepTimerMinutes?.let { minutes ->
-            widgetPlayerRepository(context).awaitReady()
-            widgetPlayerRepository(context).startSleepTimer(minutes * 60_000L)
+            playerRepo.startSleepTimer(minutes * 60_000L)
         }
         // Session сама по себе не хранит "применена ли сейчас" - без этого нажатие пилюли не
         // давало никакого видимого отклика (реально применялось, но выглядело как ничего не

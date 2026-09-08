@@ -36,6 +36,10 @@ data class Session(
     val crossfadeEnabled: Boolean,
     /** Null = don't touch/start a sleep timer when this session is applied. */
     val sleepTimerMinutes: Int?,
+    /** Раньше сессия не запоминала перемешку/зацикливание вообще - "Дорога" и "Дома" на деле
+     * часто отличаются именно этим, не только EQ. */
+    val shuffleEnabled: Boolean = false,
+    val repeatMode: RepeatMode = RepeatMode.OFF,
 )
 
 /** App-wide preferences (SharedPreferences-backed) - interface lives in :domain so feature

@@ -386,6 +386,8 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
                     put("eqGainsDb", JSONArray(session.eqGainsDb))
                     put("crossfadeEnabled", session.crossfadeEnabled)
                     put("sleepTimerMinutes", session.sleepTimerMinutes ?: JSONObject.NULL)
+                    put("shuffleEnabled", session.shuffleEnabled)
+                    put("repeatMode", session.repeatMode.name)
                 },
             )
         }
@@ -405,6 +407,8 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
                     eqGainsDb = (0 until gains.length()).map { gains.optDouble(it).toFloat() },
                     crossfadeEnabled = obj.optBoolean("crossfadeEnabled"),
                     sleepTimerMinutes = obj.opt("sleepTimerMinutes")?.takeIf { it != JSONObject.NULL } as? Int,
+                    shuffleEnabled = obj.optBoolean("shuffleEnabled"),
+                    repeatMode = runCatching { dev.nami.domain.RepeatMode.valueOf(obj.optString("repeatMode")) }.getOrDefault(dev.nami.domain.RepeatMode.OFF),
                 )
             }
         }.getOrDefault(emptyList())
