@@ -25,7 +25,14 @@
          устройств (NSD) ничего не находит. -->
     <uses-permission android:name="android.permission.CAMERA" />
 
+    <!-- Группа G целиком (Wi-Fi Drop, синхронизация, "слушать вместе" по LAN) ходит по обычному
+         http:// на соседний телефон в той же сети. С targetSdk 28+ Android блокирует cleartext по
+         умолчанию, и КАЖДЫЙ запрос группы G молча падал с "Cleartext HTTP traffic not permitted" -
+         экран показывал "Не получилось скачать" и пустоту, будто устройство недоступно. HTTPS тут
+         невозможен в принципе: сертификата у телефона в локалке нет и взять его негде. Наружу
+         приложение ходит только по https (LRCLIB, ListenBrainz) - этот флаг их не понижает. -->
     <application
+        android:usesCleartextTraffic="true"
         android:name=".NamiApplication"
         android:label="Nami"
         android:icon="@drawable/ic_launcher_wave"
