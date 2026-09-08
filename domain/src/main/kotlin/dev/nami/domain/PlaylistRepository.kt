@@ -46,6 +46,15 @@ interface PlaylistRepository {
     suspend fun createSmartPlaylist(name: String, query: SmartQuery): PlaylistId
     suspend fun updateSmartQuery(id: PlaylistId, query: SmartQuery)
 
+    /** П.md §20 - свои настройки воспроизведения на плейлист, применяются при его запуске.
+     * Null в поле = не навязывать. */
+    suspend fun setPlaybackSettings(
+        id: PlaylistId,
+        eqGainsCsv: String?,
+        crossfadeEnabled: Boolean?,
+        shuffleOnStart: Boolean?,
+    )
+
     /** The other direction of [Playlist.smartQueryJson] - parses it back into a [SmartQuery] for
      * an editor screen to load. Null on a missing/corrupted value, same as a fresh, ruleless query. */
     fun parseSmartQuery(json: String): SmartQuery?

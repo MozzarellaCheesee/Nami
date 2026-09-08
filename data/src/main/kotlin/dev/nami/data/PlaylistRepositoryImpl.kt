@@ -150,6 +150,15 @@ class PlaylistRepositoryImpl @Inject constructor(
         return PlaylistId(id)
     }
 
+    override suspend fun setPlaybackSettings(
+        id: PlaylistId,
+        eqGainsCsv: String?,
+        crossfadeEnabled: Boolean?,
+        shuffleOnStart: Boolean?,
+    ) {
+        playlistDao.updatePlaybackSettings(id.value, eqGainsCsv, crossfadeEnabled, shuffleOnStart)
+    }
+
     override suspend fun updateSmartQuery(id: PlaylistId, query: SmartQuery) {
         playlistDao.updateSmartQuery(id.value, SmartQuerySerializer.serialize(query))
     }
