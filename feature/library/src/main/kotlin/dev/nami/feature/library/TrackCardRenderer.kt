@@ -122,7 +122,7 @@ object TrackCardRenderer {
         // квадрат (RoundedCornerShape(size/3.5)), не круг - play светлый фон/тёмная иконка и
         // крупнее (72dp), prev/next тёмный фон/светлая иконка и меньше (56dp) - тот же масштаб
         // 56:72 здесь, не одинаковый размер всех трёх.
-        val controlsY = scrubberY + 270f
+        val controlsY = scrubberY + 250f
         val cornerEffect = android.graphics.CornerPathEffect(10f)
         // Тот же масштаб 56:72 что в приложении относительно ширины экрана (72dp на ~390dp
         // экране) - раньше кнопки были непропорционально огромными для карточки.
@@ -140,7 +140,9 @@ object TrackCardRenderer {
             drawSkipGlyph(canvas, cx, cy, size * 0.32f, isNext = true, paint = paint)
         }
 
-        var detailsY = controlsY + 120f
+        // Независимо от controlsY - при поднятии кнопок нижний текст должен остаться на месте,
+        // а не тоже уехать вверх вслед за ними.
+        var detailsY = scrubberY + 390f
 
         val metaParts = mutableListOf<String>()
         track.genre?.takeIf { it.isNotBlank() }?.let { metaParts += it }
