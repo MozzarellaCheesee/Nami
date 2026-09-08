@@ -35,6 +35,8 @@ class SettingsViewModel @Inject constructor(
     val doubleTapArtworkAction: StateFlow<dev.nami.domain.GestureAction> = appSettingsRepository.doubleTapArtworkAction
     val scrobblingEnabled: StateFlow<Boolean> = appSettingsRepository.scrobblingEnabled
     val listenBrainzToken: StateFlow<String?> = appSettingsRepository.listenBrainzToken
+    val nowPlayingShowTechInfo: StateFlow<Boolean> = appSettingsRepository.nowPlayingShowTechInfo
+    val nowPlayingShowShuffleRepeat: StateFlow<Boolean> = appSettingsRepository.nowPlayingShowShuffleRepeat
 
     fun setAutoOpenPlayer(value: Boolean) {
         appSettingsRepository.setAutoOpenPlayer(value)
@@ -122,5 +124,13 @@ class SettingsViewModel @Inject constructor(
 
     fun setListenBrainzToken(token: String) {
         appSettingsRepository.setListenBrainzToken(token)
+    }
+
+    fun setNowPlayingShowTechInfo(value: Boolean) {
+        appSettingsRepository.setNowPlayingShowTechInfo(value)
+    }
+
+    fun setNowPlayingShowShuffleRepeat(value: Boolean) {
+        appSettingsRepository.setNowPlayingShowShuffleRepeat(value)
     }
 }

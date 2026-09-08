@@ -774,6 +774,10 @@ private object NoOpSettingsRepository : dev.nami.domain.SettingsRepository {
     override fun setListenBrainzToken(token: String?) {}
     override val homeBlocks = MutableStateFlow(dev.nami.domain.DEFAULT_HOME_BLOCKS)
     override fun setHomeBlocks(blocks: List<dev.nami.domain.HomeBlockConfig>) {}
+    override val nowPlayingShowTechInfo = MutableStateFlow(true)
+    override fun setNowPlayingShowTechInfo(value: Boolean) {}
+    override val nowPlayingShowShuffleRepeat = MutableStateFlow(true)
+    override fun setNowPlayingShowShuffleRepeat(value: Boolean) {}
 }
 
 private object NoOpPlaylistRepository : PlaylistRepository {

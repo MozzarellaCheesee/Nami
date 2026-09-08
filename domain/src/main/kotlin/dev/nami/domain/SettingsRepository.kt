@@ -219,6 +219,17 @@ interface SettingsRepository {
     val homeBlocks: StateFlow<List<HomeBlockConfig>>
     fun setHomeBlocks(blocks: List<HomeBlockConfig>)
 
+    /** П.md §17 "Now Playing - конструктор макета" - НЕ полный конструктор из плана (порядок
+     * блоков, размер обложки, форма прогресс-бара): экран собран вокруг HorizontalPager с
+     * тонкой gesture/анимационной синхронизацией (см. NowPlayingScreen.kt, история фиксов там -
+     * десятки коммитов), трогать его геометрию/порядок вслепую - реальный риск сломать то, что
+     * уже стабильно работает. Реализованы два независимых, изолированных от жестов переключателя:
+     * видимость строки техинфо (формат/битрейт) и видимость shuffle/repeat кнопок. */
+    val nowPlayingShowTechInfo: StateFlow<Boolean>
+    fun setNowPlayingShowTechInfo(value: Boolean)
+    val nowPlayingShowShuffleRepeat: StateFlow<Boolean>
+    fun setNowPlayingShowShuffleRepeat(value: Boolean)
+
     companion object {
         const val STANDS4_DAILY_LIMIT = 100
     }

@@ -94,6 +94,10 @@ class NowPlayingViewModel @Inject constructor(
     val doubleTapArtworkAction: StateFlow<dev.nami.domain.GestureAction> =
         settingsRepository?.doubleTapArtworkAction ?: MutableStateFlow(dev.nami.domain.GestureAction.NONE)
 
+    /** П.md §17 "Now Playing - конструктор" (частично, см. SettingsRepository doc). */
+    val nowPlayingShowTechInfo: StateFlow<Boolean> = settingsRepository?.nowPlayingShowTechInfo ?: MutableStateFlow(true)
+    val nowPlayingShowShuffleRepeat: StateFlow<Boolean> = settingsRepository?.nowPlayingShowShuffleRepeat ?: MutableStateFlow(true)
+
     private val _requestShowLyrics = MutableSharedFlow<Unit>()
     val requestShowLyrics = _requestShowLyrics.asSharedFlow()
 

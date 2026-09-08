@@ -169,6 +169,8 @@ fun NowPlayingScreen(
     // Real, persisted - see SettingsRepository.nightModeEnabled. Read up here (not just at the
     // pill row further down) so the ambient backdrop below can react to it too.
     val nightModeEnabled by viewModel.nightModeEnabled.collectAsState()
+    val showTechInfo by viewModel.nowPlayingShowTechInfo.collectAsState()
+    val showShuffleRepeat by viewModel.nowPlayingShowShuffleRepeat.collectAsState()
 
     // Shared by the swipe gesture and the chevron button so both dismiss paths always finish
     // the slide-down themselves before popping - see the comment on the swipe branch below.
@@ -578,13 +580,15 @@ fun NowPlayingScreen(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TransportBlock(
-                icon = Icons.Outlined.Shuffle,
-                size = 44.dp,
-                active = shuffleEnabled,
-                contentDescription = "Перемешать",
-                onClick = { viewModel.toggleShuffle() },
-            )
+            if (showShuffleRepeat) {
+                TransportBlock(
+                    icon = Icons.Outlined.Shuffle,
+                    size = 44.dp,
+                    active = shuffleEnabled,
+                    contentDescription = "Перемешать",
+                    onClick = { viewModel.toggleShuffle() },
+                )
+            }
             TransportBlock(
                 icon = Icons.Rounded.SkipPrevious,
                 size = 56.dp,
@@ -619,25 +623,27 @@ fun NowPlayingScreen(
                     }
                 },
             )
-            TransportBlock(
-                icon = Icons.Outlined.Repeat,
-                size = 44.dp,
-                active = repeatMode != dev.nami.domain.RepeatMode.OFF,
-                badgeText = if (repeatMode == dev.nami.domain.RepeatMode.ONE) "1" else null,
-                contentDescription = when (repeatMode) {
-                    dev.nami.domain.RepeatMode.OFF -> "Зациклить очередь"
-                    dev.nami.domain.RepeatMode.ALL -> "Зациклить один трек"
-                    dev.nami.domain.RepeatMode.ONE -> "Выключить цикл"
-                },
-                onClick = { viewModel.cycleRepeatMode() },
-            )
+            if (showShuffleRepeat) {
+                TransportBlock(
+                    icon = Icons.Outlined.Repeat,
+                    size = 44.dp,
+                    active = repeatMode != dev.nami.domain.RepeatMode.OFF,
+                    badgeText = if (repeatMode == dev.nami.domain.RepeatMode.ONE) "1" else null,
+                    contentDescription = when (repeatMode) {
+                        dev.nami.domain.RepeatMode.OFF -> "Зациклить очередь"
+                        dev.nami.domain.RepeatMode.ALL -> "Зациклить один трек"
+                        dev.nami.domain.RepeatMode.ONE -> "Выключить цикл"
+                    },
+                    onClick = { viewModel.cycleRepeatMode() },
+                )
+            }
         }
         // Format badge sits below the transport controls per Дизайн.md §4.3 (mockup order:
         // controls, then format badge row, then the pill row) - was above the scrubber before.
         // Detail string (bitrate/sample-rate-bit-depth/size) needs the full Track (byte size,
         // duration), not just QueueTrack's format string - falls back to just the format badge
         // until currentTrackDetails' lookup resolves, and stays format-only if it never does.
-        queue.nowPlaying?.format?.let { format ->
+        if (showTechInfo) queue.nowPlaying?.format?.let { format ->
             // BPM/key (BpmKeyAnalyzer) land here live once a background scan finishes, sometimes
             // well after the badge is already on screen - an instant text swap would read as the
             // chip randomly resizing/changing under the user. animateContentSize smooths the

@@ -53,6 +53,8 @@ private const val KEY_OUTPUT_PROFILES_ENABLED = "output_profiles_enabled"
 private const val KEY_SCROBBLING_ENABLED = "scrobbling_enabled"
 private const val KEY_LISTENBRAINZ_TOKEN = "listenbrainz_token"
 private const val KEY_HOME_BLOCKS = "home_blocks" // JSON array [{type, enabled}], see readHomeBlocks
+private const val KEY_NOW_PLAYING_SHOW_TECH_INFO = "now_playing_show_tech_info"
+private const val KEY_NOW_PLAYING_SHOW_SHUFFLE_REPEAT = "now_playing_show_shuffle_repeat"
 // One "<CSV of 9 gains>|<volumeLimitPercent>" string per device type.
 private fun outputProfileKey(type: OutputDeviceType) = "output_profile_${type.name}"
 
@@ -402,6 +404,20 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
         blocks.forEach { array.put(JSONObject().put("type", it.type.name).put("enabled", it.enabled)) }
         prefs.edit { putString(KEY_HOME_BLOCKS, array.toString()) }
         _homeBlocks.value = blocks
+    }
+
+    private val _nowPlayingShowTechInfo = MutableStateFlow(prefs.getBoolean(KEY_NOW_PLAYING_SHOW_TECH_INFO, true))
+    override val nowPlayingShowTechInfo: StateFlow<Boolean> = _nowPlayingShowTechInfo
+    override fun setNowPlayingShowTechInfo(value: Boolean) {
+        prefs.edit { putBoolean(KEY_NOW_PLAYING_SHOW_TECH_INFO, value) }
+        _nowPlayingShowTechInfo.value = value
+    }
+
+    private val _nowPlayingShowShuffleRepeat = MutableStateFlow(prefs.getBoolean(KEY_NOW_PLAYING_SHOW_SHUFFLE_REPEAT, true))
+    override val nowPlayingShowShuffleRepeat: StateFlow<Boolean> = _nowPlayingShowShuffleRepeat
+    override fun setNowPlayingShowShuffleRepeat(value: Boolean) {
+        prefs.edit { putBoolean(KEY_NOW_PLAYING_SHOW_SHUFFLE_REPEAT, value) }
+        _nowPlayingShowShuffleRepeat.value = value
     }
 
     private fun readHomeBlocks(): List<dev.nami.domain.HomeBlockConfig> {

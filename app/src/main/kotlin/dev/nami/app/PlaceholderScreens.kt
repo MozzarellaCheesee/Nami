@@ -358,6 +358,8 @@ fun SettingsPlayerScreen(onBack: () -> Unit, onSessionsClick: () -> Unit, onDriv
     val karaokeEnabled by viewModel.karaokeEnabled.collectAsState()
     val shuffleMode by viewModel.shuffleMode.collectAsState()
     val doubleTapAction by viewModel.doubleTapArtworkAction.collectAsState()
+    val nowPlayingShowTechInfo by viewModel.nowPlayingShowTechInfo.collectAsState()
+    val nowPlayingShowShuffleRepeat by viewModel.nowPlayingShowShuffleRepeat.collectAsState()
 
     SettingsSubScreenScaffold(title = "Плеер", onBack = onBack) {
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
@@ -433,6 +435,18 @@ fun SettingsPlayerScreen(onBack: () -> Unit, onSessionsClick: () -> Unit, onDriv
                     val next = values[(values.indexOf(doubleTapAction) + 1) % values.size]
                     viewModel.setDoubleTapArtworkAction(next)
                 },
+            )
+            SettingsRow(
+                icon = Icons.Outlined.GraphicEq,
+                title = "Показывать техинфо трека (формат/битрейт)",
+                trailing = { NamiSwitch(checked = nowPlayingShowTechInfo, onCheckedChange = viewModel::setNowPlayingShowTechInfo) },
+                onClick = { viewModel.setNowPlayingShowTechInfo(!nowPlayingShowTechInfo) },
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Shuffle,
+                title = "Кнопки перемешать/зациклить на Now Playing",
+                trailing = { NamiSwitch(checked = nowPlayingShowShuffleRepeat, onCheckedChange = viewModel::setNowPlayingShowShuffleRepeat) },
+                onClick = { viewModel.setNowPlayingShowShuffleRepeat(!nowPlayingShowShuffleRepeat) },
             )
         }
     }
