@@ -20,6 +20,7 @@ dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:database"))
     implementation(project(":core:native"))
+    implementation(project(":core:tracker"))
     implementation(project(":domain"))
     // Only for DsfToDopWav (Этап 10's DSD-over-PCM import conversion) - :player depends on
     // :domain only, so this direction adds no cycle.

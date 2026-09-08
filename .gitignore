@@ -13,6 +13,8 @@ captures/
 
 # Rust
 native/target/
+# Исходники libopenmpt/game-music-emu - качаются :core:tracker при сборке, см. его build.gradle.kts
+native/third_party/
 core/native/src/main/jniLibs/
 core/native/build/
 

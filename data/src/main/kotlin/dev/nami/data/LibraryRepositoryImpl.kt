@@ -32,6 +32,7 @@ import dev.nami.domain.LibraryHealthReport
 import dev.nami.domain.LibraryRepository
 import dev.nami.domain.LyricsRepository
 import dev.nami.domain.NativeBridge
+import dev.nami.core.tracker.TrackerNative
 import dev.nami.player.dsd.DsfToDopWav
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -417,8 +418,12 @@ class LibraryRepositoryImpl @Inject constructor(
         }
     }.flowOn(Dispatchers.IO)
 
+    // .wv/.ape тут есть, но Media3 их не декодирует - см. комментарий в copyAndIndex про
+    // media3-decoder-ffmpeg. Трекерные модули и чиптюны (TrackerNative.extensions) играют через
+    // конвертацию в .wav при импорте.
     private fun isAudioFileName(name: String): Boolean =
-        listOf(".mp3", ".flac", ".m4a", ".aac", ".ogg", ".opus", ".wav", ".aiff", ".wv", ".ape", ".dsf", ".dff")
+        (listOf(".mp3", ".flac", ".m4a", ".aac", ".ogg", ".opus", ".wav", ".aiff", ".wv", ".ape", ".dsf", ".dff") +
+            TrackerNative.extensions)
             .any { name.endsWith(it, ignoreCase = true) }
 
     internal fun importFolderFromGroups(groups: List<AudioGroup>): Flow<ImportProgress> = flow {
@@ -496,6 +501,18 @@ class LibraryRepositoryImpl @Inject constructor(
             if (wavBytes != null) {
                 val wavDestination = File(musicDir, "${destination.nameWithoutExtension}.wav")
                 wavDestination.writeBytes(wavBytes)
+                destination.delete()
+                destination = wavDestination
+            }
+        }
+
+        // Трекерные модули (.mod/.xm/.it/.s3m, libopenmpt) и чиптюны консолей (.nsf/.spc/.vgm/
+        // .gbs, game-music-emu) - тот же приём, что выше с DSD: рендерим один раз в .wav, дальше
+        // файл идёт по обычному пути. Если нативная библиотека не собралась или формат ей не
+        // знаком - оставляем файл как есть, импорт из-за этого не падает.
+        if (TrackerNative.extensions.any { displayName?.endsWith(it, ignoreCase = true) == true }) {
+            val wavDestination = File(musicDir, "${destination.nameWithoutExtension}.wav")
+            if (TrackerNative.renderToWav(destination.path, wavDestination.path)) {
                 destination.delete()
                 destination = wavDestination
             }
