@@ -279,7 +279,7 @@ fun SettingsAppearanceScreen(onBack: () -> Unit, viewModel: SettingsViewModel = 
 }
 
 @Composable
-fun SettingsPlayerScreen(onBack: () -> Unit, onSessionsClick: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
+fun SettingsPlayerScreen(onBack: () -> Unit, onSessionsClick: () -> Unit, onDriveModeClick: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
     val autoOpenPlayer by viewModel.autoOpenPlayer.collectAsState()
     val hideSystemBars by viewModel.hideSystemBars.collectAsState()
     val karaokeEnabled by viewModel.karaokeEnabled.collectAsState()
@@ -332,6 +332,12 @@ fun SettingsPlayerScreen(onBack: () -> Unit, onSessionsClick: () -> Unit, viewMo
                 title = "Сессии (Учёба/Дорога/Сон)",
                 trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
                 onClick = onSessionsClick,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.PlayCircleOutline,
+                title = "Дорожный режим",
+                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
+                onClick = onDriveModeClick,
             )
             SettingsRow(
                 icon = Icons.Outlined.PlayCircleOutline,
