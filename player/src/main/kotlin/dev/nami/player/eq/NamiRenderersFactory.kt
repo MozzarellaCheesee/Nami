@@ -5,6 +5,8 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
+import dev.nami.player.convolution.ConvolutionAudioProcessor
+import dev.nami.player.crossfeed.CrossfeedAudioProcessor
 import dev.nami.player.dither.DitherAudioProcessor
 import dev.nami.player.replaygain.ReplayGainAudioProcessor
 
@@ -38,12 +40,26 @@ class NamiRenderersFactory(
     private val replayGainProcessor: ReplayGainAudioProcessor,
     private val eqProcessor: ParametricEqAudioProcessor,
     private val ditherProcessor: DitherAudioProcessor,
+    private val crossfeedProcessor: CrossfeedAudioProcessor,
+    private val convolutionProcessor: ConvolutionAudioProcessor,
 ) : DefaultRenderersFactory(context) {
 
     override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink =
         DefaultAudioSink.Builder(context)
             .setEnableFloatOutput(false)
             .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-            .setAudioProcessors(arrayOf(replayGainProcessor, eqProcessor, ditherProcessor))
+            // Порядок: уровень -> тембр -> комната (IR) -> наушники (кроссфид) -> дизер.
+            // Свёртка с IR стоит до кроссфида, потому что импульс комнаты описывает то, что
+            // происходит со звуком ДО ушей слушателя, а кроссфид моделирует уже саму голову.
+            // Дизер обязан быть последним: он маскирует ошибку округления всех, кто выше.
+            .setAudioProcessors(
+                arrayOf(
+                    replayGainProcessor,
+                    eqProcessor,
+                    convolutionProcessor,
+                    crossfeedProcessor,
+                    ditherProcessor,
+                ),
+            )
             .build()
 }

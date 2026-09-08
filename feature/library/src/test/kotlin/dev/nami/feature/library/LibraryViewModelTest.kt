@@ -812,6 +812,10 @@ private object NoOpSettingsRepository : dev.nami.domain.SettingsRepository {
     override fun setCrossfeedEnabled(value: Boolean) {}
     override val deviceAudioProfile = MutableStateFlow<String?>(null)
     override fun setDeviceAudioProfile(value: String?) {}
+    override val convolutionEnabled = MutableStateFlow(false)
+    override fun setConvolutionEnabled(value: Boolean) {}
+    override val convolutionIrPath = MutableStateFlow<String?>(null)
+    override fun setConvolutionIrPath(value: String?) {}
 }
 
 private object NoOpPlaylistRepository : PlaylistRepository {

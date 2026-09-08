@@ -9,6 +9,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.displayCutoutPadding
@@ -125,6 +126,9 @@ fun NamiNavHost(
     // есть и Context, и AppSettingsRepository), NavHost только показывает экран.
     batteryHintPending: Boolean = false,
     onBatteryHintShown: () -> Unit = {},
+    // П.md §29-31: на широком экране (Medium/Expanded, >600dp) вкладки уезжают в NavigationRail
+    // слева. Считает MainActivity через calculateWindowSizeClass, сюда приходит готовый признак.
+    useNavigationRail: Boolean = false,
     navController: NavHostController = rememberNavController(),
 ) {
     // Scoped here (Activity-level ViewModelStoreOwner), not inside a nav destination,
@@ -237,7 +241,46 @@ fun NamiNavHost(
     // while Paging reloaded from scratch every time.
     var libraryTabResetSignal by remember { mutableIntStateOf(0) }
 
+    // Вынесено из NamiBottomBar, потому что теперь у обработчика два вызывающих - панель снизу и
+    // рельса слева. Логика перехода одна и та же, дублировать её было бы прямым путём к тому, что
+    // на планшете вкладки ведут себя иначе, чем на телефоне.
+    val onTabSelected: (String) -> Unit = { route ->
+        // Pop the back stack directly down to this tab's own root, however deep the
+        // current screen is nested (playlist detail, a settings sub-screen, Search ->
+        // Artist, etc.) - succeeds (returns true) only when `route` is actually already
+        // on the live stack, i.e. this tab is the one currently open. More direct and
+        // reliable than navigate()'s popUpTo()/launchSingleTop/restoreState combo (tried
+        // first here): that combo is meant for jumping BETWEEN independent nested graphs,
+        // and on this app's single flat stack it just navigated to the target route
+        // without actually clearing whatever was pushed on top of it, so re-tapping a tab
+        // while inside one of its sub-screens silently did nothing.
+        if (!navController.popBackStack(route, inclusive = false)) {
+            // Not on the stack at all yet - this is a real switch to a different tab.
+            navController.navigate(route) {
+                popUpTo(ROUTE_LIBRARY) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
+        }
+        if (route == ROUTE_LIBRARY) {
+            libraryViewModel.selectTab(LibraryTab.TRACKS)
+            libraryTabResetSignal++
+        }
+        if (route == ROUTE_SEARCH) searchViewModel.onQueryChange("")
+    }
+
     Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
+    Row(modifier = Modifier.fillMaxSize()) {
+    // Рельса вне Column с контентом, а не внутри - она должна занимать всю высоту окна, включая
+    // область статус-бара, иначе на планшете сверху остаётся пустая полоса.
+    if (useNavigationRail) {
+        NamiNavRail(
+            tabs = bottomTabs,
+            showLabels = !bottomTabLabelsHidden,
+            currentRoute = currentRoute,
+            onTabSelected = onTabSelected,
+        )
+    }
     Column(modifier = Modifier.statusBarsPadding().displayCutoutPadding()) {
         NavHost(
             navController = navController,
@@ -625,36 +668,18 @@ fun NamiNavHost(
         ) {
             MiniPlayer(onExpand = { showNowPlaying = true }, viewModel = nowPlayingViewModel)
         }
-        NamiBottomBar(
-            tabs = bottomTabs,
-            showLabels = !bottomTabLabelsHidden,
-            currentRoute = currentRoute,
-            onTabSelected = { route ->
-                // Pop the back stack directly down to this tab's own root, however deep the
-                // current screen is nested (playlist detail, a settings sub-screen, Search ->
-                // Artist, etc.) - succeeds (returns true) only when `route` is actually already
-                // on the live stack, i.e. this tab is the one currently open. More direct and
-                // reliable than navigate()'s popUpTo()/launchSingleTop/restoreState combo (tried
-                // first here): that combo is meant for jumping BETWEEN independent nested graphs,
-                // and on this app's single flat stack it just navigated to the target route
-                // without actually clearing whatever was pushed on top of it, so re-tapping a tab
-                // while inside one of its sub-screens silently did nothing.
-                if (!navController.popBackStack(route, inclusive = false)) {
-                    // Not on the stack at all yet - this is a real switch to a different tab.
-                    navController.navigate(route) {
-                        popUpTo(ROUTE_LIBRARY) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                }
-                if (route == ROUTE_LIBRARY) {
-                    libraryViewModel.selectTab(LibraryTab.TRACKS)
-                    libraryTabResetSignal++
-                }
-                if (route == ROUTE_SEARCH) searchViewModel.onQueryChange("")
-            },
-            modifier = Modifier.navigationBarsPadding(),
-        )
+        // На широком экране те же вкладки уже стоят слева в рельсе - вторая копия снизу была бы
+        // просто дублем.
+        if (!useNavigationRail) {
+            NamiBottomBar(
+                tabs = bottomTabs,
+                showLabels = !bottomTabLabelsHidden,
+                currentRoute = currentRoute,
+                onTabSelected = onTabSelected,
+                modifier = Modifier.navigationBarsPadding(),
+            )
+        }
+    }
     }
 
     AnimatedVisibility(

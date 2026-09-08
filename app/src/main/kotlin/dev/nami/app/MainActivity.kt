@@ -10,6 +10,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
+import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
+import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
+import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Image
 import androidx.activity.viewModels
@@ -34,6 +37,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
+@OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
@@ -235,7 +239,15 @@ class MainActivity : ComponentActivity() {
                 fontScale = themeFontScale,
                 blurEnabled = blurEnabled,
             ) {
+                // П.md §29-31 "адаптивность". Считаем здесь, а не внутри NamiNavHost:
+                // calculateWindowSizeClass требует Activity, а NavHost её знать не должен - вниз
+                // уходит уже готовый признак "широкий экран".
+                val windowSizeClass = calculateWindowSizeClass(this@MainActivity)
                 NamiNavHost(
+                    // Medium/Expanded по ширине (>600dp) - планшет или телефон в ландшафте: нижняя
+                    // панель на таком экране жрёт высоту и уезжает от большого пальца, поэтому
+                    // вместо неё слева встаёт NavigationRail.
+                    useNavigationRail = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact,
                     batteryHintPending = batteryHintPending,
                     onBatteryHintShown = { appSettingsRepository.batteryHintShown = true },
                     onImportRequested = { pickFiles.launch(arrayOf("audio/*")) },

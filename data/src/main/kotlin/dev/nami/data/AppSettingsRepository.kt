@@ -77,6 +77,8 @@ private const val KEY_MINI_PLAYER_SIDE_SWIPE = "mini_player_side_swipe_action"
 private const val KEY_NOW_PLAYING_LAYOUT_PRESET = "now_playing_layout_preset"
 private const val KEY_CROSSFEED_ENABLED = "crossfeed_enabled"
 private const val KEY_DEVICE_AUDIO_PROFILE = "device_audio_profile"
+private const val KEY_CONVOLUTION_ENABLED = "convolution_enabled"
+private const val KEY_CONVOLUTION_IR_PATH = "convolution_ir_path"
 private const val KEY_AUTO_NIGHT_AMOLED = "auto_night_amoled"
 // One "<CSV of 9 gains>|<volumeLimitPercent>" string per device type.
 private fun outputProfileKey(type: OutputDeviceType) = "output_profile_${type.name}"
@@ -551,6 +553,20 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
     override fun setDeviceAudioProfile(value: String?) {
         prefs.edit { putString(KEY_DEVICE_AUDIO_PROFILE, value) }
         _deviceAudioProfile.value = value
+    }
+
+    private val _convolutionEnabled = MutableStateFlow(prefs.getBoolean(KEY_CONVOLUTION_ENABLED, false))
+    override val convolutionEnabled: StateFlow<Boolean> = _convolutionEnabled
+    override fun setConvolutionEnabled(value: Boolean) {
+        prefs.edit { putBoolean(KEY_CONVOLUTION_ENABLED, value) }
+        _convolutionEnabled.value = value
+    }
+
+    private val _convolutionIrPath = MutableStateFlow(prefs.getString(KEY_CONVOLUTION_IR_PATH, null))
+    override val convolutionIrPath: StateFlow<String?> = _convolutionIrPath
+    override fun setConvolutionIrPath(value: String?) {
+        prefs.edit { putString(KEY_CONVOLUTION_IR_PATH, value) }
+        _convolutionIrPath.value = value
     }
 
     private val _themeColorOverrides = MutableStateFlow(readThemeColorOverrides())

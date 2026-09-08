@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Home
@@ -85,6 +87,49 @@ fun NamiBottomBar(
                     .padding(top = if (showLabels) 10.dp else 0.dp),
                 horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
                 verticalArrangement = if (showLabels) Arrangement.Top else Arrangement.Center,
+            ) {
+                Icon(bottomTabIcon(tab), contentDescription = bottomTabLabel(tab), tint = iconTint, modifier = Modifier.size(24.dp))
+                if (showLabels) Text(text = bottomTabLabel(tab), color = labelColor, fontSize = 10.sp)
+            }
+        }
+    }
+}
+
+/** П.md §29-31: та же панель для широкого экрана, повёрнутая на бок. Своя вёрстка, а не
+ * material3 NavigationRail, ровно по той же причине, по которой NamiBottomBar не NavigationBar:
+ * у приложения свои токены цвета и своя (гораздо более плотная) метрика, и оборачивать M3-контейнер
+ * ради этого пришлось бы полностью переопределяя его цвета и отступы.
+ *
+ * Вкладки прижаты к верху, а не растянуты по высоте: на планшете растянутые на 900dp пять иконок
+ * читаются как случайно разбросанные, а не как одна группа. */
+@Composable
+fun NamiNavRail(
+    tabs: List<BottomTab>,
+    showLabels: Boolean,
+    currentRoute: String?,
+    onTabSelected: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = Modifier
+            .background(NamiColors.Ink900)
+            .then(modifier)
+            .fillMaxHeight()
+            .width(if (showLabels) 80.dp else 64.dp)
+            .systemBarsPadding(),
+        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        tabs.forEach { tab ->
+            val isActive = tab.route == currentRoute
+            val iconTint = if (isActive) NamiColors.Shu else NamiColors.Paper70
+            val labelColor = if (isActive) NamiColors.Shu else NamiColors.Paper40
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onTabSelected(tab.route) }
+                    .padding(vertical = 12.dp),
+                horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
             ) {
                 Icon(bottomTabIcon(tab), contentDescription = bottomTabLabel(tab), tint = iconTint, modifier = Modifier.size(24.dp))
                 if (showLabels) Text(text = bottomTabLabel(tab), color = labelColor, fontSize = 10.sp)

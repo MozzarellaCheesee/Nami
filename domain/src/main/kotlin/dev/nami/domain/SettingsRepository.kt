@@ -323,6 +323,16 @@ interface SettingsRepository {
     val deviceAudioProfile: StateFlow<String?>
     fun setDeviceAudioProfile(value: String?)
 
+    /** П.md §9 "свёртка с импульсной характеристикой" - см. ConvolutionAudioProcessor. */
+    val convolutionEnabled: StateFlow<Boolean>
+    fun setConvolutionEnabled(value: Boolean)
+
+    /** Абсолютный путь к WAV с импульсом внутри files/ir/ (файл копируется туда при выборе через
+     * SAF - держать сам SAF-Uri нельзя, разрешение на него переживает не каждую перезагрузку, а
+     * читать импульс приходится на каждой перестройке аудиоконвейера). null - импульс не выбран. */
+    val convolutionIrPath: StateFlow<String?>
+    fun setConvolutionIrPath(value: String?)
+
     companion object {
         const val STANDS4_DAILY_LIMIT = 100
     }
