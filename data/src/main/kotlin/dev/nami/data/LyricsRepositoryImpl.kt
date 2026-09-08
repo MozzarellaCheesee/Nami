@@ -17,15 +17,9 @@ class LyricsRepositoryImpl @Inject constructor(
     private val settingsRepository: SettingsRepository,
 ) : LyricsRepository {
 
-    private fun lrcFile(path: String) = File(sibling(path, ".lrc"))
+    private fun lrcFile(path: String) = File(lyricsSibling(path, ".lrc"))
 
-    // "/music/track.flac" -> "/music/track.lrc" - same basename next to the audio file, the
-    // convention every desktop player and most phone players already look for.
-    private fun sibling(path: String, newExtension: String): String {
-        val dot = path.lastIndexOf('.')
-        val base = if (dot > path.lastIndexOf('/')) path.substring(0, dot) else path
-        return base + newExtension
-    }
+    private fun sibling(path: String, newExtension: String): String = lyricsSibling(path, newExtension)
 
     override fun lyricsForPath(path: String): Flow<Lyrics?> = flow {
         emit(
@@ -174,4 +168,13 @@ class LyricsRepositoryImpl @Inject constructor(
             wordTimingsFile(path).writeText(text)
         }
     }
+}
+
+/** "/music/track.flac" -> "/music/track.lrc" - тот же basename рядом с аудиофайлом, конвенция,
+ * которую ищут все десктопные и большинство мобильных плееров. Вынесено из класса, потому что
+ * поиску по лирике (План.md §21 `lyrics:`/`no-lyrics:`) нужен путь к .lrc без всего репозитория. */
+internal fun lyricsSibling(path: String, newExtension: String): String {
+    val dot = path.lastIndexOf('.')
+    val base = if (dot > path.lastIndexOf('/')) path.substring(0, dot) else path
+    return base + newExtension
 }

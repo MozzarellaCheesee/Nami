@@ -167,6 +167,11 @@ interface TrackDao {
     )
     suspend fun allTrackYears(): List<TrackYearRow>
 
+    /** Поля для постфильтров поисковых операторов (План.md §21: bpm/rating/added/no-lyrics).
+     * Их нет в fts5-индексе, поэтому оператор доотбирает по ним уже найденные id, а не ищет ими. */
+    @Query("SELECT id, bpm, rating, dateAdded, path FROM tracks WHERE deletedAt IS NULL")
+    suspend fun allForSearchFilter(): List<TrackFilterRow>
+
     @Query("UPDATE tracks SET deletedAt = :deletedAt, path = :path WHERE id = :id")
     suspend fun setDeletedAt(id: String, deletedAt: Long?, path: String)
 
@@ -236,6 +241,14 @@ interface TrackDao {
     )
 
     data class TrackYearRow(val id: String, val year: Int)
+
+    data class TrackFilterRow(
+        val id: String,
+        val bpm: Float?,
+        val rating: Int?,
+        val dateAdded: Long,
+        val path: String,
+    )
 
     data class TrackIndexRow(
         val id: String,
