@@ -59,6 +59,7 @@ class PlaylistDetailViewModelTest {
             override suspend fun likeTrack(trackId: TrackId) {}
             override suspend fun createSmartPlaylist(name: String, query: dev.nami.domain.SmartQuery) = error("unused")
             override suspend fun updateSmartQuery(id: PlaylistId, query: dev.nami.domain.SmartQuery) {}
+            override suspend fun setPlaybackSettings(id: PlaylistId, eqGainsCsv: String?, crossfadeEnabled: Boolean?, shuffleOnStart: Boolean?) {}
             override fun parseSmartQuery(json: String): dev.nami.domain.SmartQuery? = null
         }
         val savedStateHandle = SavedStateHandle(mapOf("playlistId" to "p1"))

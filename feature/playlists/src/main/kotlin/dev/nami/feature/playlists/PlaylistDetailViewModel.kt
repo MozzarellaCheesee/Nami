@@ -23,9 +23,12 @@ data class PlaylistDetailUiState(val playlist: Playlist? = null, val tracks: Lis
 @HiltViewModel
 class PlaylistDetailViewModel @Inject constructor(
     private val playlistRepository: PlaylistRepository,
-    private val libraryRepository: dev.nami.domain.LibraryRepository,
-    private val settingsRepository: dev.nami.domain.SettingsRepository,
     savedStateHandle: SavedStateHandle,
+    // Nullable с дефолтом по той же причине, что и в NowPlayingViewModel: нужны только двум
+    // новым действиям (цепочки и запоминание эквалайзера), а существующие тесты продолжают
+    // строить этот ViewModel одним репозиторием и SavedStateHandle.
+    private val libraryRepository: dev.nami.domain.LibraryRepository? = null,
+    private val settingsRepository: dev.nami.domain.SettingsRepository? = null,
 ) : ViewModel() {
 
     val playlistId = PlaylistId(checkNotNull(savedStateHandle.get<String>("playlistId")))
@@ -62,7 +65,7 @@ class PlaylistDetailViewModel @Inject constructor(
      * в этот момент видит на ползунках. */
     fun rememberCurrentEq() {
         val playlist = _uiState.value.playlist ?: return
-        val csv = settingsRepository.eqBandGains.value.joinToString(",")
+        val csv = (settingsRepository ?: return).eqBandGains.value.joinToString(",")
         setPlaybackSettings(csv, playlist.crossfadeEnabled, playlist.shuffleOnStart)
     }
 
@@ -95,7 +98,7 @@ class PlaylistDetailViewModel @Inject constructor(
 
     /** П.md §20 "цепочки" - "после [trackId] всегда ставь [nextTrackId]". null снимает звено. */
     fun setChain(trackId: TrackId, nextTrackId: TrackId?) {
-        viewModelScope.launch { libraryRepository.setTrackChain(trackId, nextTrackId) }
+        viewModelScope.launch { libraryRepository?.setTrackChain(trackId, nextTrackId) }
     }
 
     fun delete(onDeleted: () -> Unit) {

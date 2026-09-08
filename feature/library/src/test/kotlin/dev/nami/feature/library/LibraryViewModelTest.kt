@@ -830,5 +830,6 @@ private object NoOpPlaylistRepository : PlaylistRepository {
     override suspend fun likeTrack(trackId: TrackId) {}
     override suspend fun createSmartPlaylist(name: String, query: dev.nami.domain.SmartQuery) = error("unused")
     override suspend fun updateSmartQuery(id: dev.nami.core.model.PlaylistId, query: dev.nami.domain.SmartQuery) {}
+    override suspend fun setPlaybackSettings(id: dev.nami.core.model.PlaylistId, eqGainsCsv: String?, crossfadeEnabled: Boolean?, shuffleOnStart: Boolean?) {}
     override fun parseSmartQuery(json: String): dev.nami.domain.SmartQuery? = null
 }
