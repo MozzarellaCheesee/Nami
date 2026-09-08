@@ -43,6 +43,8 @@ fun ArtistAllTracksScreen(
     onAddToQueue: (Track, artistName: String?) -> Unit,
     onShowTrackInfo: (TrackId) -> Unit,
     onCompareVersions: (TrackId, TrackId) -> Unit,
+    onStartRadio: (TrackId) -> Unit,
+    onShareCard: (Track) -> Unit,
     viewModel: ArtistDetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -77,6 +79,8 @@ fun ArtistAllTracksScreen(
                         onRemoveFromArtist = { viewModel.removeTrackFromArtist(track.id) },
                         onEditTags = { editTagsTrackId = track.id },
                         onShowInfo = { onShowTrackInfo(track.id) },
+                        onStartRadio = { onStartRadio(track.id) },
+                        onShareCard = { onShareCard(track) },
                         isCurrentTrack = track.id == nowPlaying?.trackId,
                         isPlaying = track.id == nowPlaying?.trackId && nowPlaying?.isPlaying == true,
                     )
@@ -115,6 +119,8 @@ fun ArtistAllTracksScreen(
                             onRemoveFromArtist = { viewModel.removeTrackFromArtist(track.id) },
                             onEditTags = { editTagsTrackId = track.id },
                             onShowInfo = { onShowTrackInfo(track.id) },
+                            onStartRadio = { onStartRadio(track.id) },
+                            onShareCard = { onShareCard(track) },
                             isCurrentTrack = track.id == nowPlaying?.trackId,
                             isPlaying = track.id == nowPlaying?.trackId && nowPlaying?.isPlaying == true,
                         )

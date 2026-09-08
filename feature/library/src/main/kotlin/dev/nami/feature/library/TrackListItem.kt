@@ -32,6 +32,8 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.PlayCircleOutline
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Label
 import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.MoreVert
@@ -79,6 +81,8 @@ fun TrackListItem(
     onRemoveFromAlbum: (() -> Unit)? = null,
     onRemoveFromArtist: (() -> Unit)? = null,
     onShowInfo: (() -> Unit)? = null,
+    onStartRadio: (() -> Unit)? = null,
+    onShareCard: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
     selectionMode: Boolean = false,
     isSelected: Boolean = false,
@@ -213,6 +217,8 @@ fun TrackListItem(
                         onEditNote?.let { ContextAction("Заметка", Icons.Outlined.Notes, it) },
                         onEditTags?.let { ContextAction("Редактировать теги", Icons.Outlined.Label, it) },
                         onShowInfo?.let { ContextAction("Информация о треке", Icons.Outlined.Info, it) },
+                        onStartRadio?.let { ContextAction("Начать радио от трека", Icons.Outlined.PlayCircleOutline, it) },
+                        onShareCard?.let { ContextAction("Поделиться карточкой", Icons.Outlined.Share, it) },
                         onRemoveFromAlbum?.let { ContextAction("Убрать из альбома", Icons.Outlined.Delete, it) },
                         onRemoveFromArtist?.let { ContextAction("Убрать у артиста", Icons.Outlined.Delete, it) },
                         onDelete?.let { ContextAction("Удалить", Icons.Outlined.Delete, it) },

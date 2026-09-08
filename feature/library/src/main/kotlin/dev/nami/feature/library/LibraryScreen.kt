@@ -100,6 +100,8 @@ fun LibraryScreen(
     onImportFolderRequested: () -> Unit,
     onImportZipRequested: () -> Unit,
     onShowTrackInfo: (TrackId) -> Unit,
+    onStartRadio: (TrackId) -> Unit,
+    onShareCard: (Track) -> Unit,
     importProgress: StateFlow<ImportProgress?>,
     // Bumped by the bottom nav's Library tab so re-tapping it while already here (or from any
     // other tab/detail screen) doesn't just switch back to the Tracks tab -- it scrolls that
@@ -211,6 +213,8 @@ fun LibraryScreen(
                         onEditNoteTrack = { track -> noteTrack = track },
                         onEditTagsTrack = { track -> editTagsTrackId = track.id },
                         onShowTrackInfo = onShowTrackInfo,
+                        onStartRadio = onStartRadio,
+                        onShareCard = onShareCard,
                         nowPlaying = nowPlaying,
                     )
                     LibraryTab.ALBUMS -> AlbumGridContent(
@@ -512,6 +516,8 @@ private fun TrackListContent(
     onEditNoteTrack: (Track) -> Unit,
     onEditTagsTrack: (Track) -> Unit,
     onShowTrackInfo: (TrackId) -> Unit,
+    onStartRadio: (TrackId) -> Unit,
+    onShareCard: (Track) -> Unit,
     nowPlaying: NowPlayingRow?,
 ) {
     if (tracks.itemCount == 0) {
@@ -643,6 +649,8 @@ private fun TrackListContent(
                         onEditNote = if (selectionMode) null else { { onEditNoteTrack(track) } },
                         onEditTags = if (selectionMode) null else { { onEditTagsTrack(track) } },
                         onShowInfo = if (selectionMode) null else { { onShowTrackInfo(track.id) } },
+                        onStartRadio = if (selectionMode) null else { { onStartRadio(track.id) } },
+                        onShareCard = if (selectionMode) null else { { onShareCard(track) } },
                         isCurrentTrack = track.id == nowPlaying?.trackId,
                         isPlaying = track.id == nowPlaying?.trackId && nowPlaying.isPlaying,
                     )

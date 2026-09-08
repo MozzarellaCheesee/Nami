@@ -122,6 +122,21 @@ fun NamiNavHost(
     // only actually resets if that effect happens to remount and re-observe the new key at the
     // right time, which turned out not to hold up from every screen it needed to.
     val libraryViewModel: LibraryViewModel = hiltViewModel()
+    // "Начать радио"/"Поделиться карточкой" - общие для каждого экрана со списком треков (см.
+    // TrackListItem's меню "ещё"), одна ViewModel на всех, не по одной на экран.
+    val trackQuickActionsViewModel: dev.nami.feature.library.TrackQuickActionsViewModel = hiltViewModel()
+    val shareCardUri by trackQuickActionsViewModel.shareCardUri.collectAsState()
+    val shareCardContext = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.runtime.LaunchedEffect(shareCardUri) {
+        val uri = shareCardUri ?: return@LaunchedEffect
+        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+            type = "image/png"
+            putExtra(android.content.Intent.EXTRA_STREAM, uri)
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        shareCardContext.startActivity(android.content.Intent.createChooser(intent, "Поделиться карточкой"))
+        trackQuickActionsViewModel.shareCardUriShown()
+    }
     val searchViewModel: dev.nami.feature.search.SearchViewModel = hiltViewModel()
     val settingsViewModel: SettingsViewModel = hiltViewModel()
     val autoOpenPlayer by settingsViewModel.autoOpenPlayer.collectAsState()
@@ -198,6 +213,11 @@ fun NamiNavHost(
                     onImportFolderRequested = onImportFolderRequested,
                     onImportZipRequested = onImportZipRequested,
                     onShowTrackInfo = { trackId -> navController.navigate("track_info/${trackId.value}") },
+                    onStartRadio = { trackId ->
+                        nowPlayingViewModel.startRadio(trackId)
+                        if (autoOpenPlayer) showNowPlaying = true
+                    },
+                    onShareCard = { track -> trackQuickActionsViewModel.shareCard(track) },
                     importProgress = importProgress,
                     resetSignal = libraryTabResetSignal,
                     viewModel = libraryViewModel,
@@ -290,13 +310,7 @@ fun NamiNavHost(
                 ROUTE_TRACK_INFO,
                 arguments = listOf(navArgument("trackId") { type = NavType.StringType }),
             ) {
-                dev.nami.feature.library.TrackInfoScreen(
-                    onBack = { navController.popBackStack() },
-                    onStartRadio = { trackId ->
-                        nowPlayingViewModel.startRadio(trackId)
-                        if (autoOpenPlayer) showNowPlaying = true
-                    },
-                )
+                dev.nami.feature.library.TrackInfoScreen(onBack = { navController.popBackStack() })
             }
             composable(
                 ROUTE_AB_COMPARE,
@@ -369,6 +383,11 @@ fun NamiNavHost(
                     onShowTrackInfo = { trackId -> navController.navigate("track_info/${trackId.value}") },
                     onShowAlbumInfo = { albumId -> navController.navigate("album_info/${albumId.value}") },
                     onCompareVersions = { a, b -> navController.navigate("ab_compare/${a.value}/${b.value}") },
+                    onStartRadio = { trackId ->
+                        nowPlayingViewModel.startRadio(trackId)
+                        if (autoOpenPlayer) showNowPlaying = true
+                    },
+                    onShareCard = { track -> trackQuickActionsViewModel.shareCard(track) },
                 )
             }
             composable(
@@ -436,6 +455,11 @@ fun NamiNavHost(
                     onAddToQueue = { track, artistName -> nowPlayingViewModel.addToQueue(track, artistName) },
                     onShowTrackInfo = { trackId -> navController.navigate("track_info/${trackId.value}") },
                     onCompareVersions = { a, b -> navController.navigate("ab_compare/${a.value}/${b.value}") },
+                    onStartRadio = { trackId ->
+                        nowPlayingViewModel.startRadio(trackId)
+                        if (autoOpenPlayer) showNowPlaying = true
+                    },
+                    onShareCard = { track -> trackQuickActionsViewModel.shareCard(track) },
                 )
                 }
             }

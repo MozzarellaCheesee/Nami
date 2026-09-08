@@ -52,7 +52,7 @@ import java.util.Locale
  * диалог и сохраняет сразу же (см. TrackInfoViewModel). Поля без источника правки (формат,
  * битрейт, размер, даты) - только для чтения. */
 @Composable
-fun TrackInfoScreen(onBack: () -> Unit, onStartRadio: (TrackId) -> Unit = {}, viewModel: TrackInfoViewModel = hiltViewModel()) {
+fun TrackInfoScreen(onBack: () -> Unit, viewModel: TrackInfoViewModel = hiltViewModel()) {
     val track by viewModel.track.collectAsState()
     val album by viewModel.album.collectAsState()
 
@@ -60,18 +60,6 @@ fun TrackInfoScreen(onBack: () -> Unit, onStartRadio: (TrackId) -> Unit = {}, vi
     var showAddTagDialog by remember { mutableStateOf(false) }
     val trackTags by viewModel.trackTags.collectAsState()
     val allTags by viewModel.allTags.collectAsState()
-    val shareCardUri by viewModel.shareCardUri.collectAsState()
-    val context = androidx.compose.ui.platform.LocalContext.current
-    LaunchedEffect(shareCardUri) {
-        val uri = shareCardUri ?: return@LaunchedEffect
-        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-            type = "image/png"
-            putExtra(android.content.Intent.EXTRA_STREAM, uri)
-            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        context.startActivity(android.content.Intent.createChooser(intent, "Поделиться карточкой"))
-        viewModel.shareCardUriShown()
-    }
 
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
@@ -99,24 +87,6 @@ fun TrackInfoScreen(onBack: () -> Unit, onStartRadio: (TrackId) -> Unit = {}, vi
                 InfoRow("Заметка", current.note ?: "—", onClick = { editField = TrackInfoField.Note })
                 RatingRow(current.rating, onRate = viewModel::setRating)
             }
-            Text(
-                text = "▶ Начать радио от этого трека",
-                color = NamiColors.Shu,
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onStartRadio(current.id) }
-                    .padding(vertical = 12.dp),
-            )
-            Text(
-                text = "Поделиться карточкой трека",
-                color = NamiColors.Ai,
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { viewModel.exportCard() }
-                    .padding(vertical = 12.dp),
-            )
             TagsSection(
                 trackTags = trackTags,
                 onRemove = viewModel::removeTag,

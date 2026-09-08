@@ -78,7 +78,16 @@ fun SettingsScreen(
     onBlindListenClick: () -> Unit,
     onCardSortClick: () -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900).padding(bottom = 24.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(NamiColors.Ink900)
+            // Не скроллилось вообще - с ростом числа строк (карточный разбор, DJ-режим,
+            // слепое прослушивание и т.д.) нижние пункты просто уезжали за экран, особенно с
+            // MiniPlayer, который откусывает ещё часть высоты снизу.
+            .verticalScroll(androidx.compose.foundation.rememberScrollState())
+            .padding(bottom = 24.dp),
+    ) {
         Text(
             text = "Настройки",
             color = NamiColors.Paper100,

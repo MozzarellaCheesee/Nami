@@ -86,10 +86,20 @@ object AudioPcmDecoder {
                 chunk.copyInto(interleaved, pos)
                 pos += chunk.size
             }
+            // Frees the (same-size) chunk list before allocating the mono/resampled buffers below
+            // -- otherwise all three live at once, multiplying peak memory for no reason.
+            pcmChunks.clear()
 
             val mono = downmixToMono(interleaved, srcChannels)
             return resampleLinear(mono, srcSampleRate, TARGET_SAMPLE_RATE)
         } catch (e: Exception) {
+            extractor.release()
+            return null
+        } catch (e: OutOfMemoryError) {
+            // A long/high-channel-count track can need a genuinely large buffer here -- this is
+            // one optional feature (precise sync) failing gracefully, not a reason to take the
+            // whole app process down with it. Exception doesn't catch Error/OutOfMemoryError, so
+            // this needs its own clause.
             extractor.release()
             return null
         }
