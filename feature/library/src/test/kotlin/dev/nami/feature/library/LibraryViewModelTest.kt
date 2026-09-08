@@ -146,7 +146,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun deleteTrack(id: TrackId) {}
             override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
-        val viewModel = LibraryViewModel(fakeRepo, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository(), NoOpPlaylistRepository)
+        val viewModel = LibraryViewModel(fakeRepo, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository(), NoOpPlaylistRepository, NoOpSettingsRepository)
 
         viewModel.importFiles(listOf("content://fake/1", "content://fake/2"))
 
@@ -207,7 +207,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun deleteTrack(id: TrackId) {}
             override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
-        val viewModel = LibraryViewModel(fakeRepo, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository(), NoOpPlaylistRepository)
+        val viewModel = LibraryViewModel(fakeRepo, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository(), NoOpPlaylistRepository, NoOpSettingsRepository)
 
         viewModel.importFolder("content://tree/fake")
 
@@ -265,7 +265,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun deleteTrack(id: TrackId) {}
             override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
-        val viewModel = LibraryViewModel(fakeRepo, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository(), NoOpPlaylistRepository)
+        val viewModel = LibraryViewModel(fakeRepo, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository(), NoOpPlaylistRepository, NoOpSettingsRepository)
 
         viewModel.selectTab(LibraryTab.ALBUMS)
 
@@ -329,7 +329,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun deleteTrack(id: TrackId) {}
             override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
-        val viewModel = LibraryViewModel(fakeRepo, fakeSearchRepo, FakeTrashRepository(), FakePlayerRepository(), NoOpPlaylistRepository)
+        val viewModel = LibraryViewModel(fakeRepo, fakeSearchRepo, FakeTrashRepository(), FakePlayerRepository(), NoOpPlaylistRepository, NoOpSettingsRepository)
 
         viewModel.importFiles(listOf("content://fake/1"))
 
@@ -393,7 +393,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun deleteTrack(id: TrackId) {}
             override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
-        val viewModel = LibraryViewModel(fakeRepo, fakeSearchRepo, FakeTrashRepository(), FakePlayerRepository(), NoOpPlaylistRepository)
+        val viewModel = LibraryViewModel(fakeRepo, fakeSearchRepo, FakeTrashRepository(), FakePlayerRepository(), NoOpPlaylistRepository, NoOpSettingsRepository)
 
         viewModel.importFiles(listOf("content://fake/1"))
 
@@ -452,7 +452,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
         val fakeTrashRepository = FakeTrashRepository()
-        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, fakeTrashRepository, FakePlayerRepository(), NoOpPlaylistRepository)
+        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, fakeTrashRepository, FakePlayerRepository(), NoOpPlaylistRepository, NoOpSettingsRepository)
 
         viewModel.deleteTrack(TrackId("t1"))
 
@@ -511,7 +511,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
         val fakeTrashRepository = FakeTrashRepository()
-        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, fakeTrashRepository, FakePlayerRepository(), NoOpPlaylistRepository)
+        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, fakeTrashRepository, FakePlayerRepository(), NoOpPlaylistRepository, NoOpSettingsRepository)
         viewModel.deleteTrack(TrackId("t1"))
 
         viewModel.undoLastDelete()
@@ -571,7 +571,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun deleteTrack(id: TrackId) {}
             override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
-        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository(), NoOpPlaylistRepository)
+        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository(), NoOpPlaylistRepository, NoOpSettingsRepository)
 
         viewModel.toggleTrackSelection(TrackId("t1"))
         assertEquals(setOf(TrackId("t1")), viewModel.uiState.value.selectedTrackIds)
@@ -632,7 +632,7 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun deleteTrack(id: TrackId) {}
             override suspend fun deleteTracks(ids: List<TrackId>) { deletedIds.addAll(ids) }
         }
-        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository(), NoOpPlaylistRepository)
+        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository(), NoOpPlaylistRepository, NoOpSettingsRepository)
         viewModel.toggleTrackSelection(TrackId("t1"))
         viewModel.toggleTrackSelection(TrackId("t2"))
 
@@ -694,13 +694,71 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
             override suspend fun deleteTrack(id: TrackId) {}
             override suspend fun deleteTracks(ids: List<TrackId>) {}
         }
-        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository(), NoOpPlaylistRepository)
+        val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository(), NoOpPlaylistRepository, NoOpSettingsRepository)
         viewModel.toggleTrackSelection(TrackId("t1"))
 
         viewModel.clearSelection()
 
         assertEquals(emptySet<TrackId>(), viewModel.uiState.value.selectedTrackIds)
     }
+}
+
+private object NoOpSettingsRepository : dev.nami.domain.SettingsRepository {
+    override val autoOpenPlayer = MutableStateFlow(false)
+    override fun setAutoOpenPlayer(value: Boolean) {}
+    override val hideSystemBars = MutableStateFlow(false)
+    override fun setHideSystemBars(value: Boolean) {}
+    override val karaokeEnabled = MutableStateFlow(false)
+    override fun setKaraokeEnabled(value: Boolean) {}
+    override val studyModeEnabled = MutableStateFlow(false)
+    override fun setStudyModeEnabled(value: Boolean) {}
+    override val lyricsFontPath = MutableStateFlow<String?>(null)
+    override fun setLyricsFontPath(path: String?) {}
+    override val eqEnabled = MutableStateFlow(false)
+    override fun setEqEnabled(value: Boolean) {}
+    override val eqBandGains = MutableStateFlow(emptyList<Float>())
+    override fun setEqBandGains(gainsDb: List<Float>) {}
+    override val bitPerfectUsbEnabled = MutableStateFlow(false)
+    override fun setBitPerfectUsbEnabled(value: Boolean) {}
+    override val replayGainEnabled = MutableStateFlow(false)
+    override fun setReplayGainEnabled(value: Boolean) {}
+    override val ditherEnabled = MutableStateFlow(false)
+    override fun setDitherEnabled(value: Boolean) {}
+    override val crossfadeEnabled = MutableStateFlow(false)
+    override fun setCrossfadeEnabled(value: Boolean) {}
+    override val smartCrossfadeEnabled = MutableStateFlow(false)
+    override fun setSmartCrossfadeEnabled(value: Boolean) {}
+    override val playbackGainDb = MutableStateFlow(0f)
+    override fun setPlaybackGainDb(value: Float) {}
+    override val hiFiEnabled = MutableStateFlow(false)
+    override fun setHiFiEnabled(value: Boolean) {}
+    override val nightModeEnabled = MutableStateFlow(false)
+    override fun setNightModeEnabled(value: Boolean) {}
+    override val outputProfilesEnabled = MutableStateFlow(false)
+    override fun setOutputProfilesEnabled(value: Boolean) {}
+    override val outputProfiles = MutableStateFlow(emptyMap<dev.nami.domain.OutputDeviceType, dev.nami.domain.OutputProfile>())
+    override fun setOutputProfile(type: dev.nami.domain.OutputDeviceType, profile: dev.nami.domain.OutputProfile) {}
+    override val stands4Uid = MutableStateFlow("")
+    override fun setStands4Uid(value: String) {}
+    override val stands4Token = MutableStateFlow("")
+    override fun setStands4Token(value: String) {}
+    override val stands4RequestsToday = MutableStateFlow(0)
+    override fun recordStands4Request() {}
+    override val lastPlaybackQueueTrackIds = MutableStateFlow(emptyList<String>())
+    override val lastPlaybackQueueIndex = MutableStateFlow(0)
+    override val lastPlaybackPositionMs = MutableStateFlow(0L)
+    override val lastPlaybackPausedAt = MutableStateFlow(0L)
+    override fun setLastPlayback(queueTrackIds: List<String>, queueIndex: Int, positionMs: Long, pausedAt: Long) {}
+    override val watchedFolders = MutableStateFlow(emptyList<String>())
+    override fun addWatchedFolder(treeUri: String) {}
+    override fun removeWatchedFolder(treeUri: String) {}
+    override val deeplApiKey = MutableStateFlow("")
+    override fun setDeeplApiKey(value: String) {}
+    override val shuffleMode = MutableStateFlow(dev.nami.domain.ShuffleMode.TRUE_RANDOM)
+    override fun setShuffleMode(mode: dev.nami.domain.ShuffleMode) {}
+    override val sessions = MutableStateFlow(emptyList<dev.nami.domain.Session>())
+    override fun saveSession(session: dev.nami.domain.Session) {}
+    override fun deleteSession(name: String) {}
 }
 
 private object NoOpPlaylistRepository : PlaylistRepository {

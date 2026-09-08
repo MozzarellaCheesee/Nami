@@ -17,6 +17,7 @@ import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerRepository
 import dev.nami.domain.PlaylistRepository
 import dev.nami.domain.SearchRepository
+import dev.nami.domain.SettingsRepository
 import dev.nami.domain.TrashRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
@@ -49,6 +50,7 @@ class LibraryViewModel @Inject constructor(
     private val trashRepository: TrashRepository,
     private val playerRepository: PlayerRepository,
     private val playlistRepository: PlaylistRepository,
+    private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
     fun likeTrack(trackId: TrackId) {
@@ -154,6 +156,42 @@ class LibraryViewModel @Inject constructor(
             }
         }
     }
+
+    /** П.md §2 "Режим наблюдения за папкой" -- reruns folder import for every remembered SAF
+     * tree, one at a time. No true background watch exists for SAF trees on Android, so this is
+     * called on cold start and from a manual "Обновить" action instead of ever running silently
+     * in the background. */
+    fun rescanWatchedFolders() {
+        val folders = settingsRepository.watchedFolders.value
+        if (folders.isEmpty()) return
+        viewModelScope.launch {
+            for (treeUri in folders) {
+                try {
+                    libraryRepository.import(ImportSource.Folder(treeUri)).collect { progress ->
+                        _uiState.value = _uiState.value.copy(importProgress = progress)
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // One watched folder failing (permission revoked, tree gone) shouldn't stop
+                    // the rest from rescanning.
+                }
+            }
+            searchRepository.rebuildIndex()
+            _uiState.value = _uiState.value.copy(importProgress = null)
+        }
+    }
+
+    fun addWatchedFolder(treeUri: String) {
+        settingsRepository.addWatchedFolder(treeUri)
+        importFolder(treeUri)
+    }
+
+    fun removeWatchedFolder(treeUri: String) {
+        settingsRepository.removeWatchedFolder(treeUri)
+    }
+
+    val watchedFolders: StateFlow<List<String>> = settingsRepository.watchedFolders
 
     fun importZip(uri: String) {
         viewModelScope.launch {

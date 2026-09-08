@@ -39,6 +39,7 @@ private const val KEY_DEEPL_API_KEY = "deepl_api_key"
 private const val KEY_STANDS4_REQUEST_COUNT = "stands4_request_count"
 private const val KEY_STANDS4_REQUEST_DATE = "stands4_request_date" // yyyy-MM-dd, device-local
 private const val KEY_LAST_PLAYBACK_QUEUE = "last_playback_queue"
+private const val KEY_WATCHED_FOLDERS = "watched_folders"
 private const val KEY_LAST_PLAYBACK_QUEUE_INDEX = "last_playback_queue_index"
 private const val KEY_LAST_PLAYBACK_POSITION_MS = "last_playback_position_ms"
 private const val KEY_LAST_PLAYBACK_PAUSED_AT = "last_playback_paused_at"
@@ -260,6 +261,24 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
 
     private val _lastPlaybackPausedAt = MutableStateFlow(prefs.getLong(KEY_LAST_PLAYBACK_PAUSED_AT, 0L))
     override val lastPlaybackPausedAt: StateFlow<Long> = _lastPlaybackPausedAt
+
+    // П.md §2 "Режим наблюдения за папкой" -- SAF tree URIs the user asked to keep in sync.
+    private val _watchedFolders = MutableStateFlow(
+        prefs.getString(KEY_WATCHED_FOLDERS, "")?.split(",")?.filter { it.isNotBlank() } ?: emptyList(),
+    )
+    override val watchedFolders: StateFlow<List<String>> = _watchedFolders
+
+    override fun addWatchedFolder(treeUri: String) {
+        val updated = (_watchedFolders.value + treeUri).distinct()
+        prefs.edit { putString(KEY_WATCHED_FOLDERS, updated.joinToString(",")) }
+        _watchedFolders.value = updated
+    }
+
+    override fun removeWatchedFolder(treeUri: String) {
+        val updated = _watchedFolders.value - treeUri
+        prefs.edit { putString(KEY_WATCHED_FOLDERS, updated.joinToString(",")) }
+        _watchedFolders.value = updated
+    }
 
     override fun setLastPlayback(queueTrackIds: List<String>, queueIndex: Int, positionMs: Long, pausedAt: Long) {
         prefs.edit {

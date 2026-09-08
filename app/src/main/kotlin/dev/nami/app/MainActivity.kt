@@ -90,6 +90,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // П.md §2 "Режим наблюдения за папкой" -- same persistable-permission dance as pickFolder,
+    // but also remembers the tree so rescanWatchedFolders() (cold start / manual refresh) can
+    // come back to it later.
+    private val pickWatchedFolder = registerForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { uri ->
+        uri?.let {
+            contentResolver.takePersistableUriPermission(it, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            libraryViewModel.addWatchedFolder(it.toString())
+        }
+    }
+
     // Two pickers per cover/photo target -- system Files (SAF, arbitrary storage/providers) and
     // the system Photo Picker (gallery-style grid, no storage permission needed) -- so "Изменить
     // обложку" always offers both instead of jumping straight into just one of them. Both ends of
@@ -141,6 +153,9 @@ class MainActivity : ComponentActivity() {
         IconPicker.ensureValidState(this)
         if (intent.getBooleanExtra(EXTRA_OPEN_PLAYER, false)) openPlayerSignal.value++
         handleShareIntent(intent)
+        // Watched folders (П.md §2) have no true background watch on Android -- rescanned once
+        // per cold start instead.
+        libraryViewModel.rescanWatchedFolders()
         val importProgress = libraryViewModel.uiState
             .map { it.importProgress }
             .stateIn(lifecycleScope, SharingStarted.Eagerly, libraryViewModel.uiState.value.importProgress)
@@ -175,6 +190,7 @@ class MainActivity : ComponentActivity() {
                     onImportRequested = { pickFiles.launch(arrayOf("audio/*")) },
                     onImportFolderRequested = { pickFolder.launch(null) },
                     onImportZipRequested = { pickZip.launch(arrayOf("application/zip")) },
+                    onAddWatchedFolderRequested = { pickWatchedFolder.launch(null) },
                     importProgress = importProgress,
                     onPickPlaylistCover = { playlistId ->
                         playlistActionsViewModel.requestCoverPick(playlistId)

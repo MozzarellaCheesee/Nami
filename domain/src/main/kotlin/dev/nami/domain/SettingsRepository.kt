@@ -158,6 +158,13 @@ interface SettingsRepository {
     val lastPlaybackPausedAt: StateFlow<Long>
     fun setLastPlayback(queueTrackIds: List<String>, queueIndex: Int, positionMs: Long, pausedAt: Long)
 
+    /** П.md §2 "Режим наблюдения за папкой" -- SAF tree URIs to keep re-scanning. No true
+     * background inotify-style watch (Android has none for SAF trees) -- rescanned on cold start
+     * and via a manual "Обновить" action instead. */
+    val watchedFolders: StateFlow<List<String>>
+    fun addWatchedFolder(treeUri: String)
+    fun removeWatchedFolder(treeUri: String)
+
     /** DeepL API key for lyrics translation (Settings -> Лирика) -- each user's own free-tier
      * key (500k chars/month), not shared across installs. Blank means "not configured", the
      * on-device MLKit translator (worse quality, esp. JA->RU, but keyless/offline) is used

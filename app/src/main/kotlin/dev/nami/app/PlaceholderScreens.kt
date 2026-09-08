@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Close
@@ -69,6 +70,7 @@ fun SettingsScreen(
     onLyricsClick: () -> Unit,
     onLibraryHealthClick: () -> Unit,
     onStatsClick: () -> Unit,
+    onWatchedFoldersClick: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900).padding(bottom = 24.dp)) {
         Text(
@@ -119,6 +121,12 @@ fun SettingsScreen(
                 title = "Статистика",
                 trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
                 onClick = onStatsClick,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Folder,
+                title = "Отслеживаемые папки",
+                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
+                onClick = onWatchedFoldersClick,
             )
         }
     }

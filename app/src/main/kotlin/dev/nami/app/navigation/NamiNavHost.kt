@@ -80,6 +80,7 @@ private const val ROUTE_SETTINGS_LYRICS = "settings/lyrics"
 private const val ROUTE_TRASH = "trash"
 private const val ROUTE_LIBRARY_HEALTH = "library_health"
 private const val ROUTE_STATS = "stats"
+private const val ROUTE_WATCHED_FOLDERS = "watched_folders"
 private const val ROUTE_TRACK_INFO = "track_info/{trackId}"
 private const val ROUTE_ALBUM_INFO = "album_info/{albumId}"
 private const val ROUTE_ARTIST_INFO = "artist_info/{artistId}"
@@ -92,6 +93,7 @@ fun NamiNavHost(
     onImportRequested: () -> Unit,
     onImportFolderRequested: () -> Unit,
     onImportZipRequested: () -> Unit,
+    onAddWatchedFolderRequested: () -> Unit,
     importProgress: StateFlow<ImportProgress?>,
     onPickPlaylistCover: (PlaylistId) -> Unit,
     onExportPlaylist: (PlaylistId) -> Unit,
@@ -242,6 +244,7 @@ fun NamiNavHost(
                     onLyricsClick = { navController.navigate(ROUTE_SETTINGS_LYRICS) },
                     onLibraryHealthClick = { navController.navigate(ROUTE_LIBRARY_HEALTH) },
                     onStatsClick = { navController.navigate(ROUTE_STATS) },
+                    onWatchedFoldersClick = { navController.navigate(ROUTE_WATCHED_FOLDERS) },
                 )
                 }
             }
@@ -265,6 +268,12 @@ fun NamiNavHost(
             }
             composable(ROUTE_STATS) {
                 dev.nami.feature.library.StatsScreen(onBack = { navController.popBackStack() })
+            }
+            composable(ROUTE_WATCHED_FOLDERS) {
+                dev.nami.feature.library.WatchedFoldersScreen(
+                    onBack = { navController.popBackStack() },
+                    onAddFolder = onAddWatchedFolderRequested,
+                )
             }
             composable(
                 ROUTE_TRACK_INFO,
