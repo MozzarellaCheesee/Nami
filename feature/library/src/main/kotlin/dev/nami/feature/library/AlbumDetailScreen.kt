@@ -68,6 +68,7 @@ import dev.nami.core.designsystem.ContextAction
 import dev.nami.core.designsystem.ContextActionSheet
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.designsystem.NamiRadius
+import dev.nami.core.designsystem.NamiType
 import dev.nami.core.model.AlbumId
 import dev.nami.core.model.Track
 import dev.nami.core.model.TrackId
@@ -144,7 +145,7 @@ fun AlbumDetailScreen(
                     Text(
                         text = uiState.album?.title ?: "",
                         color = NamiColors.Paper100,
-                        style = MaterialTheme.typography.headlineSmall,
+                        style = NamiType.ScreenTitle,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.fillMaxWidth().basicMarquee(iterations = Int.MAX_VALUE),
@@ -395,9 +396,14 @@ fun AlbumDetailScreen(
             }
         }
 
+        // Кружок под стрелкой: она лежит поверх обложки, и на светлой картинке белая стрелка
+        // без подложки просто исчезала.
         IconButton(
             onClick = onBack,
-            modifier = Modifier.align(Alignment.TopStart).padding(top = 12.dp, start = 12.dp),
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(top = 12.dp, start = 12.dp)
+                .background(NamiColors.Ink900.copy(alpha = 0.45f), androidx.compose.foundation.shape.CircleShape),
         ) {
             Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
         }

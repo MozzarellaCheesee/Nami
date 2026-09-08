@@ -45,6 +45,8 @@ import dev.nami.core.designsystem.ContextAction
 import dev.nami.core.designsystem.ContextActionSheet
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.designsystem.NamiRadius
+import dev.nami.core.designsystem.NamiScreenHeader
+import dev.nami.core.designsystem.NamiType
 import dev.nami.core.model.AlbumId
 import dev.nami.core.model.AlbumSummary
 import dev.nami.core.model.Track
@@ -71,12 +73,11 @@ fun ArtistDiscographyScreen(
     val tracksByAlbum = remember(uiState.tracks) { uiState.tracks.groupBy { it.albumId } }
 
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
-        Row(modifier = Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
-            }
-            Text(text = "Дискография", color = NamiColors.Paper100, style = MaterialTheme.typography.titleLarge)
-        }
+        NamiScreenHeader(
+            title = "Дискография",
+            subtitle = listOfNotNull(artistName, "${uiState.albums.size} " + albumsWord(uiState.albums.size)).joinToString(" · "),
+            onBack = onBack,
+        )
         LazyColumn {
             items(uiState.albums, key = { it.id.value }) { album ->
                 val albumTracks = remember(album.id, tracksByAlbum) {
@@ -162,22 +163,27 @@ private fun AlbumDiscographyBlock(
             )
         }
         Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp).clickable(onClick = onAlbumClick)) {
+            // Тип релиза - плашкой, а не просто мелким текстом: в длинной ленте дискографии
+            // сингл от альбома надо отличать боковым зрением.
             Text(
                 text = if (album.isSingle) "СИНГЛ" else "АЛЬБОМ",
                 color = NamiColors.Ai,
-                style = MaterialTheme.typography.labelSmall,
+                style = NamiType.Caption,
+                modifier = Modifier
+                    .background(NamiColors.Ai.copy(alpha = 0.14f), RoundedCornerShape(NamiRadius.Chip))
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
             )
             Text(
                 text = album.title,
                 color = NamiColors.Paper100,
-                style = MaterialTheme.typography.titleLarge,
+                style = NamiType.ScreenTitle,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 2.dp),
             )
             val subtitle = listOfNotNull(artistName, album.year?.toString()).joinToString(" · ")
             if (subtitle.isNotEmpty()) {
-                Text(text = subtitle, color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall)
+                Text(text = subtitle, color = NamiColors.Paper40, style = NamiType.Secondary)
             }
             Row(modifier = Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(
@@ -207,5 +213,16 @@ private fun AlbumDiscographyBlock(
                 isPlaying = track.id == nowPlayingTrackId && isPlayingNow,
             )
         }
+    }
+}
+
+private fun albumsWord(count: Int): String {
+    val mod100 = count % 100
+    val mod10 = count % 10
+    return when {
+        mod100 in 11..14 -> "альбомов"
+        mod10 == 1 -> "альбом"
+        mod10 in 2..4 -> "альбома"
+        else -> "альбомов"
     }
 }

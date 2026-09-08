@@ -60,6 +60,7 @@ import dev.nami.core.designsystem.ContextAction
 import dev.nami.core.designsystem.ContextActionSheet
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.designsystem.NamiRadius
+import dev.nami.core.designsystem.NamiType
 import dev.nami.core.designsystem.RenameDialog
 import dev.nami.core.designsystem.rememberCollapsingHeaderState
 import dev.nami.core.model.AlbumId
@@ -143,7 +144,7 @@ fun ArtistDetailScreen(
                     Text(
                         text = artistName ?: "",
                         color = NamiColors.Paper100,
-                        style = MaterialTheme.typography.headlineSmall,
+                        style = NamiType.ScreenTitle,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.fillMaxWidth().basicMarquee(iterations = Int.MAX_VALUE),
@@ -219,13 +220,12 @@ fun ArtistDetailScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Text(text = "Треки", color = NamiColors.Paper100, style = MaterialTheme.typography.titleMedium)
+                                Text(text = "ТРЕКИ", color = NamiColors.Paper40, style = NamiType.Caption)
                                 if (uiState.tracks.size > TOP_TRACKS_LIMIT) {
-                                    Text(
-                                        text = "Все →",
-                                        color = NamiColors.Paper70,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        modifier = Modifier.clickable(onClick = onShowAllTracks),
+                                    dev.nami.core.designsystem.NamiPill(
+                                        text = "Все ${uiState.tracks.size}",
+                                        color = NamiColors.Shu,
+                                        onClick = onShowAllTracks,
                                     )
                                 }
                             }
@@ -250,12 +250,11 @@ fun ArtistDetailScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Text(text = "Дискография", color = NamiColors.Paper100, style = MaterialTheme.typography.titleMedium)
-                                Text(
-                                    text = "Все →",
-                                    color = NamiColors.Paper70,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    modifier = Modifier.clickable(onClick = onShowDiscography),
+                                Text(text = "ДИСКОГРАФИЯ", color = NamiColors.Paper40, style = NamiType.Caption)
+                                dev.nami.core.designsystem.NamiPill(
+                                    text = "Все ${uiState.albums.size}",
+                                    color = NamiColors.Shu,
+                                    onClick = onShowDiscography,
                                 )
                             }
                         }
@@ -395,7 +394,12 @@ fun ArtistDetailScreen(
             // NamiNavHost's ambient statusBarsPadding()+displayCutoutPadding(), same as the back
             // button on every other screen; only the floating cover (drawn further up, outside
             // that flow) needed the manual bleed compensation above.
-            modifier = Modifier.align(Alignment.TopStart).padding(top = 12.dp, start = 12.dp),
+            // Кружок-подложка: стрелка лежит поверх фото артиста, на светлом кадре белая
+            // стрелка без подложки пропадала.
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(top = 12.dp, start = 12.dp)
+                .background(NamiColors.Ink900.copy(alpha = 0.45f), androidx.compose.foundation.shape.CircleShape),
         ) {
             Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
         }

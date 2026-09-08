@@ -27,6 +27,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.NamiScreenHeader
+import dev.nami.core.designsystem.NamiType
 
 /** Album counterpart of TrackInfoScreen - same shared InfoSection/InfoRow/TextEditDialog. */
 @Composable
@@ -38,12 +40,7 @@ fun AlbumInfoScreen(onBack: () -> Unit, viewModel: AlbumInfoViewModel = hiltView
     var editField by remember { mutableStateOf<AlbumInfoField?>(null) }
 
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
-            }
-            Text("Информация об альбоме", color = NamiColors.Paper100, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 8.dp))
-        }
+        NamiScreenHeader(title = "Об альбоме", subtitle = album?.title, onBack = onBack)
 
         val current = album
         if (current == null) {
@@ -62,7 +59,7 @@ fun AlbumInfoScreen(onBack: () -> Unit, viewModel: AlbumInfoViewModel = hiltView
                     modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Сингл", color = NamiColors.Paper70, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    Text("Сингл", color = NamiColors.Paper40, style = NamiType.Secondary, modifier = Modifier.weight(1f))
                     Switch(checked = current.isSingle, onCheckedChange = viewModel::setIsSingle)
                 }
             }

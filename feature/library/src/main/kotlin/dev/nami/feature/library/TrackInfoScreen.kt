@@ -247,12 +247,12 @@ private fun AddTagDialog(
 @Composable
 internal fun InfoSection(title: String, content: @Composable () -> Unit) {
     Text(
-        title,
+        title.uppercase(),
         color = NamiColors.Paper40,
-        style = MaterialTheme.typography.labelMedium,
-        modifier = Modifier.padding(top = 20.dp, bottom = 4.dp),
+        style = dev.nami.core.designsystem.NamiType.Caption,
+        modifier = Modifier.padding(start = 4.dp, top = 20.dp, bottom = 8.dp),
     )
-    Column(modifier = Modifier.fillMaxWidth().background(NamiColors.Ink800, RoundedCornerShape(NamiRadius.Button))) {
+    Column(modifier = Modifier.fillMaxWidth().background(NamiColors.Ink800, RoundedCornerShape(NamiRadius.Card))) {
         content()
     }
 }
@@ -265,11 +265,13 @@ internal fun InfoRow(label: String, value: String, onClick: (() -> Unit)? = null
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, color = NamiColors.Paper70, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        // Подпись поля тише значения: раньше они были одного веса и цвета, и строка читалась
+        // как сплошной текст, а не как "поле - значение".
+        Text(label, color = NamiColors.Paper40, style = dev.nami.core.designsystem.NamiType.Secondary, modifier = Modifier.weight(1f))
         Text(
             value,
             color = NamiColors.Paper100,
-            style = MaterialTheme.typography.bodyMedium,
+            style = dev.nami.core.designsystem.NamiType.ListTitle,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1.2f),

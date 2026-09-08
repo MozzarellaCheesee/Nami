@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.NamiScreenHeader
 
 /** Artist counterpart of TrackInfoScreen/AlbumInfoScreen. */
 @Composable
@@ -36,12 +37,7 @@ fun ArtistInfoScreen(onBack: () -> Unit, viewModel: ArtistInfoViewModel = hiltVi
     var editingName by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
-            }
-            Text("Информация об артисте", color = NamiColors.Paper100, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 8.dp))
-        }
+        NamiScreenHeader(title = "Об артисте", subtitle = artist?.name, onBack = onBack)
 
         val current = artist
         if (current == null) {

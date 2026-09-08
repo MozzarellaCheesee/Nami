@@ -27,6 +27,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.NamiPill
+import dev.nami.core.designsystem.NamiScreenHeader
+import dev.nami.core.designsystem.NamiType
 import dev.nami.core.model.Track
 import dev.nami.core.model.TrackId
 import dev.nami.domain.TrackVersionGrouper
@@ -57,12 +60,13 @@ fun ArtistAllTracksScreen(
     val expandedGroups = remember { mutableStateMapOf<String, Boolean>() }
 
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
-        Row(modifier = Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)
-            }
-            Text(text = artistName ?: "Треки", color = NamiColors.Paper100, style = MaterialTheme.typography.titleLarge)
-        }
+        // Порядок списка (по прослушиваниям) раньше нигде не был написан - выглядело как
+        // случайная сортировка.
+        NamiScreenHeader(
+            title = artistName ?: "Треки",
+            subtitle = "${allTracks.size} треков, чаще слушаемые выше",
+            onBack = onBack,
+        )
         LazyColumn {
             versionGroups.forEach { group ->
                 val groupKey = group.first().id.value
@@ -85,24 +89,21 @@ fun ArtistAllTracksScreen(
                         isPlaying = track.id == nowPlaying?.trackId && nowPlaying?.isPlaying == true,
                     )
                     if (group.size > 1) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
+                        // Пилюли вместо цветного текста: раньше "+2 версии" и "сравнить вслепую"
+                        // выглядели как подпись строки, а не как две разные кнопки.
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(start = 68.dp, top = 2.dp, bottom = 8.dp),
+                        ) {
+                            NamiPill(
                                 text = if (isExpanded) "Свернуть версии" else "+${group.size - 1} версии",
                                 color = NamiColors.Shu,
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier
-                                    .padding(start = 68.dp, top = 2.dp, bottom = 4.dp)
-                                    .clickable { expandedGroups[groupKey] = !isExpanded },
-                            )
+                            ) { expandedGroups[groupKey] = !isExpanded }
                             if (group.size == 2) {
-                                Text(
-                                    text = "· сравнить вслепую",
-                                    color = NamiColors.Paper40,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    modifier = Modifier
-                                        .padding(start = 6.dp, top = 2.dp, bottom = 4.dp)
-                                        .clickable { onCompareVersions(group[0].id, group[1].id) },
-                                )
+                                NamiPill(text = "Сравнить вслепую", color = NamiColors.Ai) {
+                                    onCompareVersions(group[0].id, group[1].id)
+                                }
                             }
                         }
                     }
