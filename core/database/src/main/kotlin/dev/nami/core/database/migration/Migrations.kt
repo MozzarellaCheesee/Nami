@@ -268,6 +268,17 @@ val MIGRATION_23_24 = object : Migration(23, 24) {
     }
 }
 
+/** Хвост группы C "CUE-поддержка" -- несколько tracks-строк делят один физический файл. */
+val MIGRATION_24_25 = object : Migration(24, 25) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE tracks ADD COLUMN cueStartMs INTEGER")
+        db.execSQL("ALTER TABLE tracks ADD COLUMN cueEndMs INTEGER")
+        // Was unique -- CUE tracks now intentionally share one path across several rows.
+        db.execSQL("DROP INDEX IF EXISTS index_tracks_path")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_tracks_path ON tracks(path)")
+    }
+}
+
 val MIGRATION_14_15 = object : Migration(14, 15) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL(

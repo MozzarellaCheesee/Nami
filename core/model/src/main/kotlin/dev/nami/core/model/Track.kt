@@ -31,4 +31,8 @@ data class Track(
     val rating: Int? = null,
     val firstPlayed: Long? = null,
     val fileHash: String? = null,
+    /** Хвост группы C "CUE-поддержка" -- ненулевые, когда несколько строк Track делят один
+     * физический файл (образ альбома + .cue). Null для обычного трека -- играет весь файл. */
+    val cueStartMs: Long? = null,
+    val cueEndMs: Long? = null,
 )

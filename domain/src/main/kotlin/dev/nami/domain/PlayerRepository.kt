@@ -10,6 +10,11 @@ data class PlayableTrack(
     val path: String,
     val artworkPath: String? = null,
     val format: String? = null,
+    /** Хвост группы C "CUE-поддержка" -- ненулевые, когда несколько треков делят один физический
+     * файл. Player seek'ает на cueStartMs при старте и переходит на следующий трек по достижении
+     * cueEndMs, вместо естественного конца файла. */
+    val cueStartMs: Long? = null,
+    val cueEndMs: Long? = null,
 )
 
 enum class QueueOrigin { MANUAL, CONTEXT }

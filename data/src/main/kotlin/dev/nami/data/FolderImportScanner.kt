@@ -108,6 +108,20 @@ class FolderImportScanner @Inject constructor(@ApplicationContext private val co
         }
     }
 
+    /** Хвост группы C "CUE-поддержка" -- .cue лежащий рядом с образом альбома (один большой файл
+     * вместо отдельного файла на трек), тем же поиском по совпадающему имени, что и findLyrics. */
+    fun findCue(doc: DocumentFile): DocumentFile? {
+        val parent = doc.parentFile ?: return null
+        val stem = doc.name?.substringBeforeLast('.', missingDelimiterValue = "") ?: return null
+        if (stem.isEmpty()) return null
+        return parent.listFiles().firstOrNull { candidate ->
+            if (candidate.isDirectory) return@firstOrNull false
+            val name = candidate.name ?: return@firstOrNull false
+            name.substringBeforeLast('.', missingDelimiterValue = name).equals(stem, ignoreCase = true) &&
+                name.substringAfterLast('.', missingDelimiterValue = "").equals("cue", ignoreCase = true)
+        }
+    }
+
     fun findFolderCover(dir: DocumentFile): DocumentFile? {
         return dir.listFiles().firstOrNull { doc ->
             if (doc.isDirectory) return@firstOrNull false

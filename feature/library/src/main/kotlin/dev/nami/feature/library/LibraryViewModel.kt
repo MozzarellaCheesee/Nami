@@ -116,6 +116,8 @@ class LibraryViewModel @Inject constructor(
                     path = track.path,
                     artworkPath = track.albumArtworkPath,
                     format = track.format,
+                    cueStartMs = track.cueStartMs,
+                    cueEndMs = track.cueEndMs,
                 ),
             )
         }

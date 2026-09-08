@@ -25,6 +25,7 @@ import dev.nami.core.model.ArtistId
 import dev.nami.core.model.Track
 import dev.nami.core.model.TrackId
 import dev.nami.data.mapper.toDomain
+import dev.nami.domain.CueSheet
 import dev.nami.domain.ImportProgress
 import dev.nami.domain.ImportSource
 import dev.nami.domain.LibraryHealthReport
@@ -434,6 +435,7 @@ class LibraryRepositoryImpl @Inject constructor(
                     fallbackArtist = group.artistFolderName,
                     fallbackAlbum = group.albumFolderName,
                     lyricsDoc = folderImportScanner.findLyrics(doc),
+                    cueDoc = folderImportScanner.findCue(doc),
                 )
                 if (albumIdForGroup == null) albumIdForGroup = result?.albumId
                 done++
@@ -473,6 +475,7 @@ class LibraryRepositoryImpl @Inject constructor(
         fallbackArtist: String? = null,
         fallbackAlbum: String? = null,
         lyricsDoc: DocumentFile? = null,
+        cueDoc: DocumentFile? = null,
     ): CopyAndIndexResult? {
         val displayName = queryDisplayName(resolver, uri) ?: uri.lastPathSegment
         val extension = resolver.getType(uri)?.substringAfterLast('/') ?: "audio"
@@ -557,6 +560,51 @@ class LibraryRepositoryImpl @Inject constructor(
             } else {
                 trackArtworkPath = savedPath
             }
+        }
+
+        // Хвост группы C "CUE-поддержка" -- .cue рядом с образом альбома разбивает этот один
+        // физический файл на несколько строк tracks, все с одним и тем же path (см.
+        // TrackEntity.path's index, больше не unique) и своими cueStartMs/cueEndMs. Меньше 2
+        // разобранных треков (пустой/битый .cue) -- откатывается на обычный один трек на файл.
+        val cueTracks = cueDoc?.let { doc ->
+            runCatching { resolver.openInputStream(doc.uri)?.use { it.bufferedReader().readText() } }.getOrNull()
+                ?.let(CueSheet::parse)
+        }?.takeIf { it.size >= 2 }
+
+        if (cueTracks != null) {
+            val dateAdded = System.currentTimeMillis()
+            cueTracks.forEachIndexed { index, cue ->
+                val cueEndMs = cueTracks.getOrNull(index + 1)?.startMs
+                val cueArtistId = cue.performer?.let { metadataResolver.resolveArtist(it) } ?: artistId
+                trackDao.insertAll(
+                    listOf(
+                        TrackEntity(
+                            id = UUID.randomUUID().toString(),
+                            title = cue.title,
+                            artistId = cueArtistId,
+                            albumId = albumId,
+                            trackNo = cue.trackNo,
+                            discNo = tags?.discNo,
+                            durationMs = (cueEndMs ?: durationMs) - cue.startMs,
+                            path = destination.path,
+                            format = extension,
+                            sizeBytes = destination.length(),
+                            dateAdded = dateAdded,
+                            lastPlayed = null,
+                            playCount = 0,
+                            genre = tags?.genre,
+                            artworkPath = trackArtworkPath,
+                            sampleRateHz = tags?.sampleRateHz,
+                            bitDepth = tags?.bitDepth,
+                            channels = tags?.channels,
+                            fileHash = fileHash,
+                            cueStartMs = cue.startMs,
+                            cueEndMs = cueEndMs,
+                        ),
+                    ),
+                )
+            }
+            return CopyAndIndexResult(trackId = trackId, albumId = albumId)
         }
 
         trackDao.insertAll(

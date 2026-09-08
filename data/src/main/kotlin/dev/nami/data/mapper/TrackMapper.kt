@@ -37,6 +37,8 @@ fun TrackEntity.toDomain(albumArtworkPath: String? = null, artistName: String? =
     rating = rating,
     firstPlayed = firstPlayed,
     fileHash = fileHash,
+    cueStartMs = cueStartMs,
+    cueEndMs = cueEndMs,
 )
 
 fun TrackDao.TrackWithArtwork.toDomain(): Track = track.toDomain(albumArtworkPath = albumArtworkPath, artistName = artistName)

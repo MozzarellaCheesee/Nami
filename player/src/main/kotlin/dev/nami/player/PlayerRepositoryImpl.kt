@@ -236,9 +236,24 @@ class PlayerRepositoryImpl @Inject constructor(
         format = format,
     )
 
+    // Хвост группы C "CUE-поддержка" -- ClippingConfiguration is ExoPlayer's own built-in answer
+    // to "play just this slice of a file": position/duration it reports are already relative to
+    // the clip, and reaching the clip's end fires the same MEDIA_ITEM_TRANSITION_REASON_AUTO as a
+    // normal track ending -- no separate polling/seek-on-boundary logic needed anywhere else.
     private fun PlayableTrack.toMediaItem(): MediaItem = MediaItem.Builder()
         .setMediaId(id.value)
         .setUri(path)
+        .apply {
+            val start = cueStartMs
+            if (start != null) {
+                setClippingConfiguration(
+                    MediaItem.ClippingConfiguration.Builder()
+                        .setStartPositionMs(start)
+                        .apply { cueEndMs?.let { setEndPositionMs(it) } }
+                        .build(),
+                )
+            }
+        }
         .setMediaMetadata(
             MediaMetadata.Builder()
                 .setTitle(title)
@@ -277,6 +292,8 @@ class PlayerRepositoryImpl @Inject constructor(
                 path = track.path,
                 artworkPath = track.albumArtworkPath,
                 format = track.format,
+                cueStartMs = track.cueStartMs,
+                cueEndMs = track.cueEndMs,
             )
         }
         if (playables.isEmpty()) return

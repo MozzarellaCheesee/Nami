@@ -52,17 +52,33 @@ class TrackDaoTest {
     }
 
     @Test
-    fun `insertAll ignores duplicate path on conflict`() = runTest {
+    fun `insertAll allows several tracks to share one path (CUE-split album image)`() = runTest {
+        // path is no longer unique -- a CUE-split album image has one physical file backing
+        // several track rows, each with its own cueStartMs/cueEndMs slice. See CueSheet.
         val track = TrackEntity(
             id = "t1", title = "A", artistId = null, albumId = null,
             trackNo = null, discNo = null, durationMs = 1000,
             path = "/music/dup.flac", format = "flac", sizeBytes = 1,
             dateAdded = 1, lastPlayed = null, playCount = 0,
         )
-        val duplicate = track.copy(id = "t2", title = "B")
+        val secondTrack = track.copy(id = "t2", title = "B")
 
         db.trackDao().insertAll(listOf(track))
-        db.trackDao().insertAll(listOf(duplicate))
+        db.trackDao().insertAll(listOf(secondTrack))
+
+        assertEquals(2, db.trackDao().count())
+    }
+
+    @Test
+    fun `insertAll still ignores a true duplicate id`() = runTest {
+        val track = TrackEntity(
+            id = "t1", title = "A", artistId = null, albumId = null,
+            trackNo = null, discNo = null, durationMs = 1000,
+            path = "/music/dup.flac", format = "flac", sizeBytes = 1,
+            dateAdded = 1, lastPlayed = null, playCount = 0,
+        )
+        db.trackDao().insertAll(listOf(track))
+        db.trackDao().insertAll(listOf(track.copy(title = "B")))
 
         assertEquals(1, db.trackDao().count())
     }

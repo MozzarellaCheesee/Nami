@@ -26,7 +26,9 @@ import androidx.room.PrimaryKey
         Index("artistId"),
         Index("dateAdded"),
         Index("lastPlayed"),
-        Index(value = ["path"], unique = true),
+        // Not unique -- CUE-derived tracks (см. cueStartMs/cueEndMs) intentionally share one path
+        // across several rows, one per track carved out of the same physical album image file.
+        Index(value = ["path"]),
     ],
 )
 data class TrackEntity(
@@ -75,4 +77,7 @@ data class TrackEntity(
      * LibraryHealthReport already uses: two files with different tags but the same bytes (a
      * re-rip, a re-tag) now hash-match even when their metadata doesn't. */
     val fileHash: String? = null,
+    /** Хвост группы C "CUE-поддержка" -- см. core.model.Track's identical doc. */
+    val cueStartMs: Long? = null,
+    val cueEndMs: Long? = null,
 )
