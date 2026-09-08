@@ -274,7 +274,12 @@ internal fun SettingsSubScreenScaffold(title: String, onBack: () -> Unit, conten
 }
 
 @Composable
-fun SettingsAppearanceScreen(onBack: () -> Unit, onThemeEditorClick: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
+fun SettingsAppearanceScreen(
+    onBack: () -> Unit,
+    onThemeEditorClick: () -> Unit,
+    onBottomTabsClick: () -> Unit,
+    viewModel: SettingsViewModel = hiltViewModel(),
+) {
     val context = LocalContext.current
     var selectedIcon by remember { mutableStateOf(IconPicker.current(context)) }
     var pendingIcon by remember { mutableStateOf<LauncherIcon?>(null) }
@@ -300,6 +305,12 @@ fun SettingsAppearanceScreen(onBack: () -> Unit, onThemeEditorClick: () -> Unit,
                 title = "Редактор темы",
                 trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
                 onClick = onThemeEditorClick,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Tune,
+                title = "Вкладки нижней панели",
+                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
+                onClick = onBottomTabsClick,
             )
             SettingsRow(
                 icon = Icons.Outlined.FontDownload,

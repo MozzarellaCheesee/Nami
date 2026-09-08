@@ -71,6 +71,12 @@ private const val KEY_THEME_SHAPE_OVERRIDES = "theme_shape_overrides" // JSON ob
 private const val KEY_THEME_DENSITY_SCALE = "theme_density_scale"
 private const val KEY_THEME_FONT_SCALE = "theme_font_scale"
 private const val KEY_BLUR_ENABLED = "blur_enabled"
+private const val KEY_BOTTOM_TABS = "bottom_tabs" // JSON array [{tab, enabled}], см. readBottomTabs
+private const val KEY_BOTTOM_TAB_LABELS_HIDDEN = "bottom_tab_labels_hidden"
+private const val KEY_MINI_PLAYER_SIDE_SWIPE = "mini_player_side_swipe_action"
+private const val KEY_NOW_PLAYING_LAYOUT_PRESET = "now_playing_layout_preset"
+private const val KEY_CROSSFEED_ENABLED = "crossfeed_enabled"
+private const val KEY_DEVICE_AUDIO_PROFILE = "device_audio_profile"
 private const val KEY_AUTO_NIGHT_AMOLED = "auto_night_amoled"
 // One "<CSV of 9 gains>|<volumeLimitPercent>" string per device type.
 private fun outputProfileKey(type: OutputDeviceType) = "output_profile_${type.name}"
@@ -478,6 +484,73 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
     override fun setNowPlayingLineProgress(value: Boolean) {
         prefs.edit { putBoolean(KEY_NOW_PLAYING_LINE_PROGRESS, value) }
         _nowPlayingLineProgress.value = value
+    }
+
+    private val _bottomTabs = MutableStateFlow(readBottomTabs())
+    override val bottomTabs: StateFlow<List<dev.nami.domain.BottomTabConfig>> = _bottomTabs
+    override fun setBottomTabs(tabs: List<dev.nami.domain.BottomTabConfig>) {
+        val array = JSONArray()
+        tabs.forEach { array.put(JSONObject().put("tab", it.tab.name).put("enabled", it.enabled)) }
+        prefs.edit { putString(KEY_BOTTOM_TABS, array.toString()) }
+        _bottomTabs.value = tabs
+    }
+
+    /** Тот же приём, что у [readHomeBlocks]: неизвестные имена отбрасываются, появившиеся в новой
+     * версии вкладки дописываются в конец (выключенными, как в дефолте). */
+    private fun readBottomTabs(): List<dev.nami.domain.BottomTabConfig> {
+        val raw = prefs.getString(KEY_BOTTOM_TABS, null) ?: return dev.nami.domain.DEFAULT_BOTTOM_TABS
+        return runCatching {
+            val array = JSONArray(raw)
+            (0 until array.length()).mapNotNull { i ->
+                val obj = array.optJSONObject(i) ?: return@mapNotNull null
+                val tab = runCatching { dev.nami.domain.BottomTab.valueOf(obj.optString("tab")) }.getOrNull() ?: return@mapNotNull null
+                dev.nami.domain.BottomTabConfig(tab, obj.optBoolean("enabled", false))
+            }
+        }.getOrDefault(dev.nami.domain.DEFAULT_BOTTOM_TABS)
+            .let { saved -> saved + dev.nami.domain.DEFAULT_BOTTOM_TABS.filter { d -> saved.none { it.tab == d.tab } } }
+    }
+
+    private val _bottomTabLabelsHidden = MutableStateFlow(prefs.getBoolean(KEY_BOTTOM_TAB_LABELS_HIDDEN, false))
+    override val bottomTabLabelsHidden: StateFlow<Boolean> = _bottomTabLabelsHidden
+    override fun setBottomTabLabelsHidden(value: Boolean) {
+        prefs.edit { putBoolean(KEY_BOTTOM_TAB_LABELS_HIDDEN, value) }
+        _bottomTabLabelsHidden.value = value
+    }
+
+    private val _miniPlayerSideSwipeAction = MutableStateFlow(
+        prefs.getString(KEY_MINI_PLAYER_SIDE_SWIPE, null)
+            ?.let { runCatching { dev.nami.domain.GestureAction.valueOf(it) }.getOrNull() }
+            ?: dev.nami.domain.GestureAction.SKIP_NEXT,
+    )
+    override val miniPlayerSideSwipeAction: StateFlow<dev.nami.domain.GestureAction> = _miniPlayerSideSwipeAction
+    override fun setMiniPlayerSideSwipeAction(action: dev.nami.domain.GestureAction) {
+        prefs.edit { putString(KEY_MINI_PLAYER_SIDE_SWIPE, action.name) }
+        _miniPlayerSideSwipeAction.value = action
+    }
+
+    private val _nowPlayingLayoutPreset = MutableStateFlow(
+        prefs.getString(KEY_NOW_PLAYING_LAYOUT_PRESET, null)
+            ?.let { runCatching { dev.nami.domain.NowPlayingLayoutPreset.valueOf(it) }.getOrNull() }
+            ?: dev.nami.domain.NowPlayingLayoutPreset.CUSTOM,
+    )
+    override val nowPlayingLayoutPreset: StateFlow<dev.nami.domain.NowPlayingLayoutPreset> = _nowPlayingLayoutPreset
+    override fun setNowPlayingLayoutPreset(preset: dev.nami.domain.NowPlayingLayoutPreset) {
+        prefs.edit { putString(KEY_NOW_PLAYING_LAYOUT_PRESET, preset.name) }
+        _nowPlayingLayoutPreset.value = preset
+    }
+
+    private val _crossfeedEnabled = MutableStateFlow(prefs.getBoolean(KEY_CROSSFEED_ENABLED, false))
+    override val crossfeedEnabled: StateFlow<Boolean> = _crossfeedEnabled
+    override fun setCrossfeedEnabled(value: Boolean) {
+        prefs.edit { putBoolean(KEY_CROSSFEED_ENABLED, value) }
+        _crossfeedEnabled.value = value
+    }
+
+    private val _deviceAudioProfile = MutableStateFlow(prefs.getString(KEY_DEVICE_AUDIO_PROFILE, null))
+    override val deviceAudioProfile: StateFlow<String?> = _deviceAudioProfile
+    override fun setDeviceAudioProfile(value: String?) {
+        prefs.edit { putString(KEY_DEVICE_AUDIO_PROFILE, value) }
+        _deviceAudioProfile.value = value
     }
 
     private val _themeColorOverrides = MutableStateFlow(readThemeColorOverrides())

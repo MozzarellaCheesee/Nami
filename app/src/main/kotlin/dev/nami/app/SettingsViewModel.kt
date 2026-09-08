@@ -47,6 +47,35 @@ class SettingsViewModel @Inject constructor(
     val themeFontScale: StateFlow<Float> = appSettingsRepository.themeFontScale
     val blurEnabled: StateFlow<Boolean> = appSettingsRepository.blurEnabled
     val autoNightAmoled: StateFlow<Boolean> = appSettingsRepository.autoNightAmoled
+    val bottomTabs: StateFlow<List<dev.nami.domain.BottomTabConfig>> = appSettingsRepository.bottomTabs
+    val bottomTabLabelsHidden: StateFlow<Boolean> = appSettingsRepository.bottomTabLabelsHidden
+    val miniPlayerSideSwipeAction: StateFlow<dev.nami.domain.GestureAction> = appSettingsRepository.miniPlayerSideSwipeAction
+    val nowPlayingLayoutPreset: StateFlow<dev.nami.domain.NowPlayingLayoutPreset> = appSettingsRepository.nowPlayingLayoutPreset
+
+    fun setBottomTabs(tabs: List<dev.nami.domain.BottomTabConfig>) {
+        appSettingsRepository.setBottomTabs(tabs)
+    }
+
+    fun setBottomTabLabelsHidden(value: Boolean) {
+        appSettingsRepository.setBottomTabLabelsHidden(value)
+    }
+
+    fun setMiniPlayerSideSwipeAction(action: dev.nami.domain.GestureAction) {
+        appSettingsRepository.setMiniPlayerSideSwipeAction(action)
+    }
+
+    /** П.md §17 "5 готовых пресетов макета": пресет не новая сущность в рантайме, а разовая
+     * запись набора значений в те же переключатели, что пользователь и так крутит вручную. */
+    fun applyNowPlayingPreset(preset: dev.nami.domain.NowPlayingLayoutPreset) {
+        val layout = dev.nami.domain.layoutOf(preset)
+        appSettingsRepository.setNowPlayingCompactCover(layout.compactCover)
+        appSettingsRepository.setNowPlayingLineProgress(layout.lineProgress)
+        appSettingsRepository.setNowPlayingShowTechInfo(layout.showTechInfo)
+        appSettingsRepository.setNowPlayingShowShuffle(layout.showShuffle)
+        appSettingsRepository.setNowPlayingShowRepeat(layout.showRepeat)
+        appSettingsRepository.setNowPlayingBlockOrder(layout.blockOrder)
+        appSettingsRepository.setNowPlayingLayoutPreset(preset)
+    }
 
     fun setAutoOpenPlayer(value: Boolean) {
         appSettingsRepository.setAutoOpenPlayer(value)

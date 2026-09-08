@@ -800,6 +800,18 @@ private object NoOpSettingsRepository : dev.nami.domain.SettingsRepository {
     override val autoNightAmoled = MutableStateFlow(false)
     override fun setAutoNightAmoled(value: Boolean) {}
     override fun resetThemeShapeAndDensity() {}
+    override val bottomTabs = MutableStateFlow(dev.nami.domain.DEFAULT_BOTTOM_TABS)
+    override fun setBottomTabs(tabs: List<dev.nami.domain.BottomTabConfig>) {}
+    override val bottomTabLabelsHidden = MutableStateFlow(false)
+    override fun setBottomTabLabelsHidden(value: Boolean) {}
+    override val miniPlayerSideSwipeAction = MutableStateFlow(dev.nami.domain.GestureAction.SKIP_NEXT)
+    override fun setMiniPlayerSideSwipeAction(action: dev.nami.domain.GestureAction) {}
+    override val nowPlayingLayoutPreset = MutableStateFlow(dev.nami.domain.NowPlayingLayoutPreset.CUSTOM)
+    override fun setNowPlayingLayoutPreset(preset: dev.nami.domain.NowPlayingLayoutPreset) {}
+    override val crossfeedEnabled = MutableStateFlow(false)
+    override fun setCrossfeedEnabled(value: Boolean) {}
+    override val deviceAudioProfile = MutableStateFlow<String?>(null)
+    override fun setDeviceAudioProfile(value: String?) {}
 }
 
 private object NoOpPlaylistRepository : PlaylistRepository {

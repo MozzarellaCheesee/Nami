@@ -11,8 +11,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.InsertChart
 import androidx.compose.material.icons.outlined.LibraryMusic
+import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.QueueMusic
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
@@ -24,19 +27,39 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.domain.BottomTab
 
-private data class BottomTab(val route: String, val label: String, val icon: ImageVector)
+/** Подпись и иконка вкладки - единственное, что панель знает сверх роута из [BottomTab]. */
+fun bottomTabLabel(tab: BottomTab): String = when (tab) {
+    BottomTab.HOME -> "Главная"
+    BottomTab.LIBRARY -> "Библиотека"
+    BottomTab.SEARCH -> "Поиск"
+    BottomTab.PLAYLISTS -> "Плейлисты"
+    BottomTab.SETTINGS -> "Настройки"
+    BottomTab.STATS -> "Статистика"
+    BottomTab.VOCABULARY -> "Словарь"
+    BottomTab.FOLDERS -> "Папки"
+}
 
-private val TABS = listOf(
-    BottomTab("home", "Главная", Icons.Outlined.Home),
-    BottomTab("library", "Библиотека", Icons.Outlined.LibraryMusic),
-    BottomTab("search", "Поиск", Icons.Outlined.Search),
-    BottomTab("playlists", "Плейлисты", Icons.Outlined.QueueMusic),
-    BottomTab("settings", "Настройки", Icons.Outlined.Settings),
-)
+fun bottomTabIcon(tab: BottomTab): ImageVector = when (tab) {
+    BottomTab.HOME -> Icons.Outlined.Home
+    BottomTab.LIBRARY -> Icons.Outlined.LibraryMusic
+    BottomTab.SEARCH -> Icons.Outlined.Search
+    BottomTab.PLAYLISTS -> Icons.Outlined.QueueMusic
+    BottomTab.SETTINGS -> Icons.Outlined.Settings
+    BottomTab.STATS -> Icons.Outlined.InsertChart
+    BottomTab.VOCABULARY -> Icons.Outlined.MenuBook
+    BottomTab.FOLDERS -> Icons.Outlined.Folder
+}
 
 @Composable
-fun NamiBottomBar(currentRoute: String?, onTabSelected: (String) -> Unit, modifier: Modifier = Modifier) {
+fun NamiBottomBar(
+    tabs: List<BottomTab>,
+    showLabels: Boolean,
+    currentRoute: String?,
+    onTabSelected: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Row(
         // background must come BEFORE (outer of) the incoming `modifier` (navigationBarsPadding):
         // a draw modifier paints the node's final resolved size regardless of where it sits in
@@ -47,10 +70,10 @@ fun NamiBottomBar(currentRoute: String?, onTabSelected: (String) -> Unit, modifi
             .background(NamiColors.Ink900)
             .then(modifier)
             .fillMaxWidth()
-            .height(56.dp),
+            .height(if (showLabels) 56.dp else 48.dp),
         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
     ) {
-        TABS.forEach { tab ->
+        tabs.forEach { tab ->
             val isActive = tab.route == currentRoute
             val iconTint = if (isActive) NamiColors.Shu else NamiColors.Paper70
             val labelColor = if (isActive) NamiColors.Shu else NamiColors.Paper40
@@ -59,12 +82,12 @@ fun NamiBottomBar(currentRoute: String?, onTabSelected: (String) -> Unit, modifi
                     .weight(1f)
                     .fillMaxHeight()
                     .clickable { onTabSelected(tab.route) }
-                    .padding(top = 10.dp),
+                    .padding(top = if (showLabels) 10.dp else 0.dp),
                 horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Top,
+                verticalArrangement = if (showLabels) Arrangement.Top else Arrangement.Center,
             ) {
-                Icon(tab.icon, contentDescription = tab.label, tint = iconTint, modifier = Modifier.size(24.dp))
-                Text(text = tab.label, color = labelColor, fontSize = 10.sp)
+                Icon(bottomTabIcon(tab), contentDescription = bottomTabLabel(tab), tint = iconTint, modifier = Modifier.size(24.dp))
+                if (showLabels) Text(text = bottomTabLabel(tab), color = labelColor, fontSize = 10.sp)
             }
         }
     }

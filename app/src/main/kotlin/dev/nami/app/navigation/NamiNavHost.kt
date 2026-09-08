@@ -99,6 +99,9 @@ private const val ROUTE_ALBUM_INFO = "album_info/{albumId}"
 private const val ROUTE_ARTIST_INFO = "artist_info/{artistId}"
 private const val ROUTE_AUDIO_TRACT = "audio_tract"
 private const val ROUTE_EQUALIZER = "equalizer"
+// Роуты вкладок из BottomTab: строки обязаны совпадать с BottomTab.route.
+private const val ROUTE_VOCABULARY = "vocabulary"
+private const val ROUTE_BOTTOM_TABS = "settings/tabs"
 
 
 @Composable
@@ -154,6 +157,12 @@ fun NamiNavHost(
     val settingsViewModel: SettingsViewModel = hiltViewModel()
     val autoOpenPlayer by settingsViewModel.autoOpenPlayer.collectAsState()
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
+    // П.md §13 - состав/порядок вкладок из настроек. take(MAX) на случай списка из старого бэкапа:
+    // конструктор больше пяти включить не даёт, но панель не должна ломаться, если данные пришли
+    // мимо него.
+    val bottomTabConfigs by settingsViewModel.bottomTabs.collectAsState()
+    val bottomTabLabelsHidden by settingsViewModel.bottomTabLabelsHidden.collectAsState()
+    val bottomTabs = bottomTabConfigs.filter { it.enabled }.map { it.tab }.take(dev.nami.domain.MAX_BOTTOM_TABS)
 
     // Now Playing is deliberately NOT a NavHost destination: NavHost only keeps its current
     // destination's composition alive, so pushing a "now_playing" route used to dispose the
@@ -365,7 +374,16 @@ fun NamiNavHost(
                 SettingsAppearanceScreen(
                     onBack = { navController.popBackStack() },
                     onThemeEditorClick = { navController.navigate(ROUTE_THEME_EDITOR) },
+                    onBottomTabsClick = { navController.navigate(ROUTE_BOTTOM_TABS) },
                 )
+            }
+            composable(ROUTE_BOTTOM_TABS) {
+                dev.nami.app.BottomTabsScreen(onBack = { navController.popBackStack() })
+            }
+            // Словарь уже был экраном, но открывался только изнутри лирики - как вкладка это тот
+            // же самый Composable, просто со своим роутом.
+            composable(ROUTE_VOCABULARY) {
+                dev.nami.feature.player.VocabularyScreen(onBack = { navController.popBackStack() })
             }
             composable(ROUTE_THEME_EDITOR) {
                 dev.nami.app.ThemeEditorScreen(onBack = { navController.popBackStack() })
@@ -608,6 +626,8 @@ fun NamiNavHost(
             MiniPlayer(onExpand = { showNowPlaying = true }, viewModel = nowPlayingViewModel)
         }
         NamiBottomBar(
+            tabs = bottomTabs,
+            showLabels = !bottomTabLabelsHidden,
             currentRoute = currentRoute,
             onTabSelected = { route ->
                 // Pop the back stack directly down to this tab's own root, however deep the
