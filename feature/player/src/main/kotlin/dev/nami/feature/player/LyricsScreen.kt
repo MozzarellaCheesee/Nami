@@ -8,8 +8,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.ui.draw.clip
@@ -443,22 +441,30 @@ fun LyricsScreen(
     }
 
         // Дизайн.md "один смелый акцент" -- вертикальная японская строка (縦書き) с названием
-        // трека вдоль правого края. Чисто декоративная, ни на что не реагирует -- единственная
-        // такая деталь во всём приложении.
+        // трека вдоль правого края. Настоящий тategaki -- иероглифы стоят прямо, один под другим
+        // сверху вниз, а не повёрнутая набок горизонтальная строка. Чисто декоративная, ни на что
+        // не реагирует -- единственная такая деталь во всём приложении.
         queue.nowPlaying?.title?.let { title ->
-            Text(
-                text = title,
-                color = NamiColors.Ink500,
-                fontFamily = dev.nami.core.designsystem.NamiFonts.ShipporiMincho,
-                fontSize = 14.sp,
-                maxLines = 1,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            // Ограничение по высоте экрана, не по числу символов -- разные названия трека не
+            // должны выезжать за верх/низ. "…" последним символом, если обрезали.
+            val maxChars = ((LocalConfiguration.current.screenHeightDp.dp - 32.dp) / 20.dp).toInt().coerceAtLeast(1)
+            val chars = title.toCharArray().filterNot { it.isWhitespace() }
+            val visible = if (chars.size > maxChars) chars.take(maxChars - 1) + '…' else chars
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .padding(end = 8.dp)
-                    .graphicsLayer { rotationZ = 90f }
-                    .wrapContentWidth(unbounded = true),
-            )
+                    .padding(end = 8.dp),
+            ) {
+                visible.forEach { char ->
+                    Text(
+                        text = char.toString(),
+                        color = NamiColors.Ink500,
+                        fontFamily = dev.nami.core.designsystem.NamiFonts.ShipporiMincho,
+                        fontSize = 14.sp,
+                    )
+                }
+            }
         }
     }
 
