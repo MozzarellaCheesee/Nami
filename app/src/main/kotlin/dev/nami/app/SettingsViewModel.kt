@@ -42,6 +42,9 @@ class SettingsViewModel @Inject constructor(
     val themeColorOverrides: StateFlow<Map<String, String>> = appSettingsRepository.themeColorOverrides
     val themeShapeOverrides: StateFlow<Map<String, Int>> = appSettingsRepository.themeShapeOverrides
     val themeDensityScale: StateFlow<Float> = appSettingsRepository.themeDensityScale
+    val themeFontScale: StateFlow<Float> = appSettingsRepository.themeFontScale
+    val blurEnabled: StateFlow<Boolean> = appSettingsRepository.blurEnabled
+    val autoNightAmoled: StateFlow<Boolean> = appSettingsRepository.autoNightAmoled
 
     fun setAutoOpenPlayer(value: Boolean) {
         appSettingsRepository.setAutoOpenPlayer(value)
@@ -163,7 +166,77 @@ class SettingsViewModel @Inject constructor(
         appSettingsRepository.setThemeDensityScale(value)
     }
 
+    fun setThemeFontScale(value: Float) {
+        appSettingsRepository.setThemeFontScale(value)
+    }
+
+    fun setBlurEnabled(value: Boolean) {
+        appSettingsRepository.setBlurEnabled(value)
+    }
+
+    fun setAutoNightAmoled(value: Boolean) {
+        appSettingsRepository.setAutoNightAmoled(value)
+    }
+
     fun resetThemeShapeAndDensity() {
         appSettingsRepository.resetThemeShapeAndDensity()
+    }
+
+    /** Результат последнего импорта/экспорта темы для тоста, null - показывать нечего. */
+    private val _themeIoMessage = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+    val themeIoMessage: StateFlow<String?> = _themeIoMessage
+    fun themeIoMessageShown() {
+        _themeIoMessage.value = null
+    }
+
+    /** П.md §26 "Экспорт и импорт .json" - экспорт в выбранное системным пикером место, тот же
+     * ACTION_CREATE_DOCUMENT, что у экспорта плейлиста. Импорт по ссылке и по QR из плана не
+     * сделан: файла достаточно, а загрузка тем из сети - отдельный разговор про доверие. */
+    fun exportTheme(uri: Uri) {
+        viewModelScope.launch {
+            val json = encodeThemeFile(
+                ThemeFile(
+                    colors = appSettingsRepository.themeColorOverrides.value,
+                    shape = appSettingsRepository.themeShapeOverrides.value,
+                    densityScale = appSettingsRepository.themeDensityScale.value,
+                    fontScale = appSettingsRepository.themeFontScale.value,
+                ),
+            )
+            val ok = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) } != null
+                }.getOrDefault(false)
+            }
+            _themeIoMessage.value = if (ok) "Тема сохранена" else "Не удалось сохранить тему"
+        }
+    }
+
+    fun importTheme(uri: Uri) {
+        viewModelScope.launch {
+            val raw = withContext(Dispatchers.IO) {
+                runCatching { context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } }.getOrNull()
+            }
+            val parsed = raw?.let(::parseThemeFile)
+            if (parsed == null) {
+                _themeIoMessage.value = "Это не файл темы"
+                return@launch
+            }
+            // Заменяем набор целиком, а не дополняем текущий: импортированная тема должна
+            // выглядеть так же, как у того, кто её прислал, а не смешаться с чужими правками.
+            appSettingsRepository.resetThemeColors()
+            parsed.colors.forEach { (token, hex) -> appSettingsRepository.setThemeColorOverride(token, hex) }
+            appSettingsRepository.resetThemeShapeAndDensity()
+            parsed.shape.forEach { (token, dp) -> appSettingsRepository.setThemeShapeOverride(token, dp) }
+            parsed.densityScale?.let(appSettingsRepository::setThemeDensityScale)
+            parsed.fontScale?.let(appSettingsRepository::setThemeFontScale)
+            _themeIoMessage.value = "Тема применена"
+        }
+    }
+
+    /** П.md §26 "Галерея тем" - применить пресет целиком: сначала снимаем все текущие цветовые
+     * оверрайды, потом кладём набор пресета. Пустой набор = "Тушь", базовая тема как есть. */
+    fun applyThemePreset(preset: ThemePreset) {
+        appSettingsRepository.resetThemeColors()
+        preset.colors.forEach { (token, hex) -> appSettingsRepository.setThemeColorOverride(token, hex) }
     }
 }

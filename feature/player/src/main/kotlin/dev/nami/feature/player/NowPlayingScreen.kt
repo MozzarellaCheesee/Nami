@@ -69,7 +69,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Brush
@@ -106,6 +105,7 @@ import dev.nami.core.designsystem.ContextAction
 import dev.nami.core.designsystem.ContextActionSheet
 import dev.nami.core.designsystem.NamiAlertDialog
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.namiBlur
 import dev.nami.core.designsystem.fullBlockClickable
 import dev.nami.domain.PlaybackState
 import kotlin.math.roundToInt
@@ -222,7 +222,7 @@ fun NowPlayingScreen(
                     model = path,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize().blur(64.dp),
+                    modifier = Modifier.fillMaxSize().namiBlur(64.dp),
                 )
             }
         }
@@ -466,7 +466,7 @@ fun NowPlayingScreen(
                                     colors = listOf(accentColor.copy(alpha = 0.55f), accentColor.copy(alpha = 0f)),
                                 ),
                             )
-                            .blur(32.dp),
+                            .namiBlur(32.dp),
                     )
                     NowPlayingArtwork(
                         artworkPath = track.artworkPath,

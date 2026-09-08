@@ -60,6 +60,9 @@ private const val KEY_NOW_PLAYING_COMPACT_COVER = "now_playing_compact_cover"
 private const val KEY_NOW_PLAYING_LINE_PROGRESS = "now_playing_line_progress"
 private const val KEY_THEME_SHAPE_OVERRIDES = "theme_shape_overrides" // JSON object {token: dp}
 private const val KEY_THEME_DENSITY_SCALE = "theme_density_scale"
+private const val KEY_THEME_FONT_SCALE = "theme_font_scale"
+private const val KEY_BLUR_ENABLED = "blur_enabled"
+private const val KEY_AUTO_NIGHT_AMOLED = "auto_night_amoled"
 // One "<CSV of 9 gains>|<volumeLimitPercent>" string per device type.
 private fun outputProfileKey(type: OutputDeviceType) = "output_profile_${type.name}"
 
@@ -468,9 +471,32 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
         _themeDensityScale.value = value
     }
 
+    private val _themeFontScale = MutableStateFlow(prefs.getFloat(KEY_THEME_FONT_SCALE, 1f))
+    override val themeFontScale: StateFlow<Float> = _themeFontScale
+    override fun setThemeFontScale(value: Float) {
+        prefs.edit { putFloat(KEY_THEME_FONT_SCALE, value) }
+        _themeFontScale.value = value
+    }
+
+    // По умолчанию размытие включено - выключатель для слабых устройств, а не наоборот.
+    private val _blurEnabled = MutableStateFlow(prefs.getBoolean(KEY_BLUR_ENABLED, true))
+    override val blurEnabled: StateFlow<Boolean> = _blurEnabled
+    override fun setBlurEnabled(value: Boolean) {
+        prefs.edit { putBoolean(KEY_BLUR_ENABLED, value) }
+        _blurEnabled.value = value
+    }
+
+    private val _autoNightAmoled = MutableStateFlow(prefs.getBoolean(KEY_AUTO_NIGHT_AMOLED, false))
+    override val autoNightAmoled: StateFlow<Boolean> = _autoNightAmoled
+    override fun setAutoNightAmoled(value: Boolean) {
+        prefs.edit { putBoolean(KEY_AUTO_NIGHT_AMOLED, value) }
+        _autoNightAmoled.value = value
+    }
+
     override fun resetThemeShapeAndDensity() {
         writeThemeShapeOverrides(emptyMap())
         setThemeDensityScale(1f)
+        setThemeFontScale(1f)
     }
 
     private fun writeThemeShapeOverrides(overrides: Map<String, Int>) {

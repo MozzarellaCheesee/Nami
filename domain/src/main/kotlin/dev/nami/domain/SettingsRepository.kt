@@ -259,8 +259,26 @@ interface SettingsRepository {
     val themeDensityScale: StateFlow<Float>
     fun setThemeDensityScale(value: Float)
 
-    /** Сброс формы и плотности к базовой теме - отдельно от [resetThemeColors], чтобы кнопка
-     * "сбросить всё" в редакторе не смешивала разделы в одну необратимую операцию. */
+    /** П.md §26 "масштаб шрифта" - множитель размеров MaterialTheme.typography (NamiTypeScale.
+     * SCALES), поверх системного масштаба, а не вместо него. Гарнитура настраивается отдельно,
+     * через uiFontPath - это именно размер. */
+    val themeFontScale: StateFlow<Float>
+    fun setThemeFontScale(value: Float)
+
+    /** П.md §26 "отдельный переключатель без размытия для слабых устройств". true = как было,
+     * размытие рисуется (см. NamiEffects/namiBlur). Не сбрасывается вместе с темой: это про
+     * железо устройства, а не про внешний вид. */
+    val blurEnabled: StateFlow<Boolean>
+    fun setBlurEnabled(value: Boolean)
+
+    /** П.md §26 "Автопереключение", самое простое правило из списка: после 23:00 и до 6 утра
+     * включать AMOLED-режим, днём возвращать как было. Проверяется на старте экрана, а не живым
+     * таймером - честное упрощение, см. MainActivity. */
+    val autoNightAmoled: StateFlow<Boolean>
+    fun setAutoNightAmoled(value: Boolean)
+
+    /** Сброс формы, плотности и масштаба текста к базовой теме - отдельно от [resetThemeColors],
+     * чтобы кнопка "сбросить всё" в редакторе не смешивала разделы в одну необратимую операцию. */
     fun resetThemeShapeAndDensity()
 
     companion object {

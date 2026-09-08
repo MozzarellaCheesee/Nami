@@ -10,7 +10,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Bedtime
+import androidx.compose.material.icons.outlined.BlurOn
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -34,12 +38,15 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.designsystem.NamiDensity
 import dev.nami.core.designsystem.NamiRadius
+import dev.nami.core.designsystem.NamiTypeScale
 
-/** П.md §26 "Редактор темы" - цвет, форма и плотность (типографика настраивается отдельно
- * через свой шрифт интерфейса; прозрачность/blur, режимы акцента, автопереключение, проверка
- * контраста, экспорт/импорт .json и галерея тем из плана не сделаны - каждое отдельная задача).
- * Живой
- * предпросмотр = живое всё приложение, не изолированная миниатюра - оверрайд глобальный
+/** П.md §26 "Редактор темы" - галерея пресетов, цвет, форма, плотность, масштаб текста,
+ * выключатель размытия, автоночник и экспорт/импорт .json. Не сделано из плана: режимы акцента,
+ * проверка контраста, пипетка с обложки и история цветов, импорт по ссылке и по QR, остальные
+ * правила автопереключения (системная тема, устройство вывода, плейлист) - каждое отдельная
+ * задача. Гарнитура настраивается не здесь, а во Внешнем виде (uiFontPath).
+ *
+ * Живой предпросмотр = живое всё приложение, не изолированная миниатюра - оверрайд глобальный
  * (NamiColors) и применяется мгновенно на каждый ввод, план хотел отдельную превью-миниатюру,
  * но раз тема и так глобальный singleton, честнее и меньше кода - показывать реальный результат
  * сразу, а не строить параллельный мини-макет только для превью. */
@@ -48,6 +55,23 @@ fun ThemeEditorScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltVie
     val overrides by viewModel.themeColorOverrides.collectAsState()
     val shapeOverrides by viewModel.themeShapeOverrides.collectAsState()
     val densityScale by viewModel.themeDensityScale.collectAsState()
+    val fontScale by viewModel.themeFontScale.collectAsState()
+    val blurEnabled by viewModel.blurEnabled.collectAsState()
+    val autoNightAmoled by viewModel.autoNightAmoled.collectAsState()
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val exportTheme = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri -> uri?.let(viewModel::exportTheme) }
+    val importTheme = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+    ) { uri -> uri?.let(viewModel::importTheme) }
+    val ioMessage by viewModel.themeIoMessage.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(ioMessage) {
+        val message = ioMessage ?: return@LaunchedEffect
+        android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+        viewModel.themeIoMessageShown()
+    }
 
     SettingsSubScreenScaffold(title = "Редактор темы", onBack = onBack) {
         Text(
@@ -55,6 +79,42 @@ fun ThemeEditorScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltVie
             color = NamiColors.Paper40,
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 12.dp),
+        )
+        SectionCaption("Галерея")
+        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            THEME_PRESETS.forEachIndexed { index, preset ->
+                if (index > 0) androidx.compose.material3.HorizontalDivider(color = NamiColors.Ink700)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { viewModel.applyThemePreset(preset) }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // Превью - три кружка из самого пресета (фон/поверхность/акцент), а не
+                    // отрисованная мини-карточка: этого хватает, чтобы отличить пресеты глазом.
+                    listOf(NamiColors.TOKEN_INK900, NamiColors.TOKEN_INK800, NamiColors.TOKEN_SHU).forEach { token ->
+                        val color = preset.colors[token]?.let(::parseHexOrNull) ?: NamiColors.defaultOf(token)
+                        androidx.compose.foundation.layout.Box(
+                            modifier = Modifier.size(20.dp).padding(end = 4.dp).background(color, CircleShape),
+                        )
+                    }
+                    Text(
+                        preset.name,
+                        color = NamiColors.Paper100,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(start = 12.dp),
+                    )
+                }
+            }
+        }
+        Text(
+            "Тап применяет пресет и снимает все ручные правки цвета. Пресет - это набор цветов " +
+                "поверх тёмной схемы, поэтому на светлой \"Бумаге\" отдельные захардкоженные " +
+                "затемнения (например ночной режим в плеере) остаются тёмными.",
+            color = NamiColors.Paper40,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
         )
         SectionCaption("Цвет")
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
@@ -81,26 +141,83 @@ fun ThemeEditorScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltVie
 
         SectionCaption("Плотность")
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
-            Row(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
-                NamiDensity.SCALES.forEach { (value, label) ->
-                    val selected = kotlin.math.abs(densityScale - value) < 0.01f
-                    Text(
-                        text = label,
-                        color = if (selected) NamiColors.Ink900 else NamiColors.Paper70,
-                        style = MaterialTheme.typography.bodySmall,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 4.dp)
-                            .background(if (selected) NamiColors.Shu else NamiColors.Ink700, RoundedCornerShape(NamiRadius.Button))
-                            .clickable { viewModel.setThemeDensityScale(value) }
-                            .padding(vertical = 10.dp),
-                    )
-                }
-            }
+            ScalePills(NamiDensity.SCALES, densityScale, viewModel::setThemeDensityScale)
         }
         Text(
             "Пока меняет только высоту строки в списках треков - остальные отступы приложения фиксированные.",
+            color = NamiColors.Paper40,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+        )
+
+        SectionCaption("Типографика")
+        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            ScalePills(NamiTypeScale.SCALES, fontScale, viewModel::setThemeFontScale)
+        }
+        Text(
+            "Масштаб текста поверх системного - системная настройка размера шрифта продолжает " +
+                "работать сверх этой. Гарнитура настраивается отдельно, во Внешнем виде.",
+            color = NamiColors.Paper40,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+        )
+
+        SectionCaption("Прозрачность")
+        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            SettingsRow(
+                icon = Icons.Outlined.BlurOn,
+                title = "Размытие фонов",
+                trailing = { NamiSwitch(checked = blurEnabled, onCheckedChange = viewModel::setBlurEnabled) },
+                onClick = { viewModel.setBlurEnabled(!blurEnabled) },
+            )
+        }
+        Text(
+            "Выключи на слабом устройстве: размытые обложки в плеере, очереди, тексте и " +
+                "мини-плеере рисуются на GPU и стоят дороже всего остального в кадре.",
+            color = NamiColors.Paper40,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+        )
+
+        SectionCaption("Автопереключение")
+        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            SettingsRow(
+                icon = Icons.Outlined.Bedtime,
+                title = "Ночник после 23:00",
+                trailing = { NamiSwitch(checked = autoNightAmoled, onCheckedChange = viewModel::setAutoNightAmoled) },
+                onClick = { viewModel.setAutoNightAmoled(!autoNightAmoled) },
+            )
+        }
+        Text(
+            "С 23:00 до 6:00 включает AMOLED-чёрный сам. Час проверяется при открытии " +
+                "приложения, а не живым таймером - если приложение уже открыто, тема сменится " +
+                "на следующем запуске.",
+            color = NamiColors.Paper40,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+        )
+
+        SectionCaption("Файл темы")
+        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            SettingsRow(
+                icon = Icons.Outlined.FileUpload,
+                title = "Экспортировать в .json",
+                trailing = {},
+                onClick = { exportTheme.launch("nami-theme.json") },
+            )
+            androidx.compose.material3.HorizontalDivider(color = NamiColors.Ink700)
+            SettingsRow(
+                icon = Icons.Outlined.FileDownload,
+                title = "Импортировать .json",
+                trailing = {},
+                // */* вторым: часть файловых менеджеров отдаёт .json как text/plain или
+                // application/octet-stream, и по одному только application/json файл не выбрать.
+                onClick = { importTheme.launch(arrayOf("application/json", "*/*")) },
+            )
+        }
+        Text(
+            "Импорт заменяет цвета, форму, плотность и масштаб текста целиком. Неизвестные поля " +
+                "и некорректные значения в чужом файле игнорируются, а не ломают импорт.",
             color = NamiColors.Paper40,
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
@@ -117,6 +234,28 @@ fun ThemeEditorScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltVie
                     viewModel.resetThemeShapeAndDensity()
                 },
         )
+    }
+}
+
+/** Ряд пилюль "выбери один множитель" - одинаковый для плотности и масштаба текста. */
+@Composable
+private fun ScalePills(scales: List<Pair<Float, String>>, current: Float, onSelect: (Float) -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+        scales.forEach { (value, label) ->
+            val selected = kotlin.math.abs(current - value) < 0.01f
+            Text(
+                text = label,
+                color = if (selected) NamiColors.Ink900 else NamiColors.Paper70,
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 4.dp)
+                    .background(if (selected) NamiColors.Shu else NamiColors.Ink700, RoundedCornerShape(NamiRadius.Button))
+                    .clickable { onSelect(value) }
+                    .padding(vertical = 10.dp),
+            )
+        }
     }
 }
 

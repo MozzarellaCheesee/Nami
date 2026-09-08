@@ -9,8 +9,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 
-private fun buildTypography(uiFont: FontFamily?): Typography {
-    fun style(base: androidx.compose.ui.text.TextStyle) = if (uiFont != null) base.copy(fontFamily = uiFont) else base
+/** [fontScale] - П.md §26 "масштаб шрифта": множитель поверх системного, отдельная настройка
+ * приложения (системный Android font scale применяется поверх этого сам по себе, через Density).
+ * Домножаются и размер, и межстрочный интервал - иначе на 1.2x строки начали бы налезать друг на
+ * друга. Трекинг не трогается: он в дизайн-системе задан в sp и масштабируется вместе с текстом. */
+private fun buildTypography(uiFont: FontFamily?, fontScale: Float): Typography {
+    fun style(base: androidx.compose.ui.text.TextStyle): androidx.compose.ui.text.TextStyle {
+        val withFont = if (uiFont != null) base.copy(fontFamily = uiFont) else base
+        return if (fontScale == 1f) {
+            withFont
+        } else {
+            withFont.copy(fontSize = withFont.fontSize * fontScale, lineHeight = withFont.lineHeight * fontScale)
+        }
+    }
     return Typography(
         titleLarge = style(NamiType.ScreenTitle),
         titleMedium = style(NamiType.TrackTitle),
@@ -44,7 +55,9 @@ private fun namiDarkScheme() = darkColorScheme(
  * стандартный. [colorOverrides] - П.md §26 "Редактор темы", токен -> hex ("#RRGGBB"/"#AARRGGBB"),
  * применяется через NamiColors.setOverride перед первой отрисовкой контента. [shapeOverrides] -
  * §26 "Форма", токен -> радиус в dp; [densityScale] - §26 "Плотность", множитель вертикального
- * ритма. Оба идут тем же путём, что и цвет: SideEffect -> глобальный токен-объект. */
+ * ритма; [blurEnabled] - §26 "без размытия" для слабых устройств. Все идут тем же путём, что и
+ * цвет: SideEffect -> глобальный токен-объект. [fontScale] - §26 "масштаб шрифта", единственный
+ * из набора, что не глобальный объект, а честная пересборка MaterialTheme.typography. */
 @Composable
 fun NamiTheme(
     amoled: Boolean = false,
@@ -52,6 +65,8 @@ fun NamiTheme(
     colorOverrides: Map<String, String> = emptyMap(),
     shapeOverrides: Map<String, Int> = emptyMap(),
     densityScale: Float = 1f,
+    fontScale: Float = 1f,
+    blurEnabled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     SideEffect {
@@ -64,7 +79,8 @@ fun NamiTheme(
             NamiRadius.setOverride(token, shapeOverrides[token]?.dp)
         }
         NamiDensity.setScale(densityScale)
+        NamiEffects.setBlurEnabled(blurEnabled)
     }
-    val typography = remember(uiFont) { buildTypography(uiFont) }
+    val typography = remember(uiFont, fontScale) { buildTypography(uiFont, fontScale) }
     MaterialTheme(colorScheme = namiDarkScheme(), typography = typography, content = content)
 }

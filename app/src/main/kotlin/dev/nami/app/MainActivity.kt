@@ -183,6 +183,15 @@ class MainActivity : ComponentActivity() {
             val themeColorOverrides by appSettingsRepository.themeColorOverrides.collectAsState()
             val themeShapeOverrides by appSettingsRepository.themeShapeOverrides.collectAsState()
             val themeDensityScale by appSettingsRepository.themeDensityScale.collectAsState()
+            val themeFontScale by appSettingsRepository.themeFontScale.collectAsState()
+            val blurEnabled by appSettingsRepository.blurEnabled.collectAsState()
+            val autoNightAmoled by appSettingsRepository.autoNightAmoled.collectAsState()
+            // П.md §26 "Автопереключение", самое простое правило: с 23:00 до 6:00 включаем
+            // AMOLED сами. Час берётся один раз на создание Activity, живого таймера нет - если
+            // приложение открыто в момент наступления 23:00, тема переключится на следующем
+            // открытии экрана, а не мгновенно. Сознательное упрощение: полная система правил из
+            // плана (по системной теме, по устройству вывода, по плейлисту) - отдельная задача.
+            val isNightHour = remember { java.time.LocalTime.now().hour.let { it >= 23 || it < 6 } }
             val uiFontPath by appSettingsRepository.uiFontPath.collectAsState()
             // Loaded once per path, not on every recomposition - Font(File) does real I/O/parsing.
             val uiFontFamily = remember(uiFontPath) {
@@ -215,11 +224,13 @@ class MainActivity : ComponentActivity() {
                 }
             }
             NamiTheme(
-                amoled = amoledEnabled,
+                amoled = amoledEnabled || (autoNightAmoled && isNightHour),
                 uiFont = uiFontFamily,
                 colorOverrides = themeColorOverrides,
                 shapeOverrides = themeShapeOverrides,
                 densityScale = themeDensityScale,
+                fontScale = themeFontScale,
+                blurEnabled = blurEnabled,
             ) {
                 NamiNavHost(
                     onImportRequested = { pickFiles.launch(arrayOf("audio/*")) },

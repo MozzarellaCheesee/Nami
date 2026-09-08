@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
@@ -84,6 +83,7 @@ import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.model.Lyrics
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.namiBlur
 import dev.nami.core.designsystem.NamiRadius
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -185,7 +185,7 @@ fun LyricsScreen(
                 model = backgroundArtworkPath,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize().blur(64.dp),
+                modifier = Modifier.fillMaxSize().namiBlur(64.dp),
             )
         }
         Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900.copy(alpha = if (backgroundArtworkPath != null) 0.72f else 1f)))

@@ -789,6 +789,12 @@ private object NoOpSettingsRepository : dev.nami.domain.SettingsRepository {
     override fun setThemeShapeOverride(token: String, dp: Int?) {}
     override val themeDensityScale = MutableStateFlow(1f)
     override fun setThemeDensityScale(value: Float) {}
+    override val themeFontScale = MutableStateFlow(1f)
+    override fun setThemeFontScale(value: Float) {}
+    override val blurEnabled = MutableStateFlow(true)
+    override fun setBlurEnabled(value: Boolean) {}
+    override val autoNightAmoled = MutableStateFlow(false)
+    override fun setAutoNightAmoled(value: Boolean) {}
     override fun resetThemeShapeAndDensity() {}
 }
 

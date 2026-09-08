@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
@@ -47,6 +46,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.namiBlur
 import dev.nami.core.designsystem.fullBlockClickable
 import dev.nami.domain.PlaybackState
 import dev.nami.domain.QueueTrack
@@ -110,7 +110,7 @@ fun MiniPlayer(
                 model = backgroundArtworkPath,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxWidth().height(60.dp).blur(24.dp),
+                modifier = Modifier.fillMaxWidth().height(60.dp).namiBlur(24.dp),
             )
         }
         Box(

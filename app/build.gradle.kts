@@ -103,4 +103,8 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(kotlin("test"))
+    // Разбору .json темы нужны настоящие org.json и android.graphics.Color, а не заглушки
+    // из android.jar для юнит-тестов - см. ThemeIoTest.
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
 }
