@@ -16,6 +16,13 @@ data class DiscoveredDevice(val name: String, val host: String, val port: Int)
  * (WifiP2pDevice.deviceStatus), не enum - используется только для отображения. */
 data class WifiDirectPeer(val name: String, val address: String, val status: String)
 
+/** П.md §24.25 "через интернет — опционально". Прямое P2P-соединение (WebRTC DataChannel,
+ * публичный STUN Google, без своего сервера) для случая, когда оба устройства в разных сетях -
+ * ни NSD, ни Wi-Fi Direct тут не достанут (обоим нужна общая радио-видимость). Обмен кодами
+ * приглашение/ответ - вручную (скопировать и отправить любым способом), потому что без своего
+ * сервера сигналинг больше неоткуда взять. */
+enum class InternetLinkState { IDLE, CONNECTING, CONNECTED, FAILED }
+
 data class ListenTogetherGuestState(
     val hostName: String,
     val trackId: TrackId?,
@@ -81,4 +88,17 @@ interface LocalShareRepository {
     fun startWifiDirectDiscovery()
     fun stopWifiDirectDiscovery()
     fun connectWifiDirect(peer: WifiDirectPeer)
+
+    /** Интернет-мост через WebRTC (см. [InternetLinkState] doc) - хост и гость обмениваются
+     * кодами вручную (текстом, любым мессенджером). После установки канала хост пушит nowplaying
+     * (тот же переключатель [listenTogetherHostEnabled]) и отдаёт байты трека гостю, гость
+     * попадает в тот же [listenTogetherGuestState], что и LAN-версия "слушать вместе". */
+    val internetLinkState: StateFlow<InternetLinkState>
+    /** Хост: создаёт offer и ждёт сбора ICE-кандидатов, возвращает код приглашения. */
+    suspend fun createInternetInvite(): String
+    /** Гость: принимает код приглашения, возвращает код ответа для хоста. */
+    suspend fun acceptInternetInvite(inviteCode: String): String
+    /** Хост: завершает handshake кодом ответа гостя. */
+    suspend fun completeInternetLink(answerCode: String)
+    fun closeInternetLink()
 }

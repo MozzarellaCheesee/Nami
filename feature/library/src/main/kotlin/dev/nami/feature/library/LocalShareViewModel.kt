@@ -6,6 +6,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.nami.core.model.Track
 import dev.nami.domain.DiscoveredDevice
 import dev.nami.domain.LibraryRepository
+import dev.nami.domain.InternetLinkState
 import dev.nami.domain.ListenTogetherGuestState
 import dev.nami.domain.LocalShareRepository
 import dev.nami.domain.PlayerRepository
@@ -32,6 +33,14 @@ class LocalShareViewModel @Inject constructor(
     val listenTogetherGuestState: StateFlow<ListenTogetherGuestState?> = repository.listenTogetherGuestState
     val wifiDirectPeers: StateFlow<List<WifiDirectPeer>> = repository.wifiDirectPeers
     val wifiDirectConnecting: StateFlow<Boolean> = repository.wifiDirectConnecting
+    val internetLinkState: StateFlow<InternetLinkState> = repository.internetLinkState
+
+    private val _internetInviteCode = MutableStateFlow<String?>(null)
+    val internetInviteCode: StateFlow<String?> = _internetInviteCode
+    private val _internetAnswerCode = MutableStateFlow<String?>(null)
+    val internetAnswerCode: StateFlow<String?> = _internetAnswerCode
+    private val _internetLinkError = MutableStateFlow<String?>(null)
+    val internetLinkError: StateFlow<String?> = _internetLinkError
 
     private val _lastSyncResult = MutableStateFlow<Int?>(null)
     val lastSyncResult: StateFlow<Int?> = _lastSyncResult
@@ -52,6 +61,39 @@ class LocalShareViewModel @Inject constructor(
 
     fun startWifiDirectDiscovery() = repository.startWifiDirectDiscovery()
     fun connectWifiDirect(peer: WifiDirectPeer) = repository.connectWifiDirect(peer)
+
+    fun createInternetInvite() {
+        viewModelScope.launch {
+            _internetLinkError.value = null
+            runCatching { repository.createInternetInvite() }
+                .onSuccess { _internetInviteCode.value = it }
+                .onFailure { _internetLinkError.value = "Не получилось создать приглашение: ${it.message}" }
+        }
+    }
+
+    fun acceptInternetInvite(code: String) {
+        viewModelScope.launch {
+            _internetLinkError.value = null
+            runCatching { repository.acceptInternetInvite(code) }
+                .onSuccess { _internetAnswerCode.value = it }
+                .onFailure { _internetLinkError.value = "Код не подошёл: ${it.message}" }
+        }
+    }
+
+    fun completeInternetLink(answerCode: String) {
+        viewModelScope.launch {
+            _internetLinkError.value = null
+            runCatching { repository.completeInternetLink(answerCode) }
+                .onFailure { _internetLinkError.value = "Код не подошёл: ${it.message}" }
+        }
+    }
+
+    fun closeInternetLink() {
+        repository.closeInternetLink()
+        _internetInviteCode.value = null
+        _internetAnswerCode.value = null
+        _internetLinkError.value = null
+    }
 
     fun setDropCurrentTrack() {
         val nowPlaying = playerRepository.queue.value.nowPlaying ?: return

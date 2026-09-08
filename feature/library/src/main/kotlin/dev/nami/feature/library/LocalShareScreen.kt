@@ -42,13 +42,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.domain.DiscoveredDevice
+import dev.nami.domain.InternetLinkState
 import dev.nami.domain.WifiDirectPeer
 
 /** Группа G "сеть" - один экран, три сценария (Wi-Fi Drop, синхронизация, слушать вместе) на
@@ -71,6 +75,12 @@ fun LocalShareScreen(
     val lastPullResult by viewModel.lastPullResult.collectAsState()
     val wifiDirectPeers by viewModel.wifiDirectPeers.collectAsState()
     val wifiDirectConnecting by viewModel.wifiDirectConnecting.collectAsState()
+    val internetLinkState by viewModel.internetLinkState.collectAsState()
+    val internetInviteCode by viewModel.internetInviteCode.collectAsState()
+    val internetAnswerCode by viewModel.internetAnswerCode.collectAsState()
+    val internetLinkError by viewModel.internetLinkError.collectAsState()
+    var internetPasteText by remember { mutableStateOf("") }
+    val clipboard = LocalClipboardManager.current
 
     // Wi-Fi Direct нужно ACCESS_FINE_LOCATION до Android 13, NEARBY_WIFI_DEVICES начиная с 13 -
     // тот же паттерн запроса разрешения, что у сканера QR (LocalShareScanScreen).
@@ -232,6 +242,30 @@ fun LocalShareScreen(
             }
 
             item {
+                Text(
+                    "Через интернет - разные сети (WebRTC)",
+                    color = NamiColors.Paper40,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 8.dp),
+                )
+            }
+            item {
+                InternetLinkSection(
+                    state = internetLinkState,
+                    inviteCode = internetInviteCode,
+                    answerCode = internetAnswerCode,
+                    error = internetLinkError,
+                    pasteText = internetPasteText,
+                    onPasteTextChange = { internetPasteText = it },
+                    onCreateInvite = viewModel::createInternetInvite,
+                    onAcceptInvite = { viewModel.acceptInternetInvite(internetPasteText) },
+                    onCompleteLink = { viewModel.completeInternetLink(internetPasteText) },
+                    onClose = viewModel::closeInternetLink,
+                    onCopy = { clipboard.setText(AnnotatedString(it)) },
+                )
+            }
+
+            item {
                 Text("Найденные устройства", color = NamiColors.Paper40, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(vertical = 12.dp))
             }
             if (devices.isEmpty()) {
@@ -263,6 +297,74 @@ fun LocalShareScreen(
             }
             item { Box(modifier = Modifier.padding(bottom = 24.dp)) }
         }
+    }
+}
+
+/** Ручной обмен offer/answer (см. LocalShareRepository.InternetLinkState doc) - без своего
+ * сервера сигналинг больше неоткуда взять, поэтому код нужно скопировать и отправить любым
+ * способом (мессенджер, почта) на другое устройство. Хост создаёт приглашение первым, гость
+ * вставляет его код и отдаёт хосту свой код ответа - тем же способом, в обратную сторону. */
+@Composable
+private fun InternetLinkSection(
+    state: InternetLinkState,
+    inviteCode: String?,
+    answerCode: String?,
+    error: String?,
+    pasteText: String,
+    onPasteTextChange: (String) -> Unit,
+    onCreateInvite: () -> Unit,
+    onAcceptInvite: () -> Unit,
+    onCompleteLink: () -> Unit,
+    onClose: () -> Unit,
+    onCopy: (String) -> Unit,
+) {
+    Column {
+        when {
+            state == InternetLinkState.CONNECTED -> {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Подключено", color = NamiColors.Wakaba, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    TextButton(onClick = onClose) { Text("Отключить", color = NamiColors.Paper70) }
+                }
+            }
+            inviteCode != null -> {
+                // Хост: сам код приглашения уже отправлен, ждём код ответа от гостя.
+                Text("Код приглашения - отправь его собеседнику:", color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall)
+                CodeBox(inviteCode, onCopy)
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                    OutlinedTextField(value = pasteText, onValueChange = onPasteTextChange, label = { Text("Код ответа от собеседника") }, modifier = Modifier.weight(1f))
+                }
+                Row {
+                    TextButton(onClick = onCompleteLink, enabled = pasteText.isNotBlank()) { Text("Завершить подключение", color = NamiColors.Shu) }
+                    TextButton(onClick = onClose) { Text("Отмена", color = NamiColors.Paper70) }
+                }
+            }
+            answerCode != null -> {
+                // Гость: свой код ответа готов, нужно отправить его хосту.
+                Text("Код ответа - отправь его обратно собеседнику:", color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall)
+                CodeBox(answerCode, onCopy)
+                TextButton(onClick = onClose) { Text("Отмена", color = NamiColors.Paper70) }
+            }
+            else -> {
+                Row {
+                    TextButton(onClick = onCreateInvite) { Text("Создать приглашение (я хост)", color = NamiColors.Shu) }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                    OutlinedTextField(value = pasteText, onValueChange = onPasteTextChange, label = { Text("Код приглашения от собеседника") }, modifier = Modifier.weight(1f))
+                }
+                TextButton(onClick = onAcceptInvite, enabled = pasteText.isNotBlank()) { Text("Принять (я гость)", color = NamiColors.Shu) }
+            }
+        }
+        error?.let { Text(it, color = NamiColors.Shu, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp)) }
+    }
+}
+
+@Composable
+private fun CodeBox(code: String, onCopy: (String) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().background(NamiColors.Ink800, RoundedCornerShape(12.dp)).padding(8.dp)) {
+        SelectionContainer(modifier = Modifier.weight(1f)) {
+            Text(code, color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        }
+        TextButton(onClick = { onCopy(code) }) { Text("Копировать", color = NamiColors.Shu) }
     }
 }
 

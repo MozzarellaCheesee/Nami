@@ -18,6 +18,7 @@ import dev.nami.core.model.Track
 import dev.nami.core.model.TrackId
 import dev.nami.domain.DiscoveredDevice
 import dev.nami.domain.ImportSource
+import dev.nami.domain.InternetLinkState
 import dev.nami.domain.LibraryRepository
 import dev.nami.domain.ListenTogetherGuestState
 import dev.nami.domain.LocalShareRepository
@@ -25,6 +26,7 @@ import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerRepository
 import dev.nami.domain.PlaylistRepository
 import dev.nami.domain.WifiDirectPeer
+import dev.nami.data.webrtc.WebRtcInternetLink
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -35,10 +37,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -98,6 +102,18 @@ class LocalShareRepositoryImpl @Inject constructor(
     // Имя peer'а, к которому только что запросили connect() - broadcast о смене соединения не
     // несёт имени, только его MAC/адрес и networkInfo, так что берём имя отсюда для DiscoveredDevice.
     private var pendingWifiDirectPeerName: String? = null
+
+    // ------------------------------------------------------------------ WebRTC интернет-мост
+    private var webRtcLink: WebRtcInternetLink? = null
+    private var internetLinkIsHost = false
+    private var internetLinkPushJob: Job? = null
+    private val _internetLinkState = MutableStateFlow(InternetLinkState.IDLE)
+    override val internetLinkState: StateFlow<InternetLinkState> = _internetLinkState
+    // Один трек скачивается за раз (см. WebRtcInternetLink doc) - гостевая сторона копит куски
+    // сюда между onTrackMeta и onTrackEnd.
+    private var pendingTrackId: String? = null
+    private var pendingTrackFileName: String? = null
+    private var pendingTrackBuffer: ByteArrayOutputStream? = null
 
     init {
         // Пока раздача (Wi-Fi Drop) запущена (dropTrack != null), она следует за играющим
@@ -381,6 +397,10 @@ class LocalShareRepositoryImpl @Inject constructor(
     override fun leaveListenTogether() {
         guestJob?.cancel()
         guestJob = null
+        // "Выйти" должен закрывать и интернет-мост, если гость слушал через него, а не только
+        // LAN-сессию - иначе канал остаётся висеть открытым, а гостевой стейт не сбрасывается
+        // до следующего onChannelClosed.
+        if (webRtcLink != null && !internetLinkIsHost) closeInternetLink()
         _listenTogetherGuestState.value = null
         cachedFilesByTrackId.clear()
         listenTogetherCacheDir.deleteRecursively()
@@ -541,6 +561,121 @@ class LocalShareRepositoryImpl @Inject constructor(
         WifiP2pDevice.AVAILABLE -> "доступно"
         WifiP2pDevice.UNAVAILABLE -> "недоступно"
         else -> "неизвестно"
+    }
+
+    // ------------------------------------------------------------------ WebRTC интернет-мост
+
+    override suspend fun createInternetInvite(): String {
+        closeInternetLink()
+        val link = WebRtcInternetLink(context)
+        webRtcLink = link
+        internetLinkIsHost = true
+        _internetLinkState.value = InternetLinkState.CONNECTING
+        wireInternetLinkCallbacks(link)
+        return link.createInvite()
+    }
+
+    override suspend fun acceptInternetInvite(inviteCode: String): String {
+        closeInternetLink()
+        val link = WebRtcInternetLink(context)
+        webRtcLink = link
+        internetLinkIsHost = false
+        _internetLinkState.value = InternetLinkState.CONNECTING
+        wireInternetLinkCallbacks(link)
+        return link.acceptInvite(inviteCode)
+    }
+
+    override suspend fun completeInternetLink(answerCode: String) {
+        webRtcLink?.completeLink(answerCode)
+    }
+
+    override fun closeInternetLink() {
+        internetLinkPushJob?.cancel()
+        internetLinkPushJob = null
+        webRtcLink?.close()
+        webRtcLink = null
+        _internetLinkState.value = InternetLinkState.IDLE
+        if (!internetLinkIsHost) _listenTogetherGuestState.value = null
+    }
+
+    private fun wireInternetLinkCallbacks(link: WebRtcInternetLink) {
+        link.onChannelOpen = {
+            _internetLinkState.value = InternetLinkState.CONNECTED
+            // Хост пушит nowplaying сам (не по запросу) - тот же переключатель "показывать что
+            // играю" (listenTogetherHostEnabled), что и у LAN-версии, интервал тот же (POLL_INTERVAL_MS).
+            if (internetLinkIsHost) {
+                internetLinkPushJob = scope.launch {
+                    while (isActive) {
+                        if (_listenTogetherHostEnabled.value) {
+                            buildNowPlayingJson()?.let { link.sendText(it.toString()) }
+                        }
+                        delay(POLL_INTERVAL_MS)
+                    }
+                }
+            }
+        }
+        link.onChannelClosed = {
+            _internetLinkState.value = InternetLinkState.FAILED
+            internetLinkPushJob?.cancel()
+        }
+        if (internetLinkIsHost) {
+            link.onTrackRequest = { trackId -> scope.launch { serveTrackOverLink(link, trackId) } }
+        } else {
+            link.onTextMessage = { text -> scope.launch { handleInternetNowPlaying(link, JSONObject(text)) } }
+            link.onTrackMeta = { trackId, fileName, totalBytes ->
+                pendingTrackId = trackId
+                pendingTrackFileName = fileName
+                pendingTrackBuffer = ByteArrayOutputStream(totalBytes.coerceAtLeast(0))
+            }
+            link.onTrackChunk = { chunk -> pendingTrackBuffer?.write(chunk) }
+            link.onTrackEnd = {
+                val buffer = pendingTrackBuffer
+                val id = pendingTrackId
+                val fileName = pendingTrackFileName
+                pendingTrackBuffer = null
+                if (buffer != null && id != null && fileName != null) {
+                    val file = File(listenTogetherCacheDir, "${id}_$fileName")
+                    file.writeBytes(buffer.toByteArray())
+                    cachedFilesByTrackId[id] = file
+                    scope.launch {
+                        if (_listenTogetherGuestState.value?.trackId?.value == id) {
+                            _listenTogetherGuestState.value = _listenTogetherGuestState.value?.copy(downloading = false, cachedPath = file.path)
+                            playCached(file, _listenTogetherGuestState.value?.positionMs ?: 0L)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun serveTrackOverLink(link: WebRtcInternetLink, trackId: String) {
+        val track = libraryRepository.track(TrackId(trackId)).first() ?: return
+        val file = File(track.path)
+        if (!file.exists()) return
+        link.sendTrackMeta(trackId, file.name, file.length().toInt())
+        link.sendTrackBytes(file.readBytes())
+    }
+
+    private suspend fun handleInternetNowPlaying(link: WebRtcInternetLink, json: JSONObject) {
+        val trackId = json.optString("trackId")
+        val current = _listenTogetherGuestState.value
+        if (current?.trackId?.value != trackId) {
+            _listenTogetherGuestState.value = ListenTogetherGuestState(
+                hostName = current?.hostName ?: "Интернет",
+                trackId = TrackId(trackId),
+                trackTitle = json.optString("title"),
+                artistName = json.optString("artistName", null),
+                downloading = cachedFilesByTrackId[trackId] == null,
+                cachedPath = cachedFilesByTrackId[trackId]?.path,
+                positionMs = json.optLong("positionMs"),
+                durationMs = json.optLong("durationMs"),
+            )
+            val cached = cachedFilesByTrackId[trackId]
+            if (cached != null) playCached(cached, json.optLong("positionMs")) else link.sendTrackRequest(trackId)
+        } else {
+            _listenTogetherGuestState.value = current.copy(positionMs = json.optLong("positionMs"), durationMs = json.optLong("durationMs"))
+            correctDrift(json.optLong("positionMs"), json.optBoolean("isPlaying", true))
+        }
     }
 
     // ------------------------------------------------------------------ HTTP client helpers
