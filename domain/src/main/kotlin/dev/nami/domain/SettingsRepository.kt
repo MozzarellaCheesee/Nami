@@ -204,6 +204,16 @@ interface SettingsRepository {
     val lastAppliedSessionName: StateFlow<String?>
     fun setLastAppliedSessionName(name: String?)
 
+    /** П.md §23.23 "Скробблинг" - ListenBrainz только (свой user-токен вставляется в Настройках,
+     * никакого OAuth-приложения/api_key не нужно - Last.fm требует зарегистрированное приложение
+     * с api_key+api_secret, которых у этого проекта нет и заводить их - отдельное решение).
+     * Off по умолчанию: null-токен уже фактически выключает отправку, но отдельный тумблер
+     * позволяет придержать без стирания токена. */
+    val scrobblingEnabled: StateFlow<Boolean>
+    fun setScrobblingEnabled(value: Boolean)
+    val listenBrainzToken: StateFlow<String?>
+    fun setListenBrainzToken(token: String?)
+
     companion object {
         const val STANDS4_DAILY_LIMIT = 100
     }

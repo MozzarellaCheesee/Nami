@@ -197,6 +197,24 @@ class PlayerRepositoryImpl @Inject constructor(
                     libraryRepository.incrementPlayCount(trackId)
                     libraryRepository.recordPlayHistory(trackId, System.currentTimeMillis(), durationMs)
                 }
+                // Тот же порог "считается прослушиванием" (30с/половина трека), что и play count -
+                // ListenBrainz ждёт того же самого момента, не отдельного правила.
+                val token = settingsRepository.listenBrainzToken.value
+                if (settingsRepository.scrobblingEnabled.value && token != null) {
+                    val metadata = player.currentMediaItem?.mediaMetadata
+                    val title = metadata?.title?.toString()
+                    if (title != null) {
+                        scope.launch(Dispatchers.IO) {
+                            ListenBrainzScrobbler.submitListen(
+                                token = token,
+                                title = title,
+                                artist = metadata.artist?.toString(),
+                                album = metadata.albumTitle?.toString(),
+                                listenedAtEpochSec = System.currentTimeMillis() / 1000,
+                            )
+                        }
+                    }
+                }
             }
         }
     }

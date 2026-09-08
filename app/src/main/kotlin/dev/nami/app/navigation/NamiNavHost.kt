@@ -89,6 +89,7 @@ private const val ROUTE_CARD_SORT = "card_sort"
 private const val ROUTE_DRIVE_MODE = "drive_mode"
 private const val ROUTE_LOCAL_SHARE = "local_share"
 private const val ROUTE_LOCAL_SHARE_SCAN = "local_share_scan"
+private const val ROUTE_SCROBBLING = "scrobbling"
 private const val ROUTE_ALBUM_INFO = "album_info/{albumId}"
 private const val ROUTE_ARTIST_INFO = "artist_info/{artistId}"
 private const val ROUTE_AUDIO_TRACT = "audio_tract"
@@ -281,8 +282,12 @@ fun NamiNavHost(
                     onBlindListenClick = { navController.navigate(ROUTE_BLIND_LISTEN) },
                     onCardSortClick = { navController.navigate(ROUTE_CARD_SORT) },
                     onLocalShareClick = { navController.navigate(ROUTE_LOCAL_SHARE) },
+                    onScrobblingClick = { navController.navigate(ROUTE_SCROBBLING) },
                 )
                 }
+            }
+            composable(ROUTE_SCROBBLING) {
+                dev.nami.app.SettingsScrobblingScreen(onBack = { navController.popBackStack() })
             }
             composable(ROUTE_SETTINGS_APPEARANCE) {
                 SettingsAppearanceScreen(onBack = { navController.popBackStack() })

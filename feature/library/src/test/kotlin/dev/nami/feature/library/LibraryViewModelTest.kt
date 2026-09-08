@@ -768,6 +768,10 @@ private object NoOpSettingsRepository : dev.nami.domain.SettingsRepository {
     override fun deleteSession(name: String) {}
     override val lastAppliedSessionName = MutableStateFlow<String?>(null)
     override fun setLastAppliedSessionName(name: String?) {}
+    override val scrobblingEnabled = MutableStateFlow(false)
+    override fun setScrobblingEnabled(value: Boolean) {}
+    override val listenBrainzToken = MutableStateFlow<String?>(null)
+    override fun setListenBrainzToken(token: String?) {}
 }
 
 private object NoOpPlaylistRepository : PlaylistRepository {

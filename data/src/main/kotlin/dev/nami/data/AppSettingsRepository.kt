@@ -50,6 +50,8 @@ private const val KEY_SHUFFLE_MODE = "shuffle_mode"
 private const val KEY_SESSIONS = "sessions" // JSON array, see AppSettingsRepository.readSessions
 private const val KEY_LAST_APPLIED_SESSION = "last_applied_session"
 private const val KEY_OUTPUT_PROFILES_ENABLED = "output_profiles_enabled"
+private const val KEY_SCROBBLING_ENABLED = "scrobbling_enabled"
+private const val KEY_LISTENBRAINZ_TOKEN = "listenbrainz_token"
 // One "<CSV of 9 gains>|<volumeLimitPercent>" string per device type.
 private fun outputProfileKey(type: OutputDeviceType) = "output_profile_${type.name}"
 
@@ -375,6 +377,21 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
     override fun setLastAppliedSessionName(name: String?) {
         prefs.edit { putString(KEY_LAST_APPLIED_SESSION, name) }
         _lastAppliedSessionName.value = name
+    }
+
+    private val _scrobblingEnabled = MutableStateFlow(prefs.getBoolean(KEY_SCROBBLING_ENABLED, false))
+    override val scrobblingEnabled: StateFlow<Boolean> = _scrobblingEnabled
+    override fun setScrobblingEnabled(value: Boolean) {
+        prefs.edit { putBoolean(KEY_SCROBBLING_ENABLED, value) }
+        _scrobblingEnabled.value = value
+    }
+
+    private val _listenBrainzToken = MutableStateFlow(prefs.getString(KEY_LISTENBRAINZ_TOKEN, null))
+    override val listenBrainzToken: StateFlow<String?> = _listenBrainzToken
+    override fun setListenBrainzToken(token: String?) {
+        val trimmed = token?.trim()?.takeIf { it.isNotEmpty() }
+        prefs.edit { putString(KEY_LISTENBRAINZ_TOKEN, trimmed) }
+        _listenBrainzToken.value = trimmed
     }
 
     private fun writeSessions(sessions: List<Session>) {

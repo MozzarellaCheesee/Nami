@@ -79,6 +79,7 @@ fun SettingsScreen(
     onBlindListenClick: () -> Unit,
     onCardSortClick: () -> Unit,
     onLocalShareClick: () -> Unit,
+    onScrobblingClick: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -175,6 +176,61 @@ fun SettingsScreen(
                 trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
                 onClick = onLocalShareClick,
             )
+            SettingsRow(
+                icon = Icons.Outlined.BarChart,
+                title = "Скробблинг (ListenBrainz)",
+                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
+                onClick = onScrobblingClick,
+            )
+        }
+    }
+}
+
+/** П.md §23.23 "Скробблинг" - ListenBrainz только, свой user-токен (без Last.fm - тот требует
+ * зарегистрированное приложение с api_key/api_secret, которых у проекта нет). Отправка идёт из
+ * PlayerRepositoryImpl на том же пороге "считается прослушиванием", что и play count. */
+@Composable
+fun SettingsScrobblingScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
+    val enabled by viewModel.scrobblingEnabled.collectAsState()
+    val token by viewModel.listenBrainzToken.collectAsState()
+    var tokenText by remember(token) { mutableStateOf(token.orEmpty()) }
+
+    SettingsSubScreenScaffold(title = "Скробблинг", onBack = onBack) {
+        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            SettingsRow(
+                icon = Icons.Outlined.BarChart,
+                title = "Отправлять в ListenBrainz",
+                trailing = { NamiSwitch(checked = enabled, onCheckedChange = viewModel::setScrobblingEnabled) },
+                onClick = { viewModel.setScrobblingEnabled(!enabled) },
+            )
+        }
+        SettingsSectionLabel("ListenBrainz")
+        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Text(
+                    text = "Трек отправляется когда прослушано 30 секунд или половина - как и обычный " +
+                        "счётчик прослушиваний. Own Last.fm нет - он требует зарегистрированное " +
+                        "приложение с отдельными ключами, ListenBrainz работает по своему токену без этого.",
+                    color = NamiColors.Paper40,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                androidx.compose.material3.OutlinedTextField(
+                    value = tokenText,
+                    onValueChange = { tokenText = it },
+                    label = { Text("User token") },
+                    singleLine = true,
+                    supportingText = { ApiKeyHint("Получить токен: listenbrainz.org/settings", "https://listenbrainz.org/settings/") },
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                )
+                Text(
+                    text = "Сохранить",
+                    color = NamiColors.Shu,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier
+                        .padding(top = 12.dp)
+                        .clickable { viewModel.setListenBrainzToken(tokenText) },
+                )
+            }
         }
     }
 }

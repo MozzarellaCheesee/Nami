@@ -33,6 +33,8 @@ class SettingsViewModel @Inject constructor(
     val amoledEnabled: StateFlow<Boolean> = appSettingsRepository.amoledEnabled
     val uiFontPath: StateFlow<String?> = appSettingsRepository.uiFontPath
     val doubleTapArtworkAction: StateFlow<dev.nami.domain.GestureAction> = appSettingsRepository.doubleTapArtworkAction
+    val scrobblingEnabled: StateFlow<Boolean> = appSettingsRepository.scrobblingEnabled
+    val listenBrainzToken: StateFlow<String?> = appSettingsRepository.listenBrainzToken
 
     fun setAutoOpenPlayer(value: Boolean) {
         appSettingsRepository.setAutoOpenPlayer(value)
@@ -112,5 +114,13 @@ class SettingsViewModel @Inject constructor(
 
     fun setDoubleTapArtworkAction(action: dev.nami.domain.GestureAction) {
         appSettingsRepository.setDoubleTapArtworkAction(action)
+    }
+
+    fun setScrobblingEnabled(value: Boolean) {
+        appSettingsRepository.setScrobblingEnabled(value)
+    }
+
+    fun setListenBrainzToken(token: String) {
+        appSettingsRepository.setListenBrainzToken(token)
     }
 }
