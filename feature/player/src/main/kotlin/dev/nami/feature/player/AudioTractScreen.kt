@@ -323,6 +323,22 @@ fun AudioTractBody(onOpenEqualizer: () -> Unit, viewModel: AudioTractViewModel =
                             modifier = Modifier.padding(top = 8.dp),
                         )
                     }
+                    uiState.usbAudioInfo?.let { usb ->
+                        Text(
+                            text = "USB-ЦАП по его собственным дескрипторам:\n$usb",
+                            color = NamiColors.Paper70,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 12.dp),
+                        )
+                        // Без этой строчки список форматов читается как «Nami умеет так играть»,
+                        // а он умеет только их прочитать - см. UsbAudioDescriptors.
+                        Text(
+                            text = "Nami читает эти форматы, но выводит звук через Android: изохронной передачи, которой USB Audio передаёт PCM, в публичном API Android нет.",
+                            color = NamiColors.Paper40,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
                 }
                 Spacer(modifier = Modifier.height(24.dp))
             }

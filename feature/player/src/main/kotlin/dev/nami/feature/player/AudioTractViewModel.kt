@@ -8,6 +8,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.nami.player.convolution.IrWavLoader
 import dev.nami.player.output.DeviceAudioProbe
+import dev.nami.player.usb.UsbAudioProbe
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -48,6 +49,9 @@ data class AudioTractUiState(
     /** Тест устройства идёт секунды (строит и рушит десятки AudioTrack) - экран должен показать,
      * что он идёт, иначе кнопка выглядит сломанной. */
     val deviceProbeRunning: Boolean = false,
+    /** Что сообщает о себе подключённый USB-ЦАП. Не сохраняется между запусками: зависит от того,
+     * что воткнуто прямо сейчас. */
+    val usbAudioInfo: String? = null,
 )
 
 /** Feeds both План.md's 4.6 "Аудиотракт" and 4.7 "Эквалайзер" screens - same underlying state,
@@ -64,8 +68,9 @@ class AudioTractViewModel @Inject constructor(
     // the whole combine() below stayed stuck on its initial value forever and every toggle looked
     // like it silently reverted (it was actually saved fine, the screen just never redrew). Falls
     // back to a null track instead of blocking, so settings work regardless of playback state.
-    // Объявлено до uiState: тот его читает в combine, а Kotlin инициализирует свойства сверху вниз.
+    // Объявлено до uiState: тот их читает в combine, а Kotlin инициализирует свойства сверху вниз.
     private val deviceProbeRunning = MutableStateFlow(false)
+    private val usbAudioInfo = MutableStateFlow<String?>(null)
 
     private val currentTrack = playerRepository.state
         .flatMapLatest { state ->
@@ -111,6 +116,7 @@ class AudioTractViewModel @Inject constructor(
         )
     }
         .combine(deviceProbeRunning) { state, running -> state.copy(deviceProbeRunning = running) }
+        .combine(usbAudioInfo) { state, usb -> state.copy(usbAudioInfo = usb) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AudioTractUiState())
 
     fun setEqEnabled(enabled: Boolean) = settingsRepository.setEqEnabled(enabled)
@@ -178,6 +184,12 @@ class AudioTractViewModel @Inject constructor(
             deviceProbeRunning.value = true
             try {
                 settingsRepository.setDeviceAudioProfile(DeviceAudioProbe.probe())
+                // Заодно спрашиваем сам USB-ЦАП, если он воткнут: это данные от устройства, а не
+                // от микшера Android, и расходятся они регулярно.
+                val usb = UsbAudioProbe(context)
+                usbAudioInfo.value = usb.audioDevices().joinToString("\n\n") { device ->
+                    "${device.productName ?: device.deviceName}\n${usb.describe(device)}"
+                }.takeIf { it.isNotBlank() }
             } finally {
                 deviceProbeRunning.value = false
             }
