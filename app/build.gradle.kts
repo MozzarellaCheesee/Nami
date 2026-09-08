@@ -96,6 +96,7 @@ dependencies {
     implementation(libs.hilt.navigation.compose)
     implementation(libs.glance.appwidget)
     implementation(libs.glance.material3)
+    implementation(libs.coil.compose)
     ksp(libs.hilt.compiler)
 
     debugImplementation(libs.compose.ui.tooling)

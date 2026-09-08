@@ -772,6 +772,8 @@ private object NoOpSettingsRepository : dev.nami.domain.SettingsRepository {
     override fun setScrobblingEnabled(value: Boolean) {}
     override val listenBrainzToken = MutableStateFlow<String?>(null)
     override fun setListenBrainzToken(token: String?) {}
+    override val homeBlocks = MutableStateFlow(dev.nami.domain.DEFAULT_HOME_BLOCKS)
+    override fun setHomeBlocks(blocks: List<dev.nami.domain.HomeBlockConfig>) {}
 }
 
 private object NoOpPlaylistRepository : PlaylistRepository {

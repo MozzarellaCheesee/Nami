@@ -62,6 +62,8 @@ import dev.nami.feature.search.SearchScreen
 import dev.nami.feature.trash.TrashScreen
 import kotlinx.coroutines.flow.StateFlow
 
+private const val ROUTE_HOME = "home"
+private const val ROUTE_HOME_CONSTRUCTOR = "home_constructor"
 private const val ROUTE_LIBRARY = "library"
 private const val ROUTE_SEARCH = "search"
 private const val ROUTE_PLAYLISTS = "playlists"
@@ -201,6 +203,23 @@ fun NamiNavHost(
             popEnterTransition = { EnterTransition.None },
             popExitTransition = { ExitTransition.None },
         ) {
+            composable(ROUTE_HOME) {
+                dev.nami.app.HomeScreen(
+                    onTrackClick = { trackId ->
+                        if (queue.nowPlaying?.id == trackId) {
+                            showNowPlaying = true
+                        } else {
+                            nowPlayingViewModel.playFromLibrary(trackId)
+                            if (autoOpenPlayer) showNowPlaying = true
+                        }
+                    },
+                    onAlbumClick = { albumId -> navController.navigate("album/${albumId.value}") },
+                    onConstructorClick = { navController.navigate(ROUTE_HOME_CONSTRUCTOR) },
+                )
+            }
+            composable(ROUTE_HOME_CONSTRUCTOR) {
+                dev.nami.app.HomeConstructorScreen(onBack = { navController.popBackStack() })
+            }
             composable(ROUTE_LIBRARY) {
                 // LibraryScreen already wraps its own list in clipToBounds() internally - no
                 // extra wrap needed here.

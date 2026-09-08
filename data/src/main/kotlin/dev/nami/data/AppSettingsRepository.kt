@@ -52,6 +52,7 @@ private const val KEY_LAST_APPLIED_SESSION = "last_applied_session"
 private const val KEY_OUTPUT_PROFILES_ENABLED = "output_profiles_enabled"
 private const val KEY_SCROBBLING_ENABLED = "scrobbling_enabled"
 private const val KEY_LISTENBRAINZ_TOKEN = "listenbrainz_token"
+private const val KEY_HOME_BLOCKS = "home_blocks" // JSON array [{type, enabled}], see readHomeBlocks
 // One "<CSV of 9 gains>|<volumeLimitPercent>" string per device type.
 private fun outputProfileKey(type: OutputDeviceType) = "output_profile_${type.name}"
 
@@ -392,6 +393,27 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
         val trimmed = token?.trim()?.takeIf { it.isNotEmpty() }
         prefs.edit { putString(KEY_LISTENBRAINZ_TOKEN, trimmed) }
         _listenBrainzToken.value = trimmed
+    }
+
+    private val _homeBlocks = MutableStateFlow(readHomeBlocks())
+    override val homeBlocks: StateFlow<List<dev.nami.domain.HomeBlockConfig>> = _homeBlocks
+    override fun setHomeBlocks(blocks: List<dev.nami.domain.HomeBlockConfig>) {
+        val array = JSONArray()
+        blocks.forEach { array.put(JSONObject().put("type", it.type.name).put("enabled", it.enabled)) }
+        prefs.edit { putString(KEY_HOME_BLOCKS, array.toString()) }
+        _homeBlocks.value = blocks
+    }
+
+    private fun readHomeBlocks(): List<dev.nami.domain.HomeBlockConfig> {
+        val raw = prefs.getString(KEY_HOME_BLOCKS, null) ?: return dev.nami.domain.DEFAULT_HOME_BLOCKS
+        return runCatching {
+            val array = JSONArray(raw)
+            (0 until array.length()).mapNotNull { i ->
+                val obj = array.optJSONObject(i) ?: return@mapNotNull null
+                val type = runCatching { dev.nami.domain.HomeBlockType.valueOf(obj.optString("type")) }.getOrNull() ?: return@mapNotNull null
+                dev.nami.domain.HomeBlockConfig(type, obj.optBoolean("enabled", true))
+            }
+        }.getOrDefault(dev.nami.domain.DEFAULT_HOME_BLOCKS)
     }
 
     private fun writeSessions(sessions: List<Session>) {

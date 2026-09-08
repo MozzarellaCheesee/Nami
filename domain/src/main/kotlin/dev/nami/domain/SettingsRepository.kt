@@ -214,6 +214,11 @@ interface SettingsRepository {
     val listenBrainzToken: StateFlow<String?>
     fun setListenBrainzToken(token: String?)
 
+    /** П.md §14 "Главный экран - конструктор" - см. HomeBlock.kt. Порядок списка = порядок
+     * отображения. */
+    val homeBlocks: StateFlow<List<HomeBlockConfig>>
+    fun setHomeBlocks(blocks: List<HomeBlockConfig>)
+
     companion object {
         const val STANDS4_DAILY_LIMIT = 100
     }

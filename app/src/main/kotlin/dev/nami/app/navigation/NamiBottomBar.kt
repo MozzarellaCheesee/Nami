@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.LibraryMusic
 import androidx.compose.material.icons.outlined.QueueMusic
 import androidx.compose.material.icons.outlined.Search
@@ -27,6 +28,7 @@ import dev.nami.core.designsystem.NamiColors
 private data class BottomTab(val route: String, val label: String, val icon: ImageVector)
 
 private val TABS = listOf(
+    BottomTab("home", "Главная", Icons.Outlined.Home),
     BottomTab("library", "Библиотека", Icons.Outlined.LibraryMusic),
     BottomTab("search", "Поиск", Icons.Outlined.Search),
     BottomTab("playlists", "Плейлисты", Icons.Outlined.QueueMusic),
