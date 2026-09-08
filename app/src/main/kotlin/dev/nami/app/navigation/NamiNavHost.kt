@@ -281,7 +281,9 @@ fun NamiNavHost(
             onTabSelected = onTabSelected,
         )
     }
-    Column(modifier = Modifier.statusBarsPadding().displayCutoutPadding()) {
+    // weight(1f) обязателен: без него контент в Row получил бы ширину по содержимому, а не всю
+    // оставшуюся после рельсы, и на широком экране прижался бы к левому краю.
+    Column(modifier = Modifier.weight(1f).statusBarsPadding().displayCutoutPadding()) {
         NavHost(
             navController = navController,
             startDestination = ROUTE_LIBRARY,
