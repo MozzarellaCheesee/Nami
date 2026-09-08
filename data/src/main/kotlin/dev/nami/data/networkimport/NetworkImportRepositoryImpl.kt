@@ -46,7 +46,7 @@ class NetworkImportRepositoryImpl @Inject constructor(
                 when (source) {
                     NetworkImportSource.AUDIUS -> searchAudius(trimmed)
                     NetworkImportSource.ARCHIVE -> searchArchive(trimmed)
-                    NetworkImportSource.PIPED -> emptyList()
+                    NetworkImportSource.PIPED -> searchPiped(trimmed)
                 }
             }.getOrElse {
                 Log.w(TAG, "поиск в $source не удался", it)
@@ -54,7 +54,11 @@ class NetworkImportRepositoryImpl @Inject constructor(
             }
         }
 
-    override suspend fun importTrack(track: NetworkTrack): String? = withContext(Dispatchers.IO) {
+    override suspend fun importTrack(networkTrack: NetworkTrack): String? = withContext(Dispatchers.IO) {
+        // У Piped прямой ссылки в результатах поиска нет - она короткоживущая, её добывают
+        // отдельным запросом прямо перед скачиванием.
+        val track = if (networkTrack.downloadUrl != null) networkTrack else resolvePiped(networkTrack)
+            ?: return@withContext "Инстансы Piped сейчас не отдают этот трек - попробуй позже или другой источник"
         val url = track.downloadUrl ?: return@withContext "Не удалось получить ссылку на файл"
         // Уникальность даёт ПАПКА, а не префикс в имени: иначе uuid попадает в название трека у
         // файлов без тегов (тот же урок, что в Wi-Fi Drop).
@@ -173,6 +177,87 @@ class NetworkImportRepositoryImpl @Inject constructor(
         }
     }
 
+    // ------------------------------------------------------------------ Piped (YouTube)
+
+    /**
+     * Публичные инстансы Piped регулярно падают, переезжают и упираются в защиту YouTube от ботов,
+     * поэтому хост не один, а список: первый ответивший осмысленным JSON становится рабочим до
+     * конца сессии ([pipedInstance]), при следующей ошибке перебор начинается снова. Инстанс может
+     * ответить 200 и телом {"error": "..."} - это тоже отказ, а не результат.
+     */
+    @Volatile
+    private var pipedInstance: String? = null
+
+    private fun searchPiped(query: String): List<NetworkTrack> {
+        val body = pipedGet("/search?q=${encode(query)}&filter=music_songs") ?: return emptyList()
+        val items = JSONObject(body).optJSONArray("items") ?: return emptyList()
+        return (0 until items.length()).mapNotNull { i ->
+            val item = items.optJSONObject(i) ?: return@mapNotNull null
+            if (item.optString("type") != "stream") return@mapNotNull null
+            // "/watch?v=ID" - собственный формат Piped, id отдельным полем нет.
+            val videoId = item.optString("url").substringAfter("v=", "").takeIf { it.isNotBlank() }
+                ?: return@mapNotNull null
+            val title = item.optString("title").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            NetworkTrack(
+                source = NetworkImportSource.PIPED,
+                id = videoId,
+                title = title,
+                artistName = item.optString("uploaderName").takeIf { it.isNotBlank() },
+                durationSec = item.optInt("duration").takeIf { it > 0 },
+                artworkUrl = item.optString("thumbnail").takeIf { it.isNotBlank() },
+                detail = null,
+                // Ссылка на аудиопоток живёт минуты и привязана к инстансу - добываем её в момент
+                // скачивания (см. resolvePiped), а не при показе результатов.
+                downloadUrl = null,
+                fileName = title,
+            )
+        }
+    }
+
+    /** Возвращает трек с проставленными downloadUrl/fileName или null, если ни один инстанс не
+     * отдал потоки. Перекодирования нет намеренно: lossy → lossy только портит звук и время. */
+    private fun resolvePiped(track: NetworkTrack): NetworkTrack? {
+        val body = pipedGet("/streams/${track.id}") ?: return null
+        val streams = JSONObject(body).optJSONArray("audioStreams") ?: return null
+        var bestUrl: String? = null
+        var bestBitrate = -1
+        var bestMime = ""
+        for (i in 0 until streams.length()) {
+            val s = streams.optJSONObject(i) ?: continue
+            val url = s.optString("url").takeIf { it.isNotBlank() } ?: continue
+            val bitrate = s.optInt("bitrate")
+            if (bitrate > bestBitrate) {
+                bestBitrate = bitrate
+                bestUrl = url
+                bestMime = s.optString("mimeType")
+            }
+        }
+        val url = bestUrl ?: return null
+        val ext = when {
+            bestMime.contains("mp4") -> "m4a"
+            bestMime.contains("webm") -> "webm"
+            else -> "opus"
+        }
+        return track.copy(downloadUrl = url, fileName = "${track.title}.$ext")
+    }
+
+    /** Пробует запомненный инстанс, потом все остальные по порядку. */
+    private fun pipedGet(path: String): String? {
+        val hosts = listOfNotNull(pipedInstance) + PIPED_INSTANCES.filter { it != pipedInstance }
+        for (host in hosts) {
+            val body = httpGet("$host$path") ?: continue
+            val json = runCatching { JSONObject(body) }.getOrNull() ?: continue
+            if (json.has("error")) {
+                Log.w(TAG, "инстанс $host отказал: ${json.optString("error").take(120)}")
+                continue
+            }
+            pipedInstance = host
+            return body
+        }
+        pipedInstance = null
+        return null
+    }
+
     // ------------------------------------------------------------------ HTTP
 
     private fun encode(value: String): String = URLEncoder.encode(value, "UTF-8")
@@ -227,6 +312,17 @@ class NetworkImportRepositoryImpl @Inject constructor(
         const val CONNECT_TIMEOUT_MS = 10_000
         const val READ_TIMEOUT_MS = 15_000
         const val DOWNLOAD_TIMEOUT_MS = 120_000
+        /** Не один захардкоженный хост: инстансы Piped то падают, то переезжают (их сообщество
+         * само это признаёт), поэтому при отказе перебираем следующий. */
+        val PIPED_INSTANCES = listOf(
+            "https://api.piped.private.coffee",
+            "https://pipedapi.kavin.rocks",
+            "https://pipedapi.ducks.party",
+            "https://pipedapi.adminforge.de",
+            "https://pipedapi.drgns.space",
+            "https://pipedapi.r4fo.com",
+            "https://pipedapi.nosebs.ru",
+        )
         const val ITEMS_PER_SEARCH = 6
         const val FILES_PER_ITEM = 8
         /** Чем меньше число, тем предпочтительнее формат: сначала lossless, потом lossy. */
