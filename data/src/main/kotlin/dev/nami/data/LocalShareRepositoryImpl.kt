@@ -43,6 +43,7 @@ private const val SERVER_PORT = 47821
 private const val POLL_INTERVAL_MS = 1500L
 private const val PREFETCH_COUNT = 2
 private const val MATCH_DURATION_TOLERANCE_MS = 2000L
+private const val DRIFT_THRESHOLD_MS = 1500L
 
 @Singleton
 class LocalShareRepositoryImpl @Inject constructor(
@@ -326,6 +327,7 @@ class LocalShareRepositoryImpl @Inject constructor(
                     }
                 } else {
                     _listenTogetherGuestState.value = current.copy(positionMs = json.optLong("positionMs"), durationMs = json.optLong("durationMs"))
+                    correctDrift(json.optLong("positionMs"), json.optBoolean("isPlaying", true))
                 }
 
                 // Prefetch what's coming up so switching doesn't wait on a download.
@@ -377,6 +379,23 @@ class LocalShareRepositoryImpl @Inject constructor(
         file.writeBytes(bytes)
         cachedFilesByTrackId[trackId] = file
         return file
+    }
+
+    /** Непрерывная синхронизация позиции гостя с хостом - каждый тик поллинга (см.
+     * joinListenTogether) сверяет свою текущую позицию с хостовой и корректирует seek'ом при
+     * заметном расхождении. Честно не пытается быть sample-accurate (никакой общей тактовой
+     * частоты между устройствами нет, это HTTP-поллинг раз в POLL_INTERVAL_MS, не медиа-протокол
+     * реального времени) - порог DRIFT_THRESHOLD_MS специально широкий, чтобы не дёргать seek на
+     * каждый обычный джиттер сети. */
+    private suspend fun correctDrift(hostPositionMs: Long, hostIsPlaying: Boolean) {
+        val playing = playerRepository.state.value as? PlaybackState.Playing ?: return
+        if (playing.isPlaying != hostIsPlaying) {
+            playerRepository.toggle()
+        }
+        val drift = playing.positionMs - hostPositionMs
+        if (kotlin.math.abs(drift) > DRIFT_THRESHOLD_MS) {
+            playerRepository.seek(hostPositionMs)
+        }
     }
 
     private suspend fun playCached(file: File, startPositionMs: Long) {

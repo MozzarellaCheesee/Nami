@@ -99,7 +99,9 @@ fun LocalShareScreen(
             }
             if (showQr && serverAddress != null) {
                 item {
-                    QrCodeImage(content = serverAddress!!, modifier = Modifier.size(220.dp).padding(bottom = 20.dp))
+                    Box(modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp), contentAlignment = Alignment.Center) {
+                        QrCodeImage(content = serverAddress!!, modifier = Modifier.size(220.dp))
+                    }
                 }
             }
 
