@@ -172,6 +172,20 @@ interface TrackDao {
     @Query("SELECT id, bpm, rating, dateAdded, path FROM tracks WHERE deletedAt IS NULL")
     suspend fun allForSearchFilter(): List<TrackFilterRow>
 
+    /** Треки без отпечатка - вход для сканера дублей (П.md §23.19). Порция ограничена, потому
+     * что каждая строка тут означает полное декодирование файла. */
+    @Query("SELECT id, path FROM tracks WHERE deletedAt IS NULL AND audioFingerprint IS NULL LIMIT :limit")
+    suspend fun tracksWithoutFingerprint(limit: Int): List<TrackPathRow>
+
+    @Query("SELECT id, audioFingerprint AS fingerprint FROM tracks WHERE deletedAt IS NULL AND audioFingerprint IS NOT NULL")
+    suspend fun allFingerprints(): List<TrackFingerprintRow>
+
+    @Query("UPDATE tracks SET audioFingerprint = :fingerprint WHERE id = :id")
+    suspend fun setAudioFingerprint(id: String, fingerprint: Long?)
+
+    @Query("SELECT COUNT(*) FROM tracks WHERE deletedAt IS NULL AND audioFingerprint IS NULL")
+    suspend fun countWithoutFingerprint(): Int
+
     @Query("UPDATE tracks SET deletedAt = :deletedAt, path = :path WHERE id = :id")
     suspend fun setDeletedAt(id: String, deletedAt: Long?, path: String)
 
@@ -241,6 +255,10 @@ interface TrackDao {
     )
 
     data class TrackYearRow(val id: String, val year: Int)
+
+    data class TrackPathRow(val id: String, val path: String)
+
+    data class TrackFingerprintRow(val id: String, val fingerprint: Long)
 
     data class TrackFilterRow(
         val id: String,

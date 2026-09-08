@@ -27,6 +27,11 @@ interface LibraryRepository {
     /** См. LibraryHealthReport - пробегает по всей библиотеке, не для частого вызова. */
     suspend fun libraryHealthReport(): LibraryHealthReport
 
+    /** П.md §23.19 - считает отпечатки звука для [limit] треков, у которых их ещё нет, и
+     * возвращает, сколько осталось. Порциями и по кнопке, а не фоном при импорте: каждый трек
+     * тут полностью декодируется. Дефолт для тестовых фейков - "сканировать нечего". */
+    suspend fun scanFingerprints(limit: Int = 50): Int = 0
+
     fun tracks(): Flow<PagingData<Track>>
     /** Snapshot of every non-deleted track, same order as [tracks], for building a full playback queue. */
     suspend fun allTracksOrdered(): List<Track>

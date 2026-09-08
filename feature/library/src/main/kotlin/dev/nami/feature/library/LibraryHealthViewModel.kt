@@ -40,6 +40,26 @@ class LibraryHealthViewModel @Inject constructor(
         }
     }
 
+    /** Сколько треков осталось без отпечатка звука. -1 = ещё не спрашивали. */
+    private val _fingerprintsLeft = MutableStateFlow(-1)
+    val fingerprintsLeft: StateFlow<Int> = _fingerprintsLeft.asStateFlow()
+
+    private val _isScanningFingerprints = MutableStateFlow(false)
+    val isScanningFingerprints: StateFlow<Boolean> = _isScanningFingerprints.asStateFlow()
+
+    /** П.md §23.19. Порциями по кнопке: каждый трек в порции полностью декодируется, так что
+     * запускать это само по себе на всей библиотеке - разряженный телефон без спроса.
+     * Пользователь жмёт ещё раз, пока счётчик не дойдёт до нуля. */
+    fun scanFingerprints() {
+        if (_isScanningFingerprints.value) return
+        viewModelScope.launch {
+            _isScanningFingerprints.value = true
+            _fingerprintsLeft.value = libraryRepository.scanFingerprints(FINGERPRINT_BATCH)
+            _isScanningFingerprints.value = false
+            refresh()
+        }
+    }
+
     /** Missing-file rows are just soft-deleted like any other delete - TrashFileStore's own
      * moveToTrash/deletePermanently already no-op cleanly when the source file isn't there. */
     fun deleteTrack(id: TrackId) {
@@ -82,5 +102,10 @@ class LibraryHealthViewModel @Inject constructor(
             group.forEach { libraryRepository.renameArtist(it, canonicalName) }
             refresh()
         }
+    }
+
+    private companion object {
+        // Полсотни файлов - примерно минута сканирования, после чего экран снова отвечает.
+        const val FINGERPRINT_BATCH = 50
     }
 }

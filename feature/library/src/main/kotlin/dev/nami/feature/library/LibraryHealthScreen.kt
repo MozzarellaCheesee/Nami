@@ -106,6 +106,32 @@ fun LibraryHealthScreen(onBack: () -> Unit, viewModel: LibraryHealthViewModel = 
             item {
                 DuplicatesCategory(current.duplicateGroups, onResolve = { keep, group -> viewModel.resolveDuplicateGroup(keep, group.map { it.id }) })
             }
+            item {
+                val left by viewModel.fingerprintsLeft.collectAsState()
+                val scanning by viewModel.isScanningFingerprints.collectAsState()
+                Column(modifier = Modifier.padding(top = 8.dp).background(NamiColors.Ink800, RoundedCornerShape(NamiRadius.Button)).fillMaxWidth().padding(16.dp)) {
+                    Text("Дубли по звуку", color = NamiColors.Paper100, style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        when {
+                            scanning -> "Сканирую…"
+                            left == 0 -> "Все треки просканированы"
+                            left > 0 -> "Осталось просканировать: $left"
+                            else -> "Сравнивает саму запись, а не теги - находит один трек в разных форматах"
+                        },
+                        color = NamiColors.Paper70,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                    Text(
+                        if (left > 0) "Продолжить" else "Сканировать",
+                        color = if (scanning) NamiColors.Paper40 else NamiColors.Shu,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier
+                            .padding(top = 8.dp)
+                            .clickable(enabled = !scanning && left != 0) { viewModel.scanFingerprints() },
+                    )
+                }
+            }
         }
     }
 }

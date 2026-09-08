@@ -33,7 +33,7 @@ import dev.nami.core.database.entity.VocabularyEntity
         VocabularyEntity::class, MomentEntity::class, LoopEntity::class, PlayHistoryEntity::class,
         TagEntity::class, TrackTagEntity::class,
     ],
-    version = 25,
+    version = 26,
     exportSchema = true,
 )
 abstract class NamiDatabase : RoomDatabase() {

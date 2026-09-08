@@ -80,4 +80,9 @@ data class TrackEntity(
     /** Хвост группы C "CUE-поддержка" - см. core.model.Track's identical doc. */
     val cueStartMs: Long? = null,
     val cueEndMs: Long? = null,
+    /** П.md §23.19 - 64-битный хеш RMS-огибающей (AudioFingerprint), считается по требованию из
+     * "Здоровья библиотеки". В отличие от fileHash ловит один и тот же трек в разных форматах и
+     * битрейтах, где байты файла заведомо не совпадают. Null - ещё не сканировался или не
+     * декодировался. */
+    val audioFingerprint: Long? = null,
 )
