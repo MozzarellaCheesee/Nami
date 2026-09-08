@@ -224,3 +224,82 @@ fun WaveformScrubber(
         }
     }
 }
+
+/**
+ * П.md §17/§26 "форма прогресс-бара" - альтернатива волне: обычная тонкая линия с крупным
+ * пальцем. Ставится ровно на место [WaveformScrubber] (те же onSeek/onProgressPreview/
+ * onPreviewEnd и та же высота 48dp, чтобы переключение не двигало ничего вокруг).
+ *
+ * Сознательно НЕ поддерживает moments/onLongPress/onMomentClick: метки моментов - это то, ради
+ * чего волна вообще нужна, а на голой линии тонкая засечка и попадание пальцем в неё требуют
+ * своей hit-логики и своего вида. Кто выбрал линию - выбрал вид без меток; управлять метками
+ * по-прежнему можно из "Моменты и петли" в меню плеера.
+ */
+@Composable
+fun LineScrubber(
+    progress: Float,
+    onSeek: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+    onProgressPreview: (Float) -> Unit = {},
+    onPreviewEnd: () -> Unit = {},
+) {
+    var dragProgress by remember { mutableStateOf<Float?>(null) }
+    val displayedProgress = (dragProgress ?: progress).coerceIn(0f, 1f)
+
+    Canvas(
+        modifier = modifier
+            .height(48.dp)
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = { offset -> onSeek((offset.x / size.width).coerceIn(0f, 1f)) })
+            }
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        val fraction = (offset.x / size.width).coerceIn(0f, 1f)
+                        dragProgress = fraction
+                        onProgressPreview(fraction)
+                    },
+                    onDrag = { change, _ ->
+                        change.consume()
+                        val fraction = (change.position.x / size.width).coerceIn(0f, 1f)
+                        dragProgress = fraction
+                        onProgressPreview(fraction)
+                    },
+                    onDragEnd = {
+                        dragProgress?.let(onSeek)
+                        dragProgress = null
+                        onPreviewEnd()
+                    },
+                    onDragCancel = {
+                        dragProgress = null
+                        onPreviewEnd()
+                    },
+                )
+            },
+    ) {
+        // Дорожка тоньше пальца - палец должен читаться как то, за что тянут, а линия как шкала.
+        val trackHeightPx = 3.dp.toPx()
+        val centerY = size.height / 2f
+        val thumbRadiusPx = 8.dp.toPx()
+        // Оба конца дорожки утоплены на радиус пальца: иначе в позиции 0 и 1 палец наполовину
+        // вылезает за края и обрезается.
+        val left = thumbRadiusPx
+        val right = size.width - thumbRadiusPx
+        val headX = left + (right - left) * displayedProgress
+        drawLine(
+            color = NamiColors.Ink500,
+            start = Offset(left, centerY),
+            end = Offset(right, centerY),
+            strokeWidth = trackHeightPx,
+            cap = androidx.compose.ui.graphics.StrokeCap.Round,
+        )
+        drawLine(
+            color = NamiColors.Shu,
+            start = Offset(left, centerY),
+            end = Offset(headX, centerY),
+            strokeWidth = trackHeightPx,
+            cap = androidx.compose.ui.graphics.StrokeCap.Round,
+        )
+        drawCircle(color = NamiColors.Paper100, radius = thumbRadiusPx, center = Offset(headX, centerY))
+    }
+}

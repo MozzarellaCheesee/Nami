@@ -56,6 +56,8 @@ private const val KEY_HOME_BLOCKS = "home_blocks" // JSON array [{type, enabled}
 private const val KEY_NOW_PLAYING_SHOW_TECH_INFO = "now_playing_show_tech_info"
 private const val KEY_NOW_PLAYING_SHOW_SHUFFLE_REPEAT = "now_playing_show_shuffle_repeat"
 private const val KEY_THEME_COLOR_OVERRIDES = "theme_color_overrides" // JSON object {token: hex}
+private const val KEY_NOW_PLAYING_COMPACT_COVER = "now_playing_compact_cover"
+private const val KEY_NOW_PLAYING_LINE_PROGRESS = "now_playing_line_progress"
 private const val KEY_THEME_SHAPE_OVERRIDES = "theme_shape_overrides" // JSON object {token: dp}
 private const val KEY_THEME_DENSITY_SCALE = "theme_density_scale"
 // One "<CSV of 9 gains>|<volumeLimitPercent>" string per device type.
@@ -421,6 +423,20 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
     override fun setNowPlayingShowShuffleRepeat(value: Boolean) {
         prefs.edit { putBoolean(KEY_NOW_PLAYING_SHOW_SHUFFLE_REPEAT, value) }
         _nowPlayingShowShuffleRepeat.value = value
+    }
+
+    private val _nowPlayingCompactCover = MutableStateFlow(prefs.getBoolean(KEY_NOW_PLAYING_COMPACT_COVER, false))
+    override val nowPlayingCompactCover: StateFlow<Boolean> = _nowPlayingCompactCover
+    override fun setNowPlayingCompactCover(value: Boolean) {
+        prefs.edit { putBoolean(KEY_NOW_PLAYING_COMPACT_COVER, value) }
+        _nowPlayingCompactCover.value = value
+    }
+
+    private val _nowPlayingLineProgress = MutableStateFlow(prefs.getBoolean(KEY_NOW_PLAYING_LINE_PROGRESS, false))
+    override val nowPlayingLineProgress: StateFlow<Boolean> = _nowPlayingLineProgress
+    override fun setNowPlayingLineProgress(value: Boolean) {
+        prefs.edit { putBoolean(KEY_NOW_PLAYING_LINE_PROGRESS, value) }
+        _nowPlayingLineProgress.value = value
     }
 
     private val _themeColorOverrides = MutableStateFlow(readThemeColorOverrides())

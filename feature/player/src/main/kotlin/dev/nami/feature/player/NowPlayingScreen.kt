@@ -171,6 +171,8 @@ fun NowPlayingScreen(
     val nightModeEnabled by viewModel.nightModeEnabled.collectAsState()
     val showTechInfo by viewModel.nowPlayingShowTechInfo.collectAsState()
     val showShuffleRepeat by viewModel.nowPlayingShowShuffleRepeat.collectAsState()
+    val compactCover by viewModel.nowPlayingCompactCover.collectAsState()
+    val lineProgress by viewModel.nowPlayingLineProgress.collectAsState()
 
     // Shared by the swipe gesture and the chevron button so both dismiss paths always finish
     // the slide-down themselves before popping - see the comment on the swipe branch below.
@@ -403,7 +405,11 @@ fun NowPlayingScreen(
         // set to the resulting (smaller) page width, not the full container width, so each page
         // is still a perfect square instead of a square-container's worth of height stuffed into
         // a narrower page.
-        val peekDp = 28.dp
+        // П.md §17 "размер обложки". Единственное, что тут трогается - величина бокового отступа:
+        // ширина страницы (и высота пейджера) считаются из неё, а вся drag/fling/автопродвижение
+        // логика пейджера работает в долях страницы и о константе не знает вообще. Поэтому
+        // "компактно" безопасно, в отличие от любой правки самого пейджера.
+        val peekDp = if (compactCover) 56.dp else 28.dp
         val hasPreviousTrack = queue.previousTrack != null
         val hasNextTrack = queue.upcoming.isNotEmpty()
         // Blocks the drag itself (not just re-snapping after) when there's nothing on that side --
@@ -518,22 +524,34 @@ fun NowPlayingScreen(
         val moments by viewModel.currentTrackMoments.collectAsState()
         var pendingMomentFraction by remember { mutableStateOf<Float?>(null) }
         var selectedMoment by remember { mutableStateOf<dev.nami.domain.Moment?>(null) }
-        WaveformScrubber(
-            seedKey = queue.nowPlaying?.id?.value ?: "",
-            progress = actualProgress,
-            onSeek = { fraction -> viewModel.seek((fraction * durationMs).toLong()) },
-            onProgressPreview = { fraction -> previewProgress = fraction },
-            onPreviewEnd = { previewProgress = null },
-            modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
-            realHeights = waveform,
-            moments = if (durationMs > 0) {
-                moments.map { MomentMarker(it.id, it.positionMs.toFloat() / durationMs, it.colorArgb) }
-            } else {
-                emptyList()
-            },
-            onLongPress = { fraction -> pendingMomentFraction = fraction },
-            onMomentClick = { id -> selectedMoment = moments.firstOrNull { it.id == id } },
-        )
+        // П.md §17 "форма прогресс-бара" - волна или линия, подмена ровно на этом месте, всё
+        // вокруг (время под шкалой, транспорт, диалоги меток) одинаково для обоих вариантов.
+        if (lineProgress) {
+            LineScrubber(
+                progress = actualProgress,
+                onSeek = { fraction -> viewModel.seek((fraction * durationMs).toLong()) },
+                onProgressPreview = { fraction -> previewProgress = fraction },
+                onPreviewEnd = { previewProgress = null },
+                modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
+            )
+        } else {
+            WaveformScrubber(
+                seedKey = queue.nowPlaying?.id?.value ?: "",
+                progress = actualProgress,
+                onSeek = { fraction -> viewModel.seek((fraction * durationMs).toLong()) },
+                onProgressPreview = { fraction -> previewProgress = fraction },
+                onPreviewEnd = { previewProgress = null },
+                modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
+                realHeights = waveform,
+                moments = if (durationMs > 0) {
+                    moments.map { MomentMarker(it.id, it.positionMs.toFloat() / durationMs, it.colorArgb) }
+                } else {
+                    emptyList()
+                },
+                onLongPress = { fraction -> pendingMomentFraction = fraction },
+                onMomentClick = { id -> selectedMoment = moments.firstOrNull { it.id == id } },
+            )
+        }
         pendingMomentFraction?.let { fraction ->
             AddMomentDialog(
                 onSave = { label, colorArgb, isChapter ->

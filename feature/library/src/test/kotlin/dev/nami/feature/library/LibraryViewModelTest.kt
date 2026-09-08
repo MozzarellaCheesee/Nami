@@ -778,6 +778,10 @@ private object NoOpSettingsRepository : dev.nami.domain.SettingsRepository {
     override fun setNowPlayingShowTechInfo(value: Boolean) {}
     override val nowPlayingShowShuffleRepeat = MutableStateFlow(true)
     override fun setNowPlayingShowShuffleRepeat(value: Boolean) {}
+    override val nowPlayingCompactCover = MutableStateFlow(false)
+    override fun setNowPlayingCompactCover(value: Boolean) {}
+    override val nowPlayingLineProgress = MutableStateFlow(false)
+    override fun setNowPlayingLineProgress(value: Boolean) {}
     override val themeColorOverrides = MutableStateFlow<Map<String, String>>(emptyMap())
     override fun setThemeColorOverride(token: String, hex: String?) {}
     override fun resetThemeColors() {}

@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Album
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Archive
@@ -367,6 +368,8 @@ fun SettingsPlayerScreen(onBack: () -> Unit, onSessionsClick: () -> Unit, onDriv
     val doubleTapAction by viewModel.doubleTapArtworkAction.collectAsState()
     val nowPlayingShowTechInfo by viewModel.nowPlayingShowTechInfo.collectAsState()
     val nowPlayingShowShuffleRepeat by viewModel.nowPlayingShowShuffleRepeat.collectAsState()
+    val nowPlayingCompactCover by viewModel.nowPlayingCompactCover.collectAsState()
+    val nowPlayingLineProgress by viewModel.nowPlayingLineProgress.collectAsState()
 
     SettingsSubScreenScaffold(title = "Плеер", onBack = onBack) {
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
@@ -454,6 +457,18 @@ fun SettingsPlayerScreen(onBack: () -> Unit, onSessionsClick: () -> Unit, onDriv
                 title = "Кнопки перемешать/зациклить на Now Playing",
                 trailing = { NamiSwitch(checked = nowPlayingShowShuffleRepeat, onCheckedChange = viewModel::setNowPlayingShowShuffleRepeat) },
                 onClick = { viewModel.setNowPlayingShowShuffleRepeat(!nowPlayingShowShuffleRepeat) },
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Album,
+                title = "Компактная обложка на Now Playing",
+                trailing = { NamiSwitch(checked = nowPlayingCompactCover, onCheckedChange = viewModel::setNowPlayingCompactCover) },
+                onClick = { viewModel.setNowPlayingCompactCover(!nowPlayingCompactCover) },
+            )
+            SettingsRow(
+                icon = Icons.Outlined.GraphicEq,
+                title = "Прогресс линией вместо волны (без меток моментов)",
+                trailing = { NamiSwitch(checked = nowPlayingLineProgress, onCheckedChange = viewModel::setNowPlayingLineProgress) },
+                onClick = { viewModel.setNowPlayingLineProgress(!nowPlayingLineProgress) },
             )
         }
     }

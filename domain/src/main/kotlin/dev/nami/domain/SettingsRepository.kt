@@ -230,6 +230,18 @@ interface SettingsRepository {
     val nowPlayingShowShuffleRepeat: StateFlow<Boolean>
     fun setNowPlayingShowShuffleRepeat(value: Boolean)
 
+    /** "Размер обложки" из §17, сделанный единственным безопасным способом: меняется только
+     * боковой отступ пейджера (peekDp), из которого считается ширина страницы. Сама логика
+     * HorizontalPager - драг, фling, автопродвижение - не знает о константе ничего, поэтому
+     * компактный вариант не может её сломать. true = обложка меньше, соседние шире выглядывают. */
+    val nowPlayingCompactCover: StateFlow<Boolean>
+    fun setNowPlayingCompactCover(value: Boolean)
+
+    /** "Форма прогресс-бара" из §17 - линия вместо волны (см. LineScrubber). Линейный вариант
+     * не рисует метки моментов и не ловит долгий тап, это осознанное упрощение. */
+    val nowPlayingLineProgress: StateFlow<Boolean>
+    fun setNowPlayingLineProgress(value: Boolean)
+
     /** П.md §26 "Редактор темы" - цветовые токены только (см. NamiColors.EDITABLE_TOKENS doc для
      * того, чего в редакторе пока нет: форма/плотность/типографика/прозрачность/пресеты/
      * автопереключение/экспорт). Ключ - имя токена (NamiColors.TOKEN_*), значение - hex-строка. */

@@ -37,6 +37,8 @@ class SettingsViewModel @Inject constructor(
     val listenBrainzToken: StateFlow<String?> = appSettingsRepository.listenBrainzToken
     val nowPlayingShowTechInfo: StateFlow<Boolean> = appSettingsRepository.nowPlayingShowTechInfo
     val nowPlayingShowShuffleRepeat: StateFlow<Boolean> = appSettingsRepository.nowPlayingShowShuffleRepeat
+    val nowPlayingCompactCover: StateFlow<Boolean> = appSettingsRepository.nowPlayingCompactCover
+    val nowPlayingLineProgress: StateFlow<Boolean> = appSettingsRepository.nowPlayingLineProgress
     val themeColorOverrides: StateFlow<Map<String, String>> = appSettingsRepository.themeColorOverrides
     val themeShapeOverrides: StateFlow<Map<String, Int>> = appSettingsRepository.themeShapeOverrides
     val themeDensityScale: StateFlow<Float> = appSettingsRepository.themeDensityScale
@@ -135,6 +137,14 @@ class SettingsViewModel @Inject constructor(
 
     fun setNowPlayingShowShuffleRepeat(value: Boolean) {
         appSettingsRepository.setNowPlayingShowShuffleRepeat(value)
+    }
+
+    fun setNowPlayingCompactCover(value: Boolean) {
+        appSettingsRepository.setNowPlayingCompactCover(value)
+    }
+
+    fun setNowPlayingLineProgress(value: Boolean) {
+        appSettingsRepository.setNowPlayingLineProgress(value)
     }
 
     fun setThemeColorOverride(token: String, hex: String?) {
