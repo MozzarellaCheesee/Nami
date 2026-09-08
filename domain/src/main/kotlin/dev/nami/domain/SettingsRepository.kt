@@ -120,6 +120,10 @@ interface SettingsRepository {
     val nightModeEnabled: StateFlow<Boolean>
     fun setNightModeEnabled(value: Boolean)
 
+    /** Дизайн.md "Режим AMOLED" -- чистый #000000 вместо ink-900, поверх тёмной темы. */
+    val amoledEnabled: StateFlow<Boolean>
+    fun setAmoledEnabled(value: Boolean)
+
     /** Этап 4's "профили по устройству вывода" (Beta) -- off by default, same reasoning as EQ:
      * auto-switching gains/volume the instant a route changes is exactly the kind of thing that
      * needs to be opt-in, not something that surprises a user mid-listen. */

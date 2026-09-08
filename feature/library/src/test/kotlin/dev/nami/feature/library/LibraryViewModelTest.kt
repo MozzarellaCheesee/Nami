@@ -734,6 +734,8 @@ private object NoOpSettingsRepository : dev.nami.domain.SettingsRepository {
     override fun setHiFiEnabled(value: Boolean) {}
     override val nightModeEnabled = MutableStateFlow(false)
     override fun setNightModeEnabled(value: Boolean) {}
+    override val amoledEnabled = MutableStateFlow(false)
+    override fun setAmoledEnabled(value: Boolean) {}
     override val outputProfilesEnabled = MutableStateFlow(false)
     override fun setOutputProfilesEnabled(value: Boolean) {}
     override val outputProfiles = MutableStateFlow(emptyMap<dev.nami.domain.OutputDeviceType, dev.nami.domain.OutputProfile>())

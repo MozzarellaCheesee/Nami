@@ -6,6 +6,10 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.ui.draw.clip
@@ -437,6 +441,25 @@ fun LyricsScreen(
             }
         }
     }
+
+        // Дизайн.md "один смелый акцент" -- вертикальная японская строка (縦書き) с названием
+        // трека вдоль правого края. Чисто декоративная, ни на что не реагирует -- единственная
+        // такая деталь во всём приложении.
+        queue.nowPlaying?.title?.let { title ->
+            Text(
+                text = title,
+                color = NamiColors.Ink500,
+                fontFamily = dev.nami.core.designsystem.NamiFonts.ShipporiMincho,
+                fontSize = 14.sp,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 8.dp)
+                    .graphicsLayer { rotationZ = 90f }
+                    .wrapContentWidth(unbounded = true),
+            )
+        }
     }
 
     if (showPreciseSyncConfirm) {
@@ -571,11 +594,20 @@ private fun FullscreenLyricsOverlay(
     }
 }
 
+/** Дизайн.md "Карточка словаря" -- всплывает над лирикой, ширина 300, r16, фон `--ink-700`,
+ * паддинг 16 -- отдельная плавающая карточка, не системный AlertDialog. */
 @Composable
 private fun WordLookupDialog(lookup: WordLookup, onDismiss: () -> Unit, onAddToVocabulary: (String) -> Unit) {
-    dev.nami.core.designsystem.NamiAlertDialog(
+    androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
-        title = {
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Column(
+            modifier = Modifier
+                .width(300.dp)
+                .background(NamiColors.Ink700, androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                .padding(16.dp),
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(lookup.token.baseForm, color = NamiColors.Paper100)
                 Text(
@@ -585,37 +617,35 @@ private fun WordLookupDialog(lookup: WordLookup, onDismiss: () -> Unit, onAddToV
                     modifier = Modifier.padding(start = 8.dp),
                 )
             }
-        },
-        text = {
+            Spacer(modifier = Modifier.height(12.dp))
             if (lookup.entries.isEmpty()) {
                 Text("Ничего не нашлось в словаре", color = NamiColors.Paper70)
             } else {
-                Column {
-                    lookup.entries.take(5).forEachIndexed { index, entry ->
-                        Column(modifier = Modifier.padding(bottom = 10.dp)) {
-                            if (entry.partsOfSpeech.isNotEmpty()) {
-                                Text(
-                                    entry.partsOfSpeech.joinToString(", "),
-                                    color = NamiColors.Ai,
-                                    style = MaterialTheme.typography.labelSmall,
-                                )
-                            }
-                            Text(entry.glosses.joinToString("; "), color = NamiColors.Paper100)
-                            lookup.translatedGlosses.getOrNull(index)?.takeIf { it.isNotBlank() }?.let { translated ->
-                                Text(translated, color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall)
-                            }
+                lookup.entries.take(5).forEachIndexed { index, entry ->
+                    Column(modifier = Modifier.padding(bottom = 10.dp)) {
+                        if (entry.partsOfSpeech.isNotEmpty()) {
+                            Text(
+                                entry.partsOfSpeech.joinToString(", "),
+                                color = NamiColors.Ai,
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                        Text(entry.glosses.joinToString("; "), color = NamiColors.Paper100)
+                        lookup.translatedGlosses.getOrNull(index)?.takeIf { it.isNotBlank() }?.let { translated ->
+                            Text(translated, color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = { onAddToVocabulary(lookup.entries.firstOrNull()?.glosses?.firstOrNull().orEmpty()) }) {
-                Text("В словарик")
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                TextButton(onClick = onDismiss) { Text("Закрыть") }
+                TextButton(onClick = { onAddToVocabulary(lookup.entries.firstOrNull()?.glosses?.firstOrNull().orEmpty()) }) {
+                    Text("В словарик")
+                }
             }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } },
-    )
+        }
+    }
 }
 
 @Composable

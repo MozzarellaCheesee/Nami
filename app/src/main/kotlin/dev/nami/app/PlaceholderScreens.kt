@@ -26,6 +26,7 @@ import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FontDownload
 import androidx.compose.material.icons.outlined.Fullscreen
@@ -167,12 +168,22 @@ private fun SettingsSubScreenScaffold(title: String, onBack: () -> Unit, content
 }
 
 @Composable
-fun SettingsAppearanceScreen(onBack: () -> Unit) {
+fun SettingsAppearanceScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
     val context = LocalContext.current
     var selectedIcon by remember { mutableStateOf(IconPicker.current(context)) }
     var pendingIcon by remember { mutableStateOf<LauncherIcon?>(null) }
+    val amoledEnabled by viewModel.amoledEnabled.collectAsState()
 
     SettingsSubScreenScaffold(title = "Внешний вид", onBack = onBack) {
+        SettingsSectionLabel("Тема")
+        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            SettingsRow(
+                icon = Icons.Outlined.DarkMode,
+                title = "AMOLED-чёрный",
+                trailing = { NamiSwitch(checked = amoledEnabled, onCheckedChange = viewModel::setAmoledEnabled) },
+                onClick = { viewModel.setAmoledEnabled(!amoledEnabled) },
+            )
+        }
         SettingsSectionLabel("Иконка приложения")
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
             LazyVerticalGrid(

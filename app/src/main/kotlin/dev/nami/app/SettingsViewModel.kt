@@ -30,6 +30,7 @@ class SettingsViewModel @Inject constructor(
     val stands4RequestsToday: StateFlow<Int> = appSettingsRepository.stands4RequestsToday
     val deeplApiKey: StateFlow<String> = appSettingsRepository.deeplApiKey
     val shuffleMode: StateFlow<dev.nami.domain.ShuffleMode> = appSettingsRepository.shuffleMode
+    val amoledEnabled: StateFlow<Boolean> = appSettingsRepository.amoledEnabled
 
     fun setAutoOpenPlayer(value: Boolean) {
         appSettingsRepository.setAutoOpenPlayer(value)
@@ -81,5 +82,9 @@ class SettingsViewModel @Inject constructor(
 
     fun setShuffleMode(mode: dev.nami.domain.ShuffleMode) {
         appSettingsRepository.setShuffleMode(mode)
+    }
+
+    fun setAmoledEnabled(value: Boolean) {
+        appSettingsRepository.setAmoledEnabled(value)
     }
 }

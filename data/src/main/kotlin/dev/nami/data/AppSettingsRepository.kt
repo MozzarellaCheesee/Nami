@@ -33,6 +33,7 @@ private const val KEY_SMART_CROSSFADE_ENABLED = "smart_crossfade_enabled"
 private const val KEY_PLAYBACK_GAIN_DB = "playback_gain_db"
 private const val KEY_HIFI_ENABLED = "hifi_enabled"
 private const val KEY_NIGHT_MODE_ENABLED = "night_mode_enabled"
+private const val KEY_AMOLED_ENABLED = "amoled_enabled"
 private const val KEY_STANDS4_UID = "stands4_uid"
 private const val KEY_STANDS4_TOKEN = "stands4_token"
 private const val KEY_DEEPL_API_KEY = "deepl_api_key"
@@ -188,6 +189,14 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
     override fun setNightModeEnabled(value: Boolean) {
         prefs.edit { putBoolean(KEY_NIGHT_MODE_ENABLED, value) }
         _nightModeEnabled.value = value
+    }
+
+    private val _amoledEnabled = MutableStateFlow(prefs.getBoolean(KEY_AMOLED_ENABLED, false))
+    override val amoledEnabled: StateFlow<Boolean> = _amoledEnabled
+
+    override fun setAmoledEnabled(value: Boolean) {
+        prefs.edit { putBoolean(KEY_AMOLED_ENABLED, value) }
+        _amoledEnabled.value = value
     }
 
     private val _outputProfilesEnabled = MutableStateFlow(prefs.getBoolean(KEY_OUTPUT_PROFILES_ENABLED, false))
