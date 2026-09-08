@@ -77,6 +77,10 @@ class PlaybackService : MediaSessionService() {
     private var usingCustomSink = false
     private var crossfade: CrossfadeController? = null
     private var cast: CastController? = null
+
+    /** DLNA/AirPlay/Яндекс Станция - см. RemoteCastController. Singleton, потому что тот же
+     * объект читает экран выбора устройства. */
+    @Inject lateinit var remoteCast: dev.nami.player.remote.RemoteCastController
     private var crossfadeHandovers = 0
     // Last ReplayGain value scanned for the current track, so a chain built mid-track (crossfade,
     // sink swap) starts at the right gain instead of 0dB until the next track change.
@@ -258,6 +262,12 @@ class PlaybackService : MediaSessionService() {
             trackByIdBlocking = { id -> runBlocking { libraryRepository.track(TrackId(id)).first() } },
             onActivePlayerChanged = { active -> mediaSession.player = active },
         ).also { it.start() }
+
+        remoteCast.attach(
+            localPlayer = { player },
+            trackByIdBlocking = { id -> runBlocking { libraryRepository.track(TrackId(id)).first() } },
+            onActivePlayerChanged = { active -> mediaSession.player = active },
+        )
 
         // Whether ANY effect that needs the custom DSP sink is on right now (and Hi-Fi isn't
         // vetoing all of them). The sink is only ever built when actually needed - but the user
@@ -477,7 +487,7 @@ class PlaybackService : MediaSessionService() {
         // Во время трансляции плеер сессии принадлежит CastController - подставлять туда локальный
         // значило бы молча оборвать трансляцию (кроссфейда при этом всё равно нет, локальный плеер
         // на паузе, но подстраховка дешевле разбора такого бага).
-        if (cast?.isCasting != true) mediaSession.player = fresh
+        if (cast?.isCasting != true && !remoteCast.isRemote) mediaSession.player = fresh
         player = fresh
         crossfadeHandovers++
         mediaSession.setSessionExtras(Bundle().apply { putInt(EXTRA_CROSSFADE_HANDOVER, crossfadeHandovers) })
@@ -518,7 +528,7 @@ class PlaybackService : MediaSessionService() {
             fresh.playWhenReady = wasPlaying
         }
 
-        if (cast?.isCasting != true) mediaSession.player = fresh
+        if (cast?.isCasting != true && !remoteCast.isRemote) mediaSession.player = fresh
         player = fresh
         old.release()
     }
@@ -588,6 +598,7 @@ class PlaybackService : MediaSessionService() {
         outputDeviceDetector.release()
         crossfade?.cancel()
         cast?.release()
+        remoteCast.release()
         mediaSession.run {
             player.release()
             release()

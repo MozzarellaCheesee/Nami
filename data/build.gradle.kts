@@ -29,6 +29,8 @@ dependencies {
     implementation(libs.room.ktx)
     implementation(libs.hilt.android)
     implementation(libs.androidx.documentfile)
+    // Только под OAuth-токен Яндекс ID - см. securePrefs в AppSettingsRepository.
+    implementation(libs.androidx.security.crypto)
     implementation(libs.androidx.core.ktx)
     implementation(libs.mlkit.translate)
     implementation(libs.kuromoji.ipadic)

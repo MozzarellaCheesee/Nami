@@ -42,6 +42,11 @@ play-services-cast-framework = { module = "com.google.android.gms:play-services-
 # наследуется от Theme.AppCompat ради стандартных диалогов выбора Cast-устройства.
 androidx-appcompat = { module = "androidx.appcompat:appcompat", version = "1.7.0" }
 media3-common = { module = "androidx.media3:media3-common", version.ref = "media3" }
+# DLNA/UPnP - живая Kotlin-замена заброшенному Cling (SSDP-поиск + AVTransport/RenderingControl).
+# Публикуется только через JitPack, Maven Central у неё нет.
+upnpcast = { module = "com.github.yinnho:UPnPCast", version = "v1.3.0" }
+# EncryptedSharedPreferences - только под OAuth-токен Яндекс ID (см. AppSettingsRepository).
+androidx-security-crypto = { module = "androidx.security:security-crypto", version = "1.1.0-alpha06" }
 room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
 room-paging = { module = "androidx.room:room-paging", version.ref = "room" }

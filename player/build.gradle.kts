@@ -26,6 +26,10 @@ dependencies {
     // "никаких Google Play Services" - см. комментарий в gradle/libs.versions.toml.
     implementation(libs.media3.cast)
     implementation(libs.play.services.cast.framework)
+    // DLNA/UPnP - вторая экосистема трансляции, без привязки к Google (см. RemoteCastController).
+    // api, а не implementation: RemoteCastController - Hilt-синглтон, который инжектится и в
+    // :feature:player, а KSP там обязан разрешить ВСЕ типы класса, включая приватные поля.
+    api(libs.upnpcast)
     implementation(libs.hilt.android)
     implementation(libs.kotlinx.coroutines.android)
     ksp(libs.hilt.compiler)

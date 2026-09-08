@@ -56,6 +56,9 @@ private const val KEY_SESSIONS = "sessions" // JSON array, see AppSettingsReposi
 private const val KEY_LAST_APPLIED_SESSION = "last_applied_session"
 private const val KEY_OUTPUT_PROFILES_ENABLED = "output_profiles_enabled"
 private const val KEY_SCROBBLING_ENABLED = "scrobbling_enabled"
+private const val KEY_AIRPLAY_ENABLED = "airplay_enabled"
+private const val KEY_YANDEX_STATION_ENABLED = "yandex_station_enabled"
+private const val KEY_YANDEX_OAUTH_TOKEN = "yandex_oauth_token"
 private const val KEY_LISTENBRAINZ_TOKEN = "listenbrainz_token"
 private const val KEY_HOME_BLOCKS = "home_blocks" // JSON array [{type, enabled}], see readHomeBlocks
 private const val KEY_NOW_PLAYING_SHOW_TECH_INFO = "now_playing_show_tech_info"
@@ -87,6 +90,26 @@ private fun outputProfileKey(type: OutputDeviceType) = "output_profile_${type.na
 class AppSettingsRepository @Inject constructor(@ApplicationContext context: Context) : SettingsRepository {
     private val prefs: SharedPreferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    /** Отдельное шифрованное хранилище - только для чужих секретов (OAuth-токен Яндекс ID).
+     * Остальные настройки там не нужны: это обычные пользовательские предпочтения, а каждый
+     * доступ к EncryptedSharedPreferences идёт через Keystore и стоит дороже.
+     *
+     * runCatching: на части прошивок Keystore ломается (сброс ключа после смены пароля экрана
+     * блокировки, кривые AOSP-сборки) и EncryptedSharedPreferences бросает при создании. Тогда
+     * откатываемся на обычный файл: потерять возможность войти в Яндекс ID хуже, чем хранить
+     * токен как остальные настройки, а сам файл всё равно лежит в приватной песочнице приложения. */
+    private val securePrefs: SharedPreferences = runCatching {
+        androidx.security.crypto.EncryptedSharedPreferences.create(
+            context,
+            "nami_secure",
+            androidx.security.crypto.MasterKey.Builder(context)
+                .setKeyScheme(androidx.security.crypto.MasterKey.KeyScheme.AES256_GCM)
+                .build(),
+            androidx.security.crypto.EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            androidx.security.crypto.EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+        )
+    }.getOrElse { context.getSharedPreferences("nami_secure_plain", Context.MODE_PRIVATE) }
 
     // Default OFF: tapping a track starts playback without jumping to Now Playing, per the
     // explicit request this setting exists for - opening the full player is opt-in.
@@ -412,6 +435,28 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
     override fun setScrobblingEnabled(value: Boolean) {
         prefs.edit { putBoolean(KEY_SCROBBLING_ENABLED, value) }
         _scrobblingEnabled.value = value
+    }
+
+    private val _airPlayEnabled = MutableStateFlow(prefs.getBoolean(KEY_AIRPLAY_ENABLED, false))
+    override val airPlayEnabled: StateFlow<Boolean> = _airPlayEnabled
+    override fun setAirPlayEnabled(value: Boolean) {
+        prefs.edit { putBoolean(KEY_AIRPLAY_ENABLED, value) }
+        _airPlayEnabled.value = value
+    }
+
+    private val _yandexStationEnabled = MutableStateFlow(prefs.getBoolean(KEY_YANDEX_STATION_ENABLED, false))
+    override val yandexStationEnabled: StateFlow<Boolean> = _yandexStationEnabled
+    override fun setYandexStationEnabled(value: Boolean) {
+        prefs.edit { putBoolean(KEY_YANDEX_STATION_ENABLED, value) }
+        _yandexStationEnabled.value = value
+    }
+
+    private val _yandexOAuthToken = MutableStateFlow(securePrefs.getString(KEY_YANDEX_OAUTH_TOKEN, null))
+    override val yandexOAuthToken: StateFlow<String?> = _yandexOAuthToken
+    override fun setYandexOAuthToken(token: String?) {
+        val trimmed = token?.trim()?.takeIf { it.isNotEmpty() }
+        securePrefs.edit { putString(KEY_YANDEX_OAUTH_TOKEN, trimmed) }
+        _yandexOAuthToken.value = trimmed
     }
 
     private val _listenBrainzToken = MutableStateFlow(prefs.getString(KEY_LISTENBRAINZ_TOKEN, null))

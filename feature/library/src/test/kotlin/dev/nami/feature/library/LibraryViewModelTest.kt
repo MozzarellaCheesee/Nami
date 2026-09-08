@@ -780,6 +780,12 @@ private object NoOpSettingsRepository : dev.nami.domain.SettingsRepository {
     override fun setLastAppliedSessionName(name: String?) {}
     override val scrobblingEnabled = MutableStateFlow(false)
     override fun setScrobblingEnabled(value: Boolean) {}
+    override val airPlayEnabled = MutableStateFlow(false)
+    override fun setAirPlayEnabled(value: Boolean) {}
+    override val yandexStationEnabled = MutableStateFlow(false)
+    override fun setYandexStationEnabled(value: Boolean) {}
+    override val yandexOAuthToken = MutableStateFlow<String?>(null)
+    override fun setYandexOAuthToken(token: String?) {}
     override val listenBrainzToken = MutableStateFlow<String?>(null)
     override fun setListenBrainzToken(token: String?) {}
     override val homeBlocks = MutableStateFlow(dev.nami.domain.DEFAULT_HOME_BLOCKS)

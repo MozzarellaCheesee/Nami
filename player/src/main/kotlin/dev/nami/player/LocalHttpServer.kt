@@ -101,7 +101,12 @@ class LocalHttpServer(
                     }
                     path.startsWith("/cover/") -> serveFile(output, trackCoverFileBlocking(path.removePrefix("/cover/")), "image/*")
                     path.startsWith("/artistphoto/") -> serveFile(output, artistPhotoFileBlocking(path.removePrefix("/artistphoto/")), "image/*")
-                    path.startsWith("/track/") -> serveTrack(output, trackByIdBlocking(path.removePrefix("/track/")), range)
+                    // substringBeforeLast('.'): часть приёмников (Яндекс Станция - точно)
+                    // отказывается качать ссылку без расширения файла, поэтому DLNA/AirPlay/Станции
+                    // отдаётся "/track/<id>.flac". В самих id точек не бывает (UUID), так что для
+                    // Cast и Wi-Fi Drop, которые шлют голый id, ничего не меняется.
+                    path.startsWith("/track/") ->
+                        serveTrack(output, trackByIdBlocking(path.removePrefix("/track/").substringBeforeLast('.')), range)
                     else -> writeStatus(output, 404)
                 }
             } catch (e: Exception) {

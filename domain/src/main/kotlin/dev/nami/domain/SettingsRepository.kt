@@ -214,6 +214,22 @@ interface SettingsRepository {
     val listenBrainzToken: StateFlow<String?>
     fun setListenBrainzToken(token: String?)
 
+    /** Трансляция на устройства Apple (AirPlay). Off по умолчанию и отдельным тумблером, потому
+     * что путь неофициальный: у Apple нет и не будет SDK AirPlay для сторонних Android-приложений.
+     * Выключенный тумблер означает, что AirPlay физически не ищется в сети, а не просто скрыт. */
+    val airPlayEnabled: StateFlow<Boolean>
+    fun setAirPlayEnabled(value: Boolean)
+
+    /** Трансляция на Яндекс Станцию (протокол Glagol). Off по умолчанию по тем же причинам, что и
+     * AirPlay, плюс требует входа в личный Яндекс ID - неофициальный API, Яндекс вправе сломать
+     * его без предупреждения. */
+    val yandexStationEnabled: StateFlow<Boolean>
+    fun setYandexStationEnabled(value: Boolean)
+
+    /** OAuth-токен Яндекс ID для Glagol. Null - не входил или вышел. */
+    val yandexOAuthToken: StateFlow<String?>
+    fun setYandexOAuthToken(token: String?)
+
     /** П.md §14 "Главный экран - конструктор" - см. HomeBlock.kt. Порядок списка = порядок
      * отображения. */
     val homeBlocks: StateFlow<List<HomeBlockConfig>>

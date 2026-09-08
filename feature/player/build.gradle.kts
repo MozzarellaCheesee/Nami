@@ -24,6 +24,10 @@ dependencies {
     implementation(project(":domain"))
     implementation(project(":player"))
     implementation(project(":feature:playlists"))
+    // RemoteCastController (:player) - Hilt-синглтон, общий у экрана выбора устройства и
+    // PlaybackService; KSP здесь обязан разрешить все типы его сигнатуры, включая media3-плееры.
+    implementation(libs.media3.common)
+    implementation(libs.media3.exoplayer)
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)

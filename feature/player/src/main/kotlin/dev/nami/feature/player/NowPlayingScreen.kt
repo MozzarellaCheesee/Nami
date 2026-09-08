@@ -147,6 +147,7 @@ fun NowPlayingScreen(
     val scope = rememberCoroutineScope()
     var showOverflowMenu by remember { mutableStateOf(false) }
     var showAudioTractSheet by remember { mutableStateOf(false) }
+    var showCastPicker by remember { mutableStateOf(false) }
     var showEqualizerInSheet by remember { mutableStateOf(false) }
     var showSleepTimerSheet by remember { mutableStateOf(false) }
     var showLoopSheet by remember { mutableStateOf(false) }
@@ -297,7 +298,8 @@ fun NowPlayingScreen(
                     }
                 },
                 grid = listOfNotNull(
-                    ContextAction("Трансляция", Icons.Outlined.Cast) { openCastPicker(sheetContext) },
+                    // keepParentOpen: лист выбора устройства открывается ПОВЕРХ "Ещё" - см. ниже.
+                    ContextAction("Трансляция", Icons.Outlined.Cast, keepParentOpen = true) { showCastPicker = true },
                     track?.let { ContextAction("Поделиться карточкой", Icons.Outlined.Share) { onShareCard(it) } },
                     track?.let { ContextAction("Радио", Icons.Outlined.PlayCircleOutline) { viewModel.startRadio(it.id) } },
                     // keepParentOpen: эти действия открывают своё окно ПОВЕРХ Now Playing (диалог/
@@ -335,6 +337,9 @@ fun NowPlayingScreen(
         // instead of navigating to a separate screen - same content (AudioTractBody/
         // EqualizerBody) the standalone routes use, just embedded. showEqualizerInSheet swaps
         // which body the ONE sheet shows instead of stacking a second ModalBottomSheet on top.
+        if (showCastPicker) {
+            CastPickerSheet(onDismiss = { showCastPicker = false })
+        }
         if (showAudioTractSheet) {
             ModalBottomSheet(onDismissRequest = { showAudioTractSheet = false; showEqualizerInSheet = false }) {
                 dev.nami.core.designsystem.ImmersiveSheetEffect()
@@ -1039,7 +1044,7 @@ private fun AddMomentDialog(onSave: (label: String, colorArgb: Int, isChapter: B
  * ComponentActivity, и переводить всё приложение на AppCompatActivity ради одной иконки дороже,
  * чем открыть тот же диалог руками. Своего списка устройств не рисуем.
  */
-private fun openCastPicker(context: android.content.Context) {
+internal fun openCastPicker(context: android.content.Context) {
     // runCatching: без сервисов Google (AOSP-прошивки) или без реального Cast-совместимого
     // устройства рядом Cast SDK не инициализируется вообще - причина попадает в logcat, а не
     // теряется молча, чтобы диагностировать было можно не только по обрубленному тосту.
