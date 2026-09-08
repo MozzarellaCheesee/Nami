@@ -146,10 +146,8 @@
         </receiver>
 
         <!-- План.md §28 "Плитка быстрых настроек" - две отдельные плитки (играть/пауза и таймер
-             сна), пользователь сам добавляет нужные в шторку. ACTIVE_TILE намеренно не объявлен:
-             он нужен только чтобы обновлять плитку, когда она НЕ на экране, а её всё равно никто
-             в этот момент не видит - подписки в onStartListening достаточно, зато система не
-             будит процесс лишний раз ради батареи. -->
+             сна), пользователь сам добавляет нужные в шторку. Обе объявлены ACTIVE_TILE - см.
+             комментарий у каждой ниже и PlayerRepositoryImpl.startTileNudges. -->
         <service
             android:name=".tile.PlayPauseTileService"
             android:exported="true"
@@ -159,6 +157,12 @@
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
             </intent-filter>
+            <!-- ACTIVE_TILE: система перестаёт сама звать onStartListening при открытии шторки,
+                 зато плитка обновляется и пока шторка закрыта - будим её сами из
+                 PlayerRepositoryImpl.startTileNudges на смену трека/паузы/минуты таймера. -->
+            <meta-data
+                android:name="android.service.quicksettings.ACTIVE_TILE"
+                android:value="true" />
         </service>
         <service
             android:name=".tile.SleepTimerTileService"
@@ -169,6 +173,12 @@
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
             </intent-filter>
+            <!-- ACTIVE_TILE: система перестаёт сама звать onStartListening при открытии шторки,
+                 зато плитка обновляется и пока шторка закрыта - будим её сами из
+                 PlayerRepositoryImpl.startTileNudges на смену трека/паузы/минуты таймера. -->
+            <meta-data
+                android:name="android.service.quicksettings.ACTIVE_TILE"
+                android:value="true" />
         </service>
 
         <!-- Группа D "карточка трека (экспорт-картинка)" - нужен content:// Uri чтобы поделиться

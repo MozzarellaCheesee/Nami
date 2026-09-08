@@ -26,6 +26,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -102,6 +105,7 @@ class PlayerRepositoryImpl @Inject constructor(
     private var pausedAtMs: Long? = null
 
     init {
+        startTileNudges()
         val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
         val future = MediaController.Builder(context, token)
             // A crossfade hands the session to a whole new ExoPlayer (PlaybackService.promote-
@@ -599,5 +603,49 @@ class PlayerRepositoryImpl @Inject constructor(
         sleepTimerJob?.cancel()
         sleepTimerJob = null
         _sleepTimerRemainingMs.value = null
+    }
+
+    /** План.md §28, плитки быстрых настроек. С `ACTIVE_TILE` в манифесте система больше не зовёт
+     * onStartListening сама, когда шторка открывается - плитку надо будить вызовом
+     * requestListeningState, зато теперь она обновляется и пока шторка закрыта (раньше состояние
+     * подтягивалось только на глазах у пользователя).
+     *
+     * Живёт здесь, а не в Application: единственное место, где эти три сигнала есть все сразу, и
+     * оно уже создаётся ровно тогда, когда кто-то реально работает с плеером - подписка в
+     * Application потянула бы за собой построение MediaController (и подъём PlaybackService) на
+     * каждый старт процесса, включая обновление виджета.
+     *
+     * Про батарею: будим только на реальные события. Play/pause - смена трека или флага
+     * isPlaying (позиция тикает раз в секунду и сюда не входит). Таймер сна - смена ОСТАВШЕЙСЯ
+     * МИНУТЫ, а не секунды: в подзаголовке плитки всё равно минуты (см. formatRemaining), так что
+     * из 60 тиков в минуту наружу уходит один.
+     *
+     * Имена классов строками, а не ::class.java - плитки лежат в :app, который зависит от
+     * :player, а не наоборот. Тот же приём, что у PlaybackService с MainActivity. */
+    private fun startTileNudges() {
+        scope.launch {
+            combine(state, queue) { playbackState, playerQueue ->
+                (playbackState as? PlaybackState.Playing)?.isPlaying to playerQueue.nowPlaying?.id
+            }
+                .distinctUntilChanged()
+                .collect { requestTileListening("dev.nami.app.tile.PlayPauseTileService") }
+        }
+        scope.launch {
+            _sleepTimerRemainingMs
+                .map { remaining -> remaining?.let { (it + 59_999L) / 60_000L } }
+                .distinctUntilChanged()
+                .collect { requestTileListening("dev.nami.app.tile.SleepTimerTileService") }
+        }
+    }
+
+    /** runCatching: плитка может быть не добавлена пользователем вообще, а на части прошивок
+     * requestListeningState для неизвестного компонента кидает вместо тихого no-op. */
+    private fun requestTileListening(className: String) {
+        runCatching {
+            android.service.quicksettings.TileService.requestListeningState(
+                context,
+                ComponentName(context.packageName, className),
+            )
+        }
     }
 }

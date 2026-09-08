@@ -19,7 +19,9 @@ import javax.inject.Inject
 /** Общий на процесс, а не на сервис: система убивает TileService почти сразу после того как
  * шторка закрылась, и тап (awaitReady() + toggle(), это заметно дольше нуля) успевал отмениться
  * вместе с сервисом - плитка выглядела как "нажал, ничего не произошло". Подписка на состояние -
- * наоборот, живёт ровно пока плитка видна (см. onStartListening/onStopListening). */
+ * наоборот, живёт ровно пока сервис слушает (см. onStartListening/onStopListening): с ACTIVE_TILE
+ * в манифесте это окно открывает PlayerRepositoryImpl.startTileNudges на реальную смену состояния,
+ * а не только пока шторка на экране. */
 internal val tileClickScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
 /** План.md §28 "Плитка быстрых настроек" - играть/пауза прямо из шторки. Ничего не играет?
