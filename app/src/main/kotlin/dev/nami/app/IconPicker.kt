@@ -46,7 +46,39 @@ object IconPicker {
         LauncherIcon.entries.filter { it != icon }.forEach { candidate ->
             pm.setComponentEnabledSetting(componentName(context, candidate), PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
         }
+        pendingRefresh = icon
     }
+
+    /** П.md §27, жалоба "на Samsung иконка не меняется". Лаунчер OneUI кеширует иконку и не
+     * перечитывает её, пока наше приложение - активная задача на экране: смена алиасов
+     * происходит ровно в тот момент, когда лаунчер на нас не смотрит вообще.
+     *
+     * Явная рассылка ACTION_PACKAGE_CHANGED, которую советуют в интернете как обходной путь,
+     * НЕ работает и работать не может: этот action в AOSP объявлен protected-broadcast, обычное
+     * приложение при sendBroadcast получает SecurityException, а не обновление иконки. Из того,
+     * что приложению вообще доступно, остаётся одно - переключить состояние ещё раз в момент,
+     * когда мы уходим в фон, чтобы система разослала свой (настоящий, системный) PACKAGE_CHANGED,
+     * пока лаунчер выходит на передний план и заново читает компоненты пакета.
+     *
+     * Гасим и включаем именно выбранный алиас: PackageManager не рассылает ничего, если состояние
+     * не изменилось, поэтому повторная установка того же ENABLED была бы пустой операцией.
+     * Короткое окно "ни один алиас не включён" между двумя вызовами прикрыто [ensureValidState]
+     * на старте - оно же прикрывает падение ровно в этот момент.
+     *
+     * Не проверено на живом Samsung - ни у автора правки, ни у пользователя в этот заход
+     * устройства не было. */
+    fun refreshLauncherIfPending(context: Context) {
+        val icon = pendingRefresh ?: return
+        pendingRefresh = null
+        val pm = context.packageManager
+        val component = componentName(context, icon)
+        pm.setComponentEnabledSetting(component, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
+        pm.setComponentEnabledSetting(component, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
+    }
+
+    /** Живёт в памяти процесса, а не в настройках: если процесс умер, немедленное переключение
+     * в [select] уже случилось и повторять его на следующем старте незачем. */
+    private var pendingRefresh: LauncherIcon? = null
 
     /** Self-heal for "every alias somehow ended up disabled" (should never happen given [select]
      * always enables one before disabling the rest, but a crash mid-toggle or a manifest change

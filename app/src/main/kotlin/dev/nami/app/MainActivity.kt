@@ -145,6 +145,13 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.PickVisualMedia(),
     ) { uri -> uri?.let(metadataActionsViewModel::onArtistPhotoPicked) }
 
+    /** Уход в фон - единственный момент, когда лаунчер точно перечитает иконку, см.
+     * [IconPicker.refreshLauncherIfPending]. Ничего не делает, если иконку не меняли. */
+    override fun onStop() {
+        super.onStop()
+        IconPicker.refreshLauncherIfPending(this)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Transparent system nav bar: content draws edge-to-edge under it (NamiBottomBar already
