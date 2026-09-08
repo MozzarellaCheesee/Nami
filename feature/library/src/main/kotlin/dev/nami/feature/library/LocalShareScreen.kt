@@ -2,9 +2,10 @@ package dev.nami.feature.library
 
 import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,16 +40,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.google.zxing.qrcode.QRCodeWriter
-import com.journeyapps.barcodescanner.ScanContract
-import com.journeyapps.barcodescanner.ScanOptions
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.domain.DiscoveredDevice
 
 /** Группа G "сеть" - один экран, три сценария (Wi-Fi Drop, синхронизация, слушать вместе) на
  * общем списке найденных по NSD устройств + ручной ввод/QR как запасной путь. */
 @Composable
-fun LocalShareScreen(onBack: () -> Unit, viewModel: LocalShareViewModel = hiltViewModel()) {
+fun LocalShareScreen(
+    onBack: () -> Unit,
+    onScanRequested: () -> Unit,
+    scannedAddress: String? = null,
+    onScannedAddressConsumed: () -> Unit = {},
+    viewModel: LocalShareViewModel = hiltViewModel(),
+) {
     val serverRunning by viewModel.serverRunning.collectAsState()
     val serverAddress by viewModel.serverAddress.collectAsState()
     val devices by viewModel.discoveredDevices.collectAsState()
@@ -60,8 +64,11 @@ fun LocalShareScreen(onBack: () -> Unit, viewModel: LocalShareViewModel = hiltVi
 
     var showQr by remember { mutableStateOf(false) }
     var manualText by remember { mutableStateOf("") }
-    val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
-        result.contents?.let { manualText = it }
+    androidx.compose.runtime.LaunchedEffect(scannedAddress) {
+        scannedAddress?.let {
+            manualText = it
+            onScannedAddressConsumed()
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
@@ -104,7 +111,7 @@ fun LocalShareScreen(onBack: () -> Unit, viewModel: LocalShareViewModel = hiltVi
                         label = { Text("IP:порт вручную") },
                         modifier = Modifier.weight(1f),
                     )
-                    IconButton(onClick = { scanLauncher.launch(ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE)) }) {
+                    IconButton(onClick = onScanRequested) {
                         Icon(Icons.Outlined.QrCodeScanner, contentDescription = "Сканировать QR", tint = NamiColors.Paper100)
                     }
                 }
@@ -206,7 +213,14 @@ private fun DeviceRow(
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         Text(device.name, color = NamiColors.Paper100, style = MaterialTheme.typography.bodyLarge)
         Text("${device.host}:${device.port}", color = NamiColors.Paper40, style = MaterialTheme.typography.bodySmall)
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        // Обычный Row без ширины отдаёт остаток места ПОСЛЕДНЕМУ ребёнку - на узких экранах
+        // "Слушать вместе" (самый длинный текст) получал меньше всего места и переносился на
+        // вторую строку, из-за чего сама кнопка (и её ripple) растягивалась по высоте.
+        // horizontalScroll не даёт ни одной кнопке сжаться - переносится сама строка, не текст.
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+        ) {
             TextButton(onClick = onPullDrop) { Text("Получить раздачу", color = NamiColors.Shu) }
             TextButton(onClick = onSync) { Text("Синхр.", color = NamiColors.Ai) }
             TextButton(onClick = onJoinListenTogether) { Text("Слушать вместе", color = NamiColors.Paper100) }
@@ -214,15 +228,47 @@ private fun DeviceRow(
     }
 }
 
+/** Стилизованный QR - данные-модули кружками (не квадратами), три угловых finder-паттерна
+ * остаются сплошными скруглёнными квадратами (их форма и позиция - то, по чему сканер вообще
+ * находит QR в кадре, трогать нельзя). Уровень коррекции ошибок H (30%) специально взят с
+ * запасом - кружки вместо квадратов уже съедают часть точности, дальше урезать нечем. */
 @Composable
 private fun QrCodeImage(content: String, modifier: Modifier = Modifier) {
     val bitmap = remember(content) {
-        val size = 512
-        val matrix = QRCodeWriter().encode(content, com.google.zxing.BarcodeFormat.QR_CODE, size, size)
-        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.RGB_565)
-        for (x in 0 until size) {
-            for (y in 0 until size) {
-                bmp.setPixel(x, y, if (matrix.get(x, y)) AndroidColor.BLACK else AndroidColor.WHITE)
+        val hints = mapOf(com.google.zxing.EncodeHintType.ERROR_CORRECTION to com.google.zxing.qrcode.decoder.ErrorCorrectionLevel.H)
+        val code = com.google.zxing.qrcode.encoder.Encoder.encode(content, com.google.zxing.qrcode.decoder.ErrorCorrectionLevel.H, hints)
+        val matrix = code.matrix
+        val moduleCount = matrix.width
+        val quietZone = 2
+        val totalModules = moduleCount + quietZone * 2
+        val pixelSize = 480
+        val moduleSize = pixelSize / totalModules
+
+        val bmp = Bitmap.createBitmap(pixelSize, pixelSize, Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bmp)
+        val background = AndroidColor.parseColor("#EDEAE4") // NamiColors.Paper100
+        val foreground = AndroidColor.parseColor("#0C0D0F") // NamiColors.Ink900
+        canvas.drawColor(background)
+
+        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = foreground }
+        fun isFinderZone(x: Int, y: Int): Boolean {
+            val inTopLeft = x < 7 && y < 7
+            val inTopRight = x >= moduleCount - 7 && y < 7
+            val inBottomLeft = x < 7 && y >= moduleCount - 7
+            return inTopLeft || inTopRight || inBottomLeft
+        }
+        for (x in 0 until moduleCount) {
+            for (y in 0 until moduleCount) {
+                if (matrix.get(x, y).toInt() != 1) continue
+                val left = (x + quietZone) * moduleSize.toFloat()
+                val top = (y + quietZone) * moduleSize.toFloat()
+                if (isFinderZone(x, y)) {
+                    canvas.drawRect(left, top, left + moduleSize, top + moduleSize, paint)
+                } else {
+                    val cx = left + moduleSize / 2f
+                    val cy = top + moduleSize / 2f
+                    canvas.drawCircle(cx, cy, moduleSize * 0.42f, paint)
+                }
             }
         }
         bmp

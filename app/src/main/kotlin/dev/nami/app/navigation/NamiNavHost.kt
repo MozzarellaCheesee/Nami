@@ -88,6 +88,7 @@ private const val ROUTE_BLIND_LISTEN = "blind_listen"
 private const val ROUTE_CARD_SORT = "card_sort"
 private const val ROUTE_DRIVE_MODE = "drive_mode"
 private const val ROUTE_LOCAL_SHARE = "local_share"
+private const val ROUTE_LOCAL_SHARE_SCAN = "local_share_scan"
 private const val ROUTE_ALBUM_INFO = "album_info/{albumId}"
 private const val ROUTE_ARTIST_INFO = "artist_info/{artistId}"
 private const val ROUTE_AUDIO_TRACT = "audio_tract"
@@ -150,6 +151,9 @@ fun NamiNavHost(
     // whatever screen was open) mounted underneath the whole time; the overlay below is purely
     // visual, and system back is wired by hand via BackHandler instead of the nav graph.
     var showNowPlaying by remember { mutableStateOf(false) }
+    // Группа G "сеть" - отсканированный QR передаётся из ROUTE_LOCAL_SHARE_SCAN обратно в
+    // ROUTE_LOCAL_SHARE так же, как любой другой одноразовый результат в этом NavHost.
+    var scannedQrText by remember { mutableStateOf<String?>(null) }
     BackHandler(enabled = showNowPlaying) { showNowPlaying = false }
     var showQueue by remember { mutableStateOf(false) }
     // Registered after showNowPlaying's, so it takes priority (last-mounted BackHandler wins)
@@ -336,7 +340,18 @@ fun NamiNavHost(
                 dev.nami.feature.player.DriveModeScreen(onBack = { navController.popBackStack() })
             }
             composable(ROUTE_LOCAL_SHARE) {
-                dev.nami.feature.library.LocalShareScreen(onBack = { navController.popBackStack() })
+                dev.nami.feature.library.LocalShareScreen(
+                    onBack = { navController.popBackStack() },
+                    onScanRequested = { navController.navigate(ROUTE_LOCAL_SHARE_SCAN) },
+                    scannedAddress = scannedQrText,
+                    onScannedAddressConsumed = { scannedQrText = null },
+                )
+            }
+            composable(ROUTE_LOCAL_SHARE_SCAN) {
+                dev.nami.feature.library.LocalShareScanScreen(
+                    onBack = { navController.popBackStack() },
+                    onResult = { text -> scannedQrText = text },
+                )
             }
             composable(
                 ROUTE_ALBUM_INFO,

@@ -192,6 +192,9 @@ class LocalShareRepositoryImpl @Inject constructor(
                         override fun onResolveFailed(info: NsdServiceInfo, errorCode: Int) {}
                         override fun onServiceResolved(info: NsdServiceInfo) {
                             val host = info.host?.hostAddress ?: return
+                            // Discovery runs on the same device that's also registering/serving -
+                            // without this, every device sees its own broadcast in the list.
+                            if (host == localIpAddress()) return
                             val device = DiscoveredDevice(name = info.serviceName, host = host, port = info.port)
                             _discoveredDevices.value = (_discoveredDevices.value.filterNot { it.host == host } + device)
                         }
