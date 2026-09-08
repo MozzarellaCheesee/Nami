@@ -80,7 +80,15 @@ fun BottomTabsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltView
                 ) {
                     val toggle = {
                         val wantOn = !config.enabled
-                        val allowed = if (wantOn) enabledCount < MAX_BOTTOM_TABS else enabledCount > MIN_BOTTOM_TABS
+                        // Настройки нельзя выключить вообще - это единственный путь обратно в
+                        // конструктор вкладок из самого таб-бара. Запасной путь через Now
+                        // Playing -> Ещё -> Все настройки всё равно есть, но незачем полагаться
+                        // на то, что пользователь его найдёт, если можно не создавать ловушку.
+                        val allowed = when {
+                            config.tab == dev.nami.domain.BottomTab.SETTINGS && !wantOn -> false
+                            wantOn -> enabledCount < MAX_BOTTOM_TABS
+                            else -> enabledCount > MIN_BOTTOM_TABS
+                        }
                         if (allowed) {
                             viewModel.setBottomTabs(order.toMutableList().also { it[index] = it[index].copy(enabled = wantOn) })
                         }
