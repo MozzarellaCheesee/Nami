@@ -41,6 +41,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 
 /** Set on the intent MainActivity is launched with from the system media notification/status-bar
@@ -73,6 +74,7 @@ class PlaybackService : MediaSessionService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var usingCustomSink = false
     private var crossfade: CrossfadeController? = null
+    private var cast: CastController? = null
     private var crossfadeHandovers = 0
     // Last ReplayGain value scanned for the current track, so a chain built mid-track (crossfade,
     // sink swap) starts at the right gain instead of 0dB until the next track change.
@@ -238,6 +240,15 @@ class PlaybackService : MediaSessionService() {
             isCrossfadeSuitable = { !settingsRepository.smartCrossfadeEnabled.value || currentEndsWithNaturalFade },
         )
         BitPerfectUsbController(this, settingsRepository, scope)
+
+        // Cast подменяет плеер у сессии целиком - см. CastController (там же про то, почему при
+        // трансляции не работают EQ/кроссфейд/ReplayGain).
+        cast = CastController(
+            context = this,
+            localPlayer = { player },
+            trackByIdBlocking = { id -> runBlocking { libraryRepository.track(TrackId(id)).first() } },
+            onActivePlayerChanged = { active -> mediaSession.player = active },
+        ).also { it.start() }
 
         // Whether ANY effect that needs the custom DSP sink is on right now (and Hi-Fi isn't
         // vetoing all of them). The sink is only ever built when actually needed - but the user
@@ -409,7 +420,10 @@ class PlaybackService : MediaSessionService() {
      * a player swap doesn't reach a MediaController as MEDIA_ITEM_TRANSITION_REASON_AUTO, so without
      * it the cover-slide animation for an auto-advance would silently stop happening on crossfades. */
     private fun promoteIncomingPlayer(fresh: ExoPlayer) {
-        mediaSession.player = fresh
+        // Во время трансляции плеер сессии принадлежит CastController - подставлять туда локальный
+        // значило бы молча оборвать трансляцию (кроссфейда при этом всё равно нет, локальный плеер
+        // на паузе, но подстраховка дешевле разбора такого бага).
+        if (cast?.isCasting != true) mediaSession.player = fresh
         player = fresh
         crossfadeHandovers++
         mediaSession.setSessionExtras(Bundle().apply { putInt(EXTRA_CROSSFADE_HANDOVER, crossfadeHandovers) })
@@ -450,7 +464,7 @@ class PlaybackService : MediaSessionService() {
             fresh.playWhenReady = wasPlaying
         }
 
-        mediaSession.player = fresh
+        if (cast?.isCasting != true) mediaSession.player = fresh
         player = fresh
         old.release()
     }
@@ -519,6 +533,7 @@ class PlaybackService : MediaSessionService() {
     override fun onDestroy() {
         outputDeviceDetector.release()
         crossfade?.cancel()
+        cast?.release()
         mediaSession.run {
             player.release()
             release()

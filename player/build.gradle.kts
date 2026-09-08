@@ -22,6 +22,10 @@ dependencies {
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.session)
     implementation(libs.media3.common)
+    // Cast: официальный media3-модуль поверх Google Cast SDK. Про исключение из правила
+    // "никаких Google Play Services" - см. комментарий в gradle/libs.versions.toml.
+    implementation(libs.media3.cast)
+    implementation(libs.play.services.cast.framework)
     implementation(libs.hilt.android)
     implementation(libs.kotlinx.coroutines.android)
     ksp(libs.hilt.compiler)

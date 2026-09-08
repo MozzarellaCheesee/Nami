@@ -85,6 +85,8 @@ dependencies {
     implementation(project(":feature:trash"))
 
     implementation(libs.androidx.core.ktx)
+    // Только ради Theme.AppCompat как родителя Theme.Nami - см. res/values/themes.xml.
+    implementation(libs.androidx.appcompat)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(platform(libs.compose.bom))

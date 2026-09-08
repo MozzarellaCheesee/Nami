@@ -33,6 +33,14 @@ compose-material-icons-extended = { module = "androidx.compose.material:material
 navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "navigation" }
 media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3" }
 media3-session = { module = "androidx.media3:media3-session", version.ref = "media3" }
+# Cast. Единственное согласованное исключение из правила проекта "никаких Google Play Services"
+# (План.md, Часть I "Стек"): Chromecast физически невозможен без play-services-cast-framework,
+# протокол закрытый. Исключение точечное - не расширять его на другие фичи.
+media3-cast = { module = "androidx.media3:media3-cast", version.ref = "media3" }
+play-services-cast-framework = { module = "com.google.android.gms:play-services-cast-framework", version = "21.5.0" }
+# Тянется транзитивно через cast-framework -> mediarouter, но объявлено явно: тема приложения
+# наследуется от Theme.AppCompat ради стандартных диалогов выбора Cast-устройства.
+androidx-appcompat = { module = "androidx.appcompat:appcompat", version = "1.7.0" }
 media3-common = { module = "androidx.media3:media3-common", version.ref = "media3" }
 room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }

@@ -297,7 +297,7 @@ fun NowPlayingScreen(
                     }
                 },
                 grid = listOfNotNull(
-                    ContextAction("Трансляция", Icons.Outlined.Cast) { openSystemMediaOutput(sheetContext) },
+                    ContextAction("Трансляция", Icons.Outlined.Cast) { openCastPicker(sheetContext) },
                     track?.let { ContextAction("Поделиться карточкой", Icons.Outlined.Share) { onShareCard(it) } },
                     track?.let { ContextAction("Радио", Icons.Outlined.PlayCircleOutline) { viewModel.startRadio(it.id) } },
                     // keepParentOpen: эти действия открывают своё окно ПОВЕРХ Now Playing (диалог/
@@ -1030,29 +1030,38 @@ private fun AddMomentDialog(onSave: (label: String, colorArgb: Int, isChapter: B
 }
 
 /**
- * "Трансляция": системная панель выбора аудиовыхода (Settings.Panel.ACTION_MEDIA_OUTPUT, API 29+).
- * Осознанное решение вместо Google Cast SDK: тот тянет play-services-cast-framework, а План.md
- * прямо требует "никаких Google Play Services". Системная панель - платформенная фича без единой
- * новой зависимости, показывает те же устройства вывода, что видит система (Bluetooth, а на
- * устройствах с Cast-провайдером - и их). До API 29 панели нет, честно говорим об этом тостом.
+ * "Трансляция": Chromecast. Само воспроизведение живёт в CastController (:player), здесь только
+ * выбор устройства.
+ *
+ * Показываем штатные диалоги androidx.mediarouter - те же самые, что открывает кнопка
+ * MediaRouteButton/CastButtonFactory, только вызванные напрямую: сама кнопка требует, чтобы
+ * активность была FragmentActivity (она ищет FragmentManager), а MainActivity у нас - голая
+ * ComponentActivity, и переводить всё приложение на AppCompatActivity ради одной иконки дороже,
+ * чем открыть тот же диалог руками. Своего списка устройств не рисуем.
  */
-private fun openSystemMediaOutput(context: android.content.Context) {
-    if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) {
-        android.widget.Toast.makeText(context, "Выбор устройства доступен с Android 10", android.widget.Toast.LENGTH_SHORT).show()
+private fun openCastPicker(context: android.content.Context) {
+    // runCatching: без сервисов Google (AOSP-прошивки) Cast SDK не инициализируется вообще.
+    val castContext = runCatching { com.google.android.gms.cast.framework.CastContext.getSharedInstance(context) }.getOrNull()
+    if (castContext == null) {
+        android.widget.Toast.makeText(context, "Трансляция недоступна: нет сервисов Google", android.widget.Toast.LENGTH_SHORT).show()
         return
     }
-    // Строкой, а не константой: Settings.Panel.ACTION_MEDIA_OUTPUT в SDK помечена @hide, хотя
-    // сам intent обрабатывается системным Settings. Если его нет - откатываемся на публичную
-    // панель громкости, там переключатель вывода тоже есть.
-    for (action in listOf("android.settings.panel.action.MEDIA_OUTPUT", android.provider.Settings.Panel.ACTION_VOLUME)) {
-        try {
-            context.startActivity(android.content.Intent(action))
-            return
-        } catch (e: android.content.ActivityNotFoundException) {
-            continue
+    val connected = castContext.sessionManager.currentCastSession?.isConnected == true
+    val dialog = if (connected) {
+        // Уже транслируем - этот диалог показывает громкость и кнопку "Отключить".
+        androidx.mediarouter.app.MediaRouteControllerDialog(context)
+    } else {
+        androidx.mediarouter.app.MediaRouteChooserDialog(context).apply {
+            routeSelector = androidx.mediarouter.media.MediaRouteSelector.Builder()
+                .addControlCategory(
+                    com.google.android.gms.cast.CastMediaControlIntent.categoryForCast(
+                        com.google.android.gms.cast.CastMediaControlIntent.DEFAULT_MEDIA_RECEIVER_APPLICATION_ID,
+                    ),
+                )
+                .build()
         }
     }
-    android.widget.Toast.makeText(context, "Устройство не поддерживает выбор аудиовыхода", android.widget.Toast.LENGTH_SHORT).show()
+    dialog.show()
 }
 
 /** Обычный share текстом - отдельно от "Поделиться карточкой" (та рендерит картинку,

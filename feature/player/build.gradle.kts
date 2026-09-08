@@ -33,6 +33,10 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.coil.compose)
     implementation(libs.androidx.palette.ktx)
+    // Пункт "Трансляция" открывает штатный диалог выбора Cast-устройства - см. NowPlayingScreen.
+    // appcompat явно: диалоги mediarouter наследуют AppCompatDialog, без него не компилируются.
+    implementation(libs.play.services.cast.framework)
+    implementation(libs.androidx.appcompat)
     implementation(libs.hilt.android)
     implementation(libs.hilt.navigation.compose)
     ksp(libs.hilt.compiler)

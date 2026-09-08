@@ -7,11 +7,9 @@ import android.content.IntentFilter
 import android.net.Uri
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
-import android.net.wifi.WifiManager
 import android.net.wifi.p2p.WifiP2pConfig
 import android.net.wifi.p2p.WifiP2pDevice
 import android.net.wifi.p2p.WifiP2pManager
-import android.text.format.Formatter
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.nami.core.model.Track
@@ -26,6 +24,8 @@ import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerRepository
 import dev.nami.domain.PlaylistRepository
 import dev.nami.domain.WifiDirectPeer
+import dev.nami.player.LocalHttpServer
+import dev.nami.player.localIpAddress
 import dev.nami.data.webrtc.WebRtcInternetLink
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -133,8 +133,8 @@ class LocalShareRepositoryImpl @Inject constructor(
         if (_serverRunning.value) return
         val server = LocalHttpServer(
             port = SERVER_PORT,
-            deviceName = android.os.Build.MODEL ?: "NAMI",
             trackByIdBlocking = { id -> runBlocking { libraryRepository.track(TrackId(id)).first() } },
+            deviceName = android.os.Build.MODEL ?: "NAMI",
             nowPlayingJsonBlocking = { if (_listenTogetherHostEnabled.value) buildNowPlayingJson() else null },
             dropTrackBlocking = { _dropTrack.value },
             manifestJsonBlocking = { runBlocking { buildSyncManifest() } },
@@ -147,7 +147,7 @@ class LocalShareRepositoryImpl @Inject constructor(
         }
         httpServer = server
         _serverRunning.value = true
-        _serverAddress.value = "${localIpAddress()}:$SERVER_PORT"
+        _serverAddress.value = "${localIpAddress(context)}:$SERVER_PORT"
         registerNsd()
     }
 
@@ -157,12 +157,6 @@ class LocalShareRepositoryImpl @Inject constructor(
         _serverRunning.value = false
         _serverAddress.value = null
         unregisterNsd()
-    }
-
-    private fun localIpAddress(): String {
-        val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
-        val ipInt = wifiManager?.connectionInfo?.ipAddress ?: 0
-        return if (ipInt != 0) Formatter.formatIpAddress(ipInt) else "0.0.0.0"
     }
 
     private fun buildNowPlayingJson(): JSONObject? {
@@ -244,7 +238,7 @@ class LocalShareRepositoryImpl @Inject constructor(
                             val host = info.host?.hostAddress ?: return
                             // Discovery runs on the same device that's also registering/serving -
                             // without this, every device sees its own broadcast in the list.
-                            if (host == localIpAddress()) return
+                            if (host == localIpAddress(context)) return
                             val device = DiscoveredDevice(name = info.serviceName, host = host, port = info.port)
                             _discoveredDevices.value = (_discoveredDevices.value.filterNot { it.host == host } + device)
                         }

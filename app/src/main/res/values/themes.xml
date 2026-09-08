@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.Nami" parent="android:Theme.Material.NoActionBar">
+    <!-- AppCompat, а не android:Theme.Material: штатные диалоги выбора Cast-устройства
+         (MediaRouteChooserDialog/MediaRouteControllerDialog из androidx.mediarouter) наследуют
+         AppCompatDialog и падают на не-AppCompat теме. На само приложение это не влияет -
+         вся вёрстка на Compose, из темы берётся только фон окна. -->
+    <style name="Theme.Nami" parent="Theme.AppCompat.NoActionBar">
         <item name="android:windowBackground">#0C0D0F</item>
     </style>
 </resources>
