@@ -2,7 +2,10 @@ package dev.nami.feature.player
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -33,6 +36,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -76,6 +80,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -479,10 +484,20 @@ fun NowPlayingScreen(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier.size(32.dp).fullBlockClickable(shape = CircleShape) { viewModel.toggleLikeCurrentTrack() },
             ) {
+                // Лёгкий "поп" при переключении - иконка менялась мгновенно, тап частый
+                // (десятки раз в день), поэтому только едва заметный bounce, не полноценная
+                // анимация. Скачок значения (1.3 -> 1.0), не steady-state - иначе не от чего
+                // отталкиваться при каждом повторном тапе на одно и то же значение.
+                val likeScale = remember { Animatable(1f) }
+                LaunchedEffect(isFavorite) {
+                    likeScale.snapTo(1.3f)
+                    likeScale.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium))
+                }
                 Icon(
                     imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                     contentDescription = if (isFavorite) "Убрать из избранного" else "В избранное",
                     tint = if (isFavorite) NamiColors.Shu else NamiColors.Paper100,
+                    modifier = Modifier.scale(likeScale.value),
                 )
             }
         }
