@@ -1040,8 +1040,12 @@ private fun AddMomentDialog(onSave: (label: String, colorArgb: Int, isChapter: B
  * чем открыть тот же диалог руками. Своего списка устройств не рисуем.
  */
 private fun openCastPicker(context: android.content.Context) {
-    // runCatching: без сервисов Google (AOSP-прошивки) Cast SDK не инициализируется вообще.
-    val castContext = runCatching { com.google.android.gms.cast.framework.CastContext.getSharedInstance(context) }.getOrNull()
+    // runCatching: без сервисов Google (AOSP-прошивки) или без реального Cast-совместимого
+    // устройства рядом Cast SDK не инициализируется вообще - причина попадает в logcat, а не
+    // теряется молча, чтобы диагностировать было можно не только по обрубленному тосту.
+    val castContext = runCatching { com.google.android.gms.cast.framework.CastContext.getSharedInstance(context) }
+        .onFailure { android.util.Log.e("NamiCast", "CastContext.getSharedInstance упал", it) }
+        .getOrNull()
     if (castContext == null) {
         android.widget.Toast.makeText(context, "Трансляция недоступна: нет сервисов Google", android.widget.Toast.LENGTH_SHORT).show()
         return

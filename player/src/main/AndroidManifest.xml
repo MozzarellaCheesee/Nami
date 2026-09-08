@@ -1,9 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
         <!-- Cast SDK ищет этот класс сам при первом CastContext.getSharedInstance - см.
-             NamiCastOptionsProvider. -->
+             NamiCastOptionsProvider. Ключ обязан быть именно "...OPTIONS_PROVIDER_CLASS_NAME" -
+             без суффикса "_NAME" SDK кидает IllegalStateException ("must be provided as a
+             metadata... with key ...OPTIONS_PROVIDER_CLASS_NAME") и Трансляция вообще не
+             инициализируется, независимо от версии Google Play Services на устройстве. -->
         <meta-data
-            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS"
+            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
             android:value="dev.nami.player.NamiCastOptionsProvider" />
         <service
             android:name="dev.nami.player.PlaybackService"
