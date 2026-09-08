@@ -156,7 +156,7 @@ fun HomeScreen(
                     HomeBlockType.BOOKMARKED_PLAYLISTS -> if (state.bookmarkedPlaylists.isNotEmpty()) {
                         item { HomeSectionHeader("Плейлисты-закладки") }
                         items(state.bookmarkedPlaylists, key = { "playlist-" + it.id.value }) { playlist ->
-                            HomeTrackRow(playlist.name, "${playlist.trackCount} треков", playlist.coverPath, onClick = { onPlaylistClick(playlist.id) })
+                            HomeTrackRow(playlist.name, "${playlist.trackCount} треков", playlist.coverPath, onClick = { onPlaylistClick(playlist.id) }, isLiked = playlist.isLiked)
                         }
                     }
                     HomeBlockType.NEW_IMPORT -> if (state.newImportCount > 0) {
@@ -348,14 +348,18 @@ private fun RowScope.StatCell(value: String, label: String) {
 }
 
 @Composable
-private fun HomeTrackRow(title: String, subtitle: String?, artworkPath: String?, onClick: () -> Unit) {
+private fun HomeTrackRow(title: String, subtitle: String?, artworkPath: String?, onClick: () -> Unit, isLiked: Boolean = false) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 8.dp),
     ) {
-        Box(modifier = Modifier.size(44.dp).background(NamiColors.Ink700, RoundedCornerShape(6.dp))) {
-            if (artworkPath != null) {
-                AsyncImage(model = artworkPath, contentDescription = title, modifier = Modifier.fillMaxSize())
+        Box(modifier = Modifier.size(44.dp).clip(RoundedCornerShape(6.dp)).background(NamiColors.Ink700)) {
+            when {
+                // "Любимые треки" - генерируемая обложка (сердце на градиенте), у неё нет
+                // coverPath вообще - без этой ветки строка на главном экране показывала
+                // просто пустой квадрат вместо неё.
+                isLiked -> dev.nami.core.designsystem.LikedPlaylistCover(modifier = Modifier.fillMaxSize())
+                artworkPath != null -> AsyncImage(model = artworkPath, contentDescription = title, modifier = Modifier.fillMaxSize())
             }
         }
         Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
