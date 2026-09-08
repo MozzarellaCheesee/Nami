@@ -2,6 +2,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Нужно, чтобы система вообще показала диалог ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+         (без разрешения intent просто падает с SecurityException). Само разрешение ничего не даёт,
+         решение принимает пользователь в системном диалоге. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- INTERNET is also required by Android for plain local-LAN sockets, not just real internet
          access - used for the LRCLIB lookup (План.md's opt-in network use) AND группа G's local
          HTTP server/client (Wi-Fi Drop, синхронизация, слушать вместе), which never leaves the

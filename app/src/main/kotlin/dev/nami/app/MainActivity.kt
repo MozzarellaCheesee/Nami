@@ -172,6 +172,9 @@ class MainActivity : ComponentActivity() {
         val importProgress = libraryViewModel.uiState
             .map { it.importProgress }
             .stateIn(lifecycleScope, SharingStarted.Eagerly, libraryViewModel.uiState.value.importProgress)
+        // Считаем до setContent, один раз за создание Activity - иначе флаг, погашенный
+        // onBatteryHintShown, тут же перечитается при рекомпозиции.
+        val batteryHintPending = !appSettingsRepository.batteryHintShown && !isIgnoringBatteryOptimizations()
         setContent {
             // Which pair of (Files, Gallery) launchers "Изменить обложку" should use once the
             // user picks a source in the chooser below - set by the onPickXxx callback that
@@ -233,6 +236,8 @@ class MainActivity : ComponentActivity() {
                 blurEnabled = blurEnabled,
             ) {
                 NamiNavHost(
+                    batteryHintPending = batteryHintPending,
+                    onBatteryHintShown = { appSettingsRepository.batteryHintShown = true },
                     onImportRequested = { pickFiles.launch(arrayOf("audio/*")) },
                     onImportFolderRequested = { pickFolder.launch(null) },
                     onImportZipRequested = { pickZip.launch(arrayOf("application/zip")) },

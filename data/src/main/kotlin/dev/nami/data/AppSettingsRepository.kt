@@ -47,6 +47,11 @@ private const val KEY_LAST_PLAYBACK_QUEUE_INDEX = "last_playback_queue_index"
 private const val KEY_LAST_PLAYBACK_POSITION_MS = "last_playback_position_ms"
 private const val KEY_LAST_PLAYBACK_PAUSED_AT = "last_playback_paused_at"
 private const val KEY_SHUFFLE_MODE = "shuffle_mode"
+// Онбординг "отключите оптимизацию батареи" (План.md Часть X, "убийцы фоновых процессов"):
+// показываем один раз, дальше только вручную из Настроек. Флаг отдельный от самого разрешения -
+// система может вернуть "оптимизируется" и после отказа пользователя, а долбить его каждый старт
+// нельзя.
+private const val KEY_BATTERY_HINT_SHOWN = "battery_hint_shown"
 private const val KEY_SESSIONS = "sessions" // JSON array, see AppSettingsRepository.readSessions
 private const val KEY_LAST_APPLIED_SESSION = "last_applied_session"
 private const val KEY_OUTPUT_PROFILES_ENABLED = "output_profiles_enabled"
@@ -587,6 +592,12 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
         prefs.edit { putString(KEY_SESSIONS, array.toString()) }
         _sessions.value = sessions
     }
+
+    // Не в SettingsRepository (domain) - это чисто андроидная штука уровня app, интерфейсу
+    // предметной области про оптимизацию батареи знать незачем.
+    var batteryHintShown: Boolean
+        get() = prefs.getBoolean(KEY_BATTERY_HINT_SHOWN, false)
+        set(value) = prefs.edit { putBoolean(KEY_BATTERY_HINT_SHOWN, value) }
 
     private fun readSessions(): List<Session> {
         val raw = prefs.getString(KEY_SESSIONS, null) ?: return emptyList()

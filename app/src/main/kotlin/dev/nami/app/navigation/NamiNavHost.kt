@@ -94,6 +94,7 @@ private const val ROUTE_DRIVE_MODE = "drive_mode"
 private const val ROUTE_LOCAL_SHARE = "local_share"
 private const val ROUTE_LOCAL_SHARE_SCAN = "local_share_scan"
 private const val ROUTE_SCROBBLING = "scrobbling"
+private const val ROUTE_BATTERY = "battery_optimization"
 private const val ROUTE_ALBUM_INFO = "album_info/{albumId}"
 private const val ROUTE_ARTIST_INFO = "artist_info/{artistId}"
 private const val ROUTE_AUDIO_TRACT = "audio_tract"
@@ -116,6 +117,11 @@ fun NamiNavHost(
     onPickAlbumCover: (AlbumId) -> Unit,
     onPickArtistPhoto: (ArtistId) -> Unit,
     openPlayerSignal: StateFlow<Int> = kotlinx.coroutines.flow.MutableStateFlow(0),
+    // Онбординг "отключите оптимизацию батареи": true только на том запуске, где его ещё ни разу
+    // не показывали и система реально душит приложение. Решение считает MainActivity (у неё уже
+    // есть и Context, и AppSettingsRepository), NavHost только показывает экран.
+    batteryHintPending: Boolean = false,
+    onBatteryHintShown: () -> Unit = {},
     navController: NavHostController = rememberNavController(),
 ) {
     // Scoped here (Activity-level ViewModelStoreOwner), not inside a nav destination,
@@ -174,6 +180,15 @@ fun NamiNavHost(
     LaunchedEffect(openPlayerSignalValue) {
         if (hasSeenInitialOpenSignal) showNowPlaying = true
         hasSeenInitialOpenSignal = true
+    }
+
+    // Один раз за всю жизнь установки - флаг гасим сразу при показе, а не по факту согласия:
+    // если пользователь отказался, повторно лезть к нему нельзя, экран остаётся в Настройках.
+    LaunchedEffect(Unit) {
+        if (batteryHintPending) {
+            navController.navigate(ROUTE_BATTERY)
+            onBatteryHintShown()
+        }
     }
 
     // План.md §28 "Ярлыки приложения (долгий тап по иконке)" - пересобираем их под текущую
@@ -336,11 +351,15 @@ fun NamiNavHost(
                     onCardSortClick = { navController.navigate(ROUTE_CARD_SORT) },
                     onLocalShareClick = { navController.navigate(ROUTE_LOCAL_SHARE) },
                     onScrobblingClick = { navController.navigate(ROUTE_SCROBBLING) },
+                    onBatteryClick = { navController.navigate(ROUTE_BATTERY) },
                 )
                 }
             }
             composable(ROUTE_SCROBBLING) {
                 dev.nami.app.SettingsScrobblingScreen(onBack = { navController.popBackStack() })
+            }
+            composable(ROUTE_BATTERY) {
+                dev.nami.app.BatteryOptimizationScreen(onBack = { navController.popBackStack() })
             }
             composable(ROUTE_SETTINGS_APPEARANCE) {
                 SettingsAppearanceScreen(

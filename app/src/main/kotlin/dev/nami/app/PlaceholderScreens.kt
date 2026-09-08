@@ -23,6 +23,7 @@ import androidx.compose.material.icons.outlined.Album
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.material.icons.outlined.BatteryChargingFull
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ChevronRight
@@ -84,6 +85,7 @@ fun SettingsScreen(
     onCardSortClick: () -> Unit,
     onLocalShareClick: () -> Unit,
     onScrobblingClick: () -> Unit,
+    onBatteryClick: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -185,6 +187,12 @@ fun SettingsScreen(
                 title = "Скробблинг (ListenBrainz)",
                 trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
                 onClick = onScrobblingClick,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.BatteryChargingFull,
+                title = "Фоновое воспроизведение (оптимизация батареи)",
+                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
+                onClick = onBatteryClick,
             )
         }
     }
