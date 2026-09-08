@@ -1,6 +1,5 @@
 package dev.nami.player.remote
 
-import android.util.Base64
 import android.util.Log
 import org.json.JSONObject
 import java.io.BufferedInputStream
@@ -10,6 +9,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
+import java.util.Base64
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.X509TrustManager
@@ -61,7 +61,7 @@ class GlagolClient(
                     "Host: $host:$port\r\n" +
                     "Upgrade: websocket\r\n" +
                     "Connection: Upgrade\r\n" +
-                    "Sec-WebSocket-Key: ${Base64.encodeToString(key, Base64.NO_WRAP)}\r\n" +
+                    "Sec-WebSocket-Key: ${Base64.getEncoder().encodeToString(key)}\r\n" +
                     "Sec-WebSocket-Version: 13\r\n\r\n"
                 ).toByteArray(Charsets.ISO_8859_1),
         )
@@ -156,7 +156,12 @@ fun fetchGlagolDeviceToken(oauthToken: String, deviceId: String, platform: Strin
 /** Кодирование того самого `externalCommandBypass`: имя директивы в поле 1, JSON-полезная нагрузка
  * в поле 2, всё это protobuf и потом base64. Полноценный protobuf для двух строковых полей не
  * нужен - обе записи это wire type 2 (LEN). Формат взят из protobuf.py/utils.py референса. */
-internal fun externalCommand(name: String, payload: JSONObject?): JSONObject {
+internal fun externalCommand(name: String, payload: JSONObject?): JSONObject = JSONObject()
+    .put("command", "externalCommandBypass")
+    .put("data", Base64.getEncoder().encodeToString(encodeExternalCommand(name, payload?.toString())))
+
+/** Сама упаковка, без JSON вокруг - вынесена отдельно, чтобы её можно было проверить тестом. */
+internal fun encodeExternalCommand(name: String, payloadJson: String?): ByteArray {
     val bytes = mutableListOf<Byte>()
     fun lenField(field: Int, value: String) {
         bytes += ((field shl 3) or 2).toByte()
@@ -170,10 +175,8 @@ internal fun externalCommand(name: String, payload: JSONObject?): JSONObject {
         data.forEach { bytes += it }
     }
     lenField(1, name)
-    if (payload != null) lenField(2, payload.toString())
-    return JSONObject()
-        .put("command", "externalCommandBypass")
-        .put("data", Base64.encodeToString(bytes.toByteArray(), Base64.NO_WRAP))
+    if (payloadJson != null) lenField(2, payloadJson)
+    return bytes.toByteArray()
 }
 
 private object TrustAnyCertificate : X509TrustManager {
