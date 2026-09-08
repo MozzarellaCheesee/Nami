@@ -23,6 +23,9 @@ fun PlaylistEntity.toDomain(): Playlist = Playlist(
     isLiked = isLiked,
     isSmart = isSmart,
     smartQueryJson = smartQueryJson,
+    eqGainsCsv = eqGainsCsv,
+    crossfadeEnabled = crossfadeEnabled,
+    shuffleOnStart = shuffleOnStart,
 )
 
 fun PlaylistDao.PlaylistListRow.toTrashedDomain(): TrashedPlaylist = TrashedPlaylist(

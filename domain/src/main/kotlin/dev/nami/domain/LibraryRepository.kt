@@ -32,6 +32,12 @@ interface LibraryRepository {
      * тут полностью декодируется. Дефолт для тестовых фейков - "сканировать нечего". */
     suspend fun scanFingerprints(limit: Int = 50): Int = 0
 
+    /** П.md §20 "цепочки" - "после этого трека всегда ставь вот этот", одной картой на всю
+     * библиотеку: звеньев единицы, и один запрос при старте очереди дешевле, чем лукап на трек. */
+    suspend fun trackChains(): Map<String, String> = emptyMap()
+
+    suspend fun setTrackChain(trackId: TrackId, nextTrackId: TrackId?) = Unit
+
     fun tracks(): Flow<PagingData<Track>>
     /** Snapshot of every non-deleted track, same order as [tracks], for building a full playback queue. */
     suspend fun allTracksOrdered(): List<Track>

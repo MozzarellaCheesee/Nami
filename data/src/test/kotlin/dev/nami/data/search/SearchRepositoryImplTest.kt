@@ -53,6 +53,8 @@ class SearchRepositoryImplTest {
         override suspend fun allFingerprints(): List<TrackDao.TrackFingerprintRow> = emptyList()
         override suspend fun setAudioFingerprint(id: String, fingerprint: Long?) = error("unused")
         override suspend fun countWithoutFingerprint(): Int = 0
+        override suspend fun allChainLinks(): List<TrackDao.TrackChainRow> = emptyList()
+        override suspend fun setChainNext(id: String, nextTrackId: String?) = error("unused")
         override fun pagingSource(): PagingSource<Int, TrackDao.TrackWithArtwork> = error("unused")
         override fun pagingSourceSorted(query: androidx.sqlite.db.SupportSQLiteQuery): PagingSource<Int, TrackDao.TrackWithArtwork> = error("unused")
         override suspend fun allTrackYears(): List<TrackDao.TrackYearRow> = emptyList()

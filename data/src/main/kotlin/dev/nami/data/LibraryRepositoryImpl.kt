@@ -140,6 +140,13 @@ class LibraryRepositoryImpl @Inject constructor(
             .mapNotNull { ids -> ids.mapNotNull { byId[it] }.takeIf { it.size > 1 } }
     }
 
+    override suspend fun trackChains(): Map<String, String> =
+        trackDao.allChainLinks().associate { it.id to it.nextId }
+
+    override suspend fun setTrackChain(trackId: TrackId, nextTrackId: TrackId?) {
+        trackDao.setChainNext(trackId.value, nextTrackId?.value)
+    }
+
     override suspend fun scanFingerprints(limit: Int): Int = withContext(Dispatchers.IO) {
         val rows = trackDao.tracksWithoutFingerprint(limit)
         rows.forEach { row ->

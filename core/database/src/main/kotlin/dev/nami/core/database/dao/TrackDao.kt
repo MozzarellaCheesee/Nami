@@ -180,6 +180,13 @@ interface TrackDao {
     @Query("SELECT id, audioFingerprint AS fingerprint FROM tracks WHERE deletedAt IS NULL AND audioFingerprint IS NOT NULL")
     suspend fun allFingerprints(): List<TrackFingerprintRow>
 
+    @Query("SELECT id, chainNextTrackId AS nextId FROM tracks WHERE deletedAt IS NULL AND chainNextTrackId IS NOT NULL")
+    suspend fun allChainLinks(): List<TrackChainRow>
+
+    /** П.md §20 "цепочки". null снимает звено. */
+    @Query("UPDATE tracks SET chainNextTrackId = :nextTrackId WHERE id = :id")
+    suspend fun setChainNext(id: String, nextTrackId: String?)
+
     @Query("UPDATE tracks SET audioFingerprint = :fingerprint WHERE id = :id")
     suspend fun setAudioFingerprint(id: String, fingerprint: Long?)
 
@@ -257,6 +264,8 @@ interface TrackDao {
     data class TrackYearRow(val id: String, val year: Int)
 
     data class TrackPathRow(val id: String, val path: String)
+
+    data class TrackChainRow(val id: String, val nextId: String)
 
     data class TrackFingerprintRow(val id: String, val fingerprint: Long)
 
