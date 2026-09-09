@@ -50,7 +50,7 @@ class NetworkImportRepositoryImpl @Inject constructor(
                     NetworkImportSource.ARCHIVE -> searchArchive(trimmed)
                     NetworkImportSource.PIPED -> searchPiped(trimmed)
                     NetworkImportSource.JAMENDO -> searchJamendo(trimmed)
-                    NetworkImportSource.BANDCAMP -> emptyList()
+                    NetworkImportSource.BANDCAMP -> searchBandcamp(trimmed)
                     NetworkImportSource.SOUNDCLOUD -> emptyList()
                 }
             }.getOrElse {
@@ -60,10 +60,23 @@ class NetworkImportRepositoryImpl @Inject constructor(
         }
 
     override suspend fun importTrack(networkTrack: NetworkTrack): String? = withContext(Dispatchers.IO) {
-        // У Piped прямой ссылки в результатах поиска нет - она короткоживущая, её добывают
-        // отдельным запросом прямо перед скачиванием.
-        val track = if (networkTrack.downloadUrl != null) networkTrack else resolvePiped(networkTrack)
-            ?: return@withContext "Инстансы Piped сейчас не отдают этот трек - попробуй позже или другой источник"
+        // У части источников прямой ссылки в результатах поиска нет: у Piped она короткоживущая,
+        // у Bandcamp/SoundCloud лежит на странице трека, а не в выдаче. Достаём перед скачиванием.
+        val track = if (networkTrack.downloadUrl != null) {
+            networkTrack
+        } else {
+            when (networkTrack.source) {
+                NetworkImportSource.PIPED -> resolvePiped(networkTrack)
+                NetworkImportSource.BANDCAMP -> resolveBandcamp(networkTrack)
+                else -> null
+            } ?: return@withContext when (networkTrack.source) {
+                NetworkImportSource.PIPED ->
+                    "Инстансы Piped сейчас не отдают этот трек - попробуй позже или другой источник"
+                NetworkImportSource.BANDCAMP ->
+                    "Этот трек на Bandcamp не отдаётся бесплатно (или страница изменилась и её не удалось разобрать)"
+                else -> "Не удалось получить ссылку на файл"
+            }
+        }
         val url = track.downloadUrl ?: return@withContext "Не удалось получить ссылку на файл"
         // Уникальность даёт ПАПКА, а не префикс в имени: иначе uuid попадает в название трека у
         // файлов без тегов (тот же урок, что в Wi-Fi Drop).
@@ -233,6 +246,85 @@ class NetworkImportRepositoryImpl @Inject constructor(
         }
     }
 
+    // ------------------------------------------------------------------ Bandcamp
+
+    /**
+     * Официального публичного API у Bandcamp нет: их Developer API - про продажи самого артиста,
+     * а не про чужой каталог. Зато страница поиска bandcamp.com/search обычному HTTP-клиенту без
+     * JS отдаёт заглушку "включите JavaScript" - разбирать её бессмысленно. Работает эндпоинт
+     * автодополнения их же поиска (bcsearch_public_api), который отвечает обычным JSON: он и
+     * используется вместо скрейпинга HTML-выдачи - на порядок надёжнее.
+     *
+     * Хрупкость всё равно осознанная: это не версионированный API, Bandcamp вправе поменять его
+     * без предупреждения. Поэтому все разборы - через optString/opt* и runCatching, отказ читается
+     * как "не нашлось/не разобрали", а не как краш.
+     */
+    private fun searchBandcamp(query: String): List<NetworkTrack> {
+        val body = httpPostJson(
+            "https://bandcamp.com/api/bcsearch_public_api/1/autocomplete_elastic",
+            JSONObject()
+                .put("search_text", query)
+                // "t" - только треки: альбом одной строкой в плоский список треков не ложится.
+                .put("search_filter", "t")
+                .put("full_page", false)
+                .put("fan_id", JSONObject.NULL)
+                .toString(),
+        ) ?: return emptyList()
+        val results = JSONObject(body).optJSONObject("auto")?.optJSONArray("results") ?: return emptyList()
+        return (0 until results.length()).mapNotNull { i ->
+            val r = results.optJSONObject(i) ?: return@mapNotNull null
+            if (r.optString("type") != "t") return@mapNotNull null
+            val url = r.optString("item_url_path").takeIf { it.startsWith("http") } ?: return@mapNotNull null
+            val title = r.optString("name").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            NetworkTrack(
+                source = NetworkImportSource.BANDCAMP,
+                // Адрес страницы и есть идентификатор: по нему же потом достаётся ссылка на файл.
+                id = url,
+                title = title,
+                artistName = r.optString("band_name").takeIf { it.isNotBlank() },
+                durationSec = null,
+                artworkUrl = r.optString("img").takeIf { it.isNotBlank() },
+                detail = r.optString("album_name").takeIf { it.isNotBlank() },
+                downloadUrl = null,
+                fileName = "$title.mp3",
+            )
+        }
+    }
+
+    /**
+     * Ссылка на файл лежит на странице трека в атрибуте data-tralbum (HTML-экранированный JSON).
+     *
+     * Скачиваем только то, что артист сам отдаёт бесплатно: минимальная цена 0 (name your price),
+     * отдельная страница бесплатного скачивания или флаг на самом треке. Платный трек не
+     * трогаем - это была бы уже не "открытая раздача", а обход платы.
+     */
+    private fun resolveBandcamp(track: NetworkTrack): NetworkTrack? {
+        val html = httpGet(track.id) ?: return null
+        val raw = Regex("data-tralbum=\"([^\"]*)\"").find(html)?.groupValues?.get(1) ?: return null
+        val json = runCatching { JSONObject(unescapeHtml(raw)) }.getOrNull() ?: return null
+        val info = json.optJSONArray("trackinfo")?.optJSONObject(0) ?: return null
+        val freeByAlbum = json.optJSONObject("current")?.optDouble("minimum_price", -1.0) == 0.0 ||
+            json.optString("freeDownloadPage").isNotBlank()
+        val free = freeByAlbum || info.optBoolean("has_free_download") || info.optBoolean("free_album_download")
+        if (!free) {
+            Log.w(TAG, "трек Bandcamp платный, скачивание пропущено: ${track.id}")
+            return null
+        }
+        val url = info.optJSONObject("file")?.optString("mp3-128")?.takeIf { it.isNotBlank() } ?: return null
+        return track.copy(
+            downloadUrl = url,
+            durationSec = info.optDouble("duration", 0.0).toInt().takeIf { it > 0 },
+        )
+    }
+
+    /** Атрибут в HTML экранирован, а полноценный HTML-парсер ради пяти сущностей тащить незачем. */
+    private fun unescapeHtml(value: String): String = value
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&")
+
     // ------------------------------------------------------------------ Piped (YouTube)
 
     /**
@@ -341,6 +433,24 @@ class NetworkImportRepositoryImpl @Inject constructor(
             else conn.inputStream.bufferedReader().use { it.readText() }
         } catch (e: Exception) {
             Log.w(TAG, "GET $url не удался: ${e.message}")
+            null
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    /** Единственный POST на весь файл - поиск Bandcamp. Ради него отдельного слоя не заводим. */
+    private fun httpPostJson(url: String, body: String): String? {
+        val conn = openConnection(url, READ_TIMEOUT_MS) ?: return null
+        return try {
+            conn.requestMethod = "POST"
+            conn.doOutput = true
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.outputStream.use { it.write(body.toByteArray()) }
+            if (conn.responseCode !in 200..299) null
+            else conn.inputStream.bufferedReader().use { it.readText() }
+        } catch (e: Exception) {
+            Log.w(TAG, "POST $url не удался: ${e.message}")
             null
         } finally {
             conn.disconnect()
