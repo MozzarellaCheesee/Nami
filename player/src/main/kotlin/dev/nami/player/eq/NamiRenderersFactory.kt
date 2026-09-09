@@ -9,6 +9,7 @@ import dev.nami.player.convolution.ConvolutionAudioProcessor
 import dev.nami.player.crossfeed.CrossfeedAudioProcessor
 import dev.nami.player.dither.DitherAudioProcessor
 import dev.nami.player.limiter.BrickwallLimiterAudioProcessor
+import dev.nami.player.output.WarmAudioTrackProvider
 import dev.nami.player.replaygain.ReplayGainAudioProcessor
 
 /** Only override point DefaultRenderersFactory exposes for inserting custom AudioProcessors into
@@ -62,8 +63,8 @@ import dev.nami.player.replaygain.ReplayGainAudioProcessor
  *
  * Чего гэплесс НЕ покрывает, честно:
  *  - разный формат соседних треков (частота дискретизации или число каналов) заставляет
- *    пересоздать AudioTrack - короткая пауза тут на уровне платформы, обойти её из приложения
- *    нечем;
+ *    пересоздать AudioTrack. Само пересоздание из приложения не отменить, но ожидание его можно
+ *    вынести из момента перехода - этим занимается WarmAudioTrackProvider ниже;
  *  - включённый кроссфейд по определению заменяет гэплесс перекрытием (CrossfadeController), это
  *    выбор пользователя, а не дефект;
  *  - DSD/DoP идёт отдельным путём через конвертацию в WAV (DsfToDopWav), там бесшовного перехода
@@ -95,6 +96,10 @@ class NamiRenderersFactory(
         DefaultAudioSink.Builder(context)
             .setEnableFloatOutput(false)
             .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+            // Пауза на границе треков РАЗНОГО формата - см. WarmAudioTrackProvider: второй
+            // AudioTrack под соседнюю конфигурацию строится заранее, в момент перехода синк
+            // получает готовый вместо того, чтобы создавать его на потоке воспроизведения.
+            .setAudioTrackProvider(WarmAudioTrackProvider)
             // Порядок: уровень -> тембр -> комната (IR) -> наушники (кроссфид) -> лимитер -> дизер.
             // Свёртка с IR стоит до кроссфида, потому что импульс комнаты описывает то, что
             // происходит со звуком ДО ушей слушателя, а кроссфид моделирует уже саму голову.

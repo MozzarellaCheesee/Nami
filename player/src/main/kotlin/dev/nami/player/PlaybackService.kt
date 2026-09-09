@@ -28,6 +28,7 @@ import dev.nami.domain.PlaylistRepository
 import dev.nami.domain.SettingsRepository
 import dev.nami.player.dither.DitherAudioProcessor
 import dev.nami.player.eq.NamiRenderersFactory
+import dev.nami.player.output.WarmAudioTrackProvider
 import dev.nami.player.eq.ParametricEqAudioProcessor
 import dev.nami.player.output.OutputDeviceDetector
 import dev.nami.player.replaygain.ReplayGainAudioProcessor
@@ -602,6 +603,8 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         outputDeviceDetector.release()
+        // Запасной AudioTrack держит открытым выходной поток - после остановки сервиса он не нужен.
+        WarmAudioTrackProvider.release()
         crossfade?.cancel()
         cast?.release()
         remoteCast.release()
