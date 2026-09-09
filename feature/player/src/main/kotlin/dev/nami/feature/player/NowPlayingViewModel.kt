@@ -381,6 +381,25 @@ class NowPlayingViewModel @Inject constructor(
         }
     }
 
+    /** Как [playPlaylist] (применяет свои EQ/кроссфейд плейлиста), но перемешивание всегда
+     * включено - кнопка "Перемешать" рядом с Play должна тасовать независимо от того, что
+     * сохранено в playlist.shuffleOnStart (та настройка про обычный запуск, не про эту кнопку). */
+    fun playPlaylistShuffled(playlistId: dev.nami.core.model.PlaylistId, tracks: List<Track>) {
+        viewModelScope.launch {
+            val playlist = playlistRepository?.playlist(playlistId)?.first()
+            playlist?.eqGainsCsv
+                ?.split(',')
+                ?.mapNotNull { it.trim().toFloatOrNull() }
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { settingsRepository?.setEqBandGains(it) }
+            playlist?.crossfadeEnabled?.let { settingsRepository?.setCrossfadeEnabled(it) }
+
+            playerRepository.play(tracks.map { it.toPlayableTrack(null) }, startIndex = 0)
+            playerRepository.setShuffleEnabled(true)
+            _externalTrackChangeSignal.value++
+        }
+    }
+
     /** "Перемешать" from Album/Artist - starts the given tracks as a fresh queue, then
      * immediately shuffles it (see [PlayerRepository.setShuffleEnabled]) rather than shuffling
      * [tracks] here and starting at index 0: going through the real toggle means the player's own

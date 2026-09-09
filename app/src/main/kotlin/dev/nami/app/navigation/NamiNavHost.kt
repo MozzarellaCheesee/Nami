@@ -680,6 +680,10 @@ fun NamiNavHost(
                     onExportRequested = onExportPlaylist,
                     onPickCoverRequested = onPickPlaylistCover,
                     onEditSmartPlaylist = { playlistId -> navController.navigate("smart_playlist_editor/${playlistId.value}") },
+                    onShuffleTracks = { tracks ->
+                        nowPlayingViewModel.playPlaylistShuffled(playlistId, tracks)
+                        if (autoOpenPlayer) showNowPlaying = true
+                    },
                 )
                 }
             }

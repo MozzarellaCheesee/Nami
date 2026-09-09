@@ -23,11 +23,13 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.LinkOff
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Shuffle
 import androidx.compose.material.icons.outlined.Tune
 import dev.nami.core.model.TrackId
 import androidx.compose.material3.Icon
@@ -79,7 +81,6 @@ import kotlin.math.roundToInt
 // feature:playlists (AddToPlaylistDialog), so the reverse dependency needed to reuse their
 // composables directly isn't available - CollapsingHeaderState itself lives in
 // core:designsystem and IS shared (see that file).
-private val HEADER_MAX_HEIGHT = 280.dp
 private val HEADER_MIN_HEIGHT = 56.dp
 private val AVATAR_SIZE = 40.dp
 
@@ -93,6 +94,7 @@ fun PlaylistDetailScreen(
     onExportRequested: (PlaylistId) -> Unit,
     onPickCoverRequested: (PlaylistId) -> Unit,
     onEditSmartPlaylist: (PlaylistId) -> Unit,
+    onShuffleTracks: (tracks: List<Track>) -> Unit,
     viewModel: PlaylistDetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -105,7 +107,12 @@ fun PlaylistDetailScreen(
     var showPlaybackSettings by remember { mutableStateOf(false) }
 
     val density = LocalDensity.current
-    val headerState = rememberCollapsingHeaderState(maxHeight = HEADER_MAX_HEIGHT, minHeight = HEADER_MIN_HEIGHT)
+    // Обложка - квадрат во всех остальных местах (сетка/AddToPlaylist), а не зашитая 280dp,
+    // которая на экране шире 280dp читалась как приплюснутый прямоугольник и не доходила до
+    // такой же высоты, что у альбомов - тот же приём, что уже у AlbumDetailScreen: ширина экрана
+    // это же и есть ширина обложки, значит и высота.
+    val headerMaxHeight = LocalConfiguration.current.screenWidthDp.dp
+    val headerState = rememberCollapsingHeaderState(maxHeight = headerMaxHeight, minHeight = HEADER_MIN_HEIGHT)
     val listState = rememberLazyListState()
     LaunchedEffect(listState.isScrollInProgress) {
         if (!listState.isScrollInProgress) headerState.snapToNearestEdge()
@@ -114,7 +121,7 @@ fun PlaylistDetailScreen(
     var rootOffset by remember { mutableStateOf(Offset.Zero) }
     var avatarSlotOffset by remember { mutableStateOf(Offset.Zero) }
     val screenWidthPx = with(density) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
-    val headerMaxHeightPx = with(density) { HEADER_MAX_HEIGHT.toPx() }
+    val headerMaxHeightPx = with(density) { headerMaxHeight.toPx() }
     val avatarSizePx = with(density) { AVATAR_SIZE.toPx() }
     val progress = headerState.collapseFraction
     val headerHeightDp = with(density) { headerState.heightPx.toDp() }
@@ -184,6 +191,12 @@ fun PlaylistDetailScreen(
                                     ) {
                                         Icon(Icons.Filled.PlayArrow, contentDescription = "Играть", tint = NamiColors.Ink900, modifier = Modifier.size(18.dp))
                                     }
+                                    IconButton(
+                                        onClick = { onShuffleTracks(uiState.tracks) },
+                                        modifier = Modifier.padding(start = 4.dp),
+                                    ) {
+                                        Icon(Icons.Outlined.Shuffle, contentDescription = "Перемешать", tint = NamiColors.Paper100)
+                                    }
                                 }
                                 if (isLiked) {
                                     IconButton(onClick = { onExportRequested(viewModel.playlistId) }, modifier = Modifier.padding(start = 4.dp)) {
@@ -202,10 +215,14 @@ fun PlaylistDetailScreen(
                     ContextActionSheet(
                         onDismiss = { showMenu = false },
                         actions = listOfNotNull(
+                            // Обложку можно сменить у любого плейлиста кроме "Любимых" (у него
+                            // своя фиксированная обложка-иконка) - умный плейлист не исключение,
+                            // раньше вместо неё был только пункт правил.
+                            ContextAction("Изменить обложку", Icons.Outlined.Image) { onPickCoverRequested(viewModel.playlistId) },
                             if (isSmart) {
-                                ContextAction("Изменить правила", Icons.Outlined.Image) { onEditSmartPlaylist(viewModel.playlistId) }
+                                ContextAction("Изменить правила", Icons.Outlined.Edit) { onEditSmartPlaylist(viewModel.playlistId) }
                             } else {
-                                ContextAction("Изменить обложку", Icons.Outlined.Image) { onPickCoverRequested(viewModel.playlistId) }
+                                null
                             },
                             ContextAction("Настройки воспроизведения", Icons.Outlined.Tune) { showPlaybackSettings = true },
                             ContextAction("Экспорт в .m3u8", Icons.Outlined.Share) { onExportRequested(viewModel.playlistId) },
@@ -323,6 +340,13 @@ fun PlaylistDetailScreen(
                                 modifier = Modifier.size(56.dp).background(NamiColors.Paper100, RoundedCornerShape(18.dp)),
                             ) {
                                 Icon(Icons.Filled.PlayArrow, contentDescription = "Играть", tint = NamiColors.Ink900)
+                            }
+                            Spacer(modifier = Modifier.padding(start = 8.dp))
+                            IconButton(
+                                onClick = { onShuffleTracks(uiState.tracks) },
+                                modifier = Modifier.background(NamiColors.Ink900.copy(alpha = 0.4f), CircleShape),
+                            ) {
+                                Icon(Icons.Outlined.Shuffle, contentDescription = "Перемешать", tint = NamiColors.Paper100)
                             }
                         }
                         Spacer(modifier = Modifier.padding(start = 8.dp))
