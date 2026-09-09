@@ -779,6 +779,13 @@ fun NowPlayingScreen(
                 }
             }
         }
+        // Верхний Spacer(weight(1f)) перед пейджером (см. выше) один без пары тянет весь остаток
+        // высоты наверх - при уменьшенной обложке (NowPlayingLayoutPreset.compactCover) контент
+        // короче, и это читалось как "слишком много воздуха над обложкой". Второй такой же
+        // Spacer здесь распределяет остаток поровну сверху/снизу - блок реально по центру, а не
+        // прижат к низу. Только для compactCover: в обычном пресете обложка и так занимает
+        // большую часть высоты, добавлять второй Spacer там незачем.
+        if (compactCover) androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))
     }
     // Real night-mode effect, drawn LAST so it dims everything - cover art, transport controls,
     // text - not just the ambient backdrop peeking around the edges (that was the previous,
