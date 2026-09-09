@@ -88,6 +88,10 @@ class CastController(
         local.pause()
 
         val address = localIpAddress()
+        if (address == null) {
+            Log.w(TAG, "трансляция без Wi-Fi невозможна - нет адреса в локальной сети")
+            return
+        }
         server?.stop()
         val fresh = LocalHttpServer(port = CAST_HTTP_PORT, trackByIdBlocking = trackByIdBlocking)
         try {

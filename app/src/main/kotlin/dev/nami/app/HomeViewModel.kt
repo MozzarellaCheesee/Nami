@@ -8,8 +8,11 @@ import dev.nami.core.model.PlaylistSummary
 import dev.nami.core.model.Track
 import dev.nami.domain.HomeBlockConfig
 import dev.nami.domain.HomeBlockType
+import dev.nami.domain.DiscoveredDevice
 import dev.nami.domain.LibraryRepository
+import dev.nami.domain.ListenTogetherGuestState
 import dev.nami.domain.ListeningSummary
+import dev.nami.domain.LocalShareRepository
 import dev.nami.domain.PlayerRepository
 import dev.nami.domain.PlaylistRepository
 import dev.nami.domain.SettingsRepository
@@ -59,14 +62,38 @@ class HomeViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val tagRepository: TagRepository,
     private val playlistRepository: PlaylistRepository,
+    private val localShareRepository: LocalShareRepository,
 ) : ViewModel() {
     val blocks: StateFlow<List<HomeBlockConfig>> = settingsRepository.homeBlocks
 
     private val _state = MutableStateFlow(HomeState())
     val state: StateFlow<HomeState> = _state
 
+    // Блок "Рядом" (группа G) - живой, не разовый снимок как остальные восемь: список найденных
+    // устройств меняется по мере того, как NSD находит соседей. Поиск запускается/гасится не тут,
+    // а из DisposableEffect в HomeScreen, привязанным к тому, реально ли блок сейчас на экране -
+    // ViewModel во вкладках этого приложения переживает уход с главного экрана (save/restoreState
+    // у нижней панели), поэтому от его жизненного цикла сеть не выключить, а от композиции блока
+    // можно. startDiscovery/stopDiscovery в самом репозитории уже идемпотентны (проверяют текущее
+    // состояние), так что дублирующиеся вызовы при рекомпозиции безвредны.
+    val nearbyDevices: StateFlow<List<DiscoveredDevice>> = localShareRepository.discoveredDevices
+    val nearbyGuestState: StateFlow<ListenTogetherGuestState?> = localShareRepository.listenTogetherGuestState
+
     init {
         load()
+    }
+
+    fun startNearbyDiscovery() {
+        localShareRepository.startServer()
+        localShareRepository.startDiscovery()
+    }
+
+    fun stopNearbyDiscovery() = localShareRepository.stopDiscovery()
+
+    fun joinListenTogether(device: DiscoveredDevice) = localShareRepository.joinListenTogether(device)
+    fun leaveListenTogether() = localShareRepository.leaveListenTogether()
+    fun pullDrop(device: DiscoveredDevice) {
+        viewModelScope.launch { localShareRepository.pullDrop(device) }
     }
 
     fun load() {

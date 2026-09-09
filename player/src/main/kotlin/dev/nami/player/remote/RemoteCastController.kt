@@ -160,7 +160,12 @@ class RemoteCastController @Inject constructor(
             _error.value = "не удалось поднять раздачу файлов"
             return
         }
-        val base = "http://${localIpAddress()}:$REMOTE_HTTP_PORT"
+        val address = localIpAddress()
+        if (address == null) {
+            _error.value = "нет Wi-Fi - трансляция без локальной сети невозможна"
+            return
+        }
+        val base = "http://$address:$REMOTE_HTTP_PORT"
         val player = RemotePlayer(
             transport = transport,
             urlForItem = { item -> item.mediaId.takeIf { it.isNotEmpty() }?.let { "$base/track/$it.${extensionOf(item)}" } },

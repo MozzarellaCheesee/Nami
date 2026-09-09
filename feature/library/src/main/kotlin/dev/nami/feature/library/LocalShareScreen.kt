@@ -168,12 +168,16 @@ fun LocalShareScreen(
                         StatusDot(if (serverRunning) NamiColors.Wakaba else NamiColors.Paper40)
                         Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
                             Text(
-                                if (serverRunning) "Видно другим устройствам" else "Сервер не запущен",
+                                when {
+                                    !serverRunning -> "Сервер не запущен"
+                                    serverAddress == null -> "Не подключён к Wi-Fi"
+                                    else -> "Видно другим устройствам"
+                                },
                                 color = NamiColors.Paper100,
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                             Text(
-                                serverAddress ?: "адрес появится после запуска",
+                                serverAddress ?: if (serverRunning) "Включи Wi-Fi или Wi-Fi Direct, чтобы тебя было видно" else "адрес появится после запуска",
                                 color = NamiColors.Paper40,
                                 style = MaterialTheme.typography.bodySmall,
                             )

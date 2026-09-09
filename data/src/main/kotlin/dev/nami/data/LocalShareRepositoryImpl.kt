@@ -169,7 +169,7 @@ class LocalShareRepositoryImpl @Inject constructor(
         }
         httpServer = server
         _serverRunning.value = true
-        _serverAddress.value = "${localIpAddress()}:$SERVER_PORT"
+        _serverAddress.value = localIpAddress()?.let { "$it:$SERVER_PORT" }
         // Сервер живёт на голых сокетах и никого ни о чём не уведомляет - число слушающих
         // приходится опрашивать. Тем же тактом, что и гость опрашивает хоста.
         guestCountJob = scope.launch {
@@ -299,7 +299,7 @@ class LocalShareRepositoryImpl @Inject constructor(
         // Адрес пересчитывается при каждом входе на экран: он считался один раз при старте сервера
         // и потом устаревал молча - после переключения Wi-Fi (или её включения обратно) экран и QR
         // показывали старый адрес, по которому уже никто не отвечает.
-        if (_serverRunning.value) _serverAddress.value = "${localIpAddress()}:$SERVER_PORT"
+        if (_serverRunning.value) _serverAddress.value = localIpAddress()?.let { "$it:$SERVER_PORT" }
         if (discoveryListener != null) return
         // Список НЕ чистится при старте поиска. Чистка ломала два сценария сразу: (1) подключённый
         // по Wi-Fi Direct peer добавляется в список вручную, а следом WIFI_P2P_CONNECTION_CHANGED
@@ -740,7 +740,7 @@ class LocalShareRepositoryImpl @Inject constructor(
                                     // серверный адрес считался один раз при старте сервера и
                                     // оставался старым - QR и "видно как ..." показывали адрес
                                     // обычной Wi-Fi, недостижимый для собеседника по Wi-Fi Direct.
-                                    if (_serverRunning.value) _serverAddress.value = "${localIpAddress()}:$SERVER_PORT"
+                                    if (_serverRunning.value) _serverAddress.value = localIpAddress()?.let { "$it:$SERVER_PORT" }
                                     // Мы сами группа-владелец - другая сторона подключится к нашему же
                                     // ServerSocket по нашему адресу, добавлять самих себя незачем.
                                     if (info.groupFormed) _wifiDirectConnected.value = true
@@ -776,7 +776,7 @@ class LocalShareRepositoryImpl @Inject constructor(
                                 _wifiDirectConnected.value = false
                                 // Снять пометку "сопряжено" со всех - группы больше нет.
                                 applyWifiDirectGroupMembers(emptyList())
-                                if (_serverRunning.value) _serverAddress.value = "${localIpAddress()}:$SERVER_PORT"
+                                if (_serverRunning.value) _serverAddress.value = localIpAddress()?.let { "$it:$SERVER_PORT" }
                             }
                         }
                     }

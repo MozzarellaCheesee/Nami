@@ -72,9 +72,20 @@ fun HomeScreen(
     onAlbumClick: (AlbumId) -> Unit,
     onPlaylistClick: (PlaylistId) -> Unit,
     onConstructorClick: () -> Unit,
+    onOpenLocalShare: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    val nearbyDevices by viewModel.nearbyDevices.collectAsState()
+    val guestState by viewModel.nearbyGuestState.collectAsState()
+    val nearbyBlockEnabled = state.blocks.any { it.type == HomeBlockType.NEARBY_NETWORK && it.enabled }
+    // Поиск идёт только пока сам блок реально на экране (см. HomeViewModel.startNearbyDiscovery
+    // doc про то, почему не в жизненном цикле ViewModel) - выключается автоматически, если блок
+    // выключили в конструкторе или ушли с главного экрана.
+    androidx.compose.runtime.DisposableEffect(nearbyBlockEnabled) {
+        if (nearbyBlockEnabled) viewModel.startNearbyDiscovery()
+        onDispose { if (nearbyBlockEnabled) viewModel.stopNearbyDiscovery() }
+    }
 
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
         dev.nami.core.designsystem.NamiScreenHeader(
@@ -170,6 +181,19 @@ fun HomeScreen(
                     HomeBlockType.STATS_TODAY -> state.statsToday?.let { stats ->
                         item { HomeSectionHeader("Статистика дня") }
                         item { HomeStatsCard(stats.totalMinutes, stats.distinctTracks, stats.distinctArtists) }
+                    }
+                    HomeBlockType.NEARBY_NETWORK -> {
+                        item { HomeSectionHeader("Рядом") }
+                        item {
+                            HomeNearbyBlock(
+                                devices = nearbyDevices,
+                                guestState = guestState,
+                                onJoinListenTogether = viewModel::joinListenTogether,
+                                onPullDrop = viewModel::pullDrop,
+                                onLeaveListenTogether = viewModel::leaveListenTogether,
+                                onOpenLocalShare = onOpenLocalShare,
+                            )
+                        }
                     }
                 }
             }
@@ -336,6 +360,60 @@ private fun HomeStatsCard(minutes: Int, tracks: Int, artists: Int) {
     }
 }
 
+/** П.md §14 доп. - "слушать вместе"/"принять трек" без захода в Настройки → Локальная сеть.
+ * Живой блок (см. HomeViewModel doc): пока идёт активная гостевая сессия - карточка "слушаю с",
+ * иначе - список найденных рядом устройств с теми же двумя действиями, что на полном экране
+ * (DeviceRow в LocalShareScreen). Синхронизация, Wi-Fi Direct и раздача своего трека остаются
+ * только на полном экране - для этого блока это редкие, не "быстрые" действия. */
+@Composable
+private fun HomeNearbyBlock(
+    devices: List<dev.nami.domain.DiscoveredDevice>,
+    guestState: dev.nami.domain.ListenTogetherGuestState?,
+    onJoinListenTogether: (dev.nami.domain.DiscoveredDevice) -> Unit,
+    onPullDrop: (dev.nami.domain.DiscoveredDevice) -> Unit,
+    onLeaveListenTogether: () -> Unit,
+    onOpenLocalShare: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 4.dp)
+            .background(NamiColors.Ink800, RoundedCornerShape(NamiRadius.Card))
+            .padding(16.dp),
+    ) {
+        if (guestState != null) {
+            Text("Слушаю вместе с ${guestState.hostName}", color = NamiColors.Wakaba, style = MaterialTheme.typography.bodyMedium)
+            Text(guestState.trackTitle ?: "-", color = NamiColors.Paper100, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            dev.nami.core.designsystem.NamiPill(
+                text = "Выйти",
+                color = NamiColors.Paper70,
+                modifier = Modifier.padding(top = 10.dp),
+                onClick = onLeaveListenTogether,
+            )
+        } else if (devices.isEmpty()) {
+            Text("Пока никого не видно рядом", color = NamiColors.Paper40, style = MaterialTheme.typography.bodyMedium)
+        } else {
+            devices.forEachIndexed { index, device ->
+                if (index > 0) dev.nami.core.designsystem.NamiCardDivider(modifier = Modifier.padding(vertical = 10.dp))
+                Text(device.name, color = NamiColors.Paper100, style = MaterialTheme.typography.bodyMedium)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(top = 8.dp).horizontalScroll(rememberScrollState()),
+                ) {
+                    dev.nami.core.designsystem.NamiPill(text = "Принять трек", color = NamiColors.Shu, onClick = { onPullDrop(device) })
+                    dev.nami.core.designsystem.NamiPill(text = "Слушать вместе", color = NamiColors.Wakaba, onClick = { onJoinListenTogether(device) })
+                }
+            }
+        }
+        Text(
+            "Ещё способы (Wi-Fi Direct, раздать свой трек) →",
+            color = NamiColors.Paper40,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(top = 14.dp).clickable(onClick = onOpenLocalShare),
+        )
+    }
+}
+
 @Composable
 private fun RowScope.StatCell(value: String, label: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
@@ -479,6 +557,7 @@ private fun homeBlockLabel(type: HomeBlockType): String = when (type) {
     HomeBlockType.BOOKMARKED_PLAYLISTS -> "Плейлисты-закладки"
     HomeBlockType.STATS_TODAY -> "Статистика дня"
     HomeBlockType.NEW_IMPORT -> "Импорт (если есть новое)"
+    HomeBlockType.NEARBY_NETWORK -> "Рядом (слушать вместе, принять трек)"
 }
 
 @Composable

@@ -252,24 +252,32 @@ internal fun parseByteRange(header: String?, total: Long): LongRange? {
     return from..to
 }
 
-/** Адрес телефона в текущей сети - то, что должен позвать другой участник ЛВС (телевизор с
- * Chromecast, второй телефон). "0.0.0.0" означает "сети нет", раздавать нечего.
+/** Адрес телефона в текущей Wi-Fi/Wi-Fi Direct сети - то, что должен позвать другой участник ЛВС
+ * (телевизор с Chromecast, второй телефон). null означает "нет ни Wi-Fi, ни Wi-Fi Direct" -
+ * раздавать физически некому, а не "адрес ещё не появился".
  *
  * Берётся перебором интерфейсов, а не через WifiManager.connectionInfo.ipAddress: тот знает
- * ТОЛЬКО обычную Wi-Fi (wlan0) и отдаёт 0 на Wi-Fi Direct (интерфейс p2p-*), на раздаче интернета
- * и на Ethernet - из-за чего экран группы G показывал "0.0.0.0:47821" (QR и ручной ввод давали
- * заведомо нерабочий адрес) ровно в том сценарии, ради которого Wi-Fi Direct и нужен. wlan0
- * остаётся приоритетным (Chromecast живёт именно там), p2p - следующим. */
-fun localIpAddress(): String = localIpAddresses().firstOrNull() ?: "0.0.0.0"
+ * ТОЛЬКО обычную Wi-Fi (wlan0) и отдаёт 0 на Wi-Fi Direct (интерфейс p2p-*) - из-за этого экран
+ * группы G показывал "0.0.0.0:47821" ровно в том сценарии, ради которого Wi-Fi Direct и нужен.
+ * wlan0 остаётся приоритетным (Chromecast живёт именно там), p2p - следующим.
+ *
+ * Раньше при отсутствии wlan0/p2p падало на "всё остальное" (любой up-интерфейс) - на телефоне
+ * без Wi-Fi, но с мобильным интернетом это отдавало адрес интерфейса вроде rmnet (например
+ * "10.0.0.1") - настоящий IP, который выглядел рабочим, но на самом деле никуда в локальной сети
+ * не ведёт (у мобильного интерфейса нет соседей по LAN). Честнее явно сказать "нет Wi-Fi", чем
+ * показать правдоподобный, но фактически бесполезный адрес. */
+fun localIpAddress(): String? = localIpAddresses().firstOrNull()
 
-/** Все свои IPv4-адреса разом - для отсева самого себя в автопоиске (NSD видит и собственную
- * регистрацию). Сравнение с одним [localIpAddress] тут не годится: в Wi-Fi Direct устройство
- * анонсирует себя по p2p-адресу, а localIpAddress вернул бы wlan0, и устройство показывало бы
- * само себя в списке найденных. Порядок: wlan0, потом p2p, потом всё остальное. */
+/** Все свои IPv4-адреса разом (только Wi-Fi/Wi-Fi Direct интерфейсы, см. [localIpAddress]) - для
+ * отсева самого себя в автопоиске (NSD видит и собственную регистрацию). Сравнение с одним
+ * [localIpAddress] тут не годится: в Wi-Fi Direct устройство анонсирует себя по p2p-адресу, а
+ * localIpAddress вернул бы wlan0, и устройство показывало бы само себя в списке найденных.
+ * Порядок: wlan0, потом p2p. */
 fun localIpAddresses(): List<String> = runCatching {
     java.net.NetworkInterface.getNetworkInterfaces().asSequence()
         .filter { runCatching { it.isUp && !it.isLoopback }.getOrDefault(false) }
-        .sortedBy { if (it.name.startsWith("wlan")) 0 else if (it.name.startsWith("p2p")) 1 else 2 }
+        .filter { it.name.startsWith("wlan") || it.name.startsWith("p2p") }
+        .sortedBy { if (it.name.startsWith("wlan")) 0 else 1 }
         .flatMap { iface -> iface.inetAddresses.asSequence() }
         .filter { !it.isLoopbackAddress && it is java.net.Inet4Address }
         .mapNotNull { it.hostAddress }

@@ -13,6 +13,12 @@ enum class HomeBlockType {
     BOOKMARKED_PLAYLISTS,
     STATS_TODAY,
     NEW_IMPORT,
+    /** Группа G "сеть" - подключиться к "слушать вместе" или принять предложенный трек с
+     * найденного рядом устройства без захода в Настройки. В отличие от остальных восьми блоков
+     * не разовый снимок при входе на экран, а живой (запускает NSD-автопоиск, пока блок включён
+     * и экран открыт) - поэтому выключен по умолчанию, не сканировать сеть, пока пользователь
+     * явно не попросил. */
+    NEARBY_NETWORK,
 }
 
 data class HomeBlockConfig(val type: HomeBlockType, val enabled: Boolean)
@@ -28,4 +34,5 @@ val DEFAULT_HOME_BLOCKS = listOf(
     HomeBlockConfig(HomeBlockType.RANDOM_ALBUM, true),
     HomeBlockConfig(HomeBlockType.FORGOTTEN, true),
     HomeBlockConfig(HomeBlockType.STATS_TODAY, true),
+    HomeBlockConfig(HomeBlockType.NEARBY_NETWORK, false),
 )
