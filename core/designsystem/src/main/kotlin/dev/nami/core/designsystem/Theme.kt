@@ -47,6 +47,16 @@ private fun namiDarkScheme() = darkColorScheme(
     primary = NamiColors.Shu,
     secondary = NamiColors.Ai,
     error = NamiColors.Kin,
+    // Без этого ModalBottomSheet (и любой другой M3-компонент, который красится через
+    // surfaceContainer*, не через surface) оставался на фиксированном тёмном цвете дефолтной
+    // darkColorScheme() независимо от выбранного пресета - на "Тушь" совпадало случайно, на
+    // "Бумага" вокруг светлых карточек торчал тёмный фон листа. Токенов под каждый из пяти
+    // surfaceContainer* в NamiColors нет - переиспользуем существующую лестницу Ink900..600.
+    surfaceContainerLowest = NamiColors.Ink900,
+    surfaceContainerLow = NamiColors.Ink800,
+    surfaceContainer = NamiColors.Ink800,
+    surfaceContainerHigh = NamiColors.Ink700,
+    surfaceContainerHighest = NamiColors.Ink600,
 )
 
 /** [amoled] заменяет ink-900 на чистый #000000 и поверхности на #0A0B0D (Дизайн.md, "Режим
