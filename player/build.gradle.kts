@@ -36,4 +36,7 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(kotlin("test"))
     testImplementation(libs.kotlinx.coroutines.test)
+    // Настоящие org.json и android.util.Log вместо заглушек из android.jar - без них
+    // LocalHttpServer в юнит-тесте падает на первой же собранной JSON-ручке (LocalHttpServerFanOutTest).
+    testImplementation(libs.robolectric)
 }
