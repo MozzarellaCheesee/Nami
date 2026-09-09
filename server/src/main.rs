@@ -9,6 +9,7 @@ mod auth;
 mod config;
 mod db;
 mod host;
+mod jam;
 mod scanner;
 mod share;
 mod sync;
@@ -79,6 +80,7 @@ async fn main() -> Res<()> {
         ffmpeg,
         events: tokio::sync::broadcast::channel(64).0,
         positions: tokio::sync::broadcast::channel(64).0,
+        jams: Default::default(),
         cfg: cfg.clone(),
     });
 

@@ -37,6 +37,8 @@ pub struct AppState {
     /// Отдельный канал для позиции воспроизведения: она обновляется на порядок чаще
     /// и в общем канале заглушила бы редкие события изменений (см. sync.rs).
     pub positions: tokio::sync::broadcast::Sender<String>,
+    /// Живые джем-сессии (только в памяти, см. jam.rs).
+    pub jams: crate::jam::Registry,
 }
 
 impl AppState {
@@ -680,14 +682,25 @@ async fn ws_loop(
     use axum::extract::ws::Message;
     let mut changes = st.events.subscribe();
     let mut pos = st.positions.subscribe();
+    let mut jam = crate::jam::Membership::default();
     loop {
         let msg = tokio::select! {
             r = changes.recv() => r,
             r = pos.recv(), if with_position => r,
+            // События джема идут по тому же сокету - второй канал ради них не заводим.
+            r = jam.recv() => r,
             // Клиент закрыл сокет или прислал что-то своё - читаем, чтобы заметить разрыв.
             incoming = socket.recv() => {
                 match incoming {
                     None | Some(Err(_)) | Some(Ok(Message::Close(_))) => return,
+                    Some(Ok(Message::Text(t))) => {
+                        if let Some(reply) = crate::jam::handle(&st, &ident, &mut jam, &t) {
+                            if socket.send(Message::Text(reply.into())).await.is_err() {
+                                return;
+                            }
+                        }
+                        continue;
+                    }
                     _ => continue,
                 }
             }
