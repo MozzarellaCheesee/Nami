@@ -145,7 +145,12 @@ fun NamiNavHost(
     val playbackState by nowPlayingViewModel.playbackState.collectAsState()
     val isPlaying = (playbackState as? dev.nami.domain.PlaybackState.Playing)?.isPlaying == true
     // Блок "Слушать всё вперемешку" на главном - см. NowPlayingViewModel.shuffleAllActive doc.
+    // Флаг сам по себе не сбрасывается на "остановлено свайпом вниз" (stop() чистит очередь, но
+    // это domain-слой, ему нечего знать про эту UI-настройку) - поэтому здесь дополнительно
+    // сверяется с тем, что в очереди вообще что-то есть. Без этого после stop() карточка думала
+    // что "играет её очередь" и тап открывал пустой плеер вместо повторного запуска перемешки.
     val shuffleAllActive by nowPlayingViewModel.shuffleAllActive.collectAsState()
+    val shuffleAllActiveEffective = shuffleAllActive && queue.nowPlaying != null
     // Also hoisted here rather than scoped to the ROUTE_LIBRARY nav entry - the bottom nav's
     // Library tab needs to call selectTab(TRACKS) directly and reliably from any screen (Album/
     // Artist detail, Discography, another tab entirely). The previous approach signaled a
@@ -345,7 +350,7 @@ fun NamiNavHost(
                         nowPlayingViewModel.playAllShuffled(tracks)
                         if (autoOpenPlayer) showNowPlaying = true
                     },
-                    isShuffleAllActive = shuffleAllActive,
+                    isShuffleAllActive = shuffleAllActiveEffective,
                     isPlaying = isPlaying,
                     onShuffleAllTogglePlay = nowPlayingViewModel::toggle,
                     onShuffleAllOpenPlayer = { showNowPlaying = true },

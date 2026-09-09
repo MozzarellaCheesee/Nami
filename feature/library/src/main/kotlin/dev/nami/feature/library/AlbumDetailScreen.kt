@@ -109,8 +109,13 @@ fun AlbumDetailScreen(
     val density = LocalDensity.current
     // The cover is square (aspectRatio 1f everywhere else it's shown - grid, Info screen); the
     // header needs to match, not a fixed 280dp that reads as a wide rectangle on any screen wider
-    // than that. Screen width IS the cover's width here (it fills it), so that's also its height.
-    val headerMaxHeight = LocalConfiguration.current.screenWidthDp.dp
+    // than that. Screen width IS the cover's width here (it fills it), so that's also its height -
+    // EXCEPT in landscape on a phone, where screen width is the long dimension: an uncapped square
+    // header there filled almost the entire viewport height, leaving no visible track list to grab
+    // and no way to even start the collapse-by-scroll gesture. Capped to a fraction of the actual
+    // screen height too - on a portrait phone this never binds (width is already the smaller value).
+    val configuration = LocalConfiguration.current
+    val headerMaxHeight = minOf(configuration.screenWidthDp, (configuration.screenHeightDp * 0.55f).toInt()).dp
     val headerState = rememberCollapsingHeaderState(maxHeight = headerMaxHeight, minHeight = HEADER_MIN_HEIGHT)
     val listState = rememberLazyListState()
     // Only two resting states - fully expanded or fully collapsed. Without this, releasing

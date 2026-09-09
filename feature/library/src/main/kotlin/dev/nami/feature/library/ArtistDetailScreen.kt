@@ -107,8 +107,11 @@ fun ArtistDetailScreen(
 
     val density = LocalDensity.current
     // Square photo (matches the avatar's own aspectRatio elsewhere), not a fixed 280dp that reads
-    // as a wide rectangle on any screen wider than that - see AlbumDetailScreen's identical fix.
-    val headerMaxHeight = LocalConfiguration.current.screenWidthDp.dp
+    // as a wide rectangle on any screen wider than that - see AlbumDetailScreen's identical fix,
+    // including the landscape cap (screen width is the LONG dimension there, an uncapped square
+    // header would fill almost the whole viewport height and leave nothing to scroll).
+    val configuration = LocalConfiguration.current
+    val headerMaxHeight = minOf(configuration.screenWidthDp, (configuration.screenHeightDp * 0.55f).toInt()).dp
     val headerState = rememberCollapsingHeaderState(maxHeight = headerMaxHeight, minHeight = HEADER_MIN_HEIGHT)
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     // Only two resting states - fully expanded or fully collapsed. Without this, releasing

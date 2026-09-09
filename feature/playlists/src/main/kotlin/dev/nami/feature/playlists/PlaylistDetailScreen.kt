@@ -110,8 +110,11 @@ fun PlaylistDetailScreen(
     // Обложка - квадрат во всех остальных местах (сетка/AddToPlaylist), а не зашитая 280dp,
     // которая на экране шире 280dp читалась как приплюснутый прямоугольник и не доходила до
     // такой же высоты, что у альбомов - тот же приём, что уже у AlbumDetailScreen: ширина экрана
-    // это же и есть ширина обложки, значит и высота.
-    val headerMaxHeight = LocalConfiguration.current.screenWidthDp.dp
+    // это же и есть ширина обложки, значит и высота. В ландшафте на телефоне ширина экрана -
+    // длинная сторона, поэтому дополнительно ограничена долей реальной высоты - иначе обложка
+    // без ограничения занимала почти весь экран и список было нечем прокрутить.
+    val configuration = LocalConfiguration.current
+    val headerMaxHeight = minOf(configuration.screenWidthDp, (configuration.screenHeightDp * 0.55f).toInt()).dp
     val headerState = rememberCollapsingHeaderState(maxHeight = headerMaxHeight, minHeight = HEADER_MIN_HEIGHT)
     val listState = rememberLazyListState()
     LaunchedEffect(listState.isScrollInProgress) {
