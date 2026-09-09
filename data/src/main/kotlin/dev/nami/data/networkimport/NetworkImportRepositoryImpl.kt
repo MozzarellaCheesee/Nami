@@ -360,12 +360,25 @@ class NetworkImportRepositoryImpl @Inject constructor(
                 title = title,
                 artistName = r.optString("band_name").takeIf { it.isNotBlank() },
                 durationSec = null,
-                artworkUrl = r.optString("img").takeIf { it.isNotBlank() },
+                // "img" из ответа сам по себе 404-ится - реальная CDN-схема требует префикс "a"
+                // перед art_id (https://f4.bcbits.com/img/a{art_id}_{size}.jpg), а не то, что
+                // отдаёт поле как есть (проверено живым запросом). "_10" - размер побольше
+                // стандартного маленького арта поиска, годится и на обложку трека в библиотеке.
+                artworkUrl = r.optLong("art_id").takeIf { it > 0 }
+                    ?.let { artId -> bandcampArtworkUrl(r.optString("img"), artId) },
                 detail = r.optString("album_name").takeIf { it.isNotBlank() },
                 downloadUrl = null,
                 fileName = "$title.mp3",
             )
         }
+    }
+
+    /** CDN-хост берём из того же "img" ("https://f4.bcbits.com/img/..."), а вот путь строим
+     * заново с префиксом "a" перед art_id - без него та же ссылка отдаёт 404 (проверено живым
+     * запросом), хотя выглядит совершенно так же, как рабочая. */
+    private fun bandcampArtworkUrl(originalImg: String, artId: Long): String? {
+        val host = Regex("^https://[^/]+").find(originalImg)?.value ?: return null
+        return "$host/img/a${artId}_10.jpg"
     }
 
     /**

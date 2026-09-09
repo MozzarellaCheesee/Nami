@@ -317,12 +317,10 @@ fun NowPlayingScreen(
                     ContextAction("Дорожный режим", Icons.Outlined.DirectionsCar, keepParentOpen = true, onClick = onOpenDriveMode),
                     ContextAction("Аудиотракт", Icons.Outlined.QueueMusic, keepParentOpen = true) { showAudioTractSheet = true },
                     ContextAction("Таймер сна", Icons.Outlined.DarkMode, keepParentOpen = true) { showSleepTimerSheet = true },
-                ),
-                list = listOfNotNull(
-                    track?.let { ContextAction("Поделиться", Icons.Outlined.Share) { shareTrackText(sheetContext, it) } },
                     // По сети (Wi-Fi Drop/Wi-Fi Direct - что сейчас доступнее, решает сам экран) -
                     // не Google Cast (та же "Трансляция" выше) и не текстовая ссылка (та же
-                    // "Поделиться" строкой выше), а реальная передача файла трека другому телефону.
+                    // "Поделиться" в плоском списке ниже), а реальная передача файла трека
+                    // другому телефону - такое же частое быстрое действие, как остальные в сетке.
                     ContextAction("Поделиться треком по сети", Icons.Outlined.Send, keepParentOpen = true, onClick = onShareTrackOverNetwork),
                     // Названо не "Джем" - это не серверная синхронизация как у Spotify (каждый
                     // качает свой же трек из общего облака, сервер только дирижирует таймингом),
@@ -330,6 +328,9 @@ fun NowPlayingScreen(
                     // отдельная задача поверх self-host сервера пользователя (см. заметки по
                     // серверу), не то, что реализовано здесь сейчас.
                     ContextAction("Слушать со мной", Icons.Outlined.Groups, keepParentOpen = true, onClick = onStartListenTogether),
+                ),
+                list = listOfNotNull(
+                    track?.let { ContextAction("Поделиться", Icons.Outlined.Share) { shareTrackText(sheetContext, it) } },
                     ContextAction("Моменты и петли", Icons.Outlined.Repeat, keepParentOpen = true) { showLoopSheet = true },
                     track?.let { ContextAction("Информация о треке", Icons.Outlined.Info, keepParentOpen = true) { onShowTrackInfo(it.id) } },
                     track?.artistId?.let { artistId -> ContextAction("Открыть исполнителя", Icons.Outlined.Person, keepParentOpen = true) { onOpenArtist(artistId) } },
