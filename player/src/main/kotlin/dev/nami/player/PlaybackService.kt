@@ -60,6 +60,7 @@ private class DspChain {
     val dither = DitherAudioProcessor()
     val crossfeed = dev.nami.player.crossfeed.CrossfeedAudioProcessor()
     val convolution = dev.nami.player.convolution.ConvolutionAudioProcessor()
+    val limiter = dev.nami.player.limiter.BrickwallLimiterAudioProcessor()
 }
 
 private const val ACTION_TOGGLE_LIKE = "dev.nami.ACTION_TOGGLE_LIKE"
@@ -444,7 +445,7 @@ class PlaybackService : MediaSessionService() {
             .setBackBuffer(/* backBufferDurationMs = */ 60_000, /* retainBackBufferFromKeyframe = */ true)
             .build()
         val builder = if (useCustomSink) {
-            ExoPlayer.Builder(this, NamiRenderersFactory(this, chain.replayGain, chain.eq, chain.dither, chain.crossfeed, chain.convolution))
+            ExoPlayer.Builder(this, NamiRenderersFactory(this, chain.replayGain, chain.eq, chain.dither, chain.crossfeed, chain.convolution, chain.limiter))
         } else {
             ExoPlayer.Builder(this)
         }

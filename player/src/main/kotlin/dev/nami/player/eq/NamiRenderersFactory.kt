@@ -8,6 +8,7 @@ import androidx.media3.exoplayer.audio.DefaultAudioSink
 import dev.nami.player.convolution.ConvolutionAudioProcessor
 import dev.nami.player.crossfeed.CrossfeedAudioProcessor
 import dev.nami.player.dither.DitherAudioProcessor
+import dev.nami.player.limiter.BrickwallLimiterAudioProcessor
 import dev.nami.player.replaygain.ReplayGainAudioProcessor
 
 /** Only override point DefaultRenderersFactory exposes for inserting custom AudioProcessors into
@@ -87,15 +88,18 @@ class NamiRenderersFactory(
     private val ditherProcessor: DitherAudioProcessor,
     private val crossfeedProcessor: CrossfeedAudioProcessor,
     private val convolutionProcessor: ConvolutionAudioProcessor,
+    private val limiterProcessor: BrickwallLimiterAudioProcessor,
 ) : DefaultRenderersFactory(context) {
 
     override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink =
         DefaultAudioSink.Builder(context)
             .setEnableFloatOutput(false)
             .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-            // Порядок: уровень -> тембр -> комната (IR) -> наушники (кроссфид) -> дизер.
+            // Порядок: уровень -> тембр -> комната (IR) -> наушники (кроссфид) -> лимитер -> дизер.
             // Свёртка с IR стоит до кроссфида, потому что импульс комнаты описывает то, что
             // происходит со звуком ДО ушей слушателя, а кроссфид моделирует уже саму голову.
+            // Лимитер предпоследний: он должен видеть сумму всего, что подняли стадии выше (см.
+            // BrickwallLimiterAudioProcessor - он включён всегда, это защитный пол, а не эффект).
             // Дизер обязан быть последним: он маскирует ошибку округления всех, кто выше.
             .setAudioProcessors(
                 arrayOf(
@@ -103,6 +107,7 @@ class NamiRenderersFactory(
                     eqProcessor,
                     convolutionProcessor,
                     crossfeedProcessor,
+                    limiterProcessor,
                     ditherProcessor,
                 ),
             )

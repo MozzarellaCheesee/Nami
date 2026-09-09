@@ -104,6 +104,11 @@ fun AudioTractBody(onOpenEqualizer: () -> Unit, viewModel: AudioTractViewModel =
         if (uiState.ditherEnabled) add("dither")
         if (uiState.playbackGainDb != 0f) add("усиление +${uiState.playbackGainDb.toInt()} дБ")
         if (uiState.crossfadeEnabled) add("кроссфейд")
+        // Лимитер не тумблер: он включён всегда, когда цепочка вообще строится (см.
+        // BrickwallLimiterAudioProcessor - защитный пол от клиппинга, а не эффект). Показываем
+        // его только когда в цепочке есть что ограничивать, иначе строка "нет" превратилась бы
+        // в "лимитер" при всех выключенных эффектах.
+        if (isNotEmpty()) add("лимитер")
     }
 
     // Real answer instead of a hardcoded "нет": AudioFlinger resamples whenever the file's rate
