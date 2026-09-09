@@ -16,8 +16,10 @@ enum class HomeBlockType {
     /** Группа G "сеть" - подключиться к "слушать вместе" или принять предложенный трек с
      * найденного рядом устройства без захода в Настройки. В отличие от остальных восьми блоков
      * не разовый снимок при входе на экран, а живой (запускает NSD-автопоиск, пока блок включён
-     * и экран открыт) - поэтому выключен по умолчанию, не сканировать сеть, пока пользователь
-     * явно не попросил. */
+     * и экран открыт). Включён по умолчанию (в отличие от первой версии) - пользователь явно
+     * попросил, чтобы раздача/сессия рядом распознавалась сама по факту открытой главной, без
+     * ручного включения; поиск всё равно идёт только пока сам экран реально на переднем плане
+     * (см. DisposableEffect в HomeScreen), не постоянно в фоне. */
     NEARBY_NETWORK,
 }
 
@@ -34,5 +36,5 @@ val DEFAULT_HOME_BLOCKS = listOf(
     HomeBlockConfig(HomeBlockType.RANDOM_ALBUM, true),
     HomeBlockConfig(HomeBlockType.FORGOTTEN, true),
     HomeBlockConfig(HomeBlockType.STATS_TODAY, true),
-    HomeBlockConfig(HomeBlockType.NEARBY_NETWORK, false),
+    HomeBlockConfig(HomeBlockType.NEARBY_NETWORK, true),
 )

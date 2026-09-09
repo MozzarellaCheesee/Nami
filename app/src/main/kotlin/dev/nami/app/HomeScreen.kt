@@ -182,17 +182,39 @@ fun HomeScreen(
                         item { HomeSectionHeader("Статистика дня") }
                         item { HomeStatsCard(stats.totalMinutes, stats.distinctTracks, stats.distinctArtists) }
                     }
+                    // Пользователь явно попросил: раздача/сессия рядом должна САМА появляться с
+                    // анимацией, а не сидеть на экране пустой карточкой-заглушкой "никого не
+                    // видно" - item всегда в списке (иначе не сыграть анимацию исчезновения при
+                    // потере устройства), но содержимое сворачивается/разворачивается по факту
+                    // "есть ли что показать", а не просто исчезает без анимации.
                     HomeBlockType.NEARBY_NETWORK -> {
+                        val hasActivity = nearbyDevices.isNotEmpty() || guestState != null
                         item { HomeSectionHeader("Рядом") }
                         item {
-                            HomeNearbyBlock(
-                                devices = nearbyDevices,
-                                guestState = guestState,
-                                onJoinListenTogether = viewModel::joinListenTogether,
-                                onPullDrop = viewModel::pullDrop,
-                                onLeaveListenTogether = viewModel::leaveListenTogether,
-                                onOpenLocalShare = onOpenLocalShare,
-                            )
+                            androidx.compose.animation.AnimatedVisibility(
+                                visible = hasActivity,
+                                enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(200)) +
+                                    androidx.compose.animation.expandVertically(androidx.compose.animation.core.tween(200)),
+                                exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(150)) +
+                                    androidx.compose.animation.shrinkVertically(androidx.compose.animation.core.tween(150)),
+                            ) {
+                                HomeNearbyBlock(
+                                    devices = nearbyDevices,
+                                    guestState = guestState,
+                                    onJoinListenTogether = viewModel::joinListenTogether,
+                                    onPullDrop = viewModel::pullDrop,
+                                    onLeaveListenTogether = viewModel::leaveListenTogether,
+                                    onOpenLocalShare = onOpenLocalShare,
+                                )
+                            }
+                            if (!hasActivity) {
+                                Text(
+                                    "Ищем рядом...",
+                                    color = NamiColors.Paper40,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                                )
+                            }
                         }
                     }
                 }
