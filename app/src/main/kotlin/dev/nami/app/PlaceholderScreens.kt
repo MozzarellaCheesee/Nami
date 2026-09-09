@@ -32,6 +32,7 @@ import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Cast
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Delete
@@ -49,6 +50,7 @@ import androidx.compose.material.icons.outlined.Usb
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -95,6 +97,7 @@ fun SettingsScreen(
     onCardSortClick: () -> Unit,
     onLocalShareClick: () -> Unit,
     onScrobblingClick: () -> Unit,
+    onNetworkSourcesClick: () -> Unit,
     onBatteryClick: () -> Unit,
 ) {
     var showExtras by remember { mutableStateOf(false) }
@@ -138,6 +141,7 @@ fun SettingsScreen(
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
             NavRow(Icons.Outlined.Share, "Локальная сеть", "Wi-Fi Drop, синхронизация, слушать вместе", onLocalShareClick)
             NavRow(Icons.Outlined.BarChart, "Скробблинг", "ListenBrainz", onScrobblingClick)
+            NavRow(Icons.Outlined.CloudDownload, "Источники в сети", "Ключи для Jamendo и SoundCloud", onNetworkSourcesClick)
         }
 
         NamiDisclosure(
@@ -223,6 +227,91 @@ fun SettingsScrobblingScreen(onBack: () -> Unit, viewModel: SettingsViewModel = 
                     text = "Сохранить токен",
                     modifier = Modifier.padding(top = 12.dp),
                     onClick = { viewModel.setListenBrainzToken(tokenText) },
+                )
+            }
+        }
+    }
+}
+
+/** Ключи для вкладки "В сети" (План-Импорт-из-сети-2.md). Оба поля необязательные: пустое просто
+ * выключает свой источник в списке чипов, Audius/Archive/Piped ключей не требуют вовсе. Шифровать
+ * нечего - это публичные идентификаторы приложения/сайта, а не пароль от личного аккаунта. */
+@Composable
+fun SettingsNetworkSourcesScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
+    val jamendo by viewModel.jamendoClientId.collectAsState()
+    val soundCloud by viewModel.soundCloudClientId.collectAsState()
+    var jamendoText by remember(jamendo) { mutableStateOf(jamendo.orEmpty()) }
+    var soundCloudText by remember(soundCloud) { mutableStateOf(soundCloud.orEmpty()) }
+
+    SettingsSubScreenScaffold(title = "Источники в сети", onBack = onBack) {
+        SettingsSectionLabel("Jamendo")
+        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Text(
+                    text = "Каталог музыки под Creative Commons. Ключ выдаётся на приложение, поэтому " +
+                        "заведите свой: зарегистрируйтесь на devportal.jamendo.com, создайте приложение " +
+                        "и скопируйте сюда его Client ID. Пусто - источник в списке не появится.",
+                    color = NamiColors.Paper40,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                androidx.compose.material3.OutlinedTextField(
+                    value = jamendoText,
+                    onValueChange = { jamendoText = it },
+                    label = { Text("Jamendo Client ID") },
+                    singleLine = true,
+                    trailingIcon = {
+                        if (jamendoText.isNotEmpty()) {
+                            IconButton(onClick = { jamendoText = "" }) {
+                                Icon(Icons.Outlined.Close, contentDescription = "Очистить", tint = NamiColors.Paper40)
+                            }
+                        }
+                    },
+                    supportingText = { ApiKeyHint("Зарегистрировать приложение: devportal.jamendo.com", "https://devportal.jamendo.com/") },
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                )
+                NamiPill(
+                    text = "Сохранить",
+                    modifier = Modifier.padding(top = 12.dp),
+                    onClick = { viewModel.setJamendoClientId(jamendoText) },
+                )
+            }
+        }
+
+        SettingsSectionLabel("SoundCloud")
+        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Text(
+                    text = "Регистрация приложений у SoundCloud закрыта, так что способ неофициальный: " +
+                        "берётся тот же ключ, которым работает их собственный сайт. Он время от времени " +
+                        "меняется - когда источник перестанет находить треки, достаньте ключ заново.\n\n" +
+                        "1. Откройте soundcloud.com в браузере на компьютере.\n" +
+                        "2. Нажмите F12 - откроется панель разработчика, перейдите на вкладку Network (Сеть).\n" +
+                        "3. Включите на сайте любой трек, чтобы в списке запросов появились новые строки.\n" +
+                        "4. Найдите любой запрос к api-v2.soundcloud.com и посмотрите его адрес.\n" +
+                        "5. В адресе есть кусок client_id=... - скопируйте то, что после знака равенства.\n" +
+                        "6. Вставьте сюда и нажмите Сохранить.",
+                    color = NamiColors.Paper40,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                androidx.compose.material3.OutlinedTextField(
+                    value = soundCloudText,
+                    onValueChange = { soundCloudText = it },
+                    label = { Text("SoundCloud Client ID") },
+                    singleLine = true,
+                    trailingIcon = {
+                        if (soundCloudText.isNotEmpty()) {
+                            IconButton(onClick = { soundCloudText = "" }) {
+                                Icon(Icons.Outlined.Close, contentDescription = "Очистить", tint = NamiColors.Paper40)
+                            }
+                        }
+                    },
+                    supportingText = { ApiKeyHint("Открыть soundcloud.com", "https://soundcloud.com/") },
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                )
+                NamiPill(
+                    text = "Сохранить",
+                    modifier = Modifier.padding(top = 12.dp),
+                    onClick = { viewModel.setSoundCloudClientId(soundCloudText) },
                 )
             }
         }

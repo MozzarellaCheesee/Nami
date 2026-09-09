@@ -60,6 +60,8 @@ private const val KEY_AIRPLAY_ENABLED = "airplay_enabled"
 private const val KEY_YANDEX_STATION_ENABLED = "yandex_station_enabled"
 private const val KEY_YANDEX_OAUTH_TOKEN = "yandex_oauth_token"
 private const val KEY_YANDEX_CLIENT_ID = "yandex_client_id"
+private const val KEY_JAMENDO_CLIENT_ID = "jamendo_client_id"
+private const val KEY_SOUNDCLOUD_CLIENT_ID = "soundcloud_client_id"
 private const val KEY_LISTENBRAINZ_TOKEN = "listenbrainz_token"
 private const val KEY_HOME_BLOCKS = "home_blocks" // JSON array [{type, enabled}], see readHomeBlocks
 private const val KEY_NOW_PLAYING_SHOW_TECH_INFO = "now_playing_show_tech_info"
@@ -466,6 +468,22 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
         val trimmed = value?.trim()?.takeIf { it.isNotEmpty() }
         prefs.edit { putString(KEY_YANDEX_CLIENT_ID, trimmed) }
         _yandexClientId.value = trimmed
+    }
+
+    private val _jamendoClientId = MutableStateFlow(prefs.getString(KEY_JAMENDO_CLIENT_ID, null))
+    override val jamendoClientId: StateFlow<String?> = _jamendoClientId
+    override fun setJamendoClientId(value: String?) {
+        val trimmed = value?.trim()?.takeIf { it.isNotEmpty() }
+        prefs.edit { putString(KEY_JAMENDO_CLIENT_ID, trimmed) }
+        _jamendoClientId.value = trimmed
+    }
+
+    private val _soundCloudClientId = MutableStateFlow(prefs.getString(KEY_SOUNDCLOUD_CLIENT_ID, null))
+    override val soundCloudClientId: StateFlow<String?> = _soundCloudClientId
+    override fun setSoundCloudClientId(value: String?) {
+        val trimmed = value?.trim()?.takeIf { it.isNotEmpty() }
+        prefs.edit { putString(KEY_SOUNDCLOUD_CLIENT_ID, trimmed) }
+        _soundCloudClientId.value = trimmed
     }
 
     private val _listenBrainzToken = MutableStateFlow(prefs.getString(KEY_LISTENBRAINZ_TOKEN, null))

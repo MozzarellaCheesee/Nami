@@ -788,6 +788,10 @@ private object NoOpSettingsRepository : dev.nami.domain.SettingsRepository {
     override fun setYandexOAuthToken(token: String?) {}
     override val yandexClientId = MutableStateFlow<String?>(null)
     override fun setYandexClientId(value: String?) {}
+    override val jamendoClientId = MutableStateFlow<String?>(null)
+    override fun setJamendoClientId(value: String?) {}
+    override val soundCloudClientId = MutableStateFlow<String?>(null)
+    override fun setSoundCloudClientId(value: String?) {}
     override val listenBrainzToken = MutableStateFlow<String?>(null)
     override fun setListenBrainzToken(token: String?) {}
     override val homeBlocks = MutableStateFlow(dev.nami.domain.DEFAULT_HOME_BLOCKS)

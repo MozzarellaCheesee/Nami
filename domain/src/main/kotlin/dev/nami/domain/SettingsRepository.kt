@@ -235,6 +235,18 @@ interface SettingsRepository {
     val yandexClientId: StateFlow<String?>
     fun setYandexClientId(value: String?)
 
+    /** client_id приложения на developer.jamendo.com. У Jamendo модель "ключ на приложение", а не
+     * общий публичный ключ, поэтому он не захардкожен: иначе весь трафик всех установок NAMI шёл
+     * бы по одной чужой квоте. Пусто - источник Jamendo выключен. */
+    val jamendoClientId: StateFlow<String?>
+    fun setJamendoClientId(value: String?)
+
+    /** client_id веб-плеера SoundCloud. Официальной регистрации приложений у них нет, ключ достают
+     * из их же публичного JS и он периодически протухает - поле в настройках позволяет обновить
+     * его без нового APK. Пусто - источник SoundCloud выключен. */
+    val soundCloudClientId: StateFlow<String?>
+    fun setSoundCloudClientId(value: String?)
+
     /** П.md §14 "Главный экран - конструктор" - см. HomeBlock.kt. Порядок списка = порядок
      * отображения. */
     val homeBlocks: StateFlow<List<HomeBlockConfig>>

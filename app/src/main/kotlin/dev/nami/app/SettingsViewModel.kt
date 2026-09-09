@@ -51,6 +51,10 @@ class SettingsViewModel @Inject constructor(
     fun setYandexOAuthToken(token: String?) = appSettingsRepository.setYandexOAuthToken(token)
     val yandexClientId: StateFlow<String?> = appSettingsRepository.yandexClientId
     fun setYandexClientId(value: String?) = appSettingsRepository.setYandexClientId(value)
+    val jamendoClientId: StateFlow<String?> = appSettingsRepository.jamendoClientId
+    fun setJamendoClientId(value: String?) = appSettingsRepository.setJamendoClientId(value)
+    val soundCloudClientId: StateFlow<String?> = appSettingsRepository.soundCloudClientId
+    fun setSoundCloudClientId(value: String?) = appSettingsRepository.setSoundCloudClientId(value)
     val listenBrainzToken: StateFlow<String?> = appSettingsRepository.listenBrainzToken
     val nowPlayingShowTechInfo: StateFlow<Boolean> = appSettingsRepository.nowPlayingShowTechInfo
     val nowPlayingShowShuffle: StateFlow<Boolean> = appSettingsRepository.nowPlayingShowShuffle

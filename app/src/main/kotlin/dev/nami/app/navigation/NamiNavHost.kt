@@ -95,6 +95,7 @@ private const val ROUTE_DRIVE_MODE = "drive_mode"
 private const val ROUTE_LOCAL_SHARE = "local_share"
 private const val ROUTE_LOCAL_SHARE_SCAN = "local_share_scan"
 private const val ROUTE_SCROBBLING = "scrobbling"
+private const val ROUTE_NETWORK_SOURCES = "network_sources"
 private const val ROUTE_BATTERY = "battery_optimization"
 private const val ROUTE_ALBUM_INFO = "album_info/{albumId}"
 private const val ROUTE_ARTIST_INFO = "artist_info/{artistId}"
@@ -410,12 +411,16 @@ fun NamiNavHost(
                     onCardSortClick = { navController.navigate(ROUTE_CARD_SORT) },
                     onLocalShareClick = { navController.navigate(ROUTE_LOCAL_SHARE) },
                     onScrobblingClick = { navController.navigate(ROUTE_SCROBBLING) },
+                    onNetworkSourcesClick = { navController.navigate(ROUTE_NETWORK_SOURCES) },
                     onBatteryClick = { navController.navigate(ROUTE_BATTERY) },
                 )
                 }
             }
             composable(ROUTE_SCROBBLING) {
                 dev.nami.app.SettingsScrobblingScreen(onBack = { navController.popBackStack() })
+            }
+            composable(ROUTE_NETWORK_SOURCES) {
+                dev.nami.app.SettingsNetworkSourcesScreen(onBack = { navController.popBackStack() })
             }
             composable(ROUTE_BATTERY) {
                 dev.nami.app.BatteryOptimizationScreen(onBack = { navController.popBackStack() })
