@@ -51,7 +51,7 @@ class NetworkImportRepositoryImpl @Inject constructor(
                     NetworkImportSource.PIPED -> searchPiped(trimmed)
                     NetworkImportSource.JAMENDO -> searchJamendo(trimmed)
                     NetworkImportSource.BANDCAMP -> searchBandcamp(trimmed)
-                    NetworkImportSource.SOUNDCLOUD -> emptyList()
+                    NetworkImportSource.SOUNDCLOUD -> searchSoundCloud(trimmed)
                 }
             }.getOrElse {
                 Log.w(TAG, "поиск в $source не удался", it)
@@ -68,12 +68,15 @@ class NetworkImportRepositoryImpl @Inject constructor(
             when (networkTrack.source) {
                 NetworkImportSource.PIPED -> resolvePiped(networkTrack)
                 NetworkImportSource.BANDCAMP -> resolveBandcamp(networkTrack)
+                NetworkImportSource.SOUNDCLOUD -> resolveSoundCloud(networkTrack)
                 else -> null
             } ?: return@withContext when (networkTrack.source) {
                 NetworkImportSource.PIPED ->
                     "Инстансы Piped сейчас не отдают этот трек - попробуй позже или другой источник"
                 NetworkImportSource.BANDCAMP ->
                     "Этот трек на Bandcamp не отдаётся бесплатно (или страница изменилась и её не удалось разобрать)"
+                NetworkImportSource.SOUNDCLOUD ->
+                    "Автор не разрешил скачивать этот трек - слушать его можно только на SoundCloud"
                 else -> "Не удалось получить ссылку на файл"
             }
         }
@@ -244,6 +247,80 @@ class NetworkImportRepositoryImpl @Inject constructor(
                 fileName = "$title.mp3",
             )
         }
+    }
+
+    // ------------------------------------------------------------------ SoundCloud
+
+    /**
+     * Регистрация приложений у SoundCloud закрыта, поэтому ключ - тот же, которым работает их
+     * собственный веб-плеер, и берётся он из настроек: протухает он заметно чаще любого выданного
+     * официально, а поле в настройках позволяет обновить его без нового APK.
+     */
+    private fun searchSoundCloud(query: String): List<NetworkTrack> {
+        val clientId = settingsRepository.soundCloudClientId.value?.trim().orEmpty()
+        if (clientId.isEmpty()) return emptyList()
+        val body = httpGet(
+            "https://api-v2.soundcloud.com/search/tracks?q=${encode(query)}&limit=40&client_id=${encode(clientId)}",
+        ) ?: return emptyList()
+        val items = JSONObject(body).optJSONArray("collection") ?: return emptyList()
+        return (0 until items.length()).mapNotNull { i ->
+            val t = items.optJSONObject(i) ?: return@mapNotNull null
+            val id = t.optLong("id").takeIf { it > 0 } ?: return@mapNotNull null
+            val title = t.optString("title").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            NetworkTrack(
+                source = NetworkImportSource.SOUNDCLOUD,
+                id = id.toString(),
+                title = title,
+                artistName = t.optJSONObject("user")?.optString("username")?.takeIf { it.isNotBlank() },
+                durationSec = (t.optLong("duration") / 1000).toInt().takeIf { it > 0 },
+                artworkUrl = t.optString("artwork_url").takeIf { it.isNotBlank() },
+                // Сразу видно, что качается, а что только слушается: у большинства треков автор
+                // скачивание запрещает, и без подписи это выяснялось бы только по ошибке.
+                detail = listOfNotNull(
+                    t.optString("genre").takeIf { it.isNotBlank() },
+                    if (t.optBoolean("downloadable")) "можно скачать" else "только прослушивание",
+                ).joinToString(" · "),
+                downloadUrl = null,
+                fileName = "$title.mp3",
+            )
+        }
+    }
+
+    /**
+     * Скачиваем только то, что автор пометил downloadable - иначе честная ошибка. HLS-поток в файл
+     * не перекодируем: это уже не "открытый доступ", а обход технической защиты.
+     *
+     * Сначала пробуем их же ручку скачивания (она отдаёт исходник), но на анонимный client_id она
+     * часто отвечает 401 - скачивание там для вошедших в аккаунт. Тогда берём progressive-версию:
+     * это обычный mp3 одним файлом, тот же, что играет плеер на сайте.
+     *
+     * Ссылки короткоживущие и подписанные, поэтому карточка трека их не хранит - трек
+     * перезапрашивается по id в момент скачивания.
+     */
+    private fun resolveSoundCloud(track: NetworkTrack): NetworkTrack? {
+        val clientId = settingsRepository.soundCloudClientId.value?.trim().orEmpty()
+        if (clientId.isEmpty()) return null
+        val body = httpGet("https://api-v2.soundcloud.com/tracks/${track.id}?client_id=${encode(clientId)}")
+            ?: return null
+        val json = runCatching { JSONObject(body) }.getOrNull() ?: return null
+        if (!json.optBoolean("downloadable")) return null
+        if (json.optBoolean("has_downloads_left")) {
+            httpGet("https://api-v2.soundcloud.com/tracks/${track.id}/download?client_id=${encode(clientId)}")
+                ?.let { runCatching { JSONObject(it).optString("redirectUri") }.getOrNull() }
+                ?.takeIf { it.isNotBlank() }
+                ?.let { return track.copy(downloadUrl = it) }
+        }
+        val transcodings = json.optJSONObject("media")?.optJSONArray("transcodings") ?: return null
+        for (i in 0 until transcodings.length()) {
+            val t = transcodings.optJSONObject(i) ?: continue
+            if (t.optJSONObject("format")?.optString("protocol") != "progressive") continue
+            val streamUrl = t.optString("url").takeIf { it.isNotBlank() } ?: continue
+            val resolved = httpGet("$streamUrl?client_id=${encode(clientId)}")
+                ?.let { runCatching { JSONObject(it).optString("url") }.getOrNull() }
+                ?.takeIf { it.isNotBlank() } ?: continue
+            return track.copy(downloadUrl = resolved)
+        }
+        return null
     }
 
     // ------------------------------------------------------------------ Bandcamp
