@@ -2,7 +2,12 @@ package dev.nami.data
 
 import androidx.test.core.app.ApplicationProvider
 import dev.nami.domain.DEFAULT_NOW_PLAYING_BLOCKS
+import dev.nami.domain.DEFAULT_NOW_PLAYING_MORE_ITEMS
 import dev.nami.domain.NowPlayingBlock
+import dev.nami.domain.NowPlayingMoreAccent
+import dev.nami.domain.NowPlayingMoreConfig
+import dev.nami.domain.NowPlayingMoreItem
+import dev.nami.domain.NowPlayingMoreSection
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -63,5 +68,27 @@ class AppSettingsRepositoryTest {
         assertEquals(listOf(NowPlayingBlock.PILLS, NowPlayingBlock.TRANSPORT), order.take(2))
         assertEquals(DEFAULT_NOW_PLAYING_BLOCKS.size, order.size)
         assertEquals(DEFAULT_NOW_PLAYING_BLOCKS.toSet(), order.toSet())
+    }
+
+    /** Меню "Ещё": сохранённые секция/цвет/порядок переживают перезапуск, а пункт, которого в
+     * сохранённом списке нет (новая версия приложения), дописывается в конец со своим дефолтом. */
+    @Test
+    fun `конфиг меню Ещё переживает перезапуск и дописывает новые пункты`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val repo = AppSettingsRepository(context)
+
+        repo.setNowPlayingMoreItems(
+            listOf(
+                NowPlayingMoreConfig(NowPlayingMoreItem.SLEEP_TIMER, NowPlayingMoreSection.LIST, NowPlayingMoreAccent.SHU),
+                NowPlayingMoreConfig(NowPlayingMoreItem.CAST, NowPlayingMoreSection.HIDDEN),
+            ),
+        )
+
+        val items = AppSettingsRepository(context).nowPlayingMoreItems.value
+        assertEquals(NowPlayingMoreItem.SLEEP_TIMER, items[0].item)
+        assertEquals(NowPlayingMoreSection.LIST, items[0].section)
+        assertEquals(NowPlayingMoreAccent.SHU, items[0].accent)
+        assertEquals(NowPlayingMoreSection.HIDDEN, items[1].section)
+        assertEquals(DEFAULT_NOW_PLAYING_MORE_ITEMS.map { it.item }.toSet(), items.map { it.item }.toSet())
     }
 }

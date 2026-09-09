@@ -824,6 +824,8 @@ private object NoOpSettingsRepository : dev.nami.domain.SettingsRepository {
     override fun resetThemeShapeAndDensity() {}
     override val bottomTabs = MutableStateFlow(dev.nami.domain.DEFAULT_BOTTOM_TABS)
     override fun setBottomTabs(tabs: List<dev.nami.domain.BottomTabConfig>) {}
+    override val nowPlayingMoreItems = MutableStateFlow(dev.nami.domain.DEFAULT_NOW_PLAYING_MORE_ITEMS)
+    override fun setNowPlayingMoreItems(items: List<dev.nami.domain.NowPlayingMoreConfig>) {}
     override val bottomTabLabelsHidden = MutableStateFlow(false)
     override fun setBottomTabLabelsHidden(value: Boolean) {}
     override val miniPlayerSideSwipeAction = MutableStateFlow(dev.nami.domain.GestureAction.SKIP_NEXT)

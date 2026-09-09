@@ -78,6 +78,7 @@ private const val KEY_THEME_DENSITY_SCALE = "theme_density_scale"
 private const val KEY_THEME_FONT_SCALE = "theme_font_scale"
 private const val KEY_BLUR_ENABLED = "blur_enabled"
 private const val KEY_BOTTOM_TABS = "bottom_tabs" // JSON array [{tab, enabled}], см. readBottomTabs
+private const val KEY_NOW_PLAYING_MORE_ITEMS = "now_playing_more_items" // JSON array [{item, section, accent}]
 private const val KEY_BOTTOM_TAB_LABELS_HIDDEN = "bottom_tab_labels_hidden"
 private const val KEY_MINI_PLAYER_SIDE_SWIPE = "mini_player_side_swipe_action"
 private const val KEY_NOW_PLAYING_LAYOUT_PRESET = "now_playing_layout_preset"
@@ -582,6 +583,42 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
             }
         }.getOrDefault(dev.nami.domain.DEFAULT_BOTTOM_TABS)
             .let { saved -> saved + dev.nami.domain.DEFAULT_BOTTOM_TABS.filter { d -> saved.none { it.tab == d.tab } } }
+    }
+
+    private val _nowPlayingMoreItems = MutableStateFlow(readNowPlayingMoreItems())
+    override val nowPlayingMoreItems: StateFlow<List<dev.nami.domain.NowPlayingMoreConfig>> = _nowPlayingMoreItems
+    override fun setNowPlayingMoreItems(items: List<dev.nami.domain.NowPlayingMoreConfig>) {
+        val array = JSONArray()
+        items.forEach {
+            array.put(
+                JSONObject()
+                    .put("item", it.item.name)
+                    .put("section", it.section.name)
+                    .put("accent", it.accent.name),
+            )
+        }
+        prefs.edit { putString(KEY_NOW_PLAYING_MORE_ITEMS, array.toString()) }
+        _nowPlayingMoreItems.value = items
+    }
+
+    /** Тот же приём, что у [readBottomTabs]: неизвестные id отбрасываются, появившиеся в новой
+     * версии пункты дописываются в конец со своими дефолтными секцией и цветом. */
+    private fun readNowPlayingMoreItems(): List<dev.nami.domain.NowPlayingMoreConfig> {
+        val raw = prefs.getString(KEY_NOW_PLAYING_MORE_ITEMS, null) ?: return dev.nami.domain.DEFAULT_NOW_PLAYING_MORE_ITEMS
+        return runCatching {
+            val array = JSONArray(raw)
+            (0 until array.length()).mapNotNull { i ->
+                val obj = array.optJSONObject(i) ?: return@mapNotNull null
+                val item = runCatching { dev.nami.domain.NowPlayingMoreItem.valueOf(obj.optString("item")) }.getOrNull()
+                    ?: return@mapNotNull null
+                val section = runCatching { dev.nami.domain.NowPlayingMoreSection.valueOf(obj.optString("section")) }.getOrNull()
+                    ?: dev.nami.domain.NowPlayingMoreSection.LIST
+                val accent = runCatching { dev.nami.domain.NowPlayingMoreAccent.valueOf(obj.optString("accent")) }.getOrNull()
+                    ?: dev.nami.domain.NowPlayingMoreAccent.NEUTRAL
+                dev.nami.domain.NowPlayingMoreConfig(item, section, accent)
+            }
+        }.getOrDefault(dev.nami.domain.DEFAULT_NOW_PLAYING_MORE_ITEMS)
+            .let { saved -> saved + dev.nami.domain.DEFAULT_NOW_PLAYING_MORE_ITEMS.filter { d -> saved.none { it.item == d.item } } }
     }
 
     private val _bottomTabLabelsHidden = MutableStateFlow(prefs.getBoolean(KEY_BOTTOM_TAB_LABELS_HIDDEN, false))

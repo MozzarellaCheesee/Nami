@@ -328,6 +328,12 @@ interface SettingsRepository {
     val bottomTabs: StateFlow<List<BottomTabConfig>>
     fun setBottomTabs(tabs: List<BottomTabConfig>)
 
+    /** Настраиваемое меню "Ещё" на Now Playing: порядок, секция (сетка/список/скрыт) и акцент
+     * каждого пункта. Хранится и читается ровно как [bottomTabs]. Фильтрация недоступных в моменте
+     * пунктов (нет трека, нет альбома) остаётся за экраном, репозиторий её не знает. */
+    val nowPlayingMoreItems: StateFlow<List<NowPlayingMoreConfig>>
+    fun setNowPlayingMoreItems(items: List<NowPlayingMoreConfig>)
+
     /** §13 "может скрыть подписи" - иконки без текста. */
     val bottomTabLabelsHidden: StateFlow<Boolean>
     fun setBottomTabLabelsHidden(value: Boolean)
