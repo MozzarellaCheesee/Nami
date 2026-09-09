@@ -42,7 +42,7 @@ import dev.nami.core.designsystem.fullBlockClickable
 @Composable
 fun NowPlayingMoreSheet(
     onDismiss: () -> Unit,
-    grid: List<ContextAction>,
+    grid: List<MoreGridItem>,
     list: List<ContextAction>,
     header: (@Composable () -> Unit)? = null,
 ) {
@@ -68,8 +68,13 @@ fun NowPlayingMoreSheet(
                     // фиксированной высоты, а элементов тут заведомо единицы.
                     grid.chunked(3).forEach { row ->
                         Row(modifier = Modifier.fillMaxWidth()) {
-                            row.forEach { action ->
-                                GridCell(action = action, onDismiss = onDismiss, modifier = Modifier.weight(1f))
+                            row.forEach { cell ->
+                                GridCell(
+                                    action = cell.action,
+                                    accent = cell.accent,
+                                    onDismiss = onDismiss,
+                                    modifier = Modifier.weight(1f),
+                                )
                             }
                             // Добивка пустыми ячейками, чтобы неполный ряд не растягивался.
                             repeat(3 - row.size) { Spacer(modifier = Modifier.weight(1f)) }
@@ -111,32 +116,23 @@ fun NowPlayingMoreSheet(
     }
 }
 
-/** Детерминированный маппинг по подписи, не рандом - один и тот же пункт всегда одного цвета
- * между открытиями меню. Использует уже существующую палитру приложения (никаких новых
- * цветов), по смыслу действия: акцент - на самое частое/фирменное, синий - на информационное/
- * сетевое, зелёное/жёлтое - там, где это уже привычные роли этих цветов в остальном приложении
- * (Wakaba = успех/позитивное действие, Kin = внимание/таймер). Неизвестная подпись - нейтральный
- * Paper100, как было раньше у всех. */
-private fun gridCellAccent(label: String): androidx.compose.ui.graphics.Color = when (label) {
-    "Трансляция" -> NamiColors.Ai
-    "Поделиться карточкой" -> NamiColors.Ai
-    "Радио" -> NamiColors.Shu
-    "В плейлист" -> NamiColors.Wakaba
-    "Дорожный режим" -> NamiColors.Kin
-    "Аудиотракт" -> NamiColors.Ai
-    "Таймер сна" -> NamiColors.Kin
-    "Моменты и петли" -> NamiColors.Shu
-    else -> NamiColors.Paper100
-}
+/** Ячейка сетки вместе со своим акцентом. Цвет приходит из настроек пользователя
+ * (dev.nami.domain.NowPlayingMoreConfig), а не из маппинга по подписи, как было раньше: подпись
+ * контекстная и переименовывается, а настройка должна это переживать. */
+data class MoreGridItem(val action: ContextAction, val accent: androidx.compose.ui.graphics.Color)
 
 @Composable
-private fun GridCell(action: ContextAction, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+private fun GridCell(
+    action: ContextAction,
+    accent: androidx.compose.ui.graphics.Color,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     // Раньше все шесть-восемь ячеек делили один и тот же серый Ink700 - ряд читался одним
     // плоским пятном, глазу не за что зацепиться, чтобы быстро найти нужное действие. Свой
     // акцентный цвет на каждую (по смыслу иконки, не рандом) - тот же приём, что уже был у
     // "Удалить"-строк в ContextActionSheet, просто на каждую ячейку свой оттенок вместо одного
     // тревожного.
-    val accent = gridCellAccent(action.label)
     Column(
         modifier = modifier
             .fullBlockClickable(shape = RoundedCornerShape(NamiRadius.Button)) { if (!action.keepParentOpen) onDismiss(); action.onClick() }

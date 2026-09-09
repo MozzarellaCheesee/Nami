@@ -100,6 +100,9 @@ class NowPlayingViewModel @Inject constructor(
     val nowPlayingShowRepeat: StateFlow<Boolean> = settingsRepository?.nowPlayingShowRepeat ?: MutableStateFlow(true)
     val nowPlayingBlockOrder: StateFlow<List<dev.nami.domain.NowPlayingBlock>> =
         settingsRepository?.nowPlayingBlockOrder ?: MutableStateFlow(dev.nami.domain.DEFAULT_NOW_PLAYING_BLOCKS)
+    /** Настраиваемое меню "Ещё" - порядок/секция/цвет пунктов, см. NowPlayingMoreMenuScreen. */
+    val nowPlayingMoreItems: StateFlow<List<dev.nami.domain.NowPlayingMoreConfig>> =
+        settingsRepository?.nowPlayingMoreItems ?: MutableStateFlow(dev.nami.domain.DEFAULT_NOW_PLAYING_MORE_ITEMS)
     val nowPlayingCompactCover: StateFlow<Boolean> = settingsRepository?.nowPlayingCompactCover ?: MutableStateFlow(false)
     val nowPlayingLineProgress: StateFlow<Boolean> = settingsRepository?.nowPlayingLineProgress ?: MutableStateFlow(false)
 

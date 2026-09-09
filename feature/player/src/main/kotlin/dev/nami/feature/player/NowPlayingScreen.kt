@@ -40,24 +40,11 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Album
-import androidx.compose.material.icons.outlined.Cast
 import androidx.compose.material.icons.outlined.DarkMode
-import androidx.compose.material.icons.outlined.DirectionsCar
-import androidx.compose.material.icons.outlined.Groups
-import androidx.compose.material.icons.outlined.Send
-import androidx.compose.material.icons.outlined.Palette
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FavoriteBorder
-import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.PlayCircleOutline
-import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material.icons.outlined.PlaylistAdd
 import androidx.compose.material.icons.outlined.QueueMusic
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.Shuffle
@@ -296,6 +283,46 @@ fun NowPlayingScreen(
         if (showOverflowMenu) {
             val track = trackDetails
             val sheetContext = androidx.compose.ui.platform.LocalContext.current
+            val moreItems by viewModel.nowPlayingMoreItems.collectAsState()
+            // Что делает пункт - здесь; где он стоит и каким цветом - в настройках
+            // (NowPlayingMoreMenuScreen). Пункты без контекста (нет трека, нет альбома) просто
+            // отсутствуют в этой карте и в меню не попадают, как и раньше через listOfNotNull.
+            val moreActions: Map<dev.nami.domain.NowPlayingMoreItem, () -> Unit> = buildMap {
+                // keepParentOpen у половины пунктов: они открывают своё окно ПОВЕРХ Now Playing
+                // (диалог/лист/отдельный экран), а не заменяют его - лист "Ещё" остаётся под ними
+                // и всплывает обратно, когда их закрывают, вместо того чтобы пользователь
+                // оказывался на голом Now Playing и открывал "Ещё" заново.
+                put(dev.nami.domain.NowPlayingMoreItem.CAST) { showCastPicker = true }
+                track?.let { t -> put(dev.nami.domain.NowPlayingMoreItem.SHARE_CARD) { onShareCard(t) } }
+                track?.let { t -> put(dev.nami.domain.NowPlayingMoreItem.RADIO) { viewModel.startRadio(t.id) } }
+                put(dev.nami.domain.NowPlayingMoreItem.ADD_TO_PLAYLIST) { showAddToPlaylist = true }
+                put(dev.nami.domain.NowPlayingMoreItem.DRIVE_MODE, onOpenDriveMode)
+                put(dev.nami.domain.NowPlayingMoreItem.AUDIO_TRACT) { showAudioTractSheet = true }
+                put(dev.nami.domain.NowPlayingMoreItem.SLEEP_TIMER) { showSleepTimerSheet = true }
+                // По сети (Wi-Fi Drop/Wi-Fi Direct - что доступнее, решает сам экран) - не Google
+                // Cast (это "Трансляция") и не текстовая ссылка (это "Поделиться"), а реальная
+                // передача файла трека другому телефону.
+                put(dev.nami.domain.NowPlayingMoreItem.SHARE_OVER_NETWORK, onShareTrackOverNetwork)
+                // Названо не "Джем": это не серверная синхронизация как у Spotify, а P2P-раздача
+                // байтов трека по LAN/Wi-Fi Direct. Настоящий Jam-аналог - отдельная задача.
+                put(dev.nami.domain.NowPlayingMoreItem.LISTEN_TOGETHER, onStartListenTogether)
+                track?.let { t -> put(dev.nami.domain.NowPlayingMoreItem.SHARE) { shareTrackText(sheetContext, t) } }
+                put(dev.nami.domain.NowPlayingMoreItem.MOMENTS) { showLoopSheet = true }
+                track?.let { t -> put(dev.nami.domain.NowPlayingMoreItem.TRACK_INFO) { onShowTrackInfo(t.id) } }
+                track?.artistId?.let { id -> put(dev.nami.domain.NowPlayingMoreItem.OPEN_ARTIST) { onOpenArtist(id) } }
+                track?.albumId?.let { id -> put(dev.nami.domain.NowPlayingMoreItem.OPEN_ALBUM) { onOpenAlbum(id) } }
+                put(dev.nami.domain.NowPlayingMoreItem.PLAYER_SETTINGS, onOpenPlayerSettings)
+                put(dev.nami.domain.NowPlayingMoreItem.THEME_EDITOR, onOpenThemeEditor)
+                put(dev.nami.domain.NowPlayingMoreItem.ALL_SETTINGS, onOpenAllSettings)
+            }
+            // Единственные два пункта, которые закрывают лист "Ещё" при нажатии: они не открывают
+            // ничего поверх, а отдают действие системе/плееру и возвращают на Now Playing.
+            val closesSheet = setOf(
+                dev.nami.domain.NowPlayingMoreItem.SHARE_CARD,
+                dev.nami.domain.NowPlayingMoreItem.RADIO,
+                dev.nami.domain.NowPlayingMoreItem.SHARE,
+            )
+            val visible = moreItems.filter { it.item in moreActions }
             NowPlayingMoreSheet(
                 onDismiss = { showOverflowMenu = false },
                 header = {
@@ -304,41 +331,25 @@ fun NowPlayingScreen(
                         VolumeSlider(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp))
                     }
                 },
-                grid = listOfNotNull(
-                    // keepParentOpen: лист выбора устройства открывается ПОВЕРХ "Ещё" - см. ниже.
-                    ContextAction("Трансляция", Icons.Outlined.Cast, keepParentOpen = true) { showCastPicker = true },
-                    track?.let { ContextAction("Поделиться карточкой", Icons.Outlined.Share) { onShareCard(it) } },
-                    track?.let { ContextAction("Радио", Icons.Outlined.PlayCircleOutline) { viewModel.startRadio(it.id) } },
-                    // keepParentOpen: эти действия открывают своё окно ПОВЕРХ Now Playing (диалог/
-                    // лист/отдельный экран), а не заменяют его - лист "Ещё" остаётся под ними и
-                    // сам всплывает обратно, когда их закрывают/уходят назад, вместо того чтобы
-                    // пользователь оказывался на голом Now Playing и открывал "Ещё" заново.
-                    ContextAction("В плейлист", Icons.Outlined.PlaylistAdd, keepParentOpen = true) { showAddToPlaylist = true },
-                    ContextAction("Дорожный режим", Icons.Outlined.DirectionsCar, keepParentOpen = true, onClick = onOpenDriveMode),
-                    ContextAction("Аудиотракт", Icons.Outlined.QueueMusic, keepParentOpen = true) { showAudioTractSheet = true },
-                    ContextAction("Таймер сна", Icons.Outlined.DarkMode, keepParentOpen = true) { showSleepTimerSheet = true },
-                    // По сети (Wi-Fi Drop/Wi-Fi Direct - что сейчас доступнее, решает сам экран) -
-                    // не Google Cast (та же "Трансляция" выше) и не текстовая ссылка (та же
-                    // "Поделиться" в плоском списке ниже), а реальная передача файла трека
-                    // другому телефону - такое же частое быстрое действие, как остальные в сетке.
-                    ContextAction("Поделиться треком по сети", Icons.Outlined.Send, keepParentOpen = true, onClick = onShareTrackOverNetwork),
-                    // Названо не "Джем" - это не серверная синхронизация как у Spotify (каждый
-                    // качает свой же трек из общего облака, сервер только дирижирует таймингом),
-                    // а P2P-раздача байтов трека по LAN/Wi-Fi Direct. Настоящий Jam-аналог -
-                    // отдельная задача поверх self-host сервера пользователя (см. заметки по
-                    // серверу), не то, что реализовано здесь сейчас.
-                    ContextAction("Слушать со мной", Icons.Outlined.Groups, keepParentOpen = true, onClick = onStartListenTogether),
-                ),
-                list = listOfNotNull(
-                    track?.let { ContextAction("Поделиться", Icons.Outlined.Share) { shareTrackText(sheetContext, it) } },
-                    ContextAction("Моменты и петли", Icons.Outlined.Repeat, keepParentOpen = true) { showLoopSheet = true },
-                    track?.let { ContextAction("Информация о треке", Icons.Outlined.Info, keepParentOpen = true) { onShowTrackInfo(it.id) } },
-                    track?.artistId?.let { artistId -> ContextAction("Открыть исполнителя", Icons.Outlined.Person, keepParentOpen = true) { onOpenArtist(artistId) } },
-                    track?.albumId?.let { albumId -> ContextAction("Открыть альбом", Icons.Outlined.Album, keepParentOpen = true) { onOpenAlbum(albumId) } },
-                    ContextAction("Настройки плеера", Icons.Outlined.Tune, keepParentOpen = true, onClick = onOpenPlayerSettings),
-                    ContextAction("Редактор темы", Icons.Outlined.Palette, keepParentOpen = true, onClick = onOpenThemeEditor),
-                    ContextAction("Все настройки", Icons.Outlined.Settings, keepParentOpen = true, onClick = onOpenAllSettings),
-                ),
+                grid = visible.filter { it.section == dev.nami.domain.NowPlayingMoreSection.GRID }.map { config ->
+                    MoreGridItem(
+                        action = ContextAction(
+                            label = nowPlayingMoreLabel(config.item),
+                            icon = nowPlayingMoreIcon(config.item),
+                            keepParentOpen = config.item !in closesSheet,
+                            onClick = moreActions.getValue(config.item),
+                        ),
+                        accent = nowPlayingMoreAccentColor(config.accent),
+                    )
+                },
+                list = visible.filter { it.section == dev.nami.domain.NowPlayingMoreSection.LIST }.map { config ->
+                    ContextAction(
+                        label = nowPlayingMoreLabel(config.item),
+                        icon = nowPlayingMoreIcon(config.item),
+                        keepParentOpen = config.item !in closesSheet,
+                        onClick = moreActions.getValue(config.item),
+                    )
+                },
             )
         }
         if (showAddToPlaylist) {
