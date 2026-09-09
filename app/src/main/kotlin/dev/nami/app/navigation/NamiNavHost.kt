@@ -107,6 +107,8 @@ private const val ROUTE_BOTTOM_TABS = "settings/tabs"
 private const val ROUTE_MORE_MENU = "settings/more_menu"
 // Стартовый "роут" правой колонки list-detail: пока в списке ничего не выбрано, там заглушка.
 private const val ROUTE_PANE_EMPTY = "pane_empty"
+private const val ROUTE_UI_FONT = "settings/font_ui"
+private const val ROUTE_LYRICS_FONT = "settings/font_lyrics"
 
 
 @Composable
@@ -511,6 +513,7 @@ fun NamiNavHost(
                     onThemeEditorClick = { navController.navigate(ROUTE_THEME_EDITOR) },
                     onBottomTabsClick = { navController.navigate(ROUTE_BOTTOM_TABS) },
                     onMoreMenuClick = { navController.navigate(ROUTE_MORE_MENU) },
+                    onUiFontClick = { navController.navigate(ROUTE_UI_FONT) },
                 )
             }
             composable(ROUTE_BOTTOM_TABS) {
@@ -539,7 +542,16 @@ fun NamiNavHost(
                 dev.nami.app.NowPlayingBlocksScreen(onBack = { navController.popBackStack() })
             }
             composable(ROUTE_SETTINGS_LYRICS) {
-                SettingsLyricsScreen(onBack = { navController.popBackStack() })
+                SettingsLyricsScreen(
+                    onBack = { navController.popBackStack() },
+                    onLyricsFontClick = { navController.navigate(ROUTE_LYRICS_FONT) },
+                )
+            }
+            composable(ROUTE_UI_FONT) {
+                dev.nami.app.UiFontScreen(onBack = { navController.popBackStack() })
+            }
+            composable(ROUTE_LYRICS_FONT) {
+                dev.nami.app.LyricsFontScreen(onBack = { navController.popBackStack() })
             }
             composable(ROUTE_SESSIONS) {
                 dev.nami.app.SessionsScreen(onBack = { navController.popBackStack() })

@@ -341,6 +341,7 @@ fun SettingsAppearanceScreen(
     onThemeEditorClick: () -> Unit,
     onBottomTabsClick: () -> Unit,
     onMoreMenuClick: () -> Unit,
+    onUiFontClick: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -350,10 +351,6 @@ fun SettingsAppearanceScreen(
     var offerRestart by remember { mutableStateOf(false) }
     val amoledEnabled by viewModel.amoledEnabled.collectAsState()
     val uiFontPath by viewModel.uiFontPath.collectAsState()
-    val pickUiFont = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
-    ) { uri -> uri?.let(viewModel::pickUiFont) }
-
     SettingsSubScreenScaffold(title = "Внешний вид", onBack = onBack) {
         SettingsSectionLabel("Тема")
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
@@ -385,23 +382,16 @@ fun SettingsAppearanceScreen(
             SettingsRow(
                 icon = Icons.Outlined.FontDownload,
                 title = "Шрифт интерфейса",
+                subtitle = "Встроенные наборы или свой файл",
                 trailing = {
                     Text(
-                        text = if (uiFontPath != null) "Свой" else "Стандартный",
+                        text = uiFontLabel(uiFontPath),
                         color = NamiColors.Paper40,
                         style = MaterialTheme.typography.bodySmall,
                     )
                 },
-                onClick = { pickUiFont.launch(arrayOf("font/ttf", "font/otf", "*/*")) },
+                onClick = onUiFontClick,
             )
-            if (uiFontPath != null) {
-                SettingsRow(
-                    icon = Icons.Outlined.Close,
-                    title = "Сбросить шрифт интерфейса",
-                    trailing = {},
-                    onClick = viewModel::clearUiFont,
-                )
-            }
         }
         SettingsSectionLabel("Иконка приложения")
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
@@ -831,17 +821,17 @@ private fun PresetThumbnail(preset: dev.nami.domain.NowPlayingLayoutPreset) {
 }
 
 @Composable
-fun SettingsLyricsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
+fun SettingsLyricsScreen(
+    onBack: () -> Unit,
+    onLyricsFontClick: () -> Unit = {},
+    viewModel: SettingsViewModel = hiltViewModel(),
+) {
     val studyModeEnabled by viewModel.studyModeEnabled.collectAsState()
     val lyricsFontPath by viewModel.lyricsFontPath.collectAsState()
     val stands4Uid by viewModel.stands4Uid.collectAsState()
     val stands4Token by viewModel.stands4Token.collectAsState()
     val stands4RequestsToday by viewModel.stands4RequestsToday.collectAsState()
     val deeplApiKey by viewModel.deeplApiKey.collectAsState()
-    val pickLyricsFont = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
-    ) { uri -> uri?.let(viewModel::pickLyricsFont) }
-
     SettingsSubScreenScaffold(title = "Лирика", onBack = onBack) {
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
             SettingsRow(
@@ -853,23 +843,16 @@ fun SettingsLyricsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hilt
             SettingsRow(
                 icon = Icons.Outlined.FontDownload,
                 title = "Шрифт текста песни",
+                subtitle = "Встроенные наборы или свой файл",
                 trailing = {
                     Text(
-                        text = if (lyricsFontPath != null) "Свой" else "Стандартный",
+                        text = uiFontLabel(lyricsFontPath),
                         color = NamiColors.Paper40,
                         style = MaterialTheme.typography.bodySmall,
                     )
                 },
-                onClick = { pickLyricsFont.launch(arrayOf("font/ttf", "font/otf", "*/*")) },
+                onClick = onLyricsFontClick,
             )
-            if (lyricsFontPath != null) {
-                SettingsRow(
-                    icon = Icons.Outlined.Close,
-                    title = "Сбросить шрифт",
-                    trailing = {},
-                    onClick = viewModel::clearLyricsFont,
-                )
-            }
         }
 
         SettingsSectionLabel("STANDS4 (резервный источник текстов)")

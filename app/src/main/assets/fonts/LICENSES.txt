@@ -1,0 +1,13 @@
+Встроенные шрифты интерфейса и лирики (статический Regular, подмножество latin+cyrillic,
+скачано с Google Fonts).
+
+SIL Open Font License 1.1 (https://scripts.sil.org/OFL):
+  Inter            (c) The Inter Project Authors
+  Montserrat       (c) The Montserrat Project Authors
+  Manrope          (c) The Manrope Project Authors
+  Nunito           (c) The Nunito Project Authors
+  Lora             (c) The Lora Project Authors
+  JetBrains Mono   (c) The JetBrains Mono Project Authors
+
+Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0):
+  Roboto           (c) Google LLC

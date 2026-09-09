@@ -182,6 +182,28 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    /** Встроенный шрифт из assets. Копируется в те же fonts/ в filesDir, что и свой файл, - так
+     * весь путь загрузки (Font(File) в MainActivity/лирике) остаётся ровно один, а по имени файла
+     * видно, какой именно набор выбран. */
+    fun pickBundledUiFont(font: BundledFont) = copyBundledFont(font, "ui", appSettingsRepository::setUiFontPath)
+
+    fun pickBundledLyricsFont(font: BundledFont) = copyBundledFont(font, "lyrics", appSettingsRepository::setLyricsFontPath)
+
+    private fun copyBundledFont(font: BundledFont, prefix: String, apply: (String) -> Unit) {
+        viewModelScope.launch {
+            val dest = File(context.filesDir, "fonts/" + bundledFontFileName(font.key, prefix))
+            val copied = withContext(Dispatchers.IO) {
+                runCatching {
+                    dest.parentFile?.mkdirs()
+                    context.assets.open(font.assetPath).use { input ->
+                        dest.outputStream().use { output -> input.copyTo(output) }
+                    }
+                }.isSuccess
+            }
+            if (copied) apply(dest.path)
+        }
+    }
+
     fun clearUiFont() {
         appSettingsRepository.setUiFontPath(null)
     }
