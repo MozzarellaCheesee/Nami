@@ -30,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -182,39 +183,22 @@ fun HomeScreen(
                         item { HomeSectionHeader("Статистика дня") }
                         item { HomeStatsCard(stats.totalMinutes, stats.distinctTracks, stats.distinctArtists) }
                     }
-                    // Пользователь явно попросил: раздача/сессия рядом должна САМА появляться с
-                    // анимацией, а не сидеть на экране пустой карточкой-заглушкой "никого не
-                    // видно" - item всегда в списке (иначе не сыграть анимацию исчезновения при
-                    // потере устройства), но содержимое сворачивается/разворачивается по факту
-                    // "есть ли что показать", а не просто исчезает без анимации.
+                    // Карточка на экране всегда (старый стиль - "Пока никого не видно рядом"
+                    // внутри неё же, поиск идёт фоном), а не то плоское "Ищем рядом..." без
+                    // стиля - анимируется появление КАЖДОГО найденного устройства по отдельности
+                    // (см. AnimatedVisibility на строке устройства внутри HomeNearbyBlock), не
+                    // вся карточка целиком.
                     HomeBlockType.NEARBY_NETWORK -> {
-                        val hasActivity = nearbyDevices.isNotEmpty() || guestState != null
                         item { HomeSectionHeader("Рядом") }
                         item {
-                            androidx.compose.animation.AnimatedVisibility(
-                                visible = hasActivity,
-                                enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(200)) +
-                                    androidx.compose.animation.expandVertically(androidx.compose.animation.core.tween(200)),
-                                exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(150)) +
-                                    androidx.compose.animation.shrinkVertically(androidx.compose.animation.core.tween(150)),
-                            ) {
-                                HomeNearbyBlock(
-                                    devices = nearbyDevices,
-                                    guestState = guestState,
-                                    onJoinListenTogether = viewModel::joinListenTogether,
-                                    onPullDrop = viewModel::pullDrop,
-                                    onLeaveListenTogether = viewModel::leaveListenTogether,
-                                    onOpenLocalShare = onOpenLocalShare,
-                                )
-                            }
-                            if (!hasActivity) {
-                                Text(
-                                    "Ищем рядом...",
-                                    color = NamiColors.Paper40,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-                                )
-                            }
+                            HomeNearbyBlock(
+                                devices = nearbyDevices,
+                                guestState = guestState,
+                                onJoinListenTogether = viewModel::joinListenTogether,
+                                onPullDrop = viewModel::pullDrop,
+                                onLeaveListenTogether = viewModel::leaveListenTogether,
+                                onOpenLocalShare = onOpenLocalShare,
+                            )
                         }
                     }
                 }
@@ -416,14 +400,28 @@ private fun HomeNearbyBlock(
             Text("Пока никого не видно рядом", color = NamiColors.Paper40, style = MaterialTheme.typography.bodyMedium)
         } else {
             devices.forEachIndexed { index, device ->
-                if (index > 0) dev.nami.core.designsystem.NamiCardDivider(modifier = Modifier.padding(vertical = 10.dp))
-                Text(device.name, color = NamiColors.Paper100, style = MaterialTheme.typography.bodyMedium)
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.padding(top = 8.dp).horizontalScroll(rememberScrollState()),
-                ) {
-                    dev.nami.core.designsystem.NamiPill(text = "Принять трек", color = NamiColors.Shu, onClick = { onPullDrop(device) })
-                    dev.nami.core.designsystem.NamiPill(text = "Слушать вместе", color = NamiColors.Wakaba, onClick = { onJoinListenTogether(device) })
+                // Каждое устройство появляется само по себе, когда NSD его находит - не вся
+                // карточка целиком (та уже на экране, ищет фоном) - remember(device.host) даёт
+                // AnimatedVisibility сыграть enter один раз именно в момент появления ЭТОЙ строки
+                // в composition, а не при каждой рекомпозиции карточки.
+                key(device.host) {
+                    if (index > 0) dev.nami.core.designsystem.NamiCardDivider(modifier = Modifier.padding(vertical = 10.dp))
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = true,
+                        enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(250)) +
+                            androidx.compose.animation.slideInVertically(androidx.compose.animation.core.tween(250)) { it / 4 },
+                    ) {
+                        Column {
+                            Text(device.name, color = NamiColors.Paper100, style = MaterialTheme.typography.bodyMedium)
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.padding(top = 8.dp).horizontalScroll(rememberScrollState()),
+                            ) {
+                                dev.nami.core.designsystem.NamiPill(text = "Принять трек", color = NamiColors.Shu, onClick = { onPullDrop(device) })
+                                dev.nami.core.designsystem.NamiPill(text = "Слушать вместе", color = NamiColors.Wakaba, onClick = { onJoinListenTogether(device) })
+                            }
+                        }
+                    }
                 }
             }
         }
