@@ -1,0 +1,19 @@
+# Конфигурация Caddy для docker-compose.yml: сертификат Let's Encrypt берётся
+# автоматически по доменному имени из NAMI_DOMAIN.
+{
+	email {$ACME_EMAIL}
+}
+
+{$NAMI_DOMAIN} {
+	# WebSocket (/api/ws) проходит через reverse_proxy без отдельной настройки:
+	# Caddy сам пробрасывает Upgrade/Connection.
+	reverse_proxy nami:4533
+
+	# Отдача аудио - большие тела и долгие Range-запросы, сжимать их не надо.
+	encode gzip {
+		match {
+			header Content-Type application/json*
+			header Content-Type text/*
+		}
+	}
+}

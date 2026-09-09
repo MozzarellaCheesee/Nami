@@ -274,14 +274,38 @@ async fn revoke_device(State(st): State<Shared>, Path(id): Path<i64>) -> ApiResu
     Ok(if n == 1 { StatusCode::NO_CONTENT } else { StatusCode::NOT_FOUND })
 }
 
+#[derive(Deserialize)]
+struct SetupQuery {
+    /// Токен уже сопряжённого устройства - нужен, как только первое устройство появилось.
+    token: Option<String>,
+}
+
 /// Минимальная страница мастера настройки: код сопряжения и QR к нему.
 ///
-/// ponytail: страница открыта всем в локальной сети - на этом этапе это осознанный
-/// компромисс (первый запуск, устройств ещё нет, закрывать нечем). Закрывается вместе
-/// с полноценным мастером настройки: пароль владельца на первом старте.
-async fn setup_page(State(st): State<Shared>, req: Request) -> ApiResult<Html<String>> {
+/// Пока не сопряжено ни одного устройства - открыта (первый запуск, закрывать нечем).
+/// После первого сопряжения новые коды выдаются только по токену уже доверенного
+/// устройства: иначе любой в той же Wi-Fi сети бессрочно печатает себе коды доступа.
+/// ponytail: токен передаётся query-параметром, потому что это ссылка, открываемая
+/// в браузере, а не XHR. Полноценный вход владельца по паролю - вместе с веб-панелью.
+async fn setup_page(
+    State(st): State<Shared>,
+    Query(q): Query<SetupQuery>,
+    req: Request,
+) -> ApiResult<Html<String>> {
     let code = {
         let db = st.db.lock().unwrap();
+        let paired: i64 = db.query_row("SELECT COUNT(*) FROM devices", [], |r| r.get(0))?;
+        if paired > 0 {
+            let ok = q.token.as_deref().is_some_and(|t| auth::verify(&db, t).is_some());
+            if !ok {
+                return Err(ApiError(
+                    StatusCode::UNAUTHORIZED,
+                    "устройства уже сопряжены: новый код доступен только по ссылке \
+                     /setup?token=<токен доверенного устройства>"
+                        .into(),
+                ));
+            }
+        }
         auth::create_code(&db)?
     };
     let host = req

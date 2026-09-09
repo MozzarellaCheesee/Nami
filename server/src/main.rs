@@ -11,6 +11,7 @@ mod db;
 mod host;
 mod scanner;
 mod tls;
+mod watcher;
 
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -44,6 +45,10 @@ async fn main() -> Res<()> {
     let conn = db::open(&cfg.db_path)?;
     tracing::info!("библиотека: {} треков", api::track_count(&conn));
 
+    // Провайдер криптографии выбирается явно: собираем rustls без aws-lc-rs (см. Cargo.toml),
+    // а без установленного провайдера rustls отказывается создавать конфигурацию.
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     let tls_cfg = if cfg.tls {
         let t = tls::load_or_create(&cfg.data_dir, vec!["localhost".into(), local_ip()])?;
         tracing::info!("TLS: отпечаток sha256:{}", t.fingerprint);
@@ -59,6 +64,10 @@ async fn main() -> Res<()> {
         rate: auth::RateLimiter::default(),
         cfg: cfg.clone(),
     });
+
+    if cfg.watch {
+        watcher::spawn(state.clone());
+    }
 
     let addr = SocketAddr::from(([0, 0, 0, 0], cfg.port));
     let app = api::router(state).into_make_service_with_connect_info::<SocketAddr>();

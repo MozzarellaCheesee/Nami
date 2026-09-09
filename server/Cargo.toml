@@ -6,7 +6,10 @@ description = "Self-hosted сервер NAMI - библиотека и passthrou
 
 [dependencies]
 axum = "0.8"
-axum-server = { version = "0.8", features = ["tls-rustls"] }
+# tls-rustls-no-provider вместо tls-rustls: провайдер выбираем сами (ring, не aws-lc-rs).
+# aws-lc-rs тянет cmake+bindgen и делает кросс-компиляцию arm64 отдельным приключением,
+# ring для этого собирается обычным кросс-gcc.
+axum-server = { version = "0.8", default-features = false, features = ["tls-rustls-no-provider"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
 tower = "0.5"
 tower-http = { version = "0.7", features = ["fs"] }
@@ -32,6 +35,8 @@ hex = "0.4"
 rcgen = "0.14"
 # без default-features: нужен только SVG-рендер, растровый бэкенд тянет весь крейт image.
 qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+notify = { version = "8.2.0", default-features = false, features = ["macos_fsevent"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "logging", "tls12"] }
 
 [profile.release]
 opt-level = "z"

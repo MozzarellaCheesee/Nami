@@ -1,0 +1,46 @@
+# Внешний доступ по своему домену: Caddy добывает и обновляет сертификат Let's Encrypt
+# сам, NAMI за ним работает по HTTP (свой самоподписанный TLS в этом сценарии не нужен -
+# шифрует Caddy). Требуется: домен, A/AAAA-запись на этот хост, открытые 80 и 443.
+#
+#   NAMI_DOMAIN=music.example.com [email protected] docker compose up -d
+#
+# Два других пути внешнего доступа (Tailscale, Cloudflare Tunnel) не требуют этого файла -
+# см. README, раздел "Внешний доступ".
+
+services:
+  nami:
+    build: .
+    image: nami-server
+    restart: unless-stopped
+    environment:
+      # За обратным прокси TLS терминирует Caddy - свой сертификат только мешал бы.
+      NAMI_TLS: "false"
+      NAMI_MUSIC_DIRS: /music
+      NAMI_DB_PATH: /data/nami.db
+      NAMI_DATA_DIR: /data
+    volumes:
+      - ${NAMI_MUSIC:-./music}:/music:ro
+      - nami-data:/data
+    # Порт наружу не публикуется: снаружи доступен только Caddy.
+    expose:
+      - "4533"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [nami]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      NAMI_DOMAIN: ${NAMI_DOMAIN:?нужен домен, например music.example.com}
+      ACME_EMAIL: ${ACME_EMAIL:-admin@localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  nami-data:
+  caddy-data:
+  caddy-config:

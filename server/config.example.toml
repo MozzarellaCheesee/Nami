@@ -16,3 +16,16 @@ data_dir = "."
 # NAMI_TLS - HTTPS с самоподписанным сертификатом (его отпечаток уходит в QR).
 # false имеет смысл только для локальной отладки curl'ом.
 tls = true
+
+# NAMI_WATCH - слежение за music_dirs (inotify/FSEvents/ReadDirectoryChangesW).
+# Изменения подхватываются сами, ручной POST /api/scan остаётся как запасной путь.
+watch = true
+
+# NAMI_TRANSCODE_CACHE_DIR - готовые транскоды. Относительный путь считается от data_dir.
+transcode_cache_dir = "transcode_cache"
+
+# NAMI_TRANSCODE_CACHE_MB - потолок кеша, старейшие файлы вытесняются.
+transcode_cache_mb = 2048
+
+# Сколько дней хранятся tombstone-записи синхронизации до физического удаления.
+tombstone_ttl_days = 30

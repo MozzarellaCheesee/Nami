@@ -84,8 +84,7 @@ fn is_audio(path: &Path) -> bool {
 /// библиотеки (цель "50 000 треков на 512 МБ"), поэтому никакого `Vec<TrackMeta>` со
 /// всей библиотекой здесь нет.
 ///
-/// ponytail: live-watch (inotify) не сделан - пересканирование запускается `POST /api/scan`.
-/// Добавлять `notify`, когда появится реальная жалоба на устаревающую библиотеку.
+/// Вызывается и вручную (`POST /api/scan`), и автоматически из `watcher` по событиям ФС.
 pub fn scan(conn: &mut Connection, dirs: &[PathBuf]) -> crate::Res<ScanReport> {
     let started = crate::db::now();
     let mut rep = ScanReport::default();
