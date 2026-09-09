@@ -22,8 +22,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -206,6 +209,12 @@ fun LyricsScreen(
                 },
             ),
     ) {
+        // П.md §30: в ландшафте лирика - двухколонник (слева шапка с обложкой и транспорт, справа
+        // сам текст), в портрете всё как было, одной колонкой сверху вниз. Куски раскладки
+        // одинаковые в обоих случаях, поэтому вынесены в лямбды, а не продублированы.
+        val landscape = LocalConfiguration.current.orientation ==
+            android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val header: @Composable () -> Unit = {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
             // Straight to onBack(), not dismiss() - dismiss()'s manual slide-then-flip coroutine
             // was a source of "the screen stays open forever after this" reports (its own
@@ -251,10 +260,17 @@ fun LyricsScreen(
                 }
             }
         }
+        }
 
         val lyrics = uiState.lyrics
+        val body: @Composable (Modifier) -> Unit = { bodyModifier ->
         if (lyrics == null || lyrics.lines.isEmpty()) {
-            Column(modifier = Modifier.fillMaxWidth().weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+            // verticalScroll, а не просто Column: в ландшафте (и на низких экранах) весь этот
+            // столбик подсказок и ссылок выше доступной высоты, и нижние пункты обрезались.
+            Column(
+                modifier = bodyModifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
                 Spacer(modifier = Modifier.height(64.dp))
                 if (uiState.isFetchingOnline) {
                     androidx.compose.material3.CircularProgressIndicator(color = NamiColors.Paper70, modifier = Modifier.size(24.dp))
@@ -298,7 +314,7 @@ fun LyricsScreen(
                 )
             }
         } else {
-            Box(modifier = Modifier.weight(1f)) {
+            Box(modifier = bodyModifier) {
                 SyncedLyricsList(
                     lyrics = lyrics,
                     translation = uiState.translation.takeIf { uiState.showTranslation },
@@ -316,13 +332,31 @@ fun LyricsScreen(
                 )
             }
         }
+        }
 
-        LyricsTransportBar(
-            isPlaying = isPlaying,
-            onToggle = nowPlayingViewModel::toggle,
-            onSkipPrevious = nowPlayingViewModel::skipPrevious,
-            onSkipNext = nowPlayingViewModel::skipNext,
-        )
+        val transport: @Composable () -> Unit = {
+            LyricsTransportBar(
+                isPlaying = isPlaying,
+                onToggle = nowPlayingViewModel::toggle,
+                onSkipPrevious = nowPlayingViewModel::skipPrevious,
+                onSkipNext = nowPlayingViewModel::skipNext,
+            )
+        }
+
+        if (landscape) {
+            Row(modifier = Modifier.fillMaxSize()) {
+                Column(modifier = Modifier.fillMaxWidth(0.34f).fillMaxHeight()) {
+                    header()
+                    Spacer(modifier = Modifier.weight(1f))
+                    transport()
+                }
+                body(Modifier.weight(1f).fillMaxHeight())
+            }
+        } else {
+            header()
+            body(Modifier.weight(1f))
+            transport()
+        }
     }
 
     // Overlay, not part of the Column above - sits on top of the lyrics list instead of

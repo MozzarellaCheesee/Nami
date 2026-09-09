@@ -26,10 +26,15 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -461,7 +466,12 @@ fun NowPlayingScreen(
                 )
             }
         }
-        androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))
+        // П.md §30 "Ландшафт на телефоне" - принципиально другая раскладка: обложка слева на всю
+        // высоту, справа прокручиваемая колонка со всем управлением. Ни один блок не пропадает и
+        // не обрезается, порядок блоков из настроек тот же. Портретная ветка ниже не тронута.
+        val landscape = LocalConfiguration.current.orientation ==
+            android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        if (!landscape) androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))
         // No scroll: everything must fit on-screen at once. Reduced top gap before the artwork
         // frees up the vertical room this needs, instead of a scrollable body.
         // 3-page window: 0 = previous, 1 = current, 2 = next. HorizontalPager owns the drag/fling
@@ -501,17 +511,23 @@ fun NowPlayingScreen(
                 }
             }
         }
+        val artwork: @Composable (Modifier) -> Unit = { artworkModifier ->
         androidx.compose.foundation.layout.BoxWithConstraints(
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 24.dp).nestedScroll(edgeGuard),
+            modifier = artworkModifier.padding(top = 8.dp, bottom = 24.dp).nestedScroll(edgeGuard),
         ) {
-            val pageWidth = maxWidth - peekDp * 2
+            // Обложка квадратная, поэтому сторона - по меньшему из двух измерений: в ландшафте
+            // высоты меньше ширины, и без этого пейджер вылезал бы далеко за экран.
+            val pageWidth = minOf(maxWidth - peekDp * 2, maxHeight)
             HorizontalPager(
                 state = pagerState,
                 pageSpacing = 16.dp,
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = peekDp),
                 beyondViewportPageCount = 1,
                 modifier = Modifier
-                    .fillMaxWidth()
+                    // Ширина считается из стороны страницы, а не fillMaxWidth: когда сторону
+                    // ограничивает высота (ландшафт), страница обязана остаться квадратной.
+                    .width(pageWidth + peekDp * 2)
+                    .align(Alignment.Center)
                     .height(pageWidth)
                     .clipToBounds(),
             ) { page ->
@@ -555,6 +571,7 @@ fun NowPlayingScreen(
                 }
             }
         }
+        }
         // Всё, что нужно сразу нескольким секциям, считается ДО перебора порядка - иначе
         // прогресс-бар и время под ним зависели бы от того, куда пользователь переставил блок.
         val durationMs = playing?.durationMs ?: 0L
@@ -573,7 +590,8 @@ fun NowPlayingScreen(
         // П.md §17 "порядок блоков". Секции ниже обложки идут одна за другой в обычном потоке
         // Column, не завязаны ни на пейджер, ни друг на друга по layout - поэтому порядок
         // читается из настройки, а не захардкожен здесь. Сам пейджер в списке отсутствует
-        // намеренно: он всегда сверху, см. NowPlayingBlock.
+        // намеренно: он всегда сверху (в ландшафте - слева), см. NowPlayingBlock.
+        val blocks: @Composable ColumnScope.() -> Unit = {
         blockOrder.forEach { block ->
             when (block) {
                 dev.nami.domain.NowPlayingBlock.TITLE_ARTIST -> {
@@ -809,13 +827,35 @@ fun NowPlayingScreen(
                 }
             }
         }
-        // Верхний Spacer(weight(1f)) перед пейджером (см. выше) один без пары тянет весь остаток
-        // высоты наверх - при уменьшенной обложке (NowPlayingLayoutPreset.compactCover) контент
-        // короче, и это читалось как "слишком много воздуха над обложкой". Второй такой же
-        // Spacer здесь распределяет остаток поровну сверху/снизу - блок реально по центру, а не
-        // прижат к низу. Только для compactCover: в обычном пресете обложка и так занимает
-        // большую часть высоты, добавлять второй Spacer там незачем.
-        if (compactCover) androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))
+        }
+        if (landscape) {
+            Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                Box(modifier = Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                    artwork(Modifier.fillMaxWidth())
+                }
+                // Прокрутка обязательна: в ландшафте высоты меньше, чем нужно всем блокам сразу,
+                // а по ТЗ ничего не должно исчезать - вместо выкидывания блоков колонка скроллится.
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .verticalScroll(rememberScrollState())
+                        .padding(start = 16.dp),
+                    verticalArrangement = Arrangement.Center,
+                    content = blocks,
+                )
+            }
+        } else {
+            artwork(Modifier.fillMaxWidth())
+            blocks()
+            // Верхний Spacer(weight(1f)) перед пейджером (см. выше) один без пары тянет весь остаток
+            // высоты наверх - при уменьшенной обложке (NowPlayingLayoutPreset.compactCover) контент
+            // короче, и это читалось как "слишком много воздуха над обложкой". Второй такой же
+            // Spacer здесь распределяет остаток поровну сверху/снизу - блок реально по центру, а не
+            // прижат к низу. Только для compactCover: в обычном пресете обложка и так занимает
+            // большую часть высоты, добавлять второй Spacer там незачем.
+            if (compactCover) androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))
+        }
     }
     // Real night-mode effect, drawn LAST so it dims everything - cover art, transport controls,
     // text - not just the ambient backdrop peeking around the edges (that was the previous,
