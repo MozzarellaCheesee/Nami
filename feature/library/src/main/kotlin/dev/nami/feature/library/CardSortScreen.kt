@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -62,14 +63,26 @@ fun CardSortScreen(onBack: () -> Unit, viewModel: CardSortViewModel = hiltViewMo
             modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 12.dp),
         )
 
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+        // Карточка 3:4 от полной ширины в альбомной ориентации выше экрана вдвое - сторона
+        // считается по меньшему из измерений, чтобы карточка целиком помещалась в любой.
+        androidx.compose.foundation.layout.BoxWithConstraints(
+            modifier = Modifier.fillMaxSize().padding(24.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            val cardWidth = minOf(maxWidth, maxHeight * 0.75f)
             when {
                 uiState.loading -> Text("Загрузка...", color = NamiColors.Paper70)
                 uiState.queue.isEmpty() -> Text("Библиотека разобрана", color = NamiColors.Paper70)
                 else -> {
                     // Peek card behind, static - only the top card is draggable.
                     uiState.queue.getOrNull(1)?.let { peek ->
-                        SortCard(track = peek, offset = Offset.Zero, modifier = Modifier.graphicsLayer { scaleX = 0.95f; scaleY = 0.95f; alpha = 0.6f })
+                        SortCard(
+                            track = peek,
+                            offset = Offset.Zero,
+                            modifier = Modifier
+                                .width(cardWidth)
+                                .graphicsLayer { scaleX = 0.95f; scaleY = 0.95f; alpha = 0.6f },
+                        )
                     }
                     val top = uiState.queue.first()
                     var offset by remember(top.id) { mutableStateOf(Offset.Zero) }
@@ -82,7 +95,7 @@ fun CardSortScreen(onBack: () -> Unit, viewModel: CardSortViewModel = hiltViewMo
                         offset = Offset(animatedX, animatedY),
                         isPlaying = isPlayingThis,
                         onPlayClick = { viewModel.togglePlay(top) },
-                        modifier = Modifier.pointerInput(top.id) {
+                        modifier = Modifier.width(cardWidth).pointerInput(top.id) {
                             detectDragGestures(
                                 onDrag = { change, drag -> change.consume(); offset += drag },
                                 onDragEnd = {
@@ -112,7 +125,6 @@ private fun SortCard(
 ) {
     Column(
         modifier = modifier
-            .fillMaxWidth()
             .aspectRatio(0.75f)
             .graphicsLayer { translationX = offset.x; translationY = offset.y; rotationZ = (offset.x / 40f).coerceIn(-15f, 15f) }
             .clip(RoundedCornerShape(20.dp))

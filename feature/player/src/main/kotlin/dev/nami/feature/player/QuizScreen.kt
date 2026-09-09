@@ -1,6 +1,8 @@
 package dev.nami.feature.player
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -64,7 +66,14 @@ fun QuizScreen(onBack: () -> Unit, viewModel: QuizViewModel = hiltViewModel()) {
                 }
                 else -> {
                     val question = uiState.question!!
-                    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
+                    // verticalScroll: четыре варианта ответа плюс вопрос не влезают в высоту
+                    // альбомной ориентации, нижние кнопки обрезались.
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(24.dp),
+                    ) {
                         Text(
                             text = question.prompt,
                             color = NamiColors.Paper100,

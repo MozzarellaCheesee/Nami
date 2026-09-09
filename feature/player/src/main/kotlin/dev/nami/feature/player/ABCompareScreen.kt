@@ -1,6 +1,8 @@
 package dev.nami.feature.player
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -53,7 +55,14 @@ fun ABCompareScreen(trackA: Track, trackB: Track, onBack: () -> Unit, viewModel:
         viewModel.start(trackA.toPlayableTrack(), trackB.toPlayableTrack())
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
+    // verticalScroll - в альбомной ориентации на телефоне высоты не хватает, и кнопка
+    // "Раскрыть названия" оказывалась за нижним краем.
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(NamiColors.Ink900)
+            .verticalScroll(rememberScrollState()),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
             IconButton(onClick = onBack) {
                 Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)

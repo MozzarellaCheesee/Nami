@@ -2,6 +2,8 @@ package dev.nami.feature.library
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -39,7 +41,14 @@ fun WatchedFoldersScreen(
 ) {
     val folders by viewModel.watchedFolders.collectAsState()
 
-    Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
+    // verticalScroll: список папок растёт неограниченно, а кнопка "Добавить папку" идёт после
+    // него - в альбомной ориентации (и просто при десятке папок) она уезжала за нижний край.
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(NamiColors.Ink900)
+            .verticalScroll(rememberScrollState()),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
             IconButton(onClick = onBack) {
                 Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад", tint = NamiColors.Paper100)

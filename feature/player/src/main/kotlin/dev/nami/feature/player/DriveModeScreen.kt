@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -95,10 +96,14 @@ fun DriveModeScreen(onBack: () -> Unit, viewModel: NowPlayingViewModel = hiltVie
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.SpaceEvenly,
             ) {
+                // В альбомной ориентации 62% ширины дают квадрат выше экрана - там сторона
+                // считается от высоты, иначе обложка и всё под ней обрезаются.
+                val landscape = androidx.compose.ui.platform.LocalConfiguration.current.orientation ==
+                    android.content.res.Configuration.ORIENTATION_LANDSCAPE
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(0.62f)
-                        .aspectRatio(1f)
+                        .then(if (landscape) Modifier.fillMaxHeight(0.5f) else Modifier.fillMaxWidth(0.62f))
+                        .aspectRatio(1f, matchHeightConstraintsFirst = landscape)
                         .background(NamiColors.Ink700, RoundedCornerShape(NamiRadius.Card)),
                     contentAlignment = Alignment.Center,
                 ) {

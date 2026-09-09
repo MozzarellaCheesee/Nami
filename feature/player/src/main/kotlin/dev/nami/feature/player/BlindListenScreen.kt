@@ -1,6 +1,8 @@
 package dev.nami.feature.player
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -44,6 +46,11 @@ fun BlindListenScreen(onBack: () -> Unit, viewModel: BlindListenViewModel = hilt
     val playbackState by viewModel.playbackState.collectAsState()
     val isPlaying = (playbackState as? PlaybackState.Playing)?.isPlaying == true
 
+    // П.md §30: в альбомной ориентации высоты меньше - обложка ужимается, а колонка целиком
+    // становится прокручиваемой, чтобы ни одна кнопка не ушла за нижний край.
+    val landscape = androidx.compose.ui.platform.LocalConfiguration.current.orientation ==
+        android.content.res.Configuration.ORIENTATION_LANDSCAPE
+
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
             IconButton(onClick = onBack) {
@@ -61,10 +68,13 @@ fun BlindListenScreen(onBack: () -> Unit, viewModel: BlindListenViewModel = hilt
             }
             else -> {
                 val track = uiState.current!!
-                Column(modifier = Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(
+                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
                     Box(
                         modifier = Modifier
-                            .size(260.dp)
+                            .size(if (landscape) 150.dp else 260.dp)
                             .background(NamiColors.Ink700, RoundedCornerShape(NamiRadius.Card)),
                         contentAlignment = Alignment.Center,
                     ) {
