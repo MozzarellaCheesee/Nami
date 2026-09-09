@@ -3,21 +3,24 @@ package dev.nami.player.replaygain
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
-import kotlin.math.log10
-import kotlin.math.sqrt
 
-/** Этап 4's ReplayGain - NOT true EBU R128 (no K-weighting, no gating, no true-peak limiting),
- * just RMS loudness over the whole decoded track vs a -18dBFS target. Runs once per track (result
- * cached in Track.replayGainDb), decodes with the platform's own MediaCodec so it costs nothing
- * extra beyond what playback already uses. */
+/** Сканер ReplayGain по настоящему ITU-R BS.1770-4 / EBU R128 - K-взвешивание, стробирование и
+ * true-peak с 4-кратной передискретизацией (сам алгоритм в [R128Loudness], здесь только декод).
+ *
+ * Раньше это был простой RMS против -18 dBFS: без K-взвешивания (тихая и громкая части трека
+ * считались одинаково значимыми независимо от того, в каких они частотах), без стробирования
+ * (паузы занижали измерение) и без true-peak, из-за чего после применения gain реален межсемпловый
+ * клиппинг. Контракт остался тот же: Float? в дБ, null при любой неудаче декодирования,
+ * результат кэшируется в Track.replayGainDb.
+ *
+ * Значения, посчитанные старым алгоритмом, обнуляются один раз миграцией базы (Migrations.kt) -
+ * пересчёт происходит лениво при следующем воспроизведении трека, как и первый скан. */
 object ReplayGainScanner {
 
-    private const val TARGET_DBFS = -18.0
+    /** Диапазон gain ограничен ±12 дБ - как и у EQ: что-то большее скорее артефакт скана, чем
+     * реальная разница сведения. */
+    private const val MAX_ABS_GAIN_DB = 12f
 
-    /** Returns a gain in dB to apply so the track's RMS loudness lands near TARGET_DBFS, clamped
-     * to +/-12dB (matches the EQ's own range - anything further off is more likely a scan
-     * artifact than a real mix difference). Null on any decode failure - fails closed, silent,
-     * same as BitPerfectUsbController. */
     fun scan(path: String): Float? {
         val extractor = MediaExtractor()
         return try {
@@ -32,8 +35,8 @@ object ReplayGainScanner {
             codec.configure(format, null, null, 0)
             codec.start()
 
-            var sumSquares = 0.0
-            var sampleCount = 0L
+            var meter: R128Loudness? = null
+            var scratch = FloatArray(0)
             val bufferInfo = MediaCodec.BufferInfo()
             var inputDone = false
             var outputDone = false
@@ -59,15 +62,24 @@ object ReplayGainScanner {
                     if (bufferInfo.size > 0) {
                         val outputBuffer = codec.getOutputBuffer(outputIndex)
                         if (outputBuffer != null) {
-                            val shortBuffer = outputBuffer.asShortBuffer()
-                            // ponytail: PCM 16-bit only - MediaCodec's default decoder output
-                            // format on Android; good enough for a loudness estimate regardless
-                            // of the source file's own bit depth.
-                            while (shortBuffer.hasRemaining()) {
-                                val sample = shortBuffer.get() / 32768.0
-                                sumSquares += sample * sample
-                                sampleCount++
+                            // Формат берём у самого кодека, а не у экстрактора: частота и число
+                            // каналов на выходе декодера могут отличаться (HE-AAC SBR удваивает
+                            // частоту), а K-взвешивающий фильтр считается именно под неё.
+                            if (meter == null) {
+                                val outFormat = codec.outputFormat
+                                val rate = outFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+                                val channels = outFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+                                if (rate <= 0 || channels <= 0) return null
+                                meter = R128Loudness(rate, channels)
                             }
+                            // ponytail: PCM 16-bit only - это то, что MediaCodec на Android отдаёт
+                            // по умолчанию; точности 16 бит для измерения громкости хватает с
+                            // огромным запасом (шум квантования на ~96 дБ ниже сигнала).
+                            val shortBuffer = outputBuffer.asShortBuffer()
+                            val count = shortBuffer.remaining()
+                            if (scratch.size < count) scratch = FloatArray(count)
+                            for (i in 0 until count) scratch[i] = shortBuffer.get() / 32768f
+                            meter.feed(scratch, count)
                         }
                     }
                     codec.releaseOutputBuffer(outputIndex, false)
@@ -79,15 +91,21 @@ object ReplayGainScanner {
             codec.stop()
             codec.release()
 
-            if (sampleCount == 0L) return null
-            val rms = sqrt(sumSquares / sampleCount)
-            if (rms <= 0.0) return null
-            val measuredDbfs = 20 * log10(rms)
-            (TARGET_DBFS - measuredDbfs).toFloat().coerceIn(-12f, 12f)
+            val measured = meter ?: return null
+            gainFor(measured.integratedLufs() ?: return null, measured.truePeakDbfs())
         } catch (e: Exception) {
             null
         } finally {
             extractor.release()
         }
+    }
+
+    /** Чистая часть решения (вынесена, чтобы её можно было проверить тестом): подгоняем громкость
+     * под опорные -18 LUFS, но не даём true-peak после усиления перелезть через -1 dBTP - иначе
+     * нормализация сама бы и создала межсемпловый клиппинг. */
+    internal fun gainFor(integratedLufs: Double, truePeakDbtp: Double): Float {
+        val wanted = R128Loudness.TARGET_LUFS - integratedLufs
+        val headroom = R128Loudness.TRUE_PEAK_CEILING_DBTP - truePeakDbtp
+        return minOf(wanted, headroom).toFloat().coerceIn(-MAX_ABS_GAIN_DB, MAX_ABS_GAIN_DB)
     }
 }

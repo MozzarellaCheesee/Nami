@@ -296,6 +296,18 @@ val MIGRATION_26_27 = object : Migration(26, 27) {
     }
 }
 
+/** Сброс кэша ReplayGain: алгоритм заменён с простого RMS на настоящий BS.1770-4 (K-взвешивание,
+ * стробирование, true-peak - см. R128Loudness), поэтому уже посчитанные значения не просто
+ * неточны, а систематически смещены - на треках с паузами старый RMS занижал громкость и выдавал
+ * лишнее усиление. Отдельного поля "версия алгоритма" заводить не стали: миграция базы и есть
+ * ровно тот однократный триггер на обновление, ради которого его бы завели. Пересчёт ленивый,
+ * при следующем воспроизведении трека - как и первый скан. */
+val MIGRATION_27_28 = object : Migration(27, 28) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("UPDATE tracks SET replayGainDb = NULL")
+    }
+}
+
 val MIGRATION_14_15 = object : Migration(14, 15) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL(

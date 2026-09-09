@@ -208,7 +208,7 @@ fun AudioTractBody(onOpenEqualizer: () -> Unit, viewModel: AudioTractViewModel =
                 Column(modifier = Modifier.fillMaxWidth().padding(top = 24.dp)) {
                     ToggleRow("Hi-Fi (Beta)", "прямой тракт: обходит EQ/ReplayGain/dither/усиление, ничего не считает по сэмплам", uiState.hiFiEnabled, viewModel::setHiFiEnabled)
                     ToggleRow("Bit-perfect по USB (Android 14+, Beta)", "выключает EQ/ReplayGain/dither/кроссфейд, если реально включился", uiState.bitPerfectUsbEnabled, viewModel::setBitPerfectUsbEnabled)
-                    ToggleRow("ReplayGain (Beta)", "выравнивает громкость треков, не EBU R128", uiState.replayGainEnabled, viewModel::setReplayGainEnabled)
+                    ToggleRow("ReplayGain (Beta)", "выравнивает громкость треков по EBU R128 с защитой от межсемплового клиппинга", uiState.replayGainEnabled, viewModel::setReplayGainEnabled)
                     ToggleRow("Dither (Beta)", "сглаживает шум квантования при обработке", uiState.ditherEnabled, viewModel::setDitherEnabled)
                     ToggleRow("Кроссфид (Beta)", "подмешивает каналы с задержкой 0.3 мс - собирает разваленную в наушниках сцену к центру, только для стерео", uiState.crossfeedEnabled, viewModel::setCrossfeedEnabled)
                     ToggleRow("Кроссфейд (Beta)", "плавный переход между треками, не настоящее смешивание", uiState.crossfadeEnabled, viewModel::setCrossfadeEnabled)

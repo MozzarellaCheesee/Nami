@@ -101,8 +101,8 @@ interface SettingsRepository {
     val bitPerfectUsbEnabled: StateFlow<Boolean>
     fun setBitPerfectUsbEnabled(value: Boolean)
 
-    /** ReplayGain-lite (Этап 4, Beta) - RMS-loudness normalization, not true EBU R128. Off by
-     * default, same "sits in every second of audio" reasoning as EQ. */
+    /** ReplayGain (Этап 4, Beta) - настоящее измерение по EBU R128 / ITU-R BS.1770-4, см.
+     * R128Loudness. Off by default, same "sits in every second of audio" reasoning as EQ. */
     val replayGainEnabled: StateFlow<Boolean>
     fun setReplayGainEnabled(value: Boolean)
 
