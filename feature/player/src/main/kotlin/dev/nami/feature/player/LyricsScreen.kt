@@ -127,11 +127,10 @@ fun LyricsScreen(
     var showEditor by remember { mutableStateOf(false) }
     var showVocabulary by remember { mutableStateOf(false) }
     val lyricsFileImportFailed by viewModel.lyricsFileImportFailed.collectAsState()
-    // Loaded once per path, not on every recomposition - Font(File) does real I/O/parsing.
-    val lyricsFontFamily = remember(uiState.lyricsFontPath) {
-        uiState.lyricsFontPath?.let {
-            androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(java.io.File(it)))
-        }
+    // Loaded once per path, not on every recomposition - Font(File)/Typeface.Builder do real
+    // I/O/parsing.
+    val lyricsFontFamily = remember(uiState.lyricsFontPath, uiState.lyricsCjkFontPath) {
+        dev.nami.core.designsystem.customFontFamily(uiState.lyricsFontPath, uiState.lyricsCjkFontPath)
     }
     val pickLyricsFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(viewModel::importLyricsFile)

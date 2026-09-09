@@ -71,6 +71,7 @@ data class LyricsUiState(
     val karaokeEnabled: Boolean = false,
     val studyModeEnabled: Boolean = false,
     val lyricsFontPath: String? = null,
+    val lyricsCjkFontPath: String? = null,
     /** STANDS4 is deliberately not tried automatically (it burns the user's own daily quota) --
      * the "Искать в STANDS4" button only shows once a key is actually configured, no point
      * offering a button that always misses. */
@@ -145,6 +146,7 @@ class LyricsViewModel @Inject constructor(
         trackAndLyrics, _positionMs, _isFetchingOnline, _showTranslation, _isTranslating,
         _showFurigana, _showRomaji, _isGeneratingRomaji, _wordLookup, _isPreciseSyncing, _preciseSyncProgress,
         settingsRepository.karaokeEnabled, settingsRepository.studyModeEnabled, settingsRepository.lyricsFontPath,
+        settingsRepository.lyricsCjkFontPath,
         combine(settingsRepository.stands4Uid, settingsRepository.stands4Token) { uid, token -> uid.isNotBlank() && token.isNotBlank() },
     ) { values ->
         val tl = values[0] as TrackAndLyrics?
@@ -162,7 +164,8 @@ class LyricsViewModel @Inject constructor(
         val karaokeEnabled = values[11] as Boolean
         val studyModeEnabled = values[12] as Boolean
         val lyricsFontPath = values[13] as String?
-        val stands4Configured = values[14] as Boolean
+        val lyricsCjkFontPath = values[14] as String?
+        val stands4Configured = values[15] as Boolean
         LyricsUiState(
             trackId = tl?.trackId,
             trackPath = tl?.path,
@@ -185,6 +188,7 @@ class LyricsViewModel @Inject constructor(
             karaokeEnabled = karaokeEnabled,
             studyModeEnabled = studyModeEnabled,
             lyricsFontPath = lyricsFontPath,
+            lyricsCjkFontPath = lyricsCjkFontPath,
             stands4Configured = stands4Configured,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LyricsUiState())

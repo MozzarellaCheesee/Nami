@@ -48,9 +48,33 @@ val BUNDLED_FONTS = listOf(
     BundledFont("JetBrains Mono", "jetbrainsmono"),
 )
 
+/**
+ * Шрифты для иероглифов (CJK). Полный Noto Sans CJK - это 8-16 МБ на язык в одном начертании,
+ * поэтому здесь подмножества: инстанцированный wght=400 плюс обрезка по частотному разбиению
+ * самого Google Fonts (их css2 отдаёт шрифт срезами, индекс 0 - самые частые символы). Взят
+ * префикс срезов до ~3000 иероглифов для SC/TC, ~2600 кандзи + вся кана для JP, ~2600 слогов
+ * для KR - это покрывает обычный текст песен и интерфейс; редкий иероглиф вне подмножества
+ * дорисует системный fallback, как и раньше. Скрипт сборки описан в LICENSES.txt.
+ */
+val CJK_FONTS = listOf(
+    BundledFont("Noto Sans SC - упрощённый китайский", "notosanssc"),
+    BundledFont("Noto Sans TC - традиционный китайский", "notosanstc"),
+    BundledFont("Noto Sans JP - японский", "notosansjp"),
+    BundledFont("Noto Sans KR - корейский", "notosanskr"),
+)
+
 /** Путь, по которому оседает выбранный встроенный шрифт - по нему же понятно, какой именно
  * выбран сейчас (свой файл кладётся рядом под именем без ключа). */
 fun bundledFontFileName(key: String, prefix: String) = "${prefix}_$key.ttf"
+
+/** Образец текста на своём языке для превью CJK-шрифта - латинская фраза тут бессмысленна. */
+private fun cjkPreviewText(key: String): String = when (key) {
+    "notosanssc" -> "吃葡萄不吐葡萄皮"
+    "notosanstc" -> "吃葡萄不吐葡萄皮"
+    "notosansjp" -> "隣の客はよく柿食う客だ"
+    "notosanskr" -> "저기 있는 저 콩깍지가"
+    else -> key
+}
 
 @Composable
 private fun SettingsSubSectionLabel(text: String) {
@@ -76,6 +100,14 @@ internal fun FontPickerScreen(
     onPickCustomFile: () -> Unit,
     onReset: () -> Unit,
     onBack: () -> Unit,
+    // Отдельный набор под иероглифы (CJK) - своя настройка (uiCjkFontPath/lyricsCjkFontPath),
+    // подмешивается к выбранному выше как fallback по покрытию символов, см. customFontFamily.
+    // "Другое" (свой файл/сброс) сюда не имеет смысла - у обычных .ttf/.otf с латиницей почти
+    // никогда нет иероглифов, а если есть - его можно выбрать и как основной набор выше.
+    cjkCurrentPath: String? = null,
+    cjkPrefix: String? = null,
+    onPickCjkBundled: ((BundledFont) -> Unit)? = null,
+    onResetCjk: (() -> Unit)? = null,
 ) {
     val assets = LocalContext.current.assets
     SettingsSubScreenScaffold(title = title, onBack = onBack) {
@@ -113,6 +145,41 @@ internal fun FontPickerScreen(
                 }
             }
         }
+        if (cjkPrefix != null && onPickCjkBundled != null && onResetCjk != null) {
+            SettingsSubSectionLabel("Иероглифы (CJK)")
+            SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+                CJK_FONTS.forEach { font ->
+                    val selected = cjkCurrentPath?.endsWith(bundledFontFileName(font.key, cjkPrefix)) == true
+                    val family = remember(font.key) { FontFamily(Font(font.assetPath, assets)) }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onPickCjkBundled(font) }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(font.title, color = NamiColors.Paper100, style = MaterialTheme.typography.bodyMedium)
+                            // Превью настоящим текстом на этом языке, той же гарнитурой - не
+                            // латиницей: смысл превью для CJK-шрифта именно в иероглифах.
+                            Text(cjkPreviewText(font.key), color = NamiColors.Paper40, fontFamily = family, style = MaterialTheme.typography.titleMedium)
+                        }
+                        if (selected) {
+                            Icon(Icons.Outlined.Check, contentDescription = "Выбран", tint = NamiColors.Shu)
+                        }
+                    }
+                }
+                if (cjkCurrentPath != null) {
+                    SettingsRow(
+                        icon = Icons.Outlined.Close,
+                        title = "Не использовать отдельный шрифт для иероглифов",
+                        subtitle = "Иероглифы снова рисует системный шрифт",
+                        trailing = {},
+                        onClick = onResetCjk,
+                    )
+                }
+            }
+        }
         SettingsSubSectionLabel("Другое")
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
             SettingsRow(
@@ -137,6 +204,7 @@ internal fun FontPickerScreen(
 @Composable
 fun UiFontScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
     val uiFontPath by viewModel.uiFontPath.collectAsState()
+    val uiCjkFontPath by viewModel.uiCjkFontPath.collectAsState()
     val pickCustom = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
     ) { uri -> uri?.let(viewModel::pickUiFont) }
@@ -148,12 +216,17 @@ fun UiFontScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMode
         onPickCustomFile = { pickCustom.launch(arrayOf("font/ttf", "font/otf", "*/*")) },
         onReset = viewModel::clearUiFont,
         onBack = onBack,
+        cjkCurrentPath = uiCjkFontPath,
+        cjkPrefix = "uicjk",
+        onPickCjkBundled = viewModel::pickBundledUiCjkFont,
+        onResetCjk = viewModel::clearUiCjkFont,
     )
 }
 
 @Composable
 fun LyricsFontScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
     val lyricsFontPath by viewModel.lyricsFontPath.collectAsState()
+    val lyricsCjkFontPath by viewModel.lyricsCjkFontPath.collectAsState()
     val pickCustom = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
     ) { uri -> uri?.let(viewModel::pickLyricsFont) }
@@ -165,6 +238,10 @@ fun LyricsFontScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltView
         onPickCustomFile = { pickCustom.launch(arrayOf("font/ttf", "font/otf", "*/*")) },
         onReset = viewModel::clearLyricsFont,
         onBack = onBack,
+        cjkCurrentPath = lyricsCjkFontPath,
+        cjkPrefix = "lyricscjk",
+        onPickCjkBundled = viewModel::pickBundledLyricsCjkFont,
+        onResetCjk = viewModel::clearLyricsCjkFont,
     )
 }
 

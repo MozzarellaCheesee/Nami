@@ -45,6 +45,8 @@ private const val KEY_KARAOKE_ENABLED = "karaoke_enabled"
 private const val KEY_STUDY_MODE_ENABLED = "study_mode_enabled"
 private const val KEY_LYRICS_FONT_PATH = "lyrics_font_path"
 private const val KEY_UI_FONT_PATH = "ui_font_path"
+private const val KEY_UI_CJK_FONT_PATH = "ui_cjk_font_path"
+private const val KEY_LYRICS_CJK_FONT_PATH = "lyrics_cjk_font_path"
 private const val KEY_DOUBLE_TAP_ARTWORK_ACTION = "double_tap_artwork_action"
 private const val KEY_EQ_ENABLED = "eq_enabled"
 private const val KEY_EQ_BAND_GAINS = "eq_band_gains" // CSV, 9 floats, BAND_FREQS_HZ order
@@ -191,6 +193,22 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
     override fun setUiFontPath(path: String?) {
         prefs.edit { putString(KEY_UI_FONT_PATH, path) }
         _uiFontPath.value = path
+    }
+
+    private val _uiCjkFontPath = MutableStateFlow(prefs.getString(KEY_UI_CJK_FONT_PATH, null))
+    override val uiCjkFontPath: StateFlow<String?> = _uiCjkFontPath
+
+    override fun setUiCjkFontPath(path: String?) {
+        prefs.edit { putString(KEY_UI_CJK_FONT_PATH, path) }
+        _uiCjkFontPath.value = path
+    }
+
+    private val _lyricsCjkFontPath = MutableStateFlow(prefs.getString(KEY_LYRICS_CJK_FONT_PATH, null))
+    override val lyricsCjkFontPath: StateFlow<String?> = _lyricsCjkFontPath
+
+    override fun setLyricsCjkFontPath(path: String?) {
+        prefs.edit { putString(KEY_LYRICS_CJK_FONT_PATH, path) }
+        _lyricsCjkFontPath.value = path
     }
 
     private val _doubleTapArtworkAction = MutableStateFlow(

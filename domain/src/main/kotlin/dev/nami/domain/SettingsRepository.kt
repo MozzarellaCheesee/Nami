@@ -72,6 +72,15 @@ interface SettingsRepository {
     val uiFontPath: StateFlow<String?>
     fun setUiFontPath(path: String?)
 
+    /** Отдельный шрифт для иероглифов (CJK) - подмешивается к uiFontPath/lyricsFontPath как
+     * fallback по покрытию символов, см. customFontFamily. Null = как раньше, иероглифы рисует
+     * системный fallback. */
+    val uiCjkFontPath: StateFlow<String?>
+    fun setUiCjkFontPath(path: String?)
+
+    val lyricsCjkFontPath: StateFlow<String?>
+    fun setLyricsCjkFontPath(path: String?)
+
     /** Группа E "настраиваемые жесты" - см. GestureAction. */
     val doubleTapArtworkAction: StateFlow<GestureAction>
     fun setDoubleTapArtworkAction(action: GestureAction)

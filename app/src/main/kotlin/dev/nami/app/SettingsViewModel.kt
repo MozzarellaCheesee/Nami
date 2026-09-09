@@ -41,6 +41,8 @@ class SettingsViewModel @Inject constructor(
     val shuffleMode: StateFlow<dev.nami.domain.ShuffleMode> = appSettingsRepository.shuffleMode
     val amoledEnabled: StateFlow<Boolean> = appSettingsRepository.amoledEnabled
     val uiFontPath: StateFlow<String?> = appSettingsRepository.uiFontPath
+    val uiCjkFontPath: StateFlow<String?> = appSettingsRepository.uiCjkFontPath
+    val lyricsCjkFontPath: StateFlow<String?> = appSettingsRepository.lyricsCjkFontPath
     val doubleTapArtworkAction: StateFlow<dev.nami.domain.GestureAction> = appSettingsRepository.doubleTapArtworkAction
     val scrobblingEnabled: StateFlow<Boolean> = appSettingsRepository.scrobblingEnabled
     val airPlayEnabled: StateFlow<Boolean> = appSettingsRepository.airPlayEnabled
@@ -188,6 +190,14 @@ class SettingsViewModel @Inject constructor(
     fun pickBundledUiFont(font: BundledFont) = copyBundledFont(font, "ui", appSettingsRepository::setUiFontPath)
 
     fun pickBundledLyricsFont(font: BundledFont) = copyBundledFont(font, "lyrics", appSettingsRepository::setLyricsFontPath)
+
+    fun pickBundledUiCjkFont(font: BundledFont) = copyBundledFont(font, "uicjk", appSettingsRepository::setUiCjkFontPath)
+
+    fun pickBundledLyricsCjkFont(font: BundledFont) = copyBundledFont(font, "lyricscjk", appSettingsRepository::setLyricsCjkFontPath)
+
+    fun clearUiCjkFont() = appSettingsRepository.setUiCjkFontPath(null)
+
+    fun clearLyricsCjkFont() = appSettingsRepository.setLyricsCjkFontPath(null)
 
     private fun copyBundledFont(font: BundledFont, prefix: String, apply: (String) -> Unit) {
         viewModelScope.launch {

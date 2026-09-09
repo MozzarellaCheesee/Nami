@@ -200,9 +200,11 @@ class MainActivity : ComponentActivity() {
             // плана (по системной теме, по устройству вывода, по плейлисту) - отдельная задача.
             val isNightHour = remember { java.time.LocalTime.now().hour.let { it >= 23 || it < 6 } }
             val uiFontPath by appSettingsRepository.uiFontPath.collectAsState()
-            // Loaded once per path, not on every recomposition - Font(File) does real I/O/parsing.
-            val uiFontFamily = remember(uiFontPath) {
-                uiFontPath?.let { androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(java.io.File(it))) }
+            val uiCjkFontPath by appSettingsRepository.uiCjkFontPath.collectAsState()
+            // Loaded once per path, not on every recomposition - Font(File)/Typeface.Builder do
+            // real I/O/parsing.
+            val uiFontFamily = remember(uiFontPath, uiCjkFontPath) {
+                dev.nami.core.designsystem.customFontFamily(uiFontPath, uiCjkFontPath)
             }
             // Dims the actual screen backlight (not just an on-screen overlay) to its minimum --
             // WindowManager.LayoutParams.screenBrightness in [0,1] overrides the system brightness
