@@ -27,9 +27,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -124,6 +128,19 @@ class LibraryViewModel @Inject constructor(
         .map { state -> (state as? PlaybackState.Playing)?.let { NowPlayingRow(it.trackId, it.isPlaying) } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    init {
+        // Вкладки-обзоры считаются по снимку библиотеки (см. loadBrowseGroups), поэтому без этой
+        // подписки импортированные при открытом экране треки не попадали в счётчики групп до
+        // переключения вкладки туда-обратно. Пересчитываем только когда реально поменялся состав
+        // или поля, по которым группируем: иначе каждый инкремент счётчика прослушиваний
+        // перетряхивал бы список под рукой.
+        libraryRepository.allTracksOrderedFlow()
+            .distinctUntilChangedBy { list -> list.map { Triple(it.id.value, it.genre, it.path) } }
+            .drop(1)
+            .onEach { _uiState.value.selectedTab.takeIf { it.isBrowse }?.let { loadBrowseGroups(it, keepPrevious = true) } }
+            .launchIn(viewModelScope)
+    }
+
     fun selectTab(tab: LibraryTab) {
         _uiState.value = _uiState.value.copy(selectedTab = tab, openedGroup = null, openedGroupTracks = emptyList())
         if (tab.isBrowse) loadBrowseGroups(tab)
@@ -138,8 +155,8 @@ class LibraryViewModel @Inject constructor(
      * отдельными GROUP BY-запросами: снимок уже есть (allTracksOrdered используется для очереди),
      * а группировка по строке пути или по жанру в SQL всё равно потребовала бы своих запросов и
      * миграций ради экрана, который открывают редко. */
-    private fun loadBrowseGroups(tab: LibraryTab) {
-        _uiState.value = _uiState.value.copy(browseLoading = true, browseGroups = emptyList())
+    private fun loadBrowseGroups(tab: LibraryTab, keepPrevious: Boolean = false) {
+        if (!keepPrevious) _uiState.value = _uiState.value.copy(browseLoading = true, browseGroups = emptyList())
         viewModelScope.launch {
             val all = libraryRepository.allTracksOrdered()
             browseSource = all

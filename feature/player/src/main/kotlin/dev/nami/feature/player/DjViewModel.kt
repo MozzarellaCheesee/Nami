@@ -9,9 +9,9 @@ import dev.nami.domain.DjDeckState
 import dev.nami.domain.DjRepository
 import dev.nami.domain.LibraryRepository
 import dev.nami.domain.PlayableTrack
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
 /** Хвост группы C "DJ-режим" - см. DjRepository для честного скоупа (без битмэтчинга/темпа). */
@@ -24,12 +24,10 @@ class DjViewModel @Inject constructor(
     val deckB: StateFlow<DjDeckState> = djRepository.deckB
     val crossfade: StateFlow<Float> = djRepository.crossfade
 
-    private val _tracks = MutableStateFlow<List<Track>>(emptyList())
-    val tracks: StateFlow<List<Track>> = _tracks
-
-    init {
-        viewModelScope.launch { _tracks.value = libraryRepository.allTracksOrdered() }
-    }
+    /** Живой список: экран держат открытым, и подгруженный в это время трек должен появиться в
+     * выборе для деки сам. */
+    val tracks: StateFlow<List<Track>> = libraryRepository.allTracksOrderedFlow()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun loadDeck(deck: DjDeck, track: Track) {
         djRepository.loadDeck(
