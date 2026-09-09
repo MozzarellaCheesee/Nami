@@ -32,6 +32,7 @@ import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Cast
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DarkMode
@@ -339,6 +340,7 @@ fun SettingsAppearanceScreen(
     onBack: () -> Unit,
     onThemeEditorClick: () -> Unit,
     onBottomTabsClick: () -> Unit,
+    onMoreMenuClick: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -372,6 +374,13 @@ fun SettingsAppearanceScreen(
                 title = "Вкладки нижней панели",
                 trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
                 onClick = onBottomTabsClick,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.MoreVert,
+                title = "Меню \"Ещё\" на плеере",
+                subtitle = "Состав, порядок и цвета",
+                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
+                onClick = onMoreMenuClick,
             )
             SettingsRow(
                 icon = Icons.Outlined.FontDownload,

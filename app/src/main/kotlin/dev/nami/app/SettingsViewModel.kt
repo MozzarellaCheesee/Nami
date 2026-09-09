@@ -77,6 +77,13 @@ class SettingsViewModel @Inject constructor(
         appSettingsRepository.setBottomTabs(tabs)
     }
 
+    val nowPlayingMoreItems: StateFlow<List<dev.nami.domain.NowPlayingMoreConfig>> =
+        appSettingsRepository.nowPlayingMoreItems
+
+    fun setNowPlayingMoreItems(items: List<dev.nami.domain.NowPlayingMoreConfig>) {
+        appSettingsRepository.setNowPlayingMoreItems(items)
+    }
+
     fun setBottomTabLabelsHidden(value: Boolean) {
         appSettingsRepository.setBottomTabLabelsHidden(value)
     }

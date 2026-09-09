@@ -104,6 +104,7 @@ private const val ROUTE_EQUALIZER = "equalizer"
 // Роуты вкладок из BottomTab: строки обязаны совпадать с BottomTab.route.
 private const val ROUTE_VOCABULARY = "vocabulary"
 private const val ROUTE_BOTTOM_TABS = "settings/tabs"
+private const val ROUTE_MORE_MENU = "settings/more_menu"
 
 
 @Composable
@@ -430,10 +431,14 @@ fun NamiNavHost(
                     onBack = { navController.popBackStack() },
                     onThemeEditorClick = { navController.navigate(ROUTE_THEME_EDITOR) },
                     onBottomTabsClick = { navController.navigate(ROUTE_BOTTOM_TABS) },
+                    onMoreMenuClick = { navController.navigate(ROUTE_MORE_MENU) },
                 )
             }
             composable(ROUTE_BOTTOM_TABS) {
                 dev.nami.app.BottomTabsScreen(onBack = { navController.popBackStack() })
+            }
+            composable(ROUTE_MORE_MENU) {
+                dev.nami.app.NowPlayingMoreMenuScreen(onBack = { navController.popBackStack() })
             }
             // Словарь уже был экраном, но открывался только изнутри лирики - как вкладка это тот
             // же самый Composable, просто со своим роутом.
