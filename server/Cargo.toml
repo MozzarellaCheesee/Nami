@@ -30,6 +30,9 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 getrandom = "0.4"
+# Хеш паролей людей (у устройств токены случайные, им хеш пароля не нужен).
+# default-features выключены: нужен чистый Rust-бэкенд без alloc-зависимостей сверху.
+argon2 = "0.5"
 sha2 = "0.11"
 hex = "0.4"
 rcgen = "0.14"

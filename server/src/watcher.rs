@@ -51,7 +51,7 @@ fn run(state: Shared, dirs: Vec<PathBuf>) -> crate::Res<()> {
         while rx.recv_timeout(DEBOUNCE).is_ok() {}
 
         let mut db = state.db.lock().unwrap();
-        match crate::scanner::scan(&mut db, &dirs) {
+        match crate::scanner::scan(&mut db, &dirs, 0) {
             Ok(rep) if rep.added + rep.updated + rep.removed > 0 => {
                 tracing::info!("библиотека обновлена по событию ФС: {rep:?}")
             }

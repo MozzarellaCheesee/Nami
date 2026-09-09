@@ -14,6 +14,7 @@ use tower_http::services::ServeFile;
 
 use crate::auth::{self, RateLimiter};
 use crate::config::Config;
+use crate::users::{self, Ident};
 use crate::{host, scanner, sync, transcode};
 
 pub struct AppState {
@@ -84,11 +85,22 @@ pub fn router(state: Shared) -> Router {
         .route("/api/position", get(position_get).post(position_post))
         .route("/api/auth/devices", get(devices))
         .route("/api/auth/devices/{id}", delete(revoke_device))
+        .route("/api/auth/logout", post(logout))
+        .route("/api/me", get(me).patch(patch_me))
+        .route("/api/users", get(list_users).post(create_user))
+        .route("/api/users/{id}", delete(delete_user))
+        .route("/api/users/{id}/folders", get(get_folders).put(put_folders))
+        .route("/api/invites", post(create_invite))
+        .route("/api/library-mode", get(get_library_mode).put(put_library_mode))
+        .route("/api/now-playing", get(now_playing))
         .route_layer(axum::middleware::from_fn_with_state(state.clone(), require_token));
 
     Router::new()
         .route("/api/health", get(health))
         .route("/api/auth/pair", post(pair))
+        .route("/api/auth/register", post(register))
+        .route("/api/auth/login", post(login))
+        .route("/api/invites/{token}/accept", post(accept_invite))
         .route("/setup", get(setup_page))
         // Токен проверяется внутри: у WebSocket-рукопожатия нет заголовка Authorization.
         .route("/api/ws", get(ws))
@@ -96,29 +108,68 @@ pub fn router(state: Shared) -> Router {
         .with_state(state)
 }
 
-/// Bearer-токен устройства. Публичны только health, пейринг и страница мастера.
-async fn require_token(State(st): State<Shared>, req: Request, next: Next) -> Response {
-    let token = req
-        .headers()
+/// Достаёт Bearer-токен из заголовка.
+fn bearer(req: &Request) -> Option<&str> {
+    req.headers()
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "))
-        .map(str::to_string);
+}
 
-    let device_id = match token {
-        Some(t) => {
-            let db = st.db.lock().unwrap();
-            auth::verify(&db, &t)
-        }
+/// Опознаёт токен: сначала как токен устройства, потом как сессию человека.
+///
+/// Один заголовок на два вида токенов намеренно: клиенту всё равно, чем он вошёл,
+/// а ручкам ниже нужен единый `Ident`.
+pub fn identify(conn: &Connection, token: &str) -> Option<Ident> {
+    if let Some(device_id) = auth::verify(conn, token) {
+        let user_id = conn
+            .query_row("SELECT user_id FROM devices WHERE id=?1", [device_id], |r| r.get(0))
+            .ok()
+            .flatten();
+        return Some(Ident { user_id, device_id: Some(device_id) });
+    }
+    users::verify_session(conn, token).map(|user_id| Ident { user_id: Some(user_id), device_id: None })
+}
+
+/// Bearer-токен устройства или сессии. Публичны только health, пейринг, вход и мастер.
+async fn require_token(State(st): State<Shared>, req: Request, next: Next) -> Response {
+    let ident = match bearer(&req) {
+        Some(t) => identify(&st.db.lock().unwrap(), t),
         None => None,
     };
-    if let Some(id) = device_id {
-        // Ручкам ниже нужен id устройства (позиция воспроизведения хранится по нему).
+    if let Some(ident) = ident {
+        // Ручкам ниже нужен id устройства (позиция воспроизведения хранится по нему)
+        // и id пользователя (состояние и видимость библиотеки - его).
         let mut req = req;
-        req.extensions_mut().insert(id);
+        if let Some(d) = ident.device_id {
+            req.extensions_mut().insert(d);
+        }
+        req.extensions_mut().insert(ident);
         next.run(req).await
     } else {
-        ApiError(StatusCode::UNAUTHORIZED, "нужен токен устройства".into()).into_response()
+        ApiError(StatusCode::UNAUTHORIZED, "нужен токен устройства или сессии".into())
+            .into_response()
+    }
+}
+
+/// Требует id устройства - для ручек, которым он обязателен (позиция воспроизведения).
+fn need_device(ident: &Ident) -> ApiResult<i64> {
+    ident.device_id.ok_or_else(|| {
+        ApiError(StatusCode::BAD_REQUEST, "нужен токен устройства, а не сессии".into())
+    })
+}
+
+/// Требует прав владельца. В одиночном режиме (пользователей нет) - разрешено:
+/// иначе первое же устройство не смогло бы ничего настроить.
+fn need_owner(conn: &Connection, ident: &Ident) -> ApiResult<()> {
+    let ok = match ident.user_id {
+        Some(id) => users::is_owner(conn, id),
+        None => users::count(conn) == 0,
+    };
+    if ok {
+        Ok(())
+    } else {
+        Err(ApiError(StatusCode::FORBIDDEN, "только для владельца сервера".into()))
     }
 }
 
@@ -190,25 +241,43 @@ fn row_to_track(r: &rusqlite::Row<'_>) -> rusqlite::Result<Track> {
     })
 }
 
-async fn tracks(State(st): State<Shared>, Query(p): Query<Page>) -> ApiResult<Json<Vec<Track>>> {
+async fn tracks(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Query(p): Query<Page>,
+) -> ApiResult<Json<Vec<Track>>> {
     // Потолок страницы жёсткий: без него один запрос вытянет всю библиотеку в RAM.
     let limit = p.limit.unwrap_or(200).clamp(1, 1000);
     let offset = p.offset.unwrap_or(0).max(0);
     let db = st.db.lock().unwrap();
+    let (clause, mut params) = users::visibility(&db, &ident);
+    params.push(rusqlite::types::Value::Integer(limit));
+    params.push(rusqlite::types::Value::Integer(offset));
     let mut stmt = db.prepare(&format!(
-        "SELECT {TRACK_COLS} FROM tracks ORDER BY artist, album, track_no, title LIMIT ?1 OFFSET ?2"
+        "SELECT {TRACK_COLS} FROM tracks WHERE 1=1{clause}
+         ORDER BY artist, album, track_no, title LIMIT ? OFFSET ?"
     ))?;
     let rows = stmt
-        .query_map([limit, offset], row_to_track)?
+        .query_map(rusqlite::params_from_iter(params), row_to_track)?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(Json(rows))
 }
 
-async fn track(State(st): State<Shared>, Path(id): Path<i64>) -> ApiResult<Json<Track>> {
+async fn track(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Path(id): Path<i64>,
+) -> ApiResult<Json<Track>> {
     let db = st.db.lock().unwrap();
-    db.query_row(&format!("SELECT {TRACK_COLS} FROM tracks WHERE id=?1"), [id], row_to_track)
-        .map(Json)
-        .map_err(|_| ApiError(StatusCode::NOT_FOUND, "нет такого трека".into()))
+    let (clause, mut params) = users::visibility(&db, &ident);
+    params.insert(0, rusqlite::types::Value::Integer(id));
+    db.query_row(
+        &format!("SELECT {TRACK_COLS} FROM tracks WHERE id=?{clause}"),
+        rusqlite::params_from_iter(params),
+        row_to_track,
+    )
+    .map(Json)
+    .map_err(|_| ApiError(StatusCode::NOT_FOUND, "нет такого трека".into()))
 }
 
 #[derive(Deserialize)]
@@ -224,8 +293,23 @@ struct StreamQuery {
 /// Транскод отдаётся тем же ServeFile из кеша, поэтому перемотка работает и там.
 async fn stream(
     State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
     Path(id): Path<i64>,
     Query(q): Query<StreamQuery>,
+    req: Request,
+) -> Response {
+    if !users::can_see_track(&st.db.lock().unwrap(), &ident, id) {
+        return ApiError(StatusCode::NOT_FOUND, "нет такого трека".into()).into_response();
+    }
+    serve_track(st, id, q.profile.as_deref(), req).await
+}
+
+/// Отдача файла трека (passthrough или транскод). Проверку прав делает вызывающий:
+/// у гостевой ссылки она своя (токен ссылки), у обычного клиента - видимость библиотеки.
+pub async fn serve_track(
+    st: Shared,
+    id: i64,
+    profile: Option<&str>,
     req: Request,
 ) -> Response {
     let row: Option<(String, i64, i64)> = st
@@ -240,7 +324,7 @@ async fn stream(
         return ApiError(StatusCode::NOT_FOUND, "нет такого трека".into()).into_response();
     };
 
-    let (file, mime) = match q.profile.as_deref() {
+    let (file, mime) = match profile {
         None | Some("") | Some("original") => (std::path::PathBuf::from(path), None),
         Some(name) => {
             let Some(p) = transcode::profile(name) else {
@@ -310,9 +394,22 @@ async fn transcode_profiles(State(st): State<Shared>) -> Json<serde_json::Value>
 
 async fn scan(State(st): State<Shared>) -> ApiResult<Json<scanner::ScanReport>> {
     // Сканирование блокирующее (walkdir + разбор тегов) - уводим с async-потоков.
-    let rep = tokio::task::spawn_blocking(move || {
+    let rep = tokio::task::spawn_blocking(move || -> crate::Res<scanner::ScanReport> {
         let mut db = st.db.lock().unwrap();
-        scanner::scan(&mut db, &st.cfg.music_dirs)
+        // Библиотека по умолчанию (music_dirs), затем каждая заведённая отдельно.
+        let mut total = scanner::scan(&mut db, &st.cfg.music_dirs, 0)?;
+        for (id, dirs) in scanner::library_dirs(&db)? {
+            if id == 0 || dirs.is_empty() {
+                continue;
+            }
+            let r = scanner::scan(&mut db, &dirs, id)?;
+            total.scanned += r.scanned;
+            total.added += r.added;
+            total.updated += r.updated;
+            total.removed += r.removed;
+            total.failed += r.failed;
+        }
+        Ok(total)
     })
     .await
     .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
@@ -403,18 +500,18 @@ async fn setup_page(
     let code = {
         let db = st.db.lock().unwrap();
         let paired: i64 = db.query_row("SELECT COUNT(*) FROM devices", [], |r| r.get(0))?;
-        if paired > 0 {
-            let ok = q.token.as_deref().is_some_and(|t| auth::verify(&db, t).is_some());
-            if !ok {
-                return Err(ApiError(
-                    StatusCode::UNAUTHORIZED,
-                    "устройства уже сопряжены: новый код доступен только по ссылке \
-                     /setup?token=<токен доверенного устройства>"
-                        .into(),
-                ));
-            }
+        let ident = q.token.as_deref().and_then(|t| identify(&db, t));
+        if paired > 0 && ident.is_none() {
+            return Err(ApiError(
+                StatusCode::UNAUTHORIZED,
+                "устройства уже сопряжены: новый код доступен только по ссылке \
+                 /setup?token=<токен доверенного устройства или сессии>"
+                    .into(),
+            ));
         }
-        auth::create_code(&db)?
+        // Новое устройство достаётся тому, кто печатает код: свои плейлисты, своя
+        // видимость библиотеки. В одиночном режиме владельца нет - и привязки тоже.
+        auth::create_code(&db, ident.and_then(|i| i.user_id))?
     };
     let host = req
         .headers()
@@ -461,9 +558,13 @@ struct Since {
     since: Option<i64>,
 }
 
-async fn sync_pull(State(st): State<Shared>, Query(q): Query<Since>) -> ApiResult<Json<sync::Pull>> {
+async fn sync_pull(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Query(q): Query<Since>,
+) -> ApiResult<Json<sync::Pull>> {
     let db = st.db.lock().unwrap();
-    Ok(Json(sync::pull(&db, q.since.unwrap_or(0))?))
+    Ok(Json(sync::pull(&db, ident.state_key(), q.since.unwrap_or(0))?))
 }
 
 #[derive(Deserialize)]
@@ -473,11 +574,12 @@ struct PushBody {
 
 async fn sync_push(
     State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
     Json(body): Json<PushBody>,
 ) -> ApiResult<Json<sync::PushReport>> {
     let rep = {
         let mut db = st.db.lock().unwrap();
-        sync::push(&mut db, &body.changes)?
+        sync::push(&mut db, ident.state_key(), &body.changes)?
     };
     if rep.applied > 0 {
         // Список затронутых сущностей, а не сами изменения: клиент всё равно пойдёт
@@ -487,6 +589,7 @@ async fn sync_push(
         entities.dedup();
         st.notify(serde_json::json!({
             "type": "changed",
+            "user_id": ident.state_key(),
             "entities": entities,
             "at": rep.now,
         }));
@@ -496,23 +599,26 @@ async fn sync_push(
 
 async fn position_get(
     State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
     Query(q): Query<Since>,
 ) -> ApiResult<Json<Vec<sync::Position>>> {
     let db = st.db.lock().unwrap();
-    Ok(Json(sync::positions(&db, q.since.unwrap_or(0))?))
+    Ok(Json(sync::positions(&db, ident.user_id, q.since.unwrap_or(0))?))
 }
 
 async fn position_post(
     State(st): State<Shared>,
-    Extension(device_id): Extension<i64>,
+    Extension(ident): Extension<Ident>,
     Json(p): Json<sync::Position>,
 ) -> ApiResult<Json<serde_json::Value>> {
+    let device_id = need_device(&ident)?;
     let at = {
         let db = st.db.lock().unwrap();
         sync::set_position(&db, device_id, &p)?
     };
     st.notify_position(serde_json::json!({
         "type": "position",
+        "user_id": ident.state_key(),
         "track_id": p.track_id,
         "position_ms": p.position_ms,
         "at": at,
@@ -537,19 +643,34 @@ async fn ws(
     Query(q): Query<WsQuery>,
     upgrade: axum::extract::ws::WebSocketUpgrade,
 ) -> Response {
-    let ok = q
-        .token
-        .as_deref()
-        .is_some_and(|t| auth::verify(&st.db.lock().unwrap(), t).is_some());
-    if !ok {
+    let ident = match q.token.as_deref() {
+        Some(t) => identify(&st.db.lock().unwrap(), t),
+        None => None,
+    };
+    let Some(ident) = ident else {
         return ApiError(StatusCode::UNAUTHORIZED, "нужен токен устройства (?token=)".into())
             .into_response();
-    }
+    };
     let with_position = q.position == Some(1);
-    upgrade.on_upgrade(move |socket| ws_loop(st, socket, with_position))
+    upgrade.on_upgrade(move |socket| ws_loop(st, socket, ident, with_position))
 }
 
-async fn ws_loop(st: Shared, mut socket: axum::extract::ws::WebSocket, with_position: bool) {
+/// Событие адресовано этому подключению? Состояние у каждого пользователя своё,
+/// поэтому чужие "changed"/"position" до сокета доходить не должны.
+fn addressed_to(text: &str, ident: &Ident) -> bool {
+    serde_json::from_str::<serde_json::Value>(text)
+        .ok()
+        .and_then(|v| v.get("user_id").and_then(|u| u.as_i64()))
+        .map(|u| u == ident.state_key())
+        .unwrap_or(true)
+}
+
+async fn ws_loop(
+    st: Shared,
+    mut socket: axum::extract::ws::WebSocket,
+    ident: Ident,
+    with_position: bool,
+) {
     use axum::extract::ws::Message;
     let mut changes = st.events.subscribe();
     let mut pos = st.positions.subscribe();
@@ -567,6 +688,9 @@ async fn ws_loop(st: Shared, mut socket: axum::extract::ws::WebSocket, with_posi
         };
         match msg {
             Ok(text) => {
+                if !addressed_to(&text, &ident) {
+                    continue;
+                }
                 if socket.send(Message::Text(text.into())).await.is_err() {
                     return;
                 }
@@ -577,6 +701,267 @@ async fn ws_loop(st: Shared, mut socket: axum::extract::ws::WebSocket, with_posi
             Err(_) => return,
         }
     }
+}
+
+// ---------------------------------------------------------------- пользователи
+
+impl From<users::UserError> for ApiError {
+    fn from(e: users::UserError) -> Self {
+        let code = match e {
+            users::UserError::Db(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            users::UserError::BadCredentials => StatusCode::UNAUTHORIZED,
+            users::UserError::Taken => StatusCode::CONFLICT,
+            _ => StatusCode::BAD_REQUEST,
+        };
+        ApiError(code, e.to_string())
+    }
+}
+
+#[derive(Deserialize)]
+struct Credentials {
+    username: String,
+    password: String,
+}
+
+#[derive(Serialize)]
+struct Session {
+    user_id: i64,
+    token: String,
+    role: String,
+}
+
+/// Регистрация первого пользователя - владельца сервера. Работает ровно один раз:
+/// дальше вход только по инвайту, иначе сервер, торчащий в интернет, заводит владельцев
+/// всем желающим.
+async fn register(
+    State(st): State<Shared>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Json(c): Json<Credentials>,
+) -> ApiResult<Json<Session>> {
+    if !st.rate.allow(peer.ip()) {
+        return Err(ApiError(StatusCode::TOO_MANY_REQUESTS, "слишком много попыток".into()));
+    }
+    let db = st.db.lock().unwrap();
+    if users::count(&db) > 0 {
+        return Err(ApiError(
+            StatusCode::FORBIDDEN,
+            "владелец уже есть - остальные заводятся по инвайту".into(),
+        ));
+    }
+    let id = users::create(&db, &c.username, &c.password, "owner", 0)?;
+    let token = users::start_session(&db, id)?;
+    Ok(Json(Session { user_id: id, token, role: "owner".into() }))
+}
+
+async fn login(
+    State(st): State<Shared>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Json(c): Json<Credentials>,
+) -> ApiResult<Json<Session>> {
+    if !st.rate.allow(peer.ip()) {
+        return Err(ApiError(StatusCode::TOO_MANY_REQUESTS, "слишком много попыток".into()));
+    }
+    let db = st.db.lock().unwrap();
+    let (id, token) = users::login(&db, &c.username, &c.password)?;
+    let role = users::get(&db, id).map(|u| u.role).unwrap_or_default();
+    Ok(Json(Session { user_id: id, token, role }))
+}
+
+async fn logout(State(st): State<Shared>, req: Request) -> StatusCode {
+    if let Some(t) = bearer(&req) {
+        let _ = users::logout(&st.db.lock().unwrap(), t);
+    }
+    StatusCode::NO_CONTENT
+}
+
+async fn accept_invite(
+    State(st): State<Shared>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Path(token): Path<String>,
+    Json(c): Json<Credentials>,
+) -> ApiResult<Json<Session>> {
+    if !st.rate.allow(peer.ip()) {
+        return Err(ApiError(StatusCode::TOO_MANY_REQUESTS, "слишком много попыток".into()));
+    }
+    let mut db = st.db.lock().unwrap();
+    let id = users::accept_invite(&mut db, &token, &c.username, &c.password)?;
+    let session = users::start_session(&db, id)?;
+    let role = users::get(&db, id).map(|u| u.role).unwrap_or_default();
+    Ok(Json(Session { user_id: id, token: session, role }))
+}
+
+async fn me(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let db = st.db.lock().unwrap();
+    let user = ident.user_id.and_then(|id| users::get(&db, id));
+    Ok(Json(serde_json::json!({
+        "user": user,
+        "device_id": ident.device_id,
+        "library_mode": users::library_mode(&db),
+    })))
+}
+
+#[derive(Deserialize)]
+struct PatchMe {
+    /// Видна ли моя активность на экране «Что слушают».
+    now_playing_visible: Option<bool>,
+}
+
+async fn patch_me(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Json(p): Json<PatchMe>,
+) -> ApiResult<StatusCode> {
+    let id = ident
+        .user_id
+        .ok_or_else(|| ApiError(StatusCode::BAD_REQUEST, "вход не как пользователь".into()))?;
+    if let Some(v) = p.now_playing_visible {
+        st.db.lock().unwrap().execute(
+            "UPDATE users SET now_playing_visible=?2 WHERE id=?1",
+            rusqlite::params![id, v as i64],
+        )?;
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn list_users(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+) -> ApiResult<Json<Vec<users::User>>> {
+    let db = st.db.lock().unwrap();
+    need_owner(&db, &ident)?;
+    Ok(Json(users::list(&db)?))
+}
+
+#[derive(Deserialize)]
+struct NewUser {
+    username: String,
+    password: String,
+    #[serde(default = "default_role")]
+    role: String,
+    #[serde(default)]
+    library_id: i64,
+}
+
+fn default_role() -> String {
+    "user".into()
+}
+
+async fn create_user(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Json(u): Json<NewUser>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let db = st.db.lock().unwrap();
+    need_owner(&db, &ident)?;
+    let role = if matches!(u.role.as_str(), "user" | "guest" | "owner") { u.role } else { default_role() };
+    let id = users::create(&db, &u.username, &u.password, &role, u.library_id)?;
+    Ok(Json(serde_json::json!({ "id": id })))
+}
+
+async fn delete_user(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Path(id): Path<i64>,
+) -> ApiResult<StatusCode> {
+    let db = st.db.lock().unwrap();
+    need_owner(&db, &ident)?;
+    if users::is_owner(&db, id) {
+        return Err(ApiError(StatusCode::FORBIDDEN, "владельца удалить нельзя".into()));
+    }
+    // Состояние и устройства уходят вместе с человеком: оставлять их некому.
+    db.execute("DELETE FROM state WHERE user_id=?1", [id])?;
+    db.execute("DELETE FROM devices WHERE user_id=?1", [id])?;
+    let n = db.execute("DELETE FROM users WHERE id=?1", [id])?;
+    Ok(if n == 1 { StatusCode::NO_CONTENT } else { StatusCode::NOT_FOUND })
+}
+
+async fn get_folders(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Path(id): Path<i64>,
+) -> ApiResult<Json<Vec<String>>> {
+    let db = st.db.lock().unwrap();
+    // Свои ограничения видно и без прав владельца - иначе клиент не знает, что показывать.
+    if ident.user_id != Some(id) {
+        need_owner(&db, &ident)?;
+    }
+    Ok(Json(users::folder_access(&db, id)))
+}
+
+async fn put_folders(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Path(id): Path<i64>,
+    Json(folders): Json<Vec<String>>,
+) -> ApiResult<StatusCode> {
+    let db = st.db.lock().unwrap();
+    need_owner(&db, &ident)?;
+    db.execute("DELETE FROM user_folder_access WHERE user_id=?1", [id])?;
+    for f in folders.iter().map(|f| f.trim()).filter(|f| !f.is_empty()) {
+        db.execute(
+            "INSERT OR IGNORE INTO user_folder_access (user_id, folder_path) VALUES (?1, ?2)",
+            rusqlite::params![id, f],
+        )?;
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct NewInvite {
+    #[serde(default = "default_role")]
+    role: String,
+    #[serde(default)]
+    library_id: i64,
+    /// Сколько секунд жить ссылке. По умолчанию неделя.
+    ttl_secs: Option<i64>,
+}
+
+async fn create_invite(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Json(i): Json<NewInvite>,
+) -> ApiResult<Json<users::Invite>> {
+    let db = st.db.lock().unwrap();
+    need_owner(&db, &ident)?;
+    let by = ident.user_id.unwrap_or(0);
+    Ok(Json(users::create_invite(&db, by, &i.role, i.library_id, i.ttl_secs)?))
+}
+
+async fn get_library_mode(State(st): State<Shared>) -> Json<serde_json::Value> {
+    let db = st.db.lock().unwrap();
+    Json(serde_json::json!({ "mode": users::library_mode(&db) }))
+}
+
+#[derive(Deserialize)]
+struct ModeBody {
+    mode: users::LibraryMode,
+}
+
+/// Смена режима библиотеки. ВНИМАНИЕ: чистит tracks - после смены нужен новый скан.
+/// Переносить данные между режимами намеренно нечем (см. doc-комментарий users.rs).
+async fn put_library_mode(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Json(b): Json<ModeBody>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let db = st.db.lock().unwrap();
+    need_owner(&db, &ident)?;
+    users::set_library_mode(&db, b.mode)?;
+    Ok(Json(serde_json::json!({
+        "mode": b.mode,
+        "note": "библиотека очищена, запустите POST /api/scan",
+    })))
+}
+
+async fn now_playing(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+) -> ApiResult<Json<Vec<sync::NowPlaying>>> {
+    let db = st.db.lock().unwrap();
+    Ok(Json(sync::now_playing(&db, &ident)?))
 }
 
 /// Кол-во треков в библиотеке - используется в логе старта.

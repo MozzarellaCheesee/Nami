@@ -13,6 +13,7 @@ mod scanner;
 mod sync;
 mod tls;
 mod transcode;
+mod users;
 mod watcher;
 
 use std::net::SocketAddr;

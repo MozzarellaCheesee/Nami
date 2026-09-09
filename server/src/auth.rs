@@ -29,7 +29,8 @@ pub fn hash_token(token: &str) -> String {
 /// Создаёт одноразовый код сопряжения на 10 минут.
 ///
 /// Код числовой (8 цифр) - его вводят руками, когда камера не сработала.
-pub fn create_code(conn: &Connection) -> crate::Res<String> {
+/// `user_id` - кому будет принадлежать сопряжённое устройство (None в одиночном режиме).
+pub fn create_code(conn: &Connection, user_id: Option<i64>) -> crate::Res<String> {
     // Заодно чистим протухшие: отдельного сборщика мусора здесь не нужно.
     conn.execute("DELETE FROM pairing_codes WHERE expires_at < ?1", [now()])?;
 
@@ -38,9 +39,9 @@ pub fn create_code(conn: &Connection) -> crate::Res<String> {
     let code = format!("{:08}", u32::from_le_bytes(raw) % 100_000_000);
     let t = now();
     conn.execute(
-        "INSERT OR REPLACE INTO pairing_codes (code, created_at, expires_at, used_at)
-         VALUES (?1, ?2, ?3, NULL)",
-        rusqlite::params![code, t, t + CODE_TTL_SECS],
+        "INSERT OR REPLACE INTO pairing_codes (code, created_at, expires_at, used_at, user_id)
+         VALUES (?1, ?2, ?3, NULL, ?4)",
+        rusqlite::params![code, t, t + CODE_TTL_SECS, user_id],
     )?;
     Ok(code)
 }
@@ -57,6 +58,10 @@ pub enum PairError {
 pub fn pair(conn: &mut Connection, code: &str, device_name: &str) -> Result<String, PairError> {
     let t = now();
     let tx = conn.transaction().map_err(|_| PairError::BadCode)?;
+    let owner: Option<i64> = tx
+        .query_row("SELECT user_id FROM pairing_codes WHERE code = ?1", [code], |r| r.get(0))
+        .ok()
+        .flatten();
     let burned = tx
         .execute(
             "UPDATE pairing_codes SET used_at = ?2
@@ -75,8 +80,8 @@ pub fn pair(conn: &mut Connection, code: &str, device_name: &str) -> Result<Stri
         device_name.trim()
     };
     tx.execute(
-        "INSERT INTO devices (name, token_hash, created_at) VALUES (?1, ?2, ?3)",
-        rusqlite::params![name, hash_token(&token), t],
+        "INSERT INTO devices (name, token_hash, created_at, user_id) VALUES (?1, ?2, ?3, ?4)",
+        rusqlite::params![name, hash_token(&token), t, owner],
     )
     .map_err(|_| PairError::BadCode)?;
     tx.commit().map_err(|_| PairError::BadCode)?;
@@ -131,21 +136,14 @@ mod tests {
 
     fn db() -> Connection {
         let c = Connection::open_in_memory().unwrap();
-        c.execute_batch(
-            "CREATE TABLE devices (id INTEGER PRIMARY KEY, name TEXT NOT NULL,
-                token_hash TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL,
-                last_seen_at INTEGER);
-             CREATE TABLE pairing_codes (code TEXT PRIMARY KEY, created_at INTEGER NOT NULL,
-                expires_at INTEGER NOT NULL, used_at INTEGER);",
-        )
-        .unwrap();
+        c.execute_batch(crate::db::SCHEMA).unwrap();
         c
     }
 
     #[test]
     fn код_обменивается_на_рабочий_токен() {
         let mut c = db();
-        let code = create_code(&c).unwrap();
+        let code = create_code(&c, None).unwrap();
         let token = pair(&mut c, &code, "Pixel").unwrap();
         assert!(verify(&c, &token).is_some());
         assert!(verify(&c, "мусор").is_none());
@@ -154,7 +152,7 @@ mod tests {
     #[test]
     fn код_сгорает_после_использования() {
         let mut c = db();
-        let code = create_code(&c).unwrap();
+        let code = create_code(&c, None).unwrap();
         pair(&mut c, &code, "первое").unwrap();
         assert_eq!(pair(&mut c, &code, "второе"), Err(PairError::BadCode));
     }
@@ -162,7 +160,7 @@ mod tests {
     #[test]
     fn просроченный_код_не_принимается() {
         let mut c = db();
-        let code = create_code(&c).unwrap();
+        let code = create_code(&c, None).unwrap();
         // Отматываем срок годности назад - тест не должен ждать 10 минут.
         c.execute(
             "UPDATE pairing_codes SET expires_at = ?2 WHERE code = ?1",
@@ -175,7 +173,7 @@ mod tests {
     #[test]
     fn отзыв_токена_закрывает_доступ() {
         let mut c = db();
-        let code = create_code(&c).unwrap();
+        let code = create_code(&c, None).unwrap();
         let token = pair(&mut c, &code, "Pixel").unwrap();
         let id = verify(&c, &token).unwrap();
         c.execute("DELETE FROM devices WHERE id = ?1", [id]).unwrap();

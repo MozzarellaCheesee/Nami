@@ -85,7 +85,11 @@ fn is_audio(path: &Path) -> bool {
 /// всей библиотекой здесь нет.
 ///
 /// Вызывается и вручную (`POST /api/scan`), и автоматически из `watcher` по событиям ФС.
-pub fn scan(conn: &mut Connection, dirs: &[PathBuf]) -> crate::Res<ScanReport> {
+///
+/// `library_id` - в какую библиотеку кладутся найденные треки (0 - библиотека по
+/// умолчанию, music_dirs из config.toml). Пропавшие файлы удаляются только внутри этой
+/// же библиотеки: скан одной библиотеки не должен обнулять чужую.
+pub fn scan(conn: &mut Connection, dirs: &[PathBuf], library_id: i64) -> crate::Res<ScanReport> {
     let started = crate::db::now();
     let mut rep = ScanReport::default();
 
@@ -93,16 +97,18 @@ pub fn scan(conn: &mut Connection, dirs: &[PathBuf]) -> crate::Res<ScanReport> {
     {
         let mut upsert = tx.prepare(
             "INSERT INTO tracks (path, title, artist, album, album_artist, track_no, year,
-                                 duration_ms, size_bytes, mtime, format, seen_at)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)
+                                 duration_ms, size_bytes, mtime, format, seen_at, library_id)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)
              ON CONFLICT(path) DO UPDATE SET
                 title=?2, artist=?3, album=?4, album_artist=?5, track_no=?6, year=?7,
-                duration_ms=?8, size_bytes=?9, mtime=?10, format=?11, seen_at=?12",
+                duration_ms=?8, size_bytes=?9, mtime=?10, format=?11, seen_at=?12,
+                library_id=?13",
         )?;
         // Нетронутый файл (совпали размер и mtime) не перечитывается: повторное сканирование
         // 50 000 треков не должно снова разбирать теги каждого.
         let mut touch = tx.prepare(
-            "UPDATE tracks SET seen_at=?2 WHERE path=?1 AND size_bytes=?3 AND mtime=?4",
+            "UPDATE tracks SET seen_at=?2 WHERE path=?1 AND size_bytes=?3 AND mtime=?4
+             AND library_id=?5",
         )?;
 
         for dir in dirs {
@@ -127,7 +133,7 @@ pub fn scan(conn: &mut Connection, dirs: &[PathBuf]) -> crate::Res<ScanReport> {
                     }
                 };
 
-                if touch.execute(rusqlite::params![path, started, size, mtime])? == 1 {
+                if touch.execute(rusqlite::params![path, started, size, mtime, library_id])? == 1 {
                     continue;
                 }
 
@@ -157,6 +163,7 @@ pub fn scan(conn: &mut Connection, dirs: &[PathBuf]) -> crate::Res<ScanReport> {
                     mtime,
                     meta.format,
                     started,
+                    library_id,
                 ])?;
                 if existed {
                     rep.updated += 1;
@@ -167,9 +174,29 @@ pub fn scan(conn: &mut Connection, dirs: &[PathBuf]) -> crate::Res<ScanReport> {
         }
     }
     // Всё, что не попалось в этом проходе, из библиотеки удалено.
-    rep.removed = tx.execute("DELETE FROM tracks WHERE seen_at < ?1", [started])?;
+    rep.removed = tx.execute(
+        "DELETE FROM tracks WHERE seen_at < ?1 AND library_id = ?2",
+        rusqlite::params![started, library_id],
+    )?;
     tx.commit()?;
     Ok(rep)
+}
+
+/// Папки каждой заведённой библиотеки (режим раздельных библиотек).
+pub fn library_dirs(conn: &Connection) -> rusqlite::Result<Vec<(i64, Vec<PathBuf>)>> {
+    let mut stmt = conn.prepare("SELECT id, dirs FROM libraries ORDER BY id")?;
+    let rows = stmt
+        .query_map([], |r| {
+            let dirs: String = r.get(1)?;
+            let dirs = serde_json::from_str::<Vec<String>>(&dirs)
+                .unwrap_or_default()
+                .into_iter()
+                .map(PathBuf::from)
+                .collect();
+            Ok((r.get::<_, i64>(0)?, dirs))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
 }
 
 #[cfg(test)]
@@ -204,21 +231,14 @@ mod tests {
     #[test]
     fn сканирование_наполняет_бд_и_повторный_проход_идемпотентен() {
         let mut conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(
-            "CREATE TABLE tracks (id INTEGER PRIMARY KEY, path TEXT NOT NULL UNIQUE,
-             title TEXT NOT NULL, artist TEXT, album TEXT, album_artist TEXT, track_no INTEGER,
-             year INTEGER, duration_ms INTEGER NOT NULL DEFAULT 0,
-             size_bytes INTEGER NOT NULL DEFAULT 0, mtime INTEGER NOT NULL DEFAULT 0,
-             format TEXT, seen_at INTEGER NOT NULL DEFAULT 0)",
-        )
-        .unwrap();
+        conn.execute_batch(crate::db::SCHEMA).unwrap();
 
         let dirs = vec![fixtures()];
-        let first = scan(&mut conn, &dirs).unwrap();
+        let first = scan(&mut conn, &dirs, 0).unwrap();
         assert_eq!(first.added, 2, "должны найтись обе фикстуры: {first:?}");
         assert_eq!(first.failed, 0);
 
-        let second = scan(&mut conn, &dirs).unwrap();
+        let second = scan(&mut conn, &dirs, 0).unwrap();
         assert_eq!(second.added, 0);
         assert_eq!(second.removed, 0, "второй проход не должен ничего удалять");
 
@@ -229,21 +249,14 @@ mod tests {
     #[test]
     fn исчезнувший_файл_удаляется_из_бд() {
         let mut conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(
-            "CREATE TABLE tracks (id INTEGER PRIMARY KEY, path TEXT NOT NULL UNIQUE,
-             title TEXT NOT NULL, artist TEXT, album TEXT, album_artist TEXT, track_no INTEGER,
-             year INTEGER, duration_ms INTEGER NOT NULL DEFAULT 0,
-             size_bytes INTEGER NOT NULL DEFAULT 0, mtime INTEGER NOT NULL DEFAULT 0,
-             format TEXT, seen_at INTEGER NOT NULL DEFAULT 0)",
-        )
-        .unwrap();
+        conn.execute_batch(crate::db::SCHEMA).unwrap();
         conn.execute(
             "INSERT INTO tracks (path, title, seen_at) VALUES ('/нет/такого.mp3', 'призрак', 0)",
             [],
         )
         .unwrap();
 
-        let rep = scan(&mut conn, &[fixtures()]).unwrap();
+        let rep = scan(&mut conn, &[fixtures()], 0).unwrap();
         assert_eq!(rep.removed, 1, "запись без файла должна была уйти: {rep:?}");
     }
 

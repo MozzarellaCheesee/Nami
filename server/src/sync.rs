@@ -87,13 +87,16 @@ pub struct PushReport {
 pub const MAX_SKEW_SECS: i64 = 300;
 
 /// Отдаёт все изменения новее `since` по всем сущностям одним ответом.
-pub fn pull(conn: &Connection, since: i64) -> rusqlite::Result<Pull> {
+///
+/// `user_id` - чьё состояние: у каждого пользователя своё (плейлисты, рейтинги,
+/// история). 0 - одиночный режим, когда пользователей на сервере ещё нет.
+pub fn pull(conn: &Connection, user_id: i64, since: i64) -> rusqlite::Result<Pull> {
     let mut stmt = conn.prepare(
         "SELECT entity, id, field, value, updated_at FROM state
-         WHERE updated_at > ?1 ORDER BY updated_at LIMIT ?2",
+         WHERE user_id = ?3 AND updated_at > ?1 ORDER BY updated_at LIMIT ?2",
     )?;
     let mut changes = stmt
-        .query_map(rusqlite::params![since, MAX_CHANGES as i64 + 1], |r| {
+        .query_map(rusqlite::params![since, MAX_CHANGES as i64 + 1, user_id], |r| {
             let raw: String = r.get(3)?;
             Ok(Change {
                 entity: r.get(0)?,
@@ -112,14 +115,15 @@ pub fn pull(conn: &Connection, since: i64) -> rusqlite::Result<Pull> {
 /// Применяет изменения клиента. LWW по полю: побеждает более поздняя метка,
 /// при равных метках остаётся уже записанное (иначе повторная отправка одного и того
 /// же пакета бесконечно переписывала бы строки).
-pub fn push(conn: &mut Connection, changes: &[Change]) -> rusqlite::Result<PushReport> {
+pub fn push(conn: &mut Connection, user_id: i64, changes: &[Change]) -> rusqlite::Result<PushReport> {
     let t = now();
     let mut rep = PushReport { now: t, ..Default::default() };
     let tx = conn.transaction()?;
     {
         let mut stmt = tx.prepare(
-            "INSERT INTO state (entity, id, field, value, updated_at) VALUES (?1,?2,?3,?4,?5)
-             ON CONFLICT(entity, id, field) DO UPDATE SET
+            "INSERT INTO state (user_id, entity, id, field, value, updated_at)
+             VALUES (?6,?1,?2,?3,?4,?5)
+             ON CONFLICT(user_id, entity, id, field) DO UPDATE SET
                 value = excluded.value, updated_at = excluded.updated_at
              WHERE excluded.updated_at > state.updated_at",
         )?;
@@ -139,7 +143,8 @@ pub fn push(conn: &mut Connection, changes: &[Change]) -> rusqlite::Result<PushR
                 c.id,
                 c.field,
                 value,
-                c.updated_at
+                c.updated_at,
+                user_id
             ])?;
             if n == 1 {
                 rep.applied += 1;
@@ -159,8 +164,8 @@ pub fn push(conn: &mut Connection, changes: &[Change]) -> rusqlite::Result<PushR
 pub fn purge_tombstones(conn: &Connection, ttl_days: i64) -> rusqlite::Result<usize> {
     let cutoff = now() - ttl_days.max(1) * 86_400;
     conn.execute(
-        "DELETE FROM state WHERE (entity, id) IN (
-             SELECT entity, id FROM state
+        "DELETE FROM state WHERE (user_id, entity, id) IN (
+             SELECT user_id, entity, id FROM state
              WHERE field = ?1 AND value = 'true' AND updated_at < ?2)",
         rusqlite::params![DELETED, cutoff],
     )
@@ -196,16 +201,75 @@ pub fn set_position(conn: &Connection, device_id: i64, p: &Position) -> rusqlite
     Ok(t)
 }
 
-/// Позиции всех устройств новее `since` - чтобы телефон мог продолжить с места,
-/// на котором остановился ноутбук.
-pub fn positions(conn: &Connection, since: i64) -> rusqlite::Result<Vec<Position>> {
+/// Позиции устройств новее `since` - чтобы телефон мог продолжить с места,
+/// на котором остановился ноутбук. Только СВОИ устройства: `user_id=None` (одиночный
+/// режим) видит устройства, ни за кем не закреплённые.
+pub fn positions(conn: &Connection, user_id: Option<i64>, since: i64) -> rusqlite::Result<Vec<Position>> {
     let mut stmt = conn.prepare(
-        "SELECT track_id, position_ms, updated_at FROM playback_position
-         WHERE updated_at > ?1 ORDER BY updated_at DESC",
+        "SELECT p.track_id, p.position_ms, p.updated_at
+         FROM playback_position p JOIN devices d ON d.id = p.device_id
+         WHERE p.updated_at > ?1 AND d.user_id IS ?2
+         ORDER BY p.updated_at DESC",
     )?;
     let rows = stmt
-        .query_map([since], |r| {
+        .query_map(rusqlite::params![since, user_id], |r| {
             Ok(Position { track_id: r.get(0)?, position_ms: r.get(1)?, updated_at: r.get(2)? })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
+}
+
+/// Строка экрана «Что слушают».
+#[derive(Debug, Serialize, PartialEq)]
+pub struct NowPlaying {
+    pub user_id: i64,
+    pub username: String,
+    pub track_id: i64,
+    pub title: String,
+    pub artist: Option<String>,
+    pub position_ms: i64,
+    pub updated_at: i64,
+}
+
+/// Сколько секунд после последнего обновления позиции пользователь считается активным.
+pub const NOW_PLAYING_WINDOW_SECS: i64 = 120;
+
+/// Кто что слушает прямо сейчас.
+///
+/// Скрыты: пользователи с `now_playing_visible=0` (кроме самого себя) и все, чьи треки
+/// запрашивающему не видны - для раздельных библиотек это автоматически означает
+/// «видна только своя активность», отдельной ветки под режим не нужно.
+pub fn now_playing(
+    conn: &Connection,
+    ident: &crate::users::Ident,
+) -> rusqlite::Result<Vec<NowPlaying>> {
+    let (clause, params) = crate::users::visibility_at(conn, ident, "t.");
+    let me = ident.user_id.unwrap_or(-1);
+    let mut all = vec![
+        rusqlite::types::Value::Integer(now() - NOW_PLAYING_WINDOW_SECS),
+        rusqlite::types::Value::Integer(me),
+    ];
+    all.extend(params);
+    let mut stmt = conn.prepare(&format!(
+        "SELECT u.id, u.username, t.id, t.title, t.artist, p.position_ms, p.updated_at
+         FROM playback_position p
+         JOIN devices d ON d.id = p.device_id
+         JOIN users u ON u.id = d.user_id
+         JOIN tracks t ON t.id = p.track_id
+         WHERE p.updated_at >= ?1 AND (u.now_playing_visible = 1 OR u.id = ?2){clause}
+         ORDER BY p.updated_at DESC"
+    ))?;
+    let rows = stmt
+        .query_map(rusqlite::params_from_iter(all), |r| {
+            Ok(NowPlaying {
+            user_id: r.get(0)?,
+            username: r.get(1)?,
+            track_id: r.get(2)?,
+            title: r.get(3)?,
+            artist: r.get(4)?,
+            position_ms: r.get(5)?,
+            updated_at: r.get(6)?,
+        })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(rows)
@@ -243,10 +307,10 @@ mod tests {
         let mut c = db();
         let t = now();
         // Два клиента одновременно правят одну запись, но разные её поля.
-        push(&mut c, &[ch("p1", "name", "Утро", t)]).unwrap();
-        push(&mut c, &[ch("p1", "cover", "cover.jpg", t)]).unwrap();
+        push(&mut c, 0, &[ch("p1", "name", "Утро", t)]).unwrap();
+        push(&mut c, 0, &[ch("p1", "cover", "cover.jpg", t)]).unwrap();
 
-        let got = pull(&c, 0).unwrap().changes;
+        let got = pull(&c, 0, 0).unwrap().changes;
         assert_eq!(got.len(), 2, "оба изменения обязаны сохраниться: {got:?}");
         let name = got.iter().find(|x| x.field == "name").unwrap();
         assert_eq!(name.value, serde_json::json!("Утро"));
@@ -258,26 +322,26 @@ mod tests {
     fn одно_поле_выигрывает_более_поздняя_метка() {
         let mut c = db();
         let t = now();
-        push(&mut c, &[ch("p1", "name", "поздний", t)]).unwrap();
+        push(&mut c, 0, &[ch("p1", "name", "поздний", t)]).unwrap();
         // Более раннее изменение того же поля приходит вторым - отбрасывается.
-        let r = push(&mut c, &[ch("p1", "name", "ранний", t - 10)]).unwrap();
+        let r = push(&mut c, 0, &[ch("p1", "name", "ранний", t - 10)]).unwrap();
         assert_eq!(r.stale, 1);
         assert_eq!(r.applied, 0);
-        assert_eq!(pull(&c, 0).unwrap().changes[0].value, serde_json::json!("поздний"));
+        assert_eq!(pull(&c, 0, 0).unwrap().changes[0].value, serde_json::json!("поздний"));
 
         // А более позднее - побеждает.
-        let r = push(&mut c, &[ch("p1", "name", "новейший", t + 5)]).unwrap();
+        let r = push(&mut c, 0, &[ch("p1", "name", "новейший", t + 5)]).unwrap();
         assert_eq!(r.applied, 1);
-        assert_eq!(pull(&c, 0).unwrap().changes[0].value, serde_json::json!("новейший"));
+        assert_eq!(pull(&c, 0, 0).unwrap().changes[0].value, serde_json::json!("новейший"));
     }
 
     #[test]
     fn since_отдаёт_только_новое() {
         let mut c = db();
         let t = now();
-        push(&mut c, &[ch("p1", "name", "старое", t - 100)]).unwrap();
-        push(&mut c, &[ch("p2", "name", "новое", t)]).unwrap();
-        let got = pull(&c, t - 1).unwrap().changes;
+        push(&mut c, 0, &[ch("p1", "name", "старое", t - 100)]).unwrap();
+        push(&mut c, 0, &[ch("p2", "name", "новое", t)]).unwrap();
+        let got = pull(&c, 0, t - 1).unwrap().changes;
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].id, "p2");
     }
@@ -286,9 +350,10 @@ mod tests {
     fn удаление_это_надгробие_которое_доезжает_до_клиента() {
         let mut c = db();
         let t = now();
-        push(&mut c, &[ch("p1", "name", "Утро", t)]).unwrap();
+        push(&mut c, 0, &[ch("p1", "name", "Утро", t)]).unwrap();
         push(
             &mut c,
+            0,
             &[Change {
                 entity: "playlist".into(),
                 id: "p1".into(),
@@ -298,7 +363,7 @@ mod tests {
             }],
         )
         .unwrap();
-        let got = pull(&c, t).unwrap().changes;
+        let got = pull(&c, 0, t).unwrap().changes;
         assert!(got.iter().any(|x| x.field == DELETED), "надгробие должно уехать клиенту");
 
         // Свежее надгробие не чистится, старое - чистится.
@@ -309,7 +374,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(purge_tombstones(&c, 30).unwrap(), 2, "уходит вся запись целиком");
-        assert!(pull(&c, 0).unwrap().changes.is_empty());
+        assert!(pull(&c, 0, 0).unwrap().changes.is_empty());
     }
 
     #[test]
@@ -318,9 +383,9 @@ mod tests {
         let mut bad = ch("p1", "name", "x", now());
         bad.entity = "рандом".into();
         let future = ch("p2", "name", "x", now() + 10_000);
-        let r = push(&mut c, &[bad, future]).unwrap();
+        let r = push(&mut c, 0, &[bad, future]).unwrap();
         assert_eq!(r.rejected, 2);
-        assert!(pull(&c, 0).unwrap().changes.is_empty());
+        assert!(pull(&c, 0, 0).unwrap().changes.is_empty());
     }
 
     #[test]
@@ -330,12 +395,12 @@ mod tests {
         set_position(&c, 1, &Position { track_id: 7, position_ms: 1000, updated_at: t }).unwrap();
         set_position(&c, 1, &Position { track_id: 7, position_ms: 5000, updated_at: t + 3 })
             .unwrap();
-        let p = positions(&c, 0).unwrap();
+        let p = positions(&c, None, 0).unwrap();
         assert_eq!(p.len(), 1, "на устройство одна строка, история не копится");
         assert_eq!(p[0].position_ms, 5000);
         // Устаревшая позиция не откатывает свежую.
         set_position(&c, 1, &Position { track_id: 7, position_ms: 10, updated_at: t }).unwrap();
-        assert_eq!(positions(&c, 0).unwrap()[0].position_ms, 5000);
-        assert!(pull(&c, 0).unwrap().changes.is_empty(), "позиции нет в sync-потоке");
+        assert_eq!(positions(&c, None, 0).unwrap()[0].position_ms, 5000);
+        assert!(pull(&c, 0, 0).unwrap().changes.is_empty(), "позиции нет в sync-потоке");
     }
 }
