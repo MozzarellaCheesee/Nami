@@ -39,9 +39,13 @@ class ReplayGainAudioProcessor : BaseAudioProcessor() {
 
     private var inputIsFloat = false
     private var scratch = FloatArray(0)
+    private var channelCount = 2
+    private val ramp = GainRamp()
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         inputIsFloat = inputAudioFormat.requireNamiDspInput()
+        channelCount = inputAudioFormat.channelCount.coerceAtLeast(1)
+        ramp.configure(inputAudioFormat.sampleRate, totalGainLinear())
         configured = true
         return inputAudioFormat.asFloatOutput()
     }
@@ -57,16 +61,71 @@ class ReplayGainAudioProcessor : BaseAudioProcessor() {
         // Усиление здесь НЕ ограничивается: клип делает только финальный квантователь, один раз.
         // Ограничить тут значило бы срезать пик, который следующая стадия (например, EQ с
         // отрицательным гейном) всё равно вернула бы в диапазон.
-        val gain = totalGainLinear()
+        val target = totalGainLinear()
         val output = replaceOutputBuffer(sampleCount * 4)
         val outFloats = output.asFloatBuffer()
-        for (i in 0 until sampleCount) outFloats.put(scratch[i] * gain)
+        var i = 0
+        while (i < sampleCount) {
+            // Один множитель на кадр, а не на отсчёт: иначе каналы разъезжались бы по громкости
+            // внутри одного кадра, а это уже смещение стереообраза, а не изменение уровня.
+            val gain = ramp.nextFrameGain(target)
+            var ch = 0
+            while (ch < channelCount && i < sampleCount) {
+                outFloats.put(scratch[i] * gain)
+                i++
+                ch++
+            }
+        }
 
         inputBuffer.position(inputBuffer.limit())
         output.position(sampleCount * 4).flip()
     }
 
+    /** Сик - и так разрыв сигнала, сглаживать через него нечего: множитель ставится сразу. */
+    override fun onFlush() {
+        ramp.snapTo(totalGainLinear())
+    }
+
     override fun onReset() {
         configured = false
+    }
+}
+
+/** Плавный переход множителя громкости вместо мгновенного скачка.
+ *
+ * Зачем: при гэплесс-переходе (см. NamiRenderersFactory) конвейер между треками НЕ перестраивается,
+ * поэтому смена ReplayGain соседних треков раньше меняла множитель ровно на границе - ступенька
+ * амплитуды в один отсчёт, то есть слышимый щелчок именно там, где пауза как раз и не должна была
+ * появиться. То же касается живого изменения "усиления воспроизведения" ползунком.
+ *
+ * Однополюсное сглаживание с постоянной времени [TIME_CONSTANT_S]: достаточно быстро, чтобы
+ * выравнивание громкости успевало к началу трека, и достаточно медленно, чтобы не звучать как
+ * фронт. */
+internal class GainRamp {
+    private var alpha = 1f
+    private var current = 1f
+
+    fun configure(sampleRate: Int, initialGain: Float) {
+        // Первое значение берём как есть: плавно въезжать в громкость с 1.0 на старте трека -
+        // это как раз тот фейд, которого тут быть не должно.
+        current = initialGain
+        alpha = if (sampleRate > 0) {
+            (1f - kotlin.math.exp(-1f / (sampleRate * TIME_CONSTANT_S))).coerceIn(1e-6f, 1f)
+        } else {
+            1f
+        }
+    }
+
+    fun snapTo(gain: Float) {
+        current = gain
+    }
+
+    fun nextFrameGain(target: Float): Float {
+        current += (target - current) * alpha
+        return current
+    }
+
+    companion object {
+        private const val TIME_CONSTANT_S = 0.02f
     }
 }

@@ -45,6 +45,29 @@ import dev.nami.player.replaygain.ReplayGainAudioProcessor
  * Порядок в массиве обязателен: DitherAudioProcessor идёт последним, потому что после наших
  * процессоров media3 ставит silence-skipping и Sonic, а те принимают только int16.
  *
+ * Гэплесс (переход между треками без паузы и щелчка) даёт сам media3, и своя цепочка процессоров
+ * его не ломает - проверено по байткоду DefaultAudioSink 1.5.0, той же версии, что линкует этот
+ * модуль:
+ *  - encoder delay/padding (LAME/iTunSMPB у MP3, аналог у AAC) снимает TrimmingAudioProcessor. Он
+ *    НЕ часть массива ниже: это собственное поле DefaultAudioSink, которое кладётся в
+ *    `toIntPcmAvailableAudioProcessors` в конструкторе и подставляется в конвейер ПЕРЕД
+ *    `audioProcessorChain.getAudioProcessors()`, а `configure()` зовёт у него
+ *    `setTrimFrameCount(encoderDelay, encoderPadding)`. То есть `setAudioProcessors(...)` ниже его
+ *    не вытесняет, и обрезка служебных отсчётов на границе трека работает как со штатным синком.
+ *  - между двумя айтемами с одинаковым выходным форматом синк не перенастраивается и конвейер не
+ *    сбрасывается, поэтому состояние EQ/свёртки/кроссфида через границу не рвётся.
+ *  - очередь отдаётся плееру целиком (PlayerRepositoryImpl.setMediaItems, перестановки только
+ *    через moveMediaItem), так что следующий айтем успевает быть декодирован заранее.
+ *
+ * Чего гэплесс НЕ покрывает, честно:
+ *  - разный формат соседних треков (частота дискретизации или число каналов) заставляет
+ *    пересоздать AudioTrack - короткая пауза тут на уровне платформы, обойти её из приложения
+ *    нечем;
+ *  - включённый кроссфейд по определению заменяет гэплесс перекрытием (CrossfadeController), это
+ *    выбор пользователя, а не дефект;
+ *  - DSD/DoP идёт отдельным путём через конвертацию в WAV (DsfToDopWav), там бесшовного перехода
+ *    нет и не заявляется.
+ *
  * Audio offload (TrackSelectionParameters.AudioOffloadPreferences) сюда сознательно НЕ добавлен.
  * Проверено байткодом DefaultAudioSink.configure() в media3 1.5.0: когда offload-ветка активна
  * (offloadMode != 0 и формат поддержан), метод строит `new AudioProcessingPipeline(ImmutableList.of())`
