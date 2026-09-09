@@ -1,0 +1,40 @@
+[package]
+name = "nami-server"
+version = "0.1.0"
+edition = "2021"
+description = "Self-hosted сервер NAMI - библиотека и passthrough-отдача аудио"
+
+[dependencies]
+axum = "0.8"
+axum-server = { version = "0.8", features = ["tls-rustls"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
+tower = "0.5"
+tower-http = { version = "0.7", features = ["fs"] }
+
+# rusqlite вместо sqlx: цель "1 ядро / 512 МБ" - sqlx тянет async-пул, макросы и
+# заметно больше зависимостей, а вся работа с БД здесь короткая и синхронная.
+rusqlite = { version = "0.40", features = ["bundled"] }
+
+lofty = "0.25"
+walkdir = "2"
+# default-features выключены: нужен только модуль system (CPU/RAM), без сети/дисков/процессов.
+sysinfo = { version = "0.39", default-features = false, features = ["system"] }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+getrandom = "0.4"
+sha2 = "0.11"
+hex = "0.4"
+rcgen = "0.14"
+# без default-features: нужен только SVG-рендер, растровый бэкенд тянет весь крейт image.
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
