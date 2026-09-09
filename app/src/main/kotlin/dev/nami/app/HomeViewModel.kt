@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -97,6 +98,11 @@ class HomeViewModel @Inject constructor(
     // состояние), так что дублирующиеся вызовы при рекомпозиции безвредны.
     val nearbyDevices: StateFlow<List<DiscoveredDevice>> = localShareRepository.discoveredDevices
     val nearbyGuestState: StateFlow<ListenTogetherGuestState?> = localShareRepository.listenTogetherGuestState
+
+    // Блок SHUFFLE_ALL ("Слушать всё") - тот же живой список, что уже гоняет rebuild() ниже, не
+    // отдельный запрос: кнопка должна тасовать актуальную библиотеку, а не снимок на момент входа.
+    val allTracks: StateFlow<List<Track>> = libraryRepository.allTracksOrderedFlow()
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, emptyList())
 
     init {
         // Один общий триггер пересчёта: изменился набор блоков или библиотека.

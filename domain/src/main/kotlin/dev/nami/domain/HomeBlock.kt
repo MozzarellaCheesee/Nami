@@ -5,6 +5,8 @@ package dev.nami.domain
  * хранится в списке настроек (см. [DEFAULT_HOME_BLOCKS]). */
 enum class HomeBlockType {
     CONTINUE_LISTENING,
+    /** Одна кнопка Play - запустить всю библиотеку вперемешку, без выбора альбома/плейлиста. */
+    SHUFFLE_ALL,
     RECENTLY_ADDED,
     TOP_WEEK,
     RANDOM_ALBUM,
@@ -28,6 +30,7 @@ data class HomeBlockConfig(val type: HomeBlockType, val enabled: Boolean)
 /** Порядок в списке = порядок отображения на экране. */
 val DEFAULT_HOME_BLOCKS = listOf(
     HomeBlockConfig(HomeBlockType.CONTINUE_LISTENING, true),
+    HomeBlockConfig(HomeBlockType.SHUFFLE_ALL, true),
     HomeBlockConfig(HomeBlockType.NEW_IMPORT, true),
     HomeBlockConfig(HomeBlockType.RECENTLY_ADDED, true),
     HomeBlockConfig(HomeBlockType.QUICK_TAGS, true),

@@ -20,7 +20,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.DragHandle
+import androidx.compose.material.icons.outlined.Shuffle
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -74,9 +76,11 @@ fun HomeScreen(
     onPlaylistClick: (PlaylistId) -> Unit,
     onConstructorClick: () -> Unit,
     onOpenLocalShare: () -> Unit,
+    onShuffleAllClick: (List<dev.nami.core.model.Track>) -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    val allTracks by viewModel.allTracks.collectAsState()
     val nearbyDevices by viewModel.nearbyDevices.collectAsState()
     val guestState by viewModel.nearbyGuestState.collectAsState()
     val nearbyBlockEnabled = state.blocks.any { it.type == HomeBlockType.NEARBY_NETWORK && it.enabled }
@@ -103,6 +107,9 @@ fun HomeScreen(
                     HomeBlockType.CONTINUE_LISTENING -> state.continueListening?.let { track ->
                         item { HomeSectionHeader("Продолжить слушать") }
                         item { HomeHeroRow(track.title, track.artistName, track.albumArtworkPath, onClick = { onTrackClick(track.id) }) }
+                    }
+                    HomeBlockType.SHUFFLE_ALL -> if (allTracks.isNotEmpty()) {
+                        item { HomeShuffleAllCard(trackCount = allTracks.size, onClick = { onShuffleAllClick(allTracks) }) }
                     }
                     HomeBlockType.RECENTLY_ADDED -> if (state.recentlyAdded.isNotEmpty()) {
                         item { HomeSectionHeader("Недавно добавленное") }
@@ -316,6 +323,45 @@ private fun HomeHeroRow(title: String, subtitle: String?, artworkPath: String?, 
             Text(title, color = NamiColors.Paper100, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
             subtitle?.let { Text(it, color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
         }
+    }
+}
+
+private fun tracksWord(count: Int): String {
+    val mod100 = count % 100
+    val mod10 = count % 10
+    return when {
+        mod100 in 11..14 -> "треков"
+        mod10 == 1 -> "трек"
+        mod10 in 2..4 -> "трека"
+        else -> "треков"
+    }
+}
+
+/** Одна кнопка - запустить всю библиотеку вперемешку, без похода в Библиотеку/выбора плейлиста.
+ * Без заголовка-секции (в отличие от остальных блоков) - сама карточка самодостаточна, подпись
+ * "Продолжить слушать" сверху ей не нужна, это не список, а один явный призыв к действию. */
+@Composable
+private fun HomeShuffleAllCard(trackCount: Int, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 4.dp)
+            .background(NamiColors.Ink800, RoundedCornerShape(NamiRadius.Card))
+            .clickable(onClick = onClick)
+            .padding(16.dp),
+    ) {
+        Box(
+            modifier = Modifier.size(48.dp).background(NamiColors.Shu, RoundedCornerShape(NamiRadius.Button)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = NamiColors.Ink900)
+        }
+        Column(modifier = Modifier.weight(1f).padding(start = 14.dp)) {
+            Text("Слушать всё вперемешку", color = NamiColors.Paper100, style = MaterialTheme.typography.bodyLarge)
+            Text("$trackCount " + tracksWord(trackCount), color = NamiColors.Paper40, style = MaterialTheme.typography.bodySmall)
+        }
+        Icon(Icons.Outlined.Shuffle, contentDescription = null, tint = NamiColors.Paper40, modifier = Modifier.size(20.dp))
     }
 }
 
@@ -569,6 +615,7 @@ private fun moveBlock(blocks: List<HomeBlockConfig>, from: Int, to: Int): List<H
 
 private fun homeBlockLabel(type: HomeBlockType): String = when (type) {
     HomeBlockType.CONTINUE_LISTENING -> "Продолжить слушать"
+    HomeBlockType.SHUFFLE_ALL -> "Слушать всё вперемешку"
     HomeBlockType.RECENTLY_ADDED -> "Недавно добавленное"
     HomeBlockType.TOP_WEEK -> "Топ недели"
     HomeBlockType.RANDOM_ALBUM -> "Случайный альбом"
