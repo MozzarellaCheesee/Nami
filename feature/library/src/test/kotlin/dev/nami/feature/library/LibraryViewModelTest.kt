@@ -759,6 +759,8 @@ private object NoOpSettingsRepository : dev.nami.domain.SettingsRepository {
     override fun setOutputProfilesEnabled(value: Boolean) {}
     override val outputProfiles = MutableStateFlow(emptyMap<dev.nami.domain.OutputDeviceType, dev.nami.domain.OutputProfile>())
     override fun setOutputProfile(type: dev.nami.domain.OutputDeviceType, profile: dev.nami.domain.OutputProfile) {}
+    override val outputDeviceProfiles = MutableStateFlow(emptyMap<String, dev.nami.domain.OutputProfile>())
+    override fun setOutputDeviceProfile(deviceKey: String, profile: dev.nami.domain.OutputProfile?) {}
     override val stands4Uid = MutableStateFlow("")
     override fun setStands4Uid(value: String) {}
     override val stands4Token = MutableStateFlow("")

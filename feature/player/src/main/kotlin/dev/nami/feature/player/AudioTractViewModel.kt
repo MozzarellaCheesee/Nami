@@ -52,6 +52,11 @@ data class AudioTractUiState(
     /** Что сообщает о себе подключённый USB-ЦАП. Не сохраняется между запусками: зависит от того,
      * что воткнуто прямо сейчас. */
     val usbAudioInfo: String? = null,
+    /** Ключ и имя того устройства вывода, что подключено прямо сейчас - под него сохраняется
+     * персональный EQ-профиль. Имя null у встроенного динамика. */
+    val currentDeviceKey: String = "",
+    val currentDeviceName: String? = null,
+    val outputDeviceProfiles: Map<String, OutputProfile> = emptyMap(),
 )
 
 /** Feeds both План.md's 4.6 "Аудиотракт" and 4.7 "Эквалайзер" screens - same underlying state,
@@ -71,6 +76,17 @@ class AudioTractViewModel @Inject constructor(
     // Объявлено до uiState: тот их читает в combine, а Kotlin инициализирует свойства сверху вниз.
     private val deviceProbeRunning = MutableStateFlow(false)
     private val usbAudioInfo = MutableStateFlow<String?>(null)
+
+    /** Свой экземпляр детектора: тот, что живёт в PlaybackService, экрану недоступен (это другой
+     * процессный компонент, а не общий синглтон), а знать, какое устройство подключено прямо
+     * сейчас, экрану нужно живьём - пользователь может воткнуть наушники, не уходя с экрана.
+     * Регистрация AudioDeviceCallback дешёвая, снимается в onCleared. */
+    private val outputDeviceDetector = dev.nami.player.output.OutputDeviceDetector(context)
+
+    override fun onCleared() {
+        outputDeviceDetector.release()
+        super.onCleared()
+    }
 
     private val currentTrack = playerRepository.state
         .flatMapLatest { state ->
@@ -117,6 +133,9 @@ class AudioTractViewModel @Inject constructor(
     }
         .combine(deviceProbeRunning) { state, running -> state.copy(deviceProbeRunning = running) }
         .combine(usbAudioInfo) { state, usb -> state.copy(usbAudioInfo = usb) }
+        .combine(outputDeviceDetector.currentKey) { state, key -> state.copy(currentDeviceKey = key) }
+        .combine(outputDeviceDetector.currentName) { state, name -> state.copy(currentDeviceName = name) }
+        .combine(settingsRepository.outputDeviceProfiles) { state, profiles -> state.copy(outputDeviceProfiles = profiles) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AudioTractUiState())
 
     fun setEqEnabled(enabled: Boolean) = settingsRepository.setEqEnabled(enabled)
@@ -138,6 +157,22 @@ class AudioTractViewModel @Inject constructor(
     fun setOutputProfilesEnabled(enabled: Boolean) = settingsRepository.setOutputProfilesEnabled(enabled)
 
     fun setOutputProfile(type: OutputDeviceType, profile: OutputProfile) = settingsRepository.setOutputProfile(type, profile)
+
+    /** Сохранить текущую кривую EQ как профиль подключённого сейчас устройства (или стереть его,
+     * если profile == null). Заодно включает сами профили - иначе кнопка сохраняет в пустоту. */
+    fun saveCurrentEqAsDeviceProfile() {
+        val state = uiState.value
+        val existing = state.outputDeviceProfiles[state.currentDeviceKey]
+        settingsRepository.setOutputDeviceProfile(
+            state.currentDeviceKey,
+            OutputProfile(state.eqBandGains, existing?.volumeLimitPercent ?: 100),
+        )
+        if (!state.outputProfilesEnabled) settingsRepository.setOutputProfilesEnabled(true)
+    }
+
+    fun deleteCurrentDeviceProfile() {
+        settingsRepository.setOutputDeviceProfile(uiState.value.currentDeviceKey, null)
+    }
 
     fun setSmartCrossfadeEnabled(enabled: Boolean) = settingsRepository.setSmartCrossfadeEnabled(enabled)
 

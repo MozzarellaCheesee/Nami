@@ -204,7 +204,11 @@ class PlaybackService : MediaSessionService() {
 
     private fun effectiveEq(): EffectiveEq =
         if (settingsRepository.outputProfilesEnabled.value) {
-            val profile = settingsRepository.outputProfiles.value[outputDeviceDetector.current.value] ?: OutputProfile.IDENTITY
+            // Сначала профиль конкретного устройства ("эти наушники"), потом - по типу маршрута
+            // ("любой Bluetooth"), и только потом плоская кривая.
+            val profile = settingsRepository.outputDeviceProfiles.value[outputDeviceDetector.currentKey.value]
+                ?: settingsRepository.outputProfiles.value[outputDeviceDetector.current.value]
+                ?: OutputProfile.IDENTITY
             EffectiveEq(profile.eqGainsDb, enabled = true, volumeLimitPercent = profile.volumeLimitPercent)
         } else {
             EffectiveEq(settingsRepository.eqBandGains.value, enabled = settingsRepository.eqEnabled.value, volumeLimitPercent = 100)
@@ -304,8 +308,9 @@ class PlaybackService : MediaSessionService() {
             settingsRepository.eqBandGains,
             settingsRepository.outputProfilesEnabled,
             settingsRepository.outputProfiles,
-            outputDeviceDetector.current,
+            outputDeviceDetector.currentKey,
         ) { _, _, _, _, _ -> effectiveEq() }
+            .combine(settingsRepository.outputDeviceProfiles) { _, _ -> effectiveEq() }
             .distinctUntilChanged()
             .onEach { effective ->
                 dsp.eq.setGains(effective.gainsDb)

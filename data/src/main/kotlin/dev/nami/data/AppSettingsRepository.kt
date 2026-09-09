@@ -79,6 +79,7 @@ private const val KEY_BATTERY_HINT_SHOWN = "battery_hint_shown"
 private const val KEY_SESSIONS = "sessions" // JSON array, see AppSettingsRepository.readSessions
 private const val KEY_LAST_APPLIED_SESSION = "last_applied_session"
 private const val KEY_OUTPUT_PROFILES_ENABLED = "output_profiles_enabled"
+private const val KEY_OUTPUT_DEVICE_PROFILES = "output_device_profiles"
 private const val KEY_SCROBBLING_ENABLED = "scrobbling_enabled"
 private const val KEY_AIRPLAY_ENABLED = "airplay_enabled"
 private const val KEY_YANDEX_STATION_ENABLED = "yandex_station_enabled"
@@ -338,6 +339,47 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
         val serialized = profile.eqGainsDb.joinToString(",") + "|" + profile.volumeLimitPercent
         prefs.edit { putString(outputProfileKey(type), serialized) }
         _outputProfiles.value = _outputProfiles.value + (type to profile)
+    }
+
+    /** Профили под КОНКРЕТНОЕ устройство (ключ от OutputDeviceDetector.deviceKey) - отдельно от
+     * профилей по типу маршрута выше: там "любые Bluetooth-наушники", здесь "вот эти". Хранится
+     * одной JSON-строкой, а не ключом на устройство: набор ключей заранее неизвестен, а
+     * SharedPreferences не умеет перечислять "все ключи с префиксом" без разбора всей карты. */
+    private val _outputDeviceProfiles = MutableStateFlow(readOutputDeviceProfiles())
+    override val outputDeviceProfiles: StateFlow<Map<String, OutputProfile>> = _outputDeviceProfiles
+
+    override fun setOutputDeviceProfile(deviceKey: String, profile: OutputProfile?) {
+        if (profile != null) {
+            require(profile.eqGainsDb.size == EQ_BAND_COUNT) { "expected $EQ_BAND_COUNT gains, got ${profile.eqGainsDb.size}" }
+        }
+        val updated = if (profile == null) {
+            _outputDeviceProfiles.value - deviceKey
+        } else {
+            _outputDeviceProfiles.value + (deviceKey to profile)
+        }
+        val json = JSONObject()
+        updated.forEach { (key, value) ->
+            json.put(key, value.eqGainsDb.joinToString(",") + "|" + value.volumeLimitPercent)
+        }
+        prefs.edit { putString(KEY_OUTPUT_DEVICE_PROFILES, json.toString()) }
+        _outputDeviceProfiles.value = updated
+    }
+
+    private fun readOutputDeviceProfiles(): Map<String, OutputProfile> {
+        val raw = prefs.getString(KEY_OUTPUT_DEVICE_PROFILES, null) ?: return emptyMap()
+        return runCatching {
+            val json = JSONObject(raw)
+            json.keys().asSequence().mapNotNull { key ->
+                parseOutputProfile(json.optString(key))?.let { key to it }
+            }.toMap()
+        }.getOrDefault(emptyMap())
+    }
+
+    private fun parseOutputProfile(raw: String?): OutputProfile? {
+        val parts = raw?.split("|") ?: return null
+        val gains = parts.getOrNull(0)?.split(",")?.mapNotNull { it.toFloatOrNull() }
+        val limit = parts.getOrNull(1)?.toIntOrNull()
+        return if (gains?.size == EQ_BAND_COUNT && limit != null) OutputProfile(gains, limit) else null
     }
 
     private fun readOutputProfile(type: OutputDeviceType): OutputProfile {

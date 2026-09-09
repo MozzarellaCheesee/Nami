@@ -157,6 +157,13 @@ interface SettingsRepository {
     val outputProfiles: StateFlow<Map<OutputDeviceType, OutputProfile>>
     fun setOutputProfile(type: OutputDeviceType, profile: OutputProfile)
 
+    /** Профиль под КОНКРЕТНОЕ устройство, а не под тип маршрута: ключ строит
+     * OutputDeviceDetector.deviceKey ("BLUETOOTH:WF-1000XM5"). Именно сюда логично ложится импорт
+     * AutoEQ - кривая там сделана под конкретную модель наушников, а не под "любой Bluetooth".
+     * Ищется первым, [outputProfiles] по типу остаётся запасным вариантом. null стирает профиль. */
+    val outputDeviceProfiles: StateFlow<Map<String, OutputProfile>>
+    fun setOutputDeviceProfile(deviceKey: String, profile: OutputProfile?)
+
     /** STANDS4 lyrics fallback credentials - each user's own (Settings -> Лирика), not a key
      * shared across every install: the free tier is 100 requests/day per account. Blank means
      * "not configured", the fallback silently no-ops (LRCLIB keeps working regardless). */

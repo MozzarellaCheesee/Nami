@@ -151,6 +151,8 @@ fun EqualizerBody(onBack: () -> Unit, viewModel: AudioTractViewModel = hiltViewM
                     )
                 }
 
+                DeviceProfileCard(uiState = uiState, viewModel = viewModel)
+
                 gains.forEachIndexed { index, gainDb ->
                     val freqHz = BAND_FREQS_HZ[index]
                     Column(
@@ -186,6 +188,59 @@ fun EqualizerBody(onBack: () -> Unit, viewModel: AudioTractViewModel = hiltViewM
                 }
                 Spacer(modifier = Modifier.height(24.dp))
             }
+    }
+}
+
+/** Профиль EQ под конкретное подключённое устройство (План.md §16/§20): кривая, сохранённая для
+ * "этих наушников", подставляется автоматически при их подключении - см.
+ * OutputDeviceDetector.deviceKey и PlaybackService.effectiveEq. Сюда же логично ложится импорт
+ * AutoEQ выше: его кривые сделаны под конкретную модель, а не под "любой Bluetooth". */
+@Composable
+private fun DeviceProfileCard(uiState: AudioTractUiState, viewModel: AudioTractViewModel) {
+    val saved = uiState.outputDeviceProfiles[uiState.currentDeviceKey]
+    val deviceLabel = uiState.currentDeviceName ?: "встроенный вывод"
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 20.dp)
+            .background(NamiColors.Ink800, RoundedCornerShape(NamiRadius.Card))
+            .padding(16.dp),
+    ) {
+        Text("Профиль устройства", color = NamiColors.Paper100, style = MaterialTheme.typography.bodyMedium)
+        Text(
+            text = if (saved != null) {
+                "Сохранён для «$deviceLabel» - подставляется автоматически при подключении."
+            } else {
+                "Сейчас подключено: «$deviceLabel». Своей кривой для него ещё нет."
+            },
+            color = NamiColors.Paper40,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        Row(modifier = Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text(
+                text = if (saved != null) "Обновить" else "Сохранить для этого устройства",
+                color = NamiColors.Shu,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.clickable { viewModel.saveCurrentEqAsDeviceProfile() },
+            )
+            if (saved != null) {
+                Text(
+                    text = "Удалить",
+                    color = NamiColors.Paper70,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.clickable { viewModel.deleteCurrentDeviceProfile() },
+                )
+            }
+        }
+        if (saved != null && !uiState.outputProfilesEnabled) {
+            Text(
+                text = "Профили по устройству выключены в Аудиотракте - сохранённая кривая пока не применяется.",
+                color = NamiColors.Paper40,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
     }
 }
 
