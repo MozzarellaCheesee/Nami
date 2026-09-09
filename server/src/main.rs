@@ -10,6 +10,7 @@ mod config;
 mod db;
 mod host;
 mod scanner;
+mod sync;
 mod tls;
 mod transcode;
 mod watcher;
@@ -49,6 +50,11 @@ async fn main() -> Res<()> {
     }
 
     let conn = db::open(&cfg.db_path)?;
+    match sync::purge_tombstones(&conn, cfg.tombstone_ttl_days) {
+        Ok(n) if n > 0 => tracing::info!("вычищено {n} полей у записей, удалённых давно"),
+        Ok(_) => {}
+        Err(e) => tracing::warn!("чистка надгробий не удалась: {e}"),
+    }
     tracing::info!("библиотека: {} треков", api::track_count(&conn));
 
     // Провайдер криптографии выбирается явно: собираем rustls без aws-lc-rs (см. Cargo.toml),
@@ -69,6 +75,8 @@ async fn main() -> Res<()> {
         fingerprint: tls_cfg.as_ref().map(|t| t.fingerprint.clone()),
         rate: auth::RateLimiter::default(),
         ffmpeg,
+        events: tokio::sync::broadcast::channel(64).0,
+        positions: tokio::sync::broadcast::channel(64).0,
         cfg: cfg.clone(),
     });
 

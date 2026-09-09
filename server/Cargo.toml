@@ -5,12 +5,12 @@ edition = "2021"
 description = "Self-hosted сервер NAMI - библиотека и passthrough-отдача аудио"
 
 [dependencies]
-axum = "0.8"
+axum = { version = "0.8", features = ["ws", "http1", "http2", "json", "tokio"] }
 # tls-rustls-no-provider вместо tls-rustls: провайдер выбираем сами (ring, не aws-lc-rs).
 # aws-lc-rs тянет cmake+bindgen и делает кросс-компиляцию arm64 отдельным приключением,
 # ring для этого собирается обычным кросс-gcc.
 axum-server = { version = "0.8", default-features = false, features = ["tls-rustls-no-provider"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "sync"] }
 tower = "0.5"
 tower-http = { version = "0.7", features = ["fs"] }
 

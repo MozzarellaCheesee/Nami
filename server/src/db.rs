@@ -7,7 +7,7 @@ use rusqlite::Connection;
 /// ponytail: отдельных таблиц albums/artists нет - на этом этапе они целиком выводятся
 /// из tracks (`SELECT DISTINCT album ...`). Заводить их стоит, когда появятся собственные
 /// поля (обложка альбома, MBID исполнителя), а не ради нормализации ради нормализации.
-const SCHEMA: &str = r#"
+pub const SCHEMA: &str = r#"
 PRAGMA journal_mode = WAL;
 PRAGMA synchronous = NORMAL;
 
@@ -45,6 +45,31 @@ CREATE TABLE IF NOT EXISTS pairing_codes (
     created_at  INTEGER NOT NULL,
     expires_at  INTEGER NOT NULL,
     used_at     INTEGER
+);
+
+-- Синхронизируемое состояние: плейлисты, рейтинги, теги, моменты, петли, заметки,
+-- история прослушиваний. Строка = ОДНО ПОЛЕ одной записи со своей меткой времени -
+-- именно это даёт last-write-wins на уровне поля, а не записи целиком.
+-- Подробное обоснование такой формы - в доккомментарии модуля sync.
+-- Удаление - строка с field='__deleted' (надгробие), физическая чистка по TTL.
+CREATE TABLE IF NOT EXISTS state (
+    entity      TEXT NOT NULL,
+    id          TEXT NOT NULL,
+    field       TEXT NOT NULL,
+    value       TEXT NOT NULL,   -- JSON-значение
+    updated_at  INTEGER NOT NULL,
+    PRIMARY KEY (entity, id, field)
+);
+-- Запрос синхронизации ровно один: "всё, что новее метки" - под него и индекс.
+CREATE INDEX IF NOT EXISTS idx_state_updated ON state(updated_at);
+
+-- Позиция воспроизведения: высокочастотная, поэтому вне таблицы state (см. sync.rs).
+-- Одна строка на устройство, история не копится.
+CREATE TABLE IF NOT EXISTS playback_position (
+    device_id   INTEGER PRIMARY KEY REFERENCES devices(id) ON DELETE CASCADE,
+    track_id    INTEGER NOT NULL,
+    position_ms INTEGER NOT NULL,
+    updated_at  INTEGER NOT NULL
 );
 "#;
 

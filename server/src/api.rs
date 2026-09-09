@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
-use axum::extract::{ConnectInfo, Path, Query, Request, State};
+use axum::extract::{ConnectInfo, Extension, Path, Query, Request, State};
 use axum::http::{header, StatusCode};
 use axum::middleware::Next;
 use axum::response::{Html, IntoResponse, Response};
@@ -14,7 +14,7 @@ use tower_http::services::ServeFile;
 
 use crate::auth::{self, RateLimiter};
 use crate::config::Config;
-use crate::{host, scanner, transcode};
+use crate::{host, scanner, sync, transcode};
 
 pub struct AppState {
     /// ponytail: одно соединение под мьютексом. Запросы к SQLite здесь короткие
@@ -27,6 +27,24 @@ pub struct AppState {
     pub rate: RateLimiter,
     /// Найден ли ffmpeg в PATH - проверяется один раз на старте.
     pub ffmpeg: bool,
+    /// События изменений состояния для подключённых по WebSocket.
+    ///
+    /// broadcast, а не список сокетов под мьютексом: рассылка "всем подписчикам"
+    /// - это ровно то, что он делает, а отвалившийся клиент отписывается сам.
+    pub events: tokio::sync::broadcast::Sender<String>,
+    /// Отдельный канал для позиции воспроизведения: она обновляется на порядок чаще
+    /// и в общем канале заглушила бы редкие события изменений (см. sync.rs).
+    pub positions: tokio::sync::broadcast::Sender<String>,
+}
+
+impl AppState {
+    /// Разослать событие изменения. Нет подписчиков - не ошибка.
+    pub fn notify(&self, ev: serde_json::Value) {
+        let _ = self.events.send(ev.to_string());
+    }
+    pub fn notify_position(&self, ev: serde_json::Value) {
+        let _ = self.positions.send(ev.to_string());
+    }
 }
 
 pub type Shared = Arc<AppState>;
@@ -62,6 +80,8 @@ pub fn router(state: Shared) -> Router {
         .route("/api/tracks/{id}/stream", get(stream))
         .route("/api/transcode/profiles", get(transcode_profiles))
         .route("/api/scan", post(scan))
+        .route("/api/sync", get(sync_pull).post(sync_push))
+        .route("/api/position", get(position_get).post(position_post))
         .route("/api/auth/devices", get(devices))
         .route("/api/auth/devices/{id}", delete(revoke_device))
         .route_layer(axum::middleware::from_fn_with_state(state.clone(), require_token));
@@ -70,6 +90,8 @@ pub fn router(state: Shared) -> Router {
         .route("/api/health", get(health))
         .route("/api/auth/pair", post(pair))
         .route("/setup", get(setup_page))
+        // Токен проверяется внутри: у WebSocket-рукопожатия нет заголовка Authorization.
+        .route("/api/ws", get(ws))
         .merge(protected)
         .with_state(state)
 }
@@ -83,14 +105,17 @@ async fn require_token(State(st): State<Shared>, req: Request, next: Next) -> Re
         .and_then(|v| v.strip_prefix("Bearer "))
         .map(str::to_string);
 
-    let ok = match token {
+    let device_id = match token {
         Some(t) => {
             let db = st.db.lock().unwrap();
-            auth::verify(&db, &t).is_some()
+            auth::verify(&db, &t)
         }
-        None => false,
+        None => None,
     };
-    if ok {
+    if let Some(id) = device_id {
+        // Ручкам ниже нужен id устройства (позиция воспроизведения хранится по нему).
+        let mut req = req;
+        req.extensions_mut().insert(id);
         next.run(req).await
     } else {
         ApiError(StatusCode::UNAUTHORIZED, "нужен токен устройства".into()).into_response()
@@ -427,6 +452,131 @@ async fn setup_page(
          <h1>Сопряжение устройства</h1>{qr}<p>Код: <code>{code}</code></p>\
          <p>Действует 10 минут, одно устройство.</p>{warning}"
     )))
+}
+
+// ---------------------------------------------------------------- синхронизация
+
+#[derive(Deserialize)]
+struct Since {
+    since: Option<i64>,
+}
+
+async fn sync_pull(State(st): State<Shared>, Query(q): Query<Since>) -> ApiResult<Json<sync::Pull>> {
+    let db = st.db.lock().unwrap();
+    Ok(Json(sync::pull(&db, q.since.unwrap_or(0))?))
+}
+
+#[derive(Deserialize)]
+struct PushBody {
+    changes: Vec<sync::Change>,
+}
+
+async fn sync_push(
+    State(st): State<Shared>,
+    Json(body): Json<PushBody>,
+) -> ApiResult<Json<sync::PushReport>> {
+    let rep = {
+        let mut db = st.db.lock().unwrap();
+        sync::push(&mut db, &body.changes)?
+    };
+    if rep.applied > 0 {
+        // Список затронутых сущностей, а не сами изменения: клиент всё равно пойдёт
+        // за ними в GET /api/sync?since=, а гнать их вторым путём - два источника правды.
+        let mut entities: Vec<&str> = body.changes.iter().map(|c| c.entity.as_str()).collect();
+        entities.sort_unstable();
+        entities.dedup();
+        st.notify(serde_json::json!({
+            "type": "changed",
+            "entities": entities,
+            "at": rep.now,
+        }));
+    }
+    Ok(Json(rep))
+}
+
+async fn position_get(
+    State(st): State<Shared>,
+    Query(q): Query<Since>,
+) -> ApiResult<Json<Vec<sync::Position>>> {
+    let db = st.db.lock().unwrap();
+    Ok(Json(sync::positions(&db, q.since.unwrap_or(0))?))
+}
+
+async fn position_post(
+    State(st): State<Shared>,
+    Extension(device_id): Extension<i64>,
+    Json(p): Json<sync::Position>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let at = {
+        let db = st.db.lock().unwrap();
+        sync::set_position(&db, device_id, &p)?
+    };
+    st.notify_position(serde_json::json!({
+        "type": "position",
+        "track_id": p.track_id,
+        "position_ms": p.position_ms,
+        "at": at,
+    }));
+    Ok(Json(serde_json::json!({ "updated_at": at })))
+}
+
+#[derive(Deserialize)]
+struct WsQuery {
+    /// Токен: у WebSocket-рукопожатия из браузера заголовок Authorization задать нечем.
+    token: Option<String>,
+    /// 1 - подписаться ещё и на поток позиции воспроизведения. По умолчанию нет:
+    /// позиция обновляется каждые несколько секунд и забила бы редкие события изменений.
+    position: Option<u8>,
+}
+
+/// WebSocket с событиями изменений. Не заменяет `GET /api/sync?since=`, а ускоряет его:
+/// по событию клиент идёт за самими изменениями обычным HTTP. Поллинг остаётся
+/// полноценным запасным путём, если сокет недоступен или разорван.
+async fn ws(
+    State(st): State<Shared>,
+    Query(q): Query<WsQuery>,
+    upgrade: axum::extract::ws::WebSocketUpgrade,
+) -> Response {
+    let ok = q
+        .token
+        .as_deref()
+        .is_some_and(|t| auth::verify(&st.db.lock().unwrap(), t).is_some());
+    if !ok {
+        return ApiError(StatusCode::UNAUTHORIZED, "нужен токен устройства (?token=)".into())
+            .into_response();
+    }
+    let with_position = q.position == Some(1);
+    upgrade.on_upgrade(move |socket| ws_loop(st, socket, with_position))
+}
+
+async fn ws_loop(st: Shared, mut socket: axum::extract::ws::WebSocket, with_position: bool) {
+    use axum::extract::ws::Message;
+    let mut changes = st.events.subscribe();
+    let mut pos = st.positions.subscribe();
+    loop {
+        let msg = tokio::select! {
+            r = changes.recv() => r,
+            r = pos.recv(), if with_position => r,
+            // Клиент закрыл сокет или прислал что-то своё - читаем, чтобы заметить разрыв.
+            incoming = socket.recv() => {
+                match incoming {
+                    None | Some(Err(_)) | Some(Ok(Message::Close(_))) => return,
+                    _ => continue,
+                }
+            }
+        };
+        match msg {
+            Ok(text) => {
+                if socket.send(Message::Text(text.into())).await.is_err() {
+                    return;
+                }
+            }
+            // Медленный клиент отстал от кольцевого буфера. Событий он не увидит,
+            // но и не должен: догонит их обычным GET /api/sync?since=.
+            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+            Err(_) => return,
+        }
+    }
 }
 
 /// Кол-во треков в библиотеке - используется в логе старта.
