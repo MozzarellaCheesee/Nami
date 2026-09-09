@@ -17,6 +17,28 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val PREFS_NAME = "nami_settings"
+
+/** Дефолт темы для СВЕЖЕЙ установки - те же значения, что у пресета "Бумага" в app/ThemeIo.kt
+ * (:data не может зависеть от :app, а тащить :core:designsystem только ради 12 hex-строк того
+ * не стоит - если пресет там поменяется, эту копию тоже нужно поправить). Тёмная "Тушь" (пустой
+ * override) остаётся дефолтом для уже существующих установок - это различает
+ * [readThemeColorOverrides] через [SharedPreferences.getAll], не отдельный флаг: пустой файл
+ * настроек бывает только на реально первом запуске, апдейт с прошлой версии SharedPreferences не
+ * очищает, так что у любого, кто уже пользовался приложением, там уже что-то накопилось. */
+private val FRESH_INSTALL_THEME_COLORS = mapOf(
+    "Ink900" to "#F5F1E8",
+    "Ink800" to "#EBE6DA",
+    "Ink700" to "#E0DACC",
+    "Ink600" to "#CFC7B5",
+    "Ink500" to "#B4AB98",
+    "Paper100" to "#1A1A18",
+    "Paper70" to "#4A4844",
+    "Paper40" to "#7A756B",
+    "Shu" to "#C24A34",
+    "Ai" to "#3E6098",
+    "Kin" to "#8A6D12",
+    "Wakaba" to "#3E7A44",
+)
 private const val KEY_AUTO_OPEN_PLAYER = "auto_open_player"
 private const val KEY_HIDE_SYSTEM_BARS = "hide_system_bars"
 private const val KEY_KARAOKE_ENABLED = "karaoke_enabled"
@@ -78,6 +100,7 @@ private const val KEY_THEME_DENSITY_SCALE = "theme_density_scale"
 private const val KEY_THEME_FONT_SCALE = "theme_font_scale"
 private const val KEY_BLUR_ENABLED = "blur_enabled"
 private const val KEY_BOTTOM_TABS = "bottom_tabs" // JSON array [{tab, enabled}], см. readBottomTabs
+private const val KEY_DEFAULT_START_SCREEN = "default_start_screen"
 private const val KEY_NOW_PLAYING_MORE_ITEMS = "now_playing_more_items" // JSON array [{item, section, accent}]
 private const val KEY_BOTTOM_TAB_LABELS_HIDDEN = "bottom_tab_labels_hidden"
 private const val KEY_MINI_PLAYER_SIDE_SWIPE = "mini_player_side_swipe_action"
@@ -561,6 +584,17 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
         _nowPlayingLineProgress.value = value
     }
 
+    private val _defaultStartScreen = MutableStateFlow(
+        prefs.getString(KEY_DEFAULT_START_SCREEN, null)
+            ?.let { runCatching { dev.nami.domain.BottomTab.valueOf(it) }.getOrNull() }
+            ?: dev.nami.domain.BottomTab.LIBRARY,
+    )
+    override val defaultStartScreen: StateFlow<dev.nami.domain.BottomTab> = _defaultStartScreen
+    override fun setDefaultStartScreen(tab: dev.nami.domain.BottomTab) {
+        prefs.edit { putString(KEY_DEFAULT_START_SCREEN, tab.name) }
+        _defaultStartScreen.value = tab
+    }
+
     private val _bottomTabs = MutableStateFlow(readBottomTabs())
     override val bottomTabs: StateFlow<List<dev.nami.domain.BottomTabConfig>> = _bottomTabs
     override fun setBottomTabs(tabs: List<dev.nami.domain.BottomTabConfig>) {
@@ -751,7 +785,18 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
     }
 
     private fun readThemeColorOverrides(): Map<String, String> {
-        val raw = prefs.getString(KEY_THEME_COLOR_OVERRIDES, null) ?: return emptyMap()
+        val raw = prefs.getString(KEY_THEME_COLOR_OVERRIDES, null)
+        if (raw == null && prefs.all.isEmpty()) {
+            // Реально первый запуск (см. комментарий у FRESH_INSTALL_THEME_COLORS) - пишем
+            // сразу, не только возвращаем в памяти: иначе первое же изменение ЛЮБОЙ другой
+            // настройки сделало бы prefs непустым, и на следующем запуске эта ветка перестала
+            // бы срабатывать, молча откатив тему обратно на "Тушь".
+            val obj = JSONObject()
+            FRESH_INSTALL_THEME_COLORS.forEach { (token, hex) -> obj.put(token, hex) }
+            prefs.edit { putString(KEY_THEME_COLOR_OVERRIDES, obj.toString()) }
+            return FRESH_INSTALL_THEME_COLORS
+        }
+        if (raw == null) return emptyMap()
         return runCatching {
             val obj = JSONObject(raw)
             obj.keys().asSequence().associateWith { obj.getString(it) }

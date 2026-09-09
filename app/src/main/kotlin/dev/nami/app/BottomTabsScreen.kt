@@ -47,6 +47,7 @@ import dev.nami.domain.MIN_BOTTOM_TABS
 fun BottomTabsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
     val saved by viewModel.bottomTabs.collectAsState()
     val labelsHidden by viewModel.bottomTabLabelsHidden.collectAsState()
+    val defaultStartScreen by viewModel.defaultStartScreen.collectAsState()
     var order by remember { mutableStateOf(saved) }
     // Не remember(saved): жест захватывает этот MutableState один раз (pointerInput(index)), см.
     // тот же комментарий в HomeConstructorScreen.
@@ -76,6 +77,24 @@ fun BottomTabsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltView
                 style = dev.nami.core.designsystem.NamiType.Secondary,
                 modifier = Modifier.padding(top = 4.dp),
             )
+        }
+
+        NamiSectionLabel("Экран по умолчанию")
+        Text(
+            "Открывается на холодном старте приложения - весь список из восьми экранов, включая выключенные во вкладках.",
+            color = NamiColors.Paper40,
+            style = dev.nami.core.designsystem.NamiType.Secondary,
+            modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
+        )
+        dev.nami.core.designsystem.NamiPillRow(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
+            dev.nami.domain.BottomTab.entries.forEach { tab ->
+                dev.nami.core.designsystem.NamiPill(
+                    text = bottomTabLabel(tab),
+                    leading = bottomTabIcon(tab),
+                    selected = tab == defaultStartScreen,
+                    onClick = { viewModel.setDefaultStartScreen(tab) },
+                )
+            }
         }
 
         NamiSectionLabel("Подписи")

@@ -169,6 +169,7 @@ fun NamiNavHost(
     val bottomTabConfigs by settingsViewModel.bottomTabs.collectAsState()
     val bottomTabLabelsHidden by settingsViewModel.bottomTabLabelsHidden.collectAsState()
     val bottomTabs = bottomTabConfigs.filter { it.enabled }.map { it.tab }.take(dev.nami.domain.MAX_BOTTOM_TABS)
+    val defaultStartScreen by settingsViewModel.defaultStartScreen.collectAsState()
 
     // Now Playing is deliberately NOT a NavHost destination: NavHost only keeps its current
     // destination's composition alive, so pushing a "now_playing" route used to dispose the
@@ -291,7 +292,10 @@ fun NamiNavHost(
     Column(modifier = Modifier.weight(1f).statusBarsPadding().displayCutoutPadding()) {
         NavHost(
             navController = navController,
-            startDestination = ROUTE_LIBRARY,
+            // BottomTab.route уже совпадает со строкой роута каждого таба (тот же контракт, что
+            // и у самого таб-бара) - настройка "экран по умолчанию" просто выбирает из того же
+            // enum, ROUTE_LIBRARY был раньше единственным зашитым вариантом.
+            startDestination = defaultStartScreen.route,
             // No clipToBounds here anymore - it used to blanket-clip every destination to this
             // Column's own bounds, which also meant Album/Artist detail's cover couldn't bleed
             // up past the status-bar-height padding above (their own negative-offset trick for

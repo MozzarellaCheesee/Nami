@@ -822,6 +822,8 @@ private object NoOpSettingsRepository : dev.nami.domain.SettingsRepository {
     override val autoNightAmoled = MutableStateFlow(false)
     override fun setAutoNightAmoled(value: Boolean) {}
     override fun resetThemeShapeAndDensity() {}
+    override val defaultStartScreen = MutableStateFlow(dev.nami.domain.BottomTab.LIBRARY)
+    override fun setDefaultStartScreen(tab: dev.nami.domain.BottomTab) {}
     override val bottomTabs = MutableStateFlow(dev.nami.domain.DEFAULT_BOTTOM_TABS)
     override fun setBottomTabs(tabs: List<dev.nami.domain.BottomTabConfig>) {}
     override val nowPlayingMoreItems = MutableStateFlow(dev.nami.domain.DEFAULT_NOW_PLAYING_MORE_ITEMS)

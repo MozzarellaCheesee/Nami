@@ -70,11 +70,16 @@ class SettingsViewModel @Inject constructor(
     val autoNightAmoled: StateFlow<Boolean> = appSettingsRepository.autoNightAmoled
     val bottomTabs: StateFlow<List<dev.nami.domain.BottomTabConfig>> = appSettingsRepository.bottomTabs
     val bottomTabLabelsHidden: StateFlow<Boolean> = appSettingsRepository.bottomTabLabelsHidden
+    val defaultStartScreen: StateFlow<dev.nami.domain.BottomTab> = appSettingsRepository.defaultStartScreen
     val miniPlayerSideSwipeAction: StateFlow<dev.nami.domain.GestureAction> = appSettingsRepository.miniPlayerSideSwipeAction
     val nowPlayingLayoutPreset: StateFlow<dev.nami.domain.NowPlayingLayoutPreset> = appSettingsRepository.nowPlayingLayoutPreset
 
     fun setBottomTabs(tabs: List<dev.nami.domain.BottomTabConfig>) {
         appSettingsRepository.setBottomTabs(tabs)
+    }
+
+    fun setDefaultStartScreen(tab: dev.nami.domain.BottomTab) {
+        appSettingsRepository.setDefaultStartScreen(tab)
     }
 
     val nowPlayingMoreItems: StateFlow<List<dev.nami.domain.NowPlayingMoreConfig>> =
