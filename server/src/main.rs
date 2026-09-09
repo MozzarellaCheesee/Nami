@@ -10,6 +10,7 @@ mod config;
 mod db;
 mod host;
 mod scanner;
+mod share;
 mod sync;
 mod tls;
 mod transcode;

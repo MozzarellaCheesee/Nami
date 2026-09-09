@@ -14,6 +14,7 @@ use tower_http::services::ServeFile;
 
 use crate::auth::{self, RateLimiter};
 use crate::config::Config;
+use crate::share;
 use crate::users::{self, Ident};
 use crate::{host, scanner, sync, transcode};
 
@@ -93,6 +94,8 @@ pub fn router(state: Shared) -> Router {
         .route("/api/invites", post(create_invite))
         .route("/api/library-mode", get(get_library_mode).put(put_library_mode))
         .route("/api/now-playing", get(now_playing))
+        .route("/api/share", post(create_share))
+        .route("/api/share/{token}", delete(revoke_share))
         .route_layer(axum::middleware::from_fn_with_state(state.clone(), require_token));
 
     Router::new()
@@ -102,6 +105,9 @@ pub fn router(state: Shared) -> Router {
         .route("/api/auth/login", post(login))
         .route("/api/invites/{token}/accept", post(accept_invite))
         .route("/setup", get(setup_page))
+        // Гостевые ссылки: без логина и без приложения, проверка - токен в пути.
+        .route("/share/{token}", get(share_page))
+        .route("/share/{token}/stream/{id}", get(share_stream))
         // Токен проверяется внутри: у WebSocket-рукопожатия нет заголовка Authorization.
         .route("/api/ws", get(ws))
         .merge(protected)
@@ -962,6 +968,83 @@ async fn now_playing(
 ) -> ApiResult<Json<Vec<sync::NowPlaying>>> {
     let db = st.db.lock().unwrap();
     Ok(Json(sync::now_playing(&db, &ident)?))
+}
+
+// ---------------------------------------------------------------- гостевые ссылки
+
+async fn create_share(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Json(req): Json<share::NewShare>,
+) -> ApiResult<Json<share::Share>> {
+    if req.track_ids.is_empty() {
+        return Err(ApiError(StatusCode::BAD_REQUEST, "нечем делиться: track_ids пуст".into()));
+    }
+    let db = st.db.lock().unwrap();
+    // Поделиться можно только тем, что видишь сам - иначе гостевая ссылка стала бы
+    // обходом ограничения доступа к папкам.
+    for id in &req.track_ids {
+        if !users::can_see_track(&db, &ident, *id) {
+            return Err(ApiError(StatusCode::FORBIDDEN, format!("трек {id} вам не виден")));
+        }
+    }
+    Ok(Json(share::create(&db, ident.user_id, &req)?))
+}
+
+async fn revoke_share(
+    State(st): State<Shared>,
+    Extension(_ident): Extension<Ident>,
+    Path(token): Path<String>,
+) -> ApiResult<StatusCode> {
+    let n = share::revoke(&st.db.lock().unwrap(), &token)?;
+    Ok(if n == 1 { StatusCode::NO_CONTENT } else { StatusCode::NOT_FOUND })
+}
+
+/// Страница гостя. Срок и счётчик проверяются здесь и ещё раз на каждом потоке.
+async fn share_page(State(st): State<Shared>, Path(token): Path<String>) -> Response {
+    let db = st.db.lock().unwrap();
+    match share::lookup(&db, &token) {
+        Some(live) => Html(share::page(&db, &token, &live)).into_response(),
+        None => (
+            StatusCode::GONE,
+            Html(
+                "<!doctype html><meta charset=utf-8><title>Ссылка недоступна</title>\
+                 <p style=\"font:16px system-ui;margin:40px\">Ссылка больше не действует."
+                    .to_string(),
+            ),
+        )
+            .into_response(),
+    }
+}
+
+/// Поток по гостевой ссылке. Отдельная проверка токена ссылки вместо токена устройства.
+async fn share_stream(
+    State(st): State<Shared>,
+    Path((token, id)): Path<(String, i64)>,
+    req: Request,
+) -> Response {
+    // Перемотка - это Range с ненулевым началом; новым прослушиванием она не считается.
+    let is_start = req
+        .headers()
+        .get(header::RANGE)
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v == "bytes=0-")
+        .unwrap_or(true);
+    {
+        let db = st.db.lock().unwrap();
+        let Some(live) = share::lookup(&db, &token) else {
+            return ApiError(StatusCode::GONE, "ссылка больше не действует".into()).into_response();
+        };
+        if !live.track_ids.contains(&id) {
+            return ApiError(StatusCode::NOT_FOUND, "этого трека нет в ссылке".into())
+                .into_response();
+        }
+        if is_start && !share::count_play(&db, &token) {
+            return ApiError(StatusCode::GONE, "ссылка больше не действует".into()).into_response();
+        }
+    }
+    // Гостю - всегда оригинал: профиль транскодинга он выбрать не может.
+    serve_track(st, id, None, req).await
 }
 
 /// Кол-во треков в библиотеке - используется в логе старта.
