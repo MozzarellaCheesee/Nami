@@ -5,8 +5,14 @@
 FROM --platform=$BUILDPLATFORM rust:1-slim AS build
 ARG TARGETARCH
 # rusqlite (feature bundled) и ring собирают C-код - нужен компилятор под целевую архитектуру.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        gcc libc6-dev gcc-aarch64-linux-gnu gcc-x86-64-linux-gnu \
+# Одного gcc-*-linux-gnu недостаточно: без парного libc6-dev-*-cross кросс-gcc подхватывает
+# заголовки хостовой архитектуры (/usr/include) вместо sysroot целевой, и сборка падает на
+# "bits/libc-header-start.h: No such file or directory" при компиляции C-кода внутри rusqlite/ring.
+RUN dpkg --add-architecture arm64 && dpkg --add-architecture amd64 \
+    && apt-get update && apt-get install -y --no-install-recommends \
+        gcc libc6-dev \
+        gcc-aarch64-linux-gnu libc6-dev-arm64-cross \
+        gcc-x86-64-linux-gnu libc6-dev-amd64-cross \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
