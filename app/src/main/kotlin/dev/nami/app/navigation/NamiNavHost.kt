@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -279,11 +280,15 @@ fun NamiNavHost(
         if (route == ROUTE_SEARCH) searchViewModel.onQueryChange("")
     }
 
+    // Горизонтальная ориентация - рельса справа, а не слева: пользователь явно попросил, обычное
+    // расположение (слева) остаётся для портрета/планшета-без-поворота. Ширина экрана не при чём
+    // тут - только физический поворот устройства.
+    val isLandscape = LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
     Box(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
     Row(modifier = Modifier.fillMaxSize()) {
     // Рельса вне Column с контентом, а не внутри - она должна занимать всю высоту окна, включая
     // область статус-бара, иначе на планшете сверху остаётся пустая полоса.
-    if (useNavigationRail) {
+    if (useNavigationRail && !isLandscape) {
         NamiNavRail(
             tabs = bottomTabs,
             showLabels = !bottomTabLabelsHidden,
@@ -768,6 +773,14 @@ fun NamiNavHost(
                 modifier = Modifier.navigationBarsPadding(),
             )
         }
+    }
+    if (useNavigationRail && isLandscape) {
+        NamiNavRail(
+            tabs = bottomTabs,
+            showLabels = !bottomTabLabelsHidden,
+            currentRoute = currentRoute,
+            onTabSelected = onTabSelected,
+        )
     }
     }
 
