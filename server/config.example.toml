@@ -34,3 +34,10 @@ tombstone_ttl_days = 30
 # Относительный путь считается от data_dir. Внутри заводится подпапка на библиотеку,
 # и она сканируется вместе с music_dirs - иначе пересканирование удалило бы загруженное.
 upload_dir = "uploads"
+
+# NAMI_DEEPL_API_KEY - ключ DeepL для перевода лирики (GET /api/tracks/{id}/lyrics?translate=1).
+# Пусто - сервер лирику не переводит, свой ключ он не заводит и клиентский не спрашивает.
+deepl_api_key = ""
+
+# NAMI_LYRICS_TARGET_LANG - язык перевода по умолчанию, код DeepL.
+lyrics_target_lang = "RU"

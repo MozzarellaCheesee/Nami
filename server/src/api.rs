@@ -82,6 +82,7 @@ pub fn router(state: Shared) -> Router {
         .route("/api/tracks", get(tracks))
         .route("/api/tracks/{id}", get(track))
         .route("/api/tracks/{id}/stream", get(stream))
+        .route("/api/tracks/{id}/lyrics", get(lyrics))
         .route(
             "/api/tracks/upload",
             // Тело пишется в файл потоком, поэтому потолок axum по умолчанию (2 МБ)
@@ -1121,6 +1122,86 @@ async fn write_body(path: &std::path::Path, body: axum::body::Body) -> crate::Re
         return Err("пустое тело запроса".into());
     }
     Ok(())
+}
+
+// ---------------------------------------------------------------- лирика
+
+#[derive(Deserialize)]
+struct LyricsQuery {
+    /// 1 - искать заново, даже если в кеше уже что-то лежит.
+    refresh: Option<u8>,
+    /// 1 - вернуть ещё и перевод (нужен ключ DeepL в конфигурации сервера).
+    translate: Option<u8>,
+    /// Язык перевода (код DeepL). По умолчанию - из конфигурации.
+    lang: Option<String>,
+}
+
+/// Лирика трека: кеш в БД, при промахе - поиск в LRCLIB.
+///
+/// Сеть и разбор - в `spawn_blocking`: ureq синхронный, а держать на нём
+/// async-исполнитель нельзя (сервер однопоточный по бюджету).
+async fn lyrics(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Path(id): Path<i64>,
+    Query(q): Query<LyricsQuery>,
+) -> ApiResult<Json<crate::lyrics::Lyrics>> {
+    let (title, artist, album, duration_ms) = {
+        let db = st.db.lock().unwrap();
+        if !users::can_see_track(&db, &ident, id) {
+            return Err(ApiError(StatusCode::NOT_FOUND, "нет такого трека".into()));
+        }
+        db.query_row(
+            "SELECT title, artist, album, duration_ms FROM tracks WHERE id=?1",
+            [id],
+            |r| Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?, r.get::<_, Option<String>>(2)?, r.get::<_, i64>(3)?)),
+        )?
+    };
+    let refresh = q.refresh == Some(1);
+    let translate = q.translate == Some(1);
+    let lang = q.lang.unwrap_or_else(|| st.cfg.lyrics_target_lang.clone());
+
+    let out = tokio::task::spawn_blocking(move || -> ApiResult<crate::lyrics::Lyrics> {
+        use crate::lyrics;
+        let cached = if refresh { None } else { lyrics::load(&st.db.lock().unwrap(), id) };
+        let cached = match cached {
+            Some(c) => c,
+            None => {
+                let found = lyrics::fetch_lrclib(&title, artist.as_deref(), album.as_deref(), duration_ms);
+                let db = st.db.lock().unwrap();
+                match found {
+                    Some((raw, synced)) => lyrics::store(&db, id, &raw, synced, "lrclib")?,
+                    // Промах тоже кешируется: иначе каждый показ трека без лирики -
+                    // это два запроса в lrclib.
+                    None => lyrics::store(&db, id, "", false, "none")?,
+                }
+                lyrics::load(&db, id).ok_or_else(|| {
+                    ApiError(StatusCode::INTERNAL_SERVER_ERROR, "кеш лирики не записался".into())
+                })?
+            }
+        };
+
+        let mut cached = cached;
+        if translate && cached.translation.is_none() && !cached.raw.is_empty() {
+            if st.cfg.deepl_api_key.trim().is_empty() {
+                return Err(ApiError(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "перевод не настроен: задайте deepl_api_key в config.toml".into(),
+                ));
+            }
+            let texts: Vec<String> =
+                lyrics::parse_lrc(&cached.raw).into_iter().map(|l| l.text).collect();
+            if let Some(tr) = lyrics::translate_deepl(&texts, st.cfg.deepl_api_key.trim(), &lang) {
+                let json = serde_json::to_string(&tr).unwrap_or_default();
+                lyrics::store_translation(&st.db.lock().unwrap(), id, &json)?;
+                cached.translation = Some(json);
+            }
+        }
+        Ok(lyrics::build(id, &cached))
+    })
+    .await
+    .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))??;
+    Ok(Json(out))
 }
 
 // ---------------------------------------------------------------- гостевые ссылки

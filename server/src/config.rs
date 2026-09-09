@@ -32,6 +32,13 @@ pub struct Config {
     /// Сколько дней хранить tombstone-записи синхронизации до физического удаления.
     #[serde(default = "default_tombstone_days")]
     pub tombstone_ttl_days: i64,
+    /// Ключ DeepL для перевода лирики. Пусто - сервер просто не переводит
+    /// (см. doc-комментарий lyrics.rs: своего ключа сервер не заводит).
+    #[serde(default)]
+    pub deepl_api_key: String,
+    /// Язык перевода лирики по умолчанию, код DeepL.
+    #[serde(default = "default_lyrics_lang")]
+    pub lyrics_target_lang: String,
 }
 
 fn default_port() -> u16 {
@@ -61,6 +68,9 @@ fn default_upload_dir() -> PathBuf {
 fn default_tombstone_days() -> i64 {
     30
 }
+fn default_lyrics_lang() -> String {
+    "RU".into()
+}
 
 impl Default for Config {
     fn default() -> Self {
@@ -75,6 +85,8 @@ impl Default for Config {
             transcode_cache_mb: default_cache_mb(),
             upload_dir: default_upload_dir(),
             tombstone_ttl_days: default_tombstone_days(),
+            deepl_api_key: String::new(),
+            lyrics_target_lang: default_lyrics_lang(),
         }
     }
 }
@@ -138,6 +150,12 @@ impl Config {
         }
         if let Ok(v) = std::env::var("NAMI_UPLOAD_DIR") {
             cfg.upload_dir = PathBuf::from(v);
+        }
+        if let Ok(v) = std::env::var("NAMI_DEEPL_API_KEY") {
+            cfg.deepl_api_key = v;
+        }
+        if let Ok(v) = std::env::var("NAMI_LYRICS_TARGET_LANG") {
+            cfg.lyrics_target_lang = v;
         }
         if let Ok(v) = std::env::var("NAMI_TRANSCODE_CACHE_MB") {
             cfg.transcode_cache_mb =

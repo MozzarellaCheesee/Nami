@@ -42,6 +42,10 @@ rcgen = "0.14"
 qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 notify = { version = "8.2.0", default-features = false, features = ["macos_fsevent"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "logging", "tls12"] }
+# Исходящий HTTP (LRCLIB, DeepL, MusicBrainz). ureq, а не reqwest: он синхронный, а все
+# походы наружу и так живут в spawn_blocking, и его rustls собирается на ring - том же
+# провайдере, что уже линкуется для TLS сервера, без второй криптобиблиотеки в образе.
+ureq = { version = "3.4.1", default-features = false, features = ["rustls"] }
 
 [profile.release]
 opt-level = "z"

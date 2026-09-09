@@ -141,6 +141,31 @@ CREATE TABLE IF NOT EXISTS shares (
     play_count  INTEGER NOT NULL DEFAULT 0
 );
 
+-- ---------------------------------------------------------------- этап 4
+
+-- Кеш лирики. Сырой текст как пришёл от источника (LRC или обычный) - разбор дешёвый
+-- и делается на отдаче, а хранить разобранное значило бы держать два формата сразу.
+-- Перевод отдельной колонкой: он запрашивается не всегда и сбрасывается при обновлении
+-- текста (иначе строки разъедутся).
+CREATE TABLE IF NOT EXISTS lyrics (
+    track_id    INTEGER PRIMARY KEY REFERENCES tracks(id) ON DELETE CASCADE,
+    raw         TEXT NOT NULL,
+    synced      INTEGER NOT NULL DEFAULT 0,
+    source      TEXT NOT NULL,          -- lrclib | none
+    fetched_at  INTEGER NOT NULL,
+    translation TEXT                    -- JSON-массив строк, по одной на строку raw
+);
+
+-- Файлы, которые сканер не смог открыть. Здоровью библиотеки нужен именно факт
+-- "не открылось при сканировании", а перепроверять 50 000 файлов на каждый запрос
+-- ручки нельзя - поэтому неудачи записываются в момент прохода сканера.
+CREATE TABLE IF NOT EXISTS scan_failures (
+    path       TEXT PRIMARY KEY,
+    error      TEXT NOT NULL,
+    library_id INTEGER NOT NULL DEFAULT 0,
+    failed_at  INTEGER NOT NULL
+);
+
 -- Настройки сервера, которые меняются в рантайме (в отличие от config.toml).
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
