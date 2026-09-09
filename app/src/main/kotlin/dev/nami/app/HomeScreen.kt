@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.DragHandle
 import androidx.compose.material.icons.outlined.Shuffle
@@ -77,6 +78,13 @@ fun HomeScreen(
     onConstructorClick: () -> Unit,
     onOpenLocalShare: () -> Unit,
     onShuffleAllClick: (List<dev.nami.core.model.Track>) -> Unit,
+    // Играет прямо сейчас очередь, запущенная этой же кнопкой (не любая другая) - тогда кнопка
+    // на карточке меняется на паузу вместо Play, повторный тап переключает паузу/продолжение,
+    // а тап по всей карточке открывает плеер вместо перезапуска новой перемешки.
+    isShuffleAllActive: Boolean = false,
+    isPlaying: Boolean = false,
+    onShuffleAllTogglePlay: () -> Unit = {},
+    onShuffleAllOpenPlayer: () -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
@@ -109,7 +117,16 @@ fun HomeScreen(
                         item { HomeHeroRow(track.title, track.artistName, track.albumArtworkPath, onClick = { onTrackClick(track.id) }) }
                     }
                     HomeBlockType.SHUFFLE_ALL -> if (allTracks.isNotEmpty()) {
-                        item { HomeShuffleAllCard(trackCount = allTracks.size, onClick = { onShuffleAllClick(allTracks) }) }
+                        item {
+                            HomeShuffleAllCard(
+                                trackCount = allTracks.size,
+                                isActive = isShuffleAllActive,
+                                isPlaying = isPlaying,
+                                onPlayNew = { onShuffleAllClick(allTracks) },
+                                onTogglePlay = onShuffleAllTogglePlay,
+                                onOpenPlayer = onShuffleAllOpenPlayer,
+                            )
+                        }
                     }
                     HomeBlockType.RECENTLY_ADDED -> if (state.recentlyAdded.isNotEmpty()) {
                         item { HomeSectionHeader("Недавно добавленное") }
@@ -341,21 +358,39 @@ private fun tracksWord(count: Int): String {
  * Без заголовка-секции (в отличие от остальных блоков) - сама карточка самодостаточна, подпись
  * "Продолжить слушать" сверху ей не нужна, это не список, а один явный призыв к действию. */
 @Composable
-private fun HomeShuffleAllCard(trackCount: Int, onClick: () -> Unit) {
+private fun HomeShuffleAllCard(
+    trackCount: Int,
+    isActive: Boolean,
+    isPlaying: Boolean,
+    onPlayNew: () -> Unit,
+    onTogglePlay: () -> Unit,
+    onOpenPlayer: () -> Unit,
+) {
+    // Пока играет очередь, запущенная этой же кнопкой - тап по всей карточке открывает плеер
+    // (пользователь уже слушает, ему нужен полный экран, не новый запуск), а кнопка отдельно
+    // переключает паузу/продолжение. Иначе (ещё не нажимали, или сейчас играет что-то другое) -
+    // тап где угодно на карточке запускает новую перемешку, кнопка визуально та же область.
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp, vertical = 4.dp)
             .background(NamiColors.Ink800, RoundedCornerShape(NamiRadius.Card))
-            .clickable(onClick = onClick)
+            .clickable(onClick = if (isActive) onOpenPlayer else onPlayNew)
             .padding(16.dp),
     ) {
         Box(
-            modifier = Modifier.size(48.dp).background(NamiColors.Shu, RoundedCornerShape(NamiRadius.Button)),
+            modifier = Modifier
+                .size(48.dp)
+                .background(NamiColors.Shu, RoundedCornerShape(NamiRadius.Button))
+                .clickable(onClick = if (isActive) onTogglePlay else onPlayNew),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = NamiColors.Ink900)
+            Icon(
+                if (isActive && isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                contentDescription = if (isActive && isPlaying) "Пауза" else "Играть",
+                tint = NamiColors.Ink900,
+            )
         }
         Column(modifier = Modifier.weight(1f).padding(start = 14.dp)) {
             Text("Слушать всё вперемешку", color = NamiColors.Paper100, style = MaterialTheme.typography.bodyLarge)

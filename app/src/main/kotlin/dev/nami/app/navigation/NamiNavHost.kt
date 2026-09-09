@@ -142,6 +142,10 @@ fun NamiNavHost(
     // so MiniPlayer and NowPlayingScreen share the same instance and stay in sync.
     val nowPlayingViewModel: NowPlayingViewModel = hiltViewModel()
     val queue by nowPlayingViewModel.queue.collectAsState()
+    val playbackState by nowPlayingViewModel.playbackState.collectAsState()
+    val isPlaying = (playbackState as? dev.nami.domain.PlaybackState.Playing)?.isPlaying == true
+    // Блок "Слушать всё вперемешку" на главном - см. NowPlayingViewModel.shuffleAllActive doc.
+    val shuffleAllActive by nowPlayingViewModel.shuffleAllActive.collectAsState()
     // Also hoisted here rather than scoped to the ROUTE_LIBRARY nav entry - the bottom nav's
     // Library tab needs to call selectTab(TRACKS) directly and reliably from any screen (Album/
     // Artist detail, Discography, another tab entirely). The previous approach signaled a
@@ -338,9 +342,13 @@ fun NamiNavHost(
                     onConstructorClick = { navController.navigate(ROUTE_HOME_CONSTRUCTOR) },
                     onOpenLocalShare = { navController.navigate(ROUTE_LOCAL_SHARE) },
                     onShuffleAllClick = { tracks ->
-                        nowPlayingViewModel.playTracksShuffled(tracks, artistName = null)
+                        nowPlayingViewModel.playAllShuffled(tracks)
                         if (autoOpenPlayer) showNowPlaying = true
                     },
+                    isShuffleAllActive = shuffleAllActive,
+                    isPlaying = isPlaying,
+                    onShuffleAllTogglePlay = nowPlayingViewModel::toggle,
+                    onShuffleAllOpenPlayer = { showNowPlaying = true },
                 )
             }
             composable(ROUTE_HOME_CONSTRUCTOR) {

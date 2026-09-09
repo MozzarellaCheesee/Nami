@@ -315,7 +315,16 @@ class NowPlayingViewModel @Inject constructor(
      * plays for itself. */
     val externalTrackChangeSignal: StateFlow<Int> = _externalTrackChangeSignal.asStateFlow()
 
+    // Блок "Слушать всё вперемешку" на главном - true пока играет ИМЕННО очередь, запущенная им
+    // (не любая другая перемешка). Сбрасывается в false в начале КАЖДОЙ другой функции ниже,
+    // которая грузит новую очередь - вкладка/альбом/плейлист/радио, что угодно, кроме
+    // skipNext/skipPrevious внутри той же очереди (они его не трогают, пользователь всё ещё
+    // слушает тот же перемешанный набор).
+    private val _shuffleAllActive = MutableStateFlow(false)
+    val shuffleAllActive: StateFlow<Boolean> = _shuffleAllActive.asStateFlow()
+
     fun playTrack(trackId: TrackId) {
+        _shuffleAllActive.value = false
         viewModelScope.launch {
             val track = libraryRepository.track(trackId).first() ?: return@launch
             playerRepository.play(listOf(track.toPlayableTrack(artistName = null)), startIndex = 0)
@@ -326,6 +335,7 @@ class NowPlayingViewModel @Inject constructor(
     /** Хвост группы C "офлайн-радио от трека" - см. RadioBuilder для того, что на самом деле
      * считается похожестью (локальная эвристика, не рекомендатель). */
     fun startRadio(trackId: TrackId) {
+        _shuffleAllActive.value = false
         viewModelScope.launch {
             val seed = libraryRepository.track(trackId).first() ?: return@launch
             val library = libraryRepository.allTracksOrdered()
@@ -341,6 +351,7 @@ class NowPlayingViewModel @Inject constructor(
      * whole library exactly like tapping a track inside an album/artist/playlist already does.
      */
     fun playFromLibrary(trackId: TrackId) {
+        _shuffleAllActive.value = false
         viewModelScope.launch {
             val tracks = libraryRepository.allTracksOrdered()
             val startIndex = tracks.indexOfFirst { it.id == trackId }
@@ -351,6 +362,7 @@ class NowPlayingViewModel @Inject constructor(
     }
 
     fun playTracks(tracks: List<Track>, artistName: String?, startIndex: Int) {
+        _shuffleAllActive.value = false
         viewModelScope.launch {
             playerRepository.play(tracks.map { it.toPlayableTrack(artistName) }, startIndex = startIndex)
             _externalTrackChangeSignal.value++
@@ -366,6 +378,7 @@ class NowPlayingViewModel @Inject constructor(
      * треками), и пользователь получал бы необъяснимые скачки звука. Тут это осознанно
      * односторонняя операция, как если бы он переключил их сам. */
     fun playPlaylist(playlistId: dev.nami.core.model.PlaylistId, tracks: List<Track>, startIndex: Int) {
+        _shuffleAllActive.value = false
         viewModelScope.launch {
             val playlist = playlistRepository?.playlist(playlistId)?.first()
             playlist?.eqGainsCsv
@@ -385,6 +398,7 @@ class NowPlayingViewModel @Inject constructor(
      * включено - кнопка "Перемешать" рядом с Play должна тасовать независимо от того, что
      * сохранено в playlist.shuffleOnStart (та настройка про обычный запуск, не про эту кнопку). */
     fun playPlaylistShuffled(playlistId: dev.nami.core.model.PlaylistId, tracks: List<Track>) {
+        _shuffleAllActive.value = false
         viewModelScope.launch {
             val playlist = playlistRepository?.playlist(playlistId)?.first()
             playlist?.eqGainsCsv
@@ -406,8 +420,26 @@ class NowPlayingViewModel @Inject constructor(
      * shuffle button can un-shuffle back to this exact starting order afterwards, same as if the
      * user had tapped Play and then shuffle by hand. */
     fun playTracksShuffled(tracks: List<Track>, artistName: String?) {
+        _shuffleAllActive.value = false
         viewModelScope.launch {
             playerRepository.play(tracks.map { it.toPlayableTrack(artistName) }, startIndex = 0)
+            playerRepository.setShuffleEnabled(true)
+            _externalTrackChangeSignal.value++
+        }
+    }
+
+    /** Кнопка "Слушать всё вперемешку" на главном - специально своя функция, не [playTracksShuffled]:
+     * та начинает с индекса 0 переданного списка И ТОЛЬКО ПОТОМ включает перемешку (осознанно для
+     * альбома/артиста - индекс 0 там значит первый трек альбома). Для всей библиотеки список
+     * приходит в порядке "как хранится" (свежедобавленные первыми) - тот же приём давал баг:
+     * играть всегда начинало с самого последнего скачанного трека, потому что именно он был
+     * нулевым, а перемешка применялась только к ОСТАВШЕЙСЯ части очереди. Тут список тасуется
+     * заранее, поэтому и первый трек по-настоящему случайный. */
+    fun playAllShuffled(tracks: List<Track>) {
+        _shuffleAllActive.value = true
+        viewModelScope.launch {
+            val shuffled = tracks.shuffled()
+            playerRepository.play(shuffled.map { it.toPlayableTrack(artistName = null) }, startIndex = 0)
             playerRepository.setShuffleEnabled(true)
             _externalTrackChangeSignal.value++
         }
