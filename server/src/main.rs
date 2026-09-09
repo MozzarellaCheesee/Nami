@@ -11,6 +11,7 @@ mod db;
 mod host;
 mod scanner;
 mod tls;
+mod transcode;
 mod watcher;
 
 use std::net::SocketAddr;
@@ -42,6 +43,11 @@ async fn main() -> Res<()> {
         if caps.meets_baseline { "да" } else { "НЕТ" }
     );
 
+    let ffmpeg = transcode::ffmpeg_available();
+    if !ffmpeg {
+        tracing::warn!("ffmpeg не найден в PATH - транскодинг недоступен, остаётся passthrough");
+    }
+
     let conn = db::open(&cfg.db_path)?;
     tracing::info!("библиотека: {} треков", api::track_count(&conn));
 
@@ -62,6 +68,7 @@ async fn main() -> Res<()> {
         db: Mutex::new(conn),
         fingerprint: tls_cfg.as_ref().map(|t| t.fingerprint.clone()),
         rate: auth::RateLimiter::default(),
+        ffmpeg,
         cfg: cfg.clone(),
     });
 

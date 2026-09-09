@@ -14,7 +14,7 @@ use tower_http::services::ServeFile;
 
 use crate::auth::{self, RateLimiter};
 use crate::config::Config;
-use crate::{host, scanner};
+use crate::{host, scanner, transcode};
 
 pub struct AppState {
     /// ponytail: одно соединение под мьютексом. Запросы к SQLite здесь короткие
@@ -25,6 +25,8 @@ pub struct AppState {
     /// None, когда сервер поднят без TLS - тогда пейринг помечается небезопасным.
     pub fingerprint: Option<String>,
     pub rate: RateLimiter,
+    /// Найден ли ffmpeg в PATH - проверяется один раз на старте.
+    pub ffmpeg: bool,
 }
 
 pub type Shared = Arc<AppState>;
@@ -58,6 +60,7 @@ pub fn router(state: Shared) -> Router {
         .route("/api/tracks", get(tracks))
         .route("/api/tracks/{id}", get(track))
         .route("/api/tracks/{id}/stream", get(stream))
+        .route("/api/transcode/profiles", get(transcode_profiles))
         .route("/api/scan", post(scan))
         .route("/api/auth/devices", get(devices))
         .route("/api/auth/devices/{id}", delete(revoke_device))
@@ -101,6 +104,8 @@ struct Health {
     tracks: i64,
     /// false - сервер поднят без TLS, пейринг небезопасен (только локальная отладка).
     tls: bool,
+    /// Найден ли ffmpeg: false - профили транскодинга отвечают 503.
+    ffmpeg: bool,
 }
 
 async fn health(State(st): State<Shared>) -> ApiResult<Json<Health>> {
@@ -114,6 +119,7 @@ async fn health(State(st): State<Shared>) -> ApiResult<Json<Health>> {
         version: env!("CARGO_PKG_VERSION"),
         tracks,
         tls: st.fingerprint.is_some(),
+        ffmpeg: st.ffmpeg,
     }))
 }
 
@@ -180,24 +186,101 @@ async fn track(State(st): State<Shared>, Path(id): Path<i64>) -> ApiResult<Json<
         .map_err(|_| ApiError(StatusCode::NOT_FOUND, "нет такого трека".into()))
 }
 
-/// Passthrough-отдача: файл байт-в-байт, никакого транскодинга.
+#[derive(Deserialize)]
+struct StreamQuery {
+    /// Имя профиля транскодинга. Без него - passthrough, байт-в-байт.
+    profile: Option<String>,
+}
+
+/// Отдача аудио: по умолчанию passthrough (файл байт-в-байт), с `?profile=` - транскод.
 ///
 /// Range/206/If-Range реализует ServeFile из tower-http - переписывать разбор
 /// заголовка Range руками смысла нет, готовая реализация уже покрывает крайние случаи.
-async fn stream(State(st): State<Shared>, Path(id): Path<i64>, req: Request) -> Response {
-    let path: Option<String> = st
+/// Транскод отдаётся тем же ServeFile из кеша, поэтому перемотка работает и там.
+async fn stream(
+    State(st): State<Shared>,
+    Path(id): Path<i64>,
+    Query(q): Query<StreamQuery>,
+    req: Request,
+) -> Response {
+    let row: Option<(String, i64, i64)> = st
         .db
         .lock()
         .unwrap()
-        .query_row("SELECT path FROM tracks WHERE id=?1", [id], |r| r.get(0))
+        .query_row("SELECT path, size_bytes, mtime FROM tracks WHERE id=?1", [id], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+        })
         .ok();
-    let Some(path) = path else {
+    let Some((path, size, mtime)) = row else {
         return ApiError(StatusCode::NOT_FOUND, "нет такого трека".into()).into_response();
     };
-    match ServeFile::new(path).oneshot(req).await {
+
+    let (file, mime) = match q.profile.as_deref() {
+        None | Some("") | Some("original") => (std::path::PathBuf::from(path), None),
+        Some(name) => {
+            let Some(p) = transcode::profile(name) else {
+                return ApiError(
+                    StatusCode::BAD_REQUEST,
+                    format!("нет профиля {name} - см. GET /api/transcode/profiles"),
+                )
+                .into_response();
+            };
+            if !st.ffmpeg {
+                return ApiError(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "ffmpeg не найден в PATH - транскодинг недоступен".into(),
+                )
+                .into_response();
+            }
+            let cache_dir = st.cfg.cache_dir();
+            let limit = st.cfg.transcode_cache_mb;
+            let src = std::path::PathBuf::from(path);
+            // ffmpeg блокирует поток надолго - только не на async-исполнителе.
+            let ready = tokio::task::spawn_blocking(move || {
+                let r = transcode::ensure(&cache_dir, &src, id, size, mtime, p);
+                if r.as_ref().is_ok_and(|r| r.encoded) {
+                    let _ = transcode::evict(&cache_dir, limit);
+                }
+                r
+            })
+            .await;
+            match ready {
+                Ok(Ok(r)) => (r.path, Some(p.mime)),
+                Ok(Err(e)) => {
+                    return ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+                        .into_response()
+                }
+                Err(e) => {
+                    return ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+                        .into_response()
+                }
+            }
+        }
+    };
+
+    let resp = match ServeFile::new(file).oneshot(req).await {
         Ok(resp) => resp.map(axum::body::Body::new),
-        Err(e) => ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => {
+            return ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
+        }
+    };
+    match mime {
+        // По расширению .opus/.m4a ServeFile угадывает не всегда - ставим тип сами.
+        Some(m) => {
+            let mut resp = resp;
+            resp.headers_mut()
+                .insert(header::CONTENT_TYPE, header::HeaderValue::from_static(m));
+            resp
+        }
+        None => resp,
     }
+}
+
+async fn transcode_profiles(State(st): State<Shared>) -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "available": st.ffmpeg,
+        "profiles": transcode::PROFILES,
+    }))
 }
 
 async fn scan(State(st): State<Shared>) -> ApiResult<Json<scanner::ScanReport>> {
