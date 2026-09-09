@@ -105,6 +105,8 @@ private const val ROUTE_EQUALIZER = "equalizer"
 private const val ROUTE_VOCABULARY = "vocabulary"
 private const val ROUTE_BOTTOM_TABS = "settings/tabs"
 private const val ROUTE_MORE_MENU = "settings/more_menu"
+// Стартовый "роут" правой колонки list-detail: пока в списке ничего не выбрано, там заглушка.
+private const val ROUTE_PANE_EMPTY = "pane_empty"
 
 
 @Composable
@@ -333,6 +335,15 @@ fun NamiNavHost(
                 dev.nami.app.HomeConstructorScreen(onBack = { navController.popBackStack() })
             }
             composable(ROUTE_LIBRARY) {
+                // П.md §29-31 list-detail: на широком экране альбом/исполнитель открываются в
+                // правой колонке рядом со списком, на узком - обычным переходом, как раньше.
+                val paneNav = rememberNavController()
+                val openDetail: (String) -> Unit = { route ->
+                    if (useNavigationRail) paneNav.navigate(route) else navController.navigate(route)
+                }
+                NamiListDetail(
+                    twoPane = useNavigationRail,
+                    list = {
                 // LibraryScreen already wraps its own list in clipToBounds() internally - no
                 // extra wrap needed here.
                 LibraryScreen(
@@ -344,8 +355,8 @@ fun NamiNavHost(
                             if (autoOpenPlayer) showNowPlaying = true
                         }
                     },
-                    onAlbumClick = { albumId -> navController.navigate("album/${albumId.value}") },
-                    onArtistClick = { artistId -> navController.navigate("artist/${artistId.value}") },
+                    onAlbumClick = { albumId -> openDetail("album/${albumId.value}") },
+                    onArtistClick = { artistId -> openDetail("artist/${artistId.value}") },
                     onImportRequested = onImportRequested,
                     onImportFolderRequested = onImportFolderRequested,
                     onImportZipRequested = onImportZipRequested,
@@ -358,6 +369,44 @@ fun NamiNavHost(
                     importProgress = importProgress,
                     resetSignal = libraryTabResetSignal,
                     viewModel = libraryViewModel,
+                )
+                    },
+                    detail = {
+                        DetailPaneNavHost(paneNav, emptyText = "Выберите альбом или исполнителя") {
+                            composable(
+                                ROUTE_ALBUM_DETAIL,
+                                arguments = listOf(navArgument("albumId") { type = NavType.StringType }),
+                            ) {
+                                AlbumDetailRoute(
+                                    onBack = { paneNav.popBackStack() },
+                                    navigate = { route -> navController.navigate(route) },
+                                    onShowNowPlaying = { showNowPlaying = true },
+                                    autoOpenPlayer = autoOpenPlayer,
+                                    nowPlayingViewModel = nowPlayingViewModel,
+                                    trackQuickActionsViewModel = trackQuickActionsViewModel,
+                                    onPickAlbumCover = onPickAlbumCover,
+                                )
+                            }
+                            composable(
+                                ROUTE_ARTIST_DETAIL,
+                                arguments = listOf(navArgument("artistId") { type = NavType.StringType }),
+                            ) { entry ->
+                                ArtistDetailRoute(
+                                    artistId = ArtistId(entry.arguments?.getString("artistId").orEmpty()),
+                                    onBack = { paneNav.popBackStack() },
+                                    // Альбом изнутри исполнителя остаётся в той же колонке, а вот
+                                    // дискография/все треки уходят на полный экран - в узкой
+                                    // колонке им тесно, и это уже не "деталь выбранного в списке".
+                                    onAlbumClick = { albumId -> paneNav.navigate("album/${albumId.value}") },
+                                    navigate = { route -> navController.navigate(route) },
+                                    onShowNowPlaying = { showNowPlaying = true },
+                                    autoOpenPlayer = autoOpenPlayer,
+                                    nowPlayingViewModel = nowPlayingViewModel,
+                                    onPickArtistPhoto = onPickArtistPhoto,
+                                )
+                            }
+                        }
+                    },
                 )
             }
             composable(ROUTE_SEARCH) {
@@ -378,15 +427,43 @@ fun NamiNavHost(
                 }
             }
             composable(ROUTE_PLAYLISTS) {
-                Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
-                PlaylistsScreen(
-                    onPlaylistClick = { playlistId -> navController.navigate("playlist/${playlistId.value}") },
-                    onImportRequested = onImportPlaylist,
-                    onCreateSmartPlaylist = { navController.navigate(ROUTE_SMART_PLAYLIST_EDITOR) },
-                    lastImportResult = lastImportResult,
-                    onImportResultShown = onImportResultShown,
+                val paneNav = rememberNavController()
+                NamiListDetail(
+                    twoPane = useNavigationRail,
+                    list = {
+                        Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
+                            PlaylistsScreen(
+                                onPlaylistClick = { playlistId ->
+                                    val route = "playlist/${playlistId.value}"
+                                    if (useNavigationRail) paneNav.navigate(route) else navController.navigate(route)
+                                },
+                                onImportRequested = onImportPlaylist,
+                                onCreateSmartPlaylist = { navController.navigate(ROUTE_SMART_PLAYLIST_EDITOR) },
+                                lastImportResult = lastImportResult,
+                                onImportResultShown = onImportResultShown,
+                            )
+                        }
+                    },
+                    detail = {
+                        DetailPaneNavHost(paneNav, emptyText = "Выберите плейлист") {
+                            composable(
+                                ROUTE_PLAYLIST_DETAIL,
+                                arguments = listOf(navArgument("playlistId") { type = NavType.StringType }),
+                            ) { entry ->
+                                PlaylistDetailRoute(
+                                    playlistId = PlaylistId(entry.arguments?.getString("playlistId").orEmpty()),
+                                    onBack = { paneNav.popBackStack() },
+                                    navigate = { route -> navController.navigate(route) },
+                                    onShowNowPlaying = { showNowPlaying = true },
+                                    autoOpenPlayer = autoOpenPlayer,
+                                    nowPlayingViewModel = nowPlayingViewModel,
+                                    onExportPlaylist = onExportPlaylist,
+                                    onPickPlaylistCover = onPickPlaylistCover,
+                                )
+                            }
+                        }
+                    },
                 )
-                }
             }
             composable(ROUTE_SMART_PLAYLIST_EDITOR) {
                 dev.nami.feature.playlists.SmartPlaylistEditorScreen(onBack = { navController.popBackStack() })
@@ -556,31 +633,14 @@ fun NamiNavHost(
                 ROUTE_ALBUM_DETAIL,
                 arguments = listOf(navArgument("albumId") { type = NavType.StringType }),
             ) {
-                AlbumDetailScreen(
+                AlbumDetailRoute(
                     onBack = { navController.popBackStack() },
-                    onPlayTracks = { tracks, startIndex ->
-                        if (queue.nowPlaying?.id == tracks.getOrNull(startIndex)?.id) {
-                            showNowPlaying = true
-                        } else {
-                            nowPlayingViewModel.playTracks(tracks, artistName = null, startIndex = startIndex)
-                            if (autoOpenPlayer) showNowPlaying = true
-                        }
-                    },
-                    onShuffleTracks = { tracks ->
-                        nowPlayingViewModel.playTracksShuffled(tracks, artistName = null)
-                        if (autoOpenPlayer) showNowPlaying = true
-                    },
-                    onAddToQueue = { track -> nowPlayingViewModel.addToQueue(track, artistName = null) },
-                    onPickCoverRequested = onPickAlbumCover,
-                    onDeleted = { navController.popBackStack() },
-                    onShowTrackInfo = { trackId -> navController.navigate("track_info/${trackId.value}") },
-                    onShowAlbumInfo = { albumId -> navController.navigate("album_info/${albumId.value}") },
-                    onCompareVersions = { a, b -> navController.navigate("ab_compare/${a.value}/${b.value}") },
-                    onStartRadio = { trackId ->
-                        nowPlayingViewModel.startRadio(trackId)
-                        if (autoOpenPlayer) showNowPlaying = true
-                    },
-                    onShareCard = { track -> trackQuickActionsViewModel.shareCard(track) },
+                    navigate = { route -> navController.navigate(route) },
+                    onShowNowPlaying = { showNowPlaying = true },
+                    autoOpenPlayer = autoOpenPlayer,
+                    nowPlayingViewModel = nowPlayingViewModel,
+                    trackQuickActionsViewModel = trackQuickActionsViewModel,
+                    onPickAlbumCover = onPickAlbumCover,
                 )
             }
             composable(
@@ -588,26 +648,15 @@ fun NamiNavHost(
                 arguments = listOf(navArgument("artistId") { type = NavType.StringType }),
             ) {
                 val artistId = ArtistId(it.arguments?.getString("artistId").orEmpty())
-                ArtistDetailScreen(
+                ArtistDetailRoute(
+                    artistId = artistId,
                     onBack = { navController.popBackStack() },
                     onAlbumClick = { albumId -> navController.navigate("album/${albumId.value}") },
-                    onShowDiscography = { navController.navigate("artist/${artistId.value}/discography") },
-                    onShowAllTracks = { navController.navigate("artist/${artistId.value}/tracks") },
-                    onPlayTracks = { tracks, artistName, startIndex ->
-                        if (queue.nowPlaying?.id == tracks.getOrNull(startIndex)?.id) {
-                            showNowPlaying = true
-                        } else {
-                            nowPlayingViewModel.playTracks(tracks, artistName, startIndex)
-                            if (autoOpenPlayer) showNowPlaying = true
-                        }
-                    },
-                    onShuffleTracks = { tracks, artistName ->
-                        nowPlayingViewModel.playTracksShuffled(tracks, artistName)
-                        if (autoOpenPlayer) showNowPlaying = true
-                    },
-                    onAddToQueue = { track, artistName -> nowPlayingViewModel.addToQueue(track, artistName) },
-                    onPickPhotoRequested = onPickArtistPhoto,
-                    onShowArtistInfo = { id -> navController.navigate("artist_info/${id.value}") },
+                    navigate = { route -> navController.navigate(route) },
+                    onShowNowPlaying = { showNowPlaying = true },
+                    autoOpenPlayer = autoOpenPlayer,
+                    nowPlayingViewModel = nowPlayingViewModel,
+                    onPickArtistPhoto = onPickArtistPhoto,
                 )
             }
             composable(
@@ -665,24 +714,15 @@ fun NamiNavHost(
                 val playlistId = dev.nami.core.model.PlaylistId(
                     backStackEntry.arguments?.getString("playlistId").orEmpty(),
                 )
-                PlaylistDetailScreen(
+                PlaylistDetailRoute(
+                    playlistId = playlistId,
                     onBack = { navController.popBackStack() },
-                    onDeleted = { navController.popBackStack() },
-                    onPlayTracks = { tracks, startIndex ->
-                        if (queue.nowPlaying?.id == tracks.getOrNull(startIndex)?.id) {
-                            showNowPlaying = true
-                        } else {
-                            nowPlayingViewModel.playPlaylist(playlistId, tracks, startIndex)
-                            if (autoOpenPlayer) showNowPlaying = true
-                        }
-                    },
-                    onExportRequested = onExportPlaylist,
-                    onPickCoverRequested = onPickPlaylistCover,
-                    onEditSmartPlaylist = { playlistId -> navController.navigate("smart_playlist_editor/${playlistId.value}") },
-                    onShuffleTracks = { tracks ->
-                        nowPlayingViewModel.playPlaylistShuffled(playlistId, tracks)
-                        if (autoOpenPlayer) showNowPlaying = true
-                    },
+                    navigate = { route -> navController.navigate(route) },
+                    onShowNowPlaying = { showNowPlaying = true },
+                    autoOpenPlayer = autoOpenPlayer,
+                    nowPlayingViewModel = nowPlayingViewModel,
+                    onExportPlaylist = onExportPlaylist,
+                    onPickPlaylistCover = onPickPlaylistCover,
                 )
             }
         }
@@ -785,5 +825,144 @@ fun NamiNavHost(
     ) {
         LyricsScreen(onBack = { showLyrics = false }, nowPlayingViewModel = nowPlayingViewModel)
     }
+    }
+}
+
+// Экраны-детали вынесены из тела NavHost в отдельные функции, потому что теперь у каждой из них
+// два места вызова: обычный полноэкранный роут (Compact) и правая колонка list-detail на широком
+// экране (Medium/Expanded, см. NamiListDetail). Разница между этими двумя случаями - только в
+// том, какой navController обрабатывает переходы, поэтому наружу вынесены именно колбэки навигации.
+
+@Composable
+private fun AlbumDetailRoute(
+    onBack: () -> Unit,
+    navigate: (String) -> Unit,
+    onShowNowPlaying: () -> Unit,
+    autoOpenPlayer: Boolean,
+    nowPlayingViewModel: NowPlayingViewModel,
+    trackQuickActionsViewModel: dev.nami.feature.library.TrackQuickActionsViewModel,
+    onPickAlbumCover: (AlbumId) -> Unit,
+) {
+    val queue by nowPlayingViewModel.queue.collectAsState()
+    AlbumDetailScreen(
+        onBack = onBack,
+        onPlayTracks = { tracks, startIndex ->
+            if (queue.nowPlaying?.id == tracks.getOrNull(startIndex)?.id) {
+                onShowNowPlaying()
+            } else {
+                nowPlayingViewModel.playTracks(tracks, artistName = null, startIndex = startIndex)
+                if (autoOpenPlayer) onShowNowPlaying()
+            }
+        },
+        onShuffleTracks = { tracks ->
+            nowPlayingViewModel.playTracksShuffled(tracks, artistName = null)
+            if (autoOpenPlayer) onShowNowPlaying()
+        },
+        onAddToQueue = { track -> nowPlayingViewModel.addToQueue(track, artistName = null) },
+        onPickCoverRequested = onPickAlbumCover,
+        onDeleted = onBack,
+        onShowTrackInfo = { trackId -> navigate("track_info/${trackId.value}") },
+        onShowAlbumInfo = { albumId -> navigate("album_info/${albumId.value}") },
+        onCompareVersions = { a, b -> navigate("ab_compare/${a.value}/${b.value}") },
+        onStartRadio = { trackId ->
+            nowPlayingViewModel.startRadio(trackId)
+            if (autoOpenPlayer) onShowNowPlaying()
+        },
+        onShareCard = { track -> trackQuickActionsViewModel.shareCard(track) },
+    )
+}
+
+@Composable
+private fun ArtistDetailRoute(
+    artistId: ArtistId,
+    onBack: () -> Unit,
+    onAlbumClick: (AlbumId) -> Unit,
+    navigate: (String) -> Unit,
+    onShowNowPlaying: () -> Unit,
+    autoOpenPlayer: Boolean,
+    nowPlayingViewModel: NowPlayingViewModel,
+    onPickArtistPhoto: (ArtistId) -> Unit,
+) {
+    val queue by nowPlayingViewModel.queue.collectAsState()
+    ArtistDetailScreen(
+        onBack = onBack,
+        onAlbumClick = onAlbumClick,
+        onShowDiscography = { navigate("artist/${artistId.value}/discography") },
+        onShowAllTracks = { navigate("artist/${artistId.value}/tracks") },
+        onPlayTracks = { tracks, artistName, startIndex ->
+            if (queue.nowPlaying?.id == tracks.getOrNull(startIndex)?.id) {
+                onShowNowPlaying()
+            } else {
+                nowPlayingViewModel.playTracks(tracks, artistName, startIndex)
+                if (autoOpenPlayer) onShowNowPlaying()
+            }
+        },
+        onShuffleTracks = { tracks, artistName ->
+            nowPlayingViewModel.playTracksShuffled(tracks, artistName)
+            if (autoOpenPlayer) onShowNowPlaying()
+        },
+        onAddToQueue = { track, artistName -> nowPlayingViewModel.addToQueue(track, artistName) },
+        onPickPhotoRequested = onPickArtistPhoto,
+        onShowArtistInfo = { id -> navigate("artist_info/${id.value}") },
+    )
+}
+
+@Composable
+private fun PlaylistDetailRoute(
+    playlistId: PlaylistId,
+    onBack: () -> Unit,
+    navigate: (String) -> Unit,
+    onShowNowPlaying: () -> Unit,
+    autoOpenPlayer: Boolean,
+    nowPlayingViewModel: NowPlayingViewModel,
+    onExportPlaylist: (PlaylistId) -> Unit,
+    onPickPlaylistCover: (PlaylistId) -> Unit,
+) {
+    val queue by nowPlayingViewModel.queue.collectAsState()
+    // Свои настройки плейлиста применяются при старте воспроизведения (П.md §20), поэтому запуск
+    // идёт через playPlaylist, а не общий playTracks.
+    PlaylistDetailScreen(
+        onBack = onBack,
+        onDeleted = onBack,
+        onPlayTracks = { tracks, startIndex ->
+            if (queue.nowPlaying?.id == tracks.getOrNull(startIndex)?.id) {
+                onShowNowPlaying()
+            } else {
+                nowPlayingViewModel.playPlaylist(playlistId, tracks, startIndex)
+                if (autoOpenPlayer) onShowNowPlaying()
+            }
+        },
+        onExportRequested = onExportPlaylist,
+        onPickCoverRequested = onPickPlaylistCover,
+        onEditSmartPlaylist = { id -> navigate("smart_playlist_editor/${id.value}") },
+        onShuffleTracks = { tracks ->
+            nowPlayingViewModel.playPlaylistShuffled(playlistId, tracks)
+            if (autoOpenPlayer) onShowNowPlaying()
+        },
+    )
+}
+
+/**
+ * Правая колонка list-detail для Библиотеки и Плейлистов: собственный NavHost со своим стеком,
+ * чтобы у экранов-деталей были нормальные аргументы роута (их ViewModel читают albumId/artistId/
+ * playlistId из SavedStateHandle) и работал системный "назад" внутри колонки, не трогая основной
+ * стек слева.
+ */
+@Composable
+private fun DetailPaneNavHost(
+    paneNav: NavHostController,
+    emptyText: String,
+    builder: androidx.navigation.NavGraphBuilder.() -> Unit,
+) {
+    NavHost(
+        navController = paneNav,
+        startDestination = ROUTE_PANE_EMPTY,
+        enterTransition = { EnterTransition.None },
+        exitTransition = { ExitTransition.None },
+        popEnterTransition = { EnterTransition.None },
+        popExitTransition = { ExitTransition.None },
+    ) {
+        composable(ROUTE_PANE_EMPTY) { NamiEmptyDetailPane(emptyText) }
+        builder()
     }
 }

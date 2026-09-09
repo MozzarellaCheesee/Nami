@@ -30,6 +30,9 @@ compose-material3 = { module = "androidx.compose.material3:material3" }
 # Версия не указана намеренно - приходит из compose-bom, как и остальной material3.
 compose-material3-windowsize = { module = "androidx.compose.material3:material3-window-size-class" }
 compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
+# П.md §30 "складные устройства": WindowInfoTracker/FoldingFeature - место сгиба как граница
+# между списком и деталью. Только это, без material3-adaptive - разметку считаем сами.
+androidx-window = { module = "androidx.window:window", version = "1.3.0" }
 navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "navigation" }
 media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3" }
 media3-session = { module = "androidx.media3:media3-session", version.ref = "media3" }
