@@ -9,6 +9,7 @@ import dev.nami.core.model.ArtistId
 import dev.nami.core.model.Track
 import dev.nami.core.model.TrackId
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 
 /** План.md §15 "сортировки библиотеки". BITRATE считается на лету из размера файла и
  * длительности - отдельной колонки битрейта в схеме нет, а для порядка сортировки этой оценки
@@ -41,6 +42,11 @@ interface LibraryRepository {
     fun tracks(): Flow<PagingData<Track>>
     /** Snapshot of every non-deleted track, same order as [tracks], for building a full playback queue. */
     suspend fun allTracksOrdered(): List<Track>
+
+    /** Живой вариант [allTracksOrdered]: переотдаёт список при каждом изменении библиотеки.
+     * Для главного экрана, который держат открытым во время импорта. Дефолт-реализация - разовый
+     * снимок, чтобы тестовым фейкам не пришлось ничего добавлять. */
+    fun allTracksOrderedFlow(): Flow<List<Track>> = flow { emit(allTracksOrdered()) }
     fun track(id: TrackId): Flow<Track?>
     fun albums(): Flow<PagingData<AlbumSummary>>
     /** Live - reflects renames, cover/artist changes and album/track add-or-remove without the

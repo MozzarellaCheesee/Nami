@@ -195,6 +195,9 @@ class LibraryRepositoryImpl @Inject constructor(
     override suspend fun allTracksOrdered(): List<Track> =
         trackDao.allOrderedWithArtwork().map { it.toDomain() }
 
+    override fun allTracksOrderedFlow(): Flow<List<Track>> =
+        trackDao.observeAllOrderedWithArtwork().map { rows -> rows.map { it.toDomain() } }
+
     override fun track(id: TrackId): Flow<Track?> =
         trackDao.observeByIdWithArtwork(id.value).map { it?.toDomain() }
 

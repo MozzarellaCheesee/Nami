@@ -46,6 +46,22 @@ interface TrackDao {
     )
     suspend fun allOrderedWithArtwork(): List<TrackWithArtwork>
 
+    /** Живой вариант [allOrderedWithArtwork] - тот же запрос, но Room переотдаёт список при любом
+     * изменении tracks/albums/artists. Нужен главному экрану, который держат открытым во время
+     * импорта: без него блоки "Недавно добавленные"/"Есть новое" обновлялись только по перезаходу. */
+    @Query(
+        """
+        SELECT tracks.*, COALESCE(albums.artworkPath, tracks.artworkPath) AS albumArtworkPath,
+               artists.name AS artistName
+        FROM tracks
+        LEFT JOIN albums ON tracks.albumId = albums.id
+        LEFT JOIN artists ON tracks.artistId = artists.id
+        WHERE tracks.deletedAt IS NULL
+        ORDER BY tracks.dateAdded DESC
+        """,
+    )
+    fun observeAllOrderedWithArtwork(): Flow<List<TrackWithArtwork>>
+
     @Query("SELECT * FROM tracks WHERE id = :id")
     suspend fun findById(id: String): TrackEntity?
 
