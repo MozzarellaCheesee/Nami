@@ -95,6 +95,10 @@ class LocalShareRepositoryImpl @Inject constructor(
     private val _listenTogetherHostEnabled = MutableStateFlow(false)
     override val listenTogetherHostEnabled: StateFlow<Boolean> = _listenTogetherHostEnabled
 
+    private val _listenTogetherGuestCount = MutableStateFlow(0)
+    override val listenTogetherGuestCount: StateFlow<Int> = _listenTogetherGuestCount
+    private var guestCountJob: Job? = null
+
     private val _listenTogetherGuestState = MutableStateFlow<ListenTogetherGuestState?>(null)
     override val listenTogetherGuestState: StateFlow<ListenTogetherGuestState?> = _listenTogetherGuestState
     private val _listenTogetherError = MutableStateFlow<String?>(null)
@@ -166,12 +170,23 @@ class LocalShareRepositoryImpl @Inject constructor(
         httpServer = server
         _serverRunning.value = true
         _serverAddress.value = "${localIpAddress()}:$SERVER_PORT"
+        // Сервер живёт на голых сокетах и никого ни о чём не уведомляет - число слушающих
+        // приходится опрашивать. Тем же тактом, что и гость опрашивает хоста.
+        guestCountJob = scope.launch {
+            while (true) {
+                _listenTogetherGuestCount.value = server.guestCount()
+                delay(POLL_INTERVAL_MS)
+            }
+        }
         registerNsd()
     }
 
     override fun stopServer() {
         httpServer?.stop()
         httpServer = null
+        guestCountJob?.cancel()
+        guestCountJob = null
+        _listenTogetherGuestCount.value = 0
         _serverRunning.value = false
         _serverAddress.value = null
         unregisterNsd()
@@ -196,6 +211,9 @@ class LocalShareRepositoryImpl @Inject constructor(
             put("positionMs", playing.positionMs)
             put("durationMs", playing.durationMs)
             put("isPlaying", playing.isPlaying)
+            // Гость сам себя тоже видит в этом числе (его запрос уже засчитан) - вычитает себя на
+            // своей стороне, чтобы показать "и ещё N".
+            put("guests", httpServer?.guestCount() ?: 0)
             put("upcoming", upcoming)
         }
     }
@@ -502,6 +520,7 @@ class LocalShareRepositoryImpl @Inject constructor(
                 val trackId = json.optString("trackId")
                 val hostPositionMs = aheadByOneWay(json, oneWayLatencyMs)
                 val current = _listenTogetherGuestState.value
+                val otherGuests = (json.optInt("guests") - 1).coerceAtLeast(0)
                 if (current?.trackId?.value != trackId) {
                     _listenTogetherGuestState.value = ListenTogetherGuestState(
                         hostName = hostName,
@@ -512,6 +531,7 @@ class LocalShareRepositoryImpl @Inject constructor(
                         cachedPath = cachedFilesByTrackId[trackId]?.path,
                         positionMs = hostPositionMs,
                         durationMs = json.optLong("durationMs"),
+                        otherGuests = otherGuests,
                     )
                     val cached = cachedFilesByTrackId[trackId]
                     if (cached != null) {
@@ -520,7 +540,8 @@ class LocalShareRepositoryImpl @Inject constructor(
                         downloadAndPlay(device, trackId, json.optString("title"), json.optString("artistName", null))
                     }
                 } else {
-                    _listenTogetherGuestState.value = current.copy(positionMs = hostPositionMs, durationMs = json.optLong("durationMs"))
+                    _listenTogetherGuestState.value =
+                        current.copy(positionMs = hostPositionMs, durationMs = json.optLong("durationMs"), otherGuests = otherGuests)
                     // Пока трек ещё качается, играет ПРЕДЫДУЩИЙ - подгонять его под позицию нового
                     // нечестно (перемотка в никуда), догоняем только когда играет то же, что у хоста.
                     if (!current.downloading) correctDrift(hostPositionMs, json.optBoolean("isPlaying", true))

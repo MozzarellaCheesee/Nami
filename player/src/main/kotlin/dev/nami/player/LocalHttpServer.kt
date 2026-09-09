@@ -41,6 +41,16 @@ class LocalHttpServer(
 ) {
     private var serverSocket: ServerSocket? = null
 
+    /** Кто недавно спрашивал /nowplaying - это и есть "слушают вместе". Отдельного "подключения" в
+     * протоколе нет (обычные stateless GET), так что живость гостя определяется тем же способом,
+     * что и у него самого разрыв связи: спрашивал недавно - значит слушает. */
+    private val guests = RecentGuests()
+
+    /** Сколько человек слушает прямо сейчас. Верхнего лимита нет и осознанно не вводится: сценарий
+     * тут - домашняя сеть на 2-5 человек, а ServerSocket с потоком на клиента столько тянет без
+     * оговорок; лимит был бы защитой от несуществующей проблемы. */
+    fun guestCount(): Int = guests.count()
+
     fun start() {
         val socket = ServerSocket(port)
         serverSocket = socket
@@ -83,6 +93,7 @@ class LocalHttpServer(
                 when {
                     path == "/info" -> writeJson(output, JSONObject().put("name", deviceName))
                     path == "/nowplaying" -> {
+                        s.inetAddress?.hostAddress?.let { guests.seen(it) }
                         val json = nowPlayingJsonBlocking()
                         if (json != null) writeJson(output, json) else writeStatus(output, 204)
                     }
@@ -186,6 +197,26 @@ class LocalHttpServer(
         val text = if (code == 404) "Not Found" else if (code == 204) "No Content" else "Error"
         output.write("HTTP/1.1 $code $text\r\nConnection: close\r\n\r\n".toByteArray(Charsets.UTF_8))
         output.flush()
+    }
+}
+
+/** Счётчик "кто слушает сейчас" по адресу источника запроса. Окно взято с запасом относительно
+ * интервала опроса гостя (1.5 с): три пропущенных опроса подряд - уже не сетевой джиттер, а уход.
+ * Часы - elapsedRealtime-подобный System.nanoTime (переводом системного времени не сбивается). */
+internal class RecentGuests(
+    private val windowMs: Long = 6_000L,
+    private val nowMs: () -> Long = { System.nanoTime() / 1_000_000 },
+) {
+    private val lastSeen = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    fun seen(address: String) {
+        lastSeen[address] = nowMs()
+    }
+
+    fun count(): Int {
+        val cutoff = nowMs() - windowMs
+        lastSeen.entries.removeAll { it.value < cutoff }
+        return lastSeen.size
     }
 }
 

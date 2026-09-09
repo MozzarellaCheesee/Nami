@@ -37,6 +37,9 @@ data class ListenTogetherGuestState(
     val cachedPath: String?,
     val positionMs: Long,
     val durationMs: Long,
+    /** Сколько ещё гостей слушает того же хоста, кроме нас - хост считает их сам и кладёт число в
+     * /nowplaying. 0 значит "мы одни". */
+    val otherGuests: Int = 0,
 )
 
 interface LocalShareRepository {
@@ -72,6 +75,10 @@ interface LocalShareRepository {
      * (приватность по умолчанию, не автоматически при старте сервера). */
     val listenTogetherHostEnabled: StateFlow<Boolean>
     fun setListenTogetherHost(enabled: Boolean)
+
+    /** Сколько устройств прямо сейчас нас слушает - раньше тумблер выше был слепым, хост не видел,
+     * подключился ли вообще кто-нибудь. Считается по недавним запросам /nowplaying. */
+    val listenTogetherGuestCount: StateFlow<Int>
 
     val listenTogetherGuestState: StateFlow<ListenTogetherGuestState?>
     /** Почему гостевая сессия не идёт: хост недоступен, не включил "показывать что играю", или

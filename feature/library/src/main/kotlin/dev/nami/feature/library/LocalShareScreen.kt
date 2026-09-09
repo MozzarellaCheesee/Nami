@@ -98,6 +98,7 @@ fun LocalShareScreen(
     val devices by viewModel.discoveredDevices.collectAsState()
     val dropTrack by viewModel.dropTrack.collectAsState()
     val hostEnabled by viewModel.listenTogetherHostEnabled.collectAsState()
+    val guestCount by viewModel.listenTogetherGuestCount.collectAsState()
     val guestState by viewModel.listenTogetherGuestState.collectAsState()
     val listenTogetherError by viewModel.listenTogetherError.collectAsState()
     val lastSyncResult by viewModel.lastSyncResult.collectAsState()
@@ -239,7 +240,11 @@ fun LocalShareScreen(
                         }
                         guestState?.let { g ->
                             Column(modifier = Modifier.padding(top = 8.dp)) {
-                                Text("Слушаю вместе с ${g.hostName}", color = NamiColors.Paper40, style = MaterialTheme.typography.bodySmall)
+                                Text(
+                                    "Слушаю вместе с ${g.hostName}" + if (g.otherGuests > 0) " и ещё ${g.otherGuests}" else "",
+                                    color = NamiColors.Paper40,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
                                 Text(g.trackTitle ?: "-", color = NamiColors.Paper100, style = MaterialTheme.typography.bodyLarge)
                                 g.artistName?.let { Text(it, color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall) }
                                 if (g.downloading) {
@@ -300,9 +305,16 @@ fun LocalShareScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f)) {
                             SectionTitle(Icons.Outlined.Groups, "Слушать вместе", NamiColors.Wakaba)
+                            // Тумблер сам по себе слепой: хост не видел, подключился ли вообще
+                            // кто-то. Число гостей ограничения не имеет - слушать могут сколько
+                            // угодно устройств в сети, каждое само по себе.
                             Text(
-                                "Показывать что играю - другие смогут подключиться",
-                                color = NamiColors.Paper40,
+                                when {
+                                    !hostEnabled -> "Показывать что играю - другие смогут подключиться"
+                                    guestCount == 0 -> "Пока никто не слушает"
+                                    else -> "Сейчас слушают: $guestCount"
+                                },
+                                color = if (hostEnabled && guestCount > 0) NamiColors.Wakaba else NamiColors.Paper40,
                                 style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.padding(top = 4.dp),
                             )
