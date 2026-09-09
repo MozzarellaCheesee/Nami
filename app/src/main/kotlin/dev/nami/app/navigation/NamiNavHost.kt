@@ -665,7 +665,6 @@ fun NamiNavHost(
                 val playlistId = dev.nami.core.model.PlaylistId(
                     backStackEntry.arguments?.getString("playlistId").orEmpty(),
                 )
-                Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
                 PlaylistDetailScreen(
                     onBack = { navController.popBackStack() },
                     onDeleted = { navController.popBackStack() },
@@ -685,7 +684,6 @@ fun NamiNavHost(
                         if (autoOpenPlayer) showNowPlaying = true
                     },
                 )
-                }
             }
         }
         // Always mounted, even while Now Playing is open/closing - it's what Now Playing's
