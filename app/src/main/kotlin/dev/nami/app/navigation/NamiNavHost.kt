@@ -183,8 +183,6 @@ fun NamiNavHost(
     // Тот же одноразовый паттерн - кнопки "Поделиться треком"/"Слушать со мной" из меню "Ещё"
     // Now Playing должны сразу включить нужный режим на ROUTE_LOCAL_SHARE, а не просто открыть
     // экран как обычный переход.
-    var pendingShareCurrentTrack by remember { mutableStateOf(false) }
-    var pendingStartListenTogether by remember { mutableStateOf(false) }
     BackHandler(enabled = showNowPlaying) { showNowPlaying = false }
     var showQueue by remember { mutableStateOf(false) }
     // Registered after showNowPlaying's, so it takes priority (last-mounted BackHandler wins)
@@ -510,14 +508,12 @@ fun NamiNavHost(
                     onScanRequested = { navController.navigate(ROUTE_LOCAL_SHARE_SCAN) },
                     scannedAddress = scannedQrText,
                     onScannedAddressConsumed = { scannedQrText = null },
-                    autoShareCurrentTrack = pendingShareCurrentTrack,
-                    autoStartListenTogether = pendingStartListenTogether,
-                    // Одноразовые - иначе сработали бы заново при каждом возврате на этот
-                    // экран (например после системного диалога разрешений).
-                    onAutoActionsConsumed = {
-                        pendingShareCurrentTrack = false
-                        pendingStartListenTogether = false
-                    },
+                    // Автовключение раздачи/хост-режима на входе больше не используется: оба
+                    // действия переключаются прямо в меню "Ещё" на Now Playing, без перехода
+                    // сюда. Параметры экрана остались - сам экран не трогаем.
+                    autoShareCurrentTrack = false,
+                    autoStartListenTogether = false,
+                    onAutoActionsConsumed = {},
                 )
             }
             composable(ROUTE_LOCAL_SHARE_SCAN) {
@@ -755,16 +751,6 @@ fun NamiNavHost(
             onOpenAllSettings = {
                 showNowPlaying = false
                 navController.navigate(ROUTE_SETTINGS)
-            },
-            onShareTrackOverNetwork = {
-                showNowPlaying = false
-                pendingShareCurrentTrack = true
-                navController.navigate(ROUTE_LOCAL_SHARE)
-            },
-            onStartListenTogether = {
-                showNowPlaying = false
-                pendingStartListenTogether = true
-                navController.navigate(ROUTE_LOCAL_SHARE)
             },
             viewModel = nowPlayingViewModel,
         )

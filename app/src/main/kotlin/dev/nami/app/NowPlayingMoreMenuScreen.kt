@@ -39,6 +39,7 @@ import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.designsystem.NamiRadius
 import dev.nami.core.designsystem.NamiSectionLabel
 import dev.nami.core.designsystem.NamiType
+import dev.nami.domain.DEFAULT_NOW_PLAYING_MORE_ITEMS
 import dev.nami.domain.NowPlayingMoreAccent
 import dev.nami.domain.NowPlayingMoreConfig
 import dev.nami.domain.NowPlayingMoreSection
@@ -69,6 +70,16 @@ fun NowPlayingMoreMenuScreen(onBack: () -> Unit, viewModel: SettingsViewModel = 
                 color = NamiColors.Paper40,
                 style = NamiType.Secondary,
                 modifier = Modifier.padding(top = 4.dp),
+            )
+            Text(
+                "Вернуть как было",
+                color = NamiColors.Shu,
+                style = NamiType.Secondary,
+                modifier = Modifier
+                    .padding(top = 12.dp)
+                    .clip(RoundedCornerShape(NamiRadius.Button))
+                    .clickable { viewModel.setNowPlayingMoreItems(DEFAULT_NOW_PLAYING_MORE_ITEMS) }
+                    .padding(vertical = 4.dp),
             )
         }
 

@@ -122,11 +122,10 @@ fun NowPlayingScreen(
     onOpenPlayerSettings: () -> Unit = {},
     onOpenThemeEditor: () -> Unit = {},
     onOpenAllSettings: () -> Unit = {},
-    // "Поделиться треком" и "Слушать со мной" - оба ведут на группу G "сеть" (Wi-Fi Drop/
-    // Wi-Fi Direct/слушать вместе), только с разным заранее включённым режимом - см. вызывающую
-    // сторону (NamiNavHost), которая заводит раздачу/хост-режим сама на входе в экран.
-    onShareTrackOverNetwork: () -> Unit = {},
-    onStartListenTogether: () -> Unit = {},
+    // "Поделиться треком по сети" и "Слушать со мной" сюда не приходят колбэками: они не ведут
+    // никуда, а переключаются прямо в меню "Ещё" (viewModel.toggleDropCurrentTrack/
+    // toggleListenTogetherHost) и там же показывают своё состояние. Полный экран "Локальная
+    // сеть" никуда не делся и открывается как раньше из настроек.
     viewModel: NowPlayingViewModel = hiltViewModel(),
 ) {
     val state by viewModel.playbackState.collectAsState()
@@ -302,10 +301,10 @@ fun NowPlayingScreen(
                 // По сети (Wi-Fi Drop/Wi-Fi Direct - что доступнее, решает сам экран) - не Google
                 // Cast (это "Трансляция") и не текстовая ссылка (это "Поделиться"), а реальная
                 // передача файла трека другому телефону.
-                put(dev.nami.domain.NowPlayingMoreItem.SHARE_OVER_NETWORK, onShareTrackOverNetwork)
+                put(dev.nami.domain.NowPlayingMoreItem.SHARE_OVER_NETWORK) { viewModel.toggleDropCurrentTrack() }
                 // Названо не "Джем": это не серверная синхронизация как у Spotify, а P2P-раздача
                 // байтов трека по LAN/Wi-Fi Direct. Настоящий Jam-аналог - отдельная задача.
-                put(dev.nami.domain.NowPlayingMoreItem.LISTEN_TOGETHER, onStartListenTogether)
+                put(dev.nami.domain.NowPlayingMoreItem.LISTEN_TOGETHER) { viewModel.toggleListenTogetherHost() }
                 track?.let { t -> put(dev.nami.domain.NowPlayingMoreItem.SHARE) { shareTrackText(sheetContext, t) } }
                 put(dev.nami.domain.NowPlayingMoreItem.MOMENTS) { showLoopSheet = true }
                 track?.let { t -> put(dev.nami.domain.NowPlayingMoreItem.TRACK_INFO) { onShowTrackInfo(t.id) } }
@@ -323,6 +322,22 @@ fun NowPlayingScreen(
                 dev.nami.domain.NowPlayingMoreItem.SHARE,
             )
             val visible = moreItems.filter { it.item in moreActions }
+            // Эти два пункта - переключатели, а не переходы: состояние видно прямо на ячейке
+            // (подпись плюс акцент), поэтому и подпись, и цвет у них считаются здесь, а не
+            // берутся из конфига как у остальных.
+            val dropping by viewModel.droppingTrack.collectAsState()
+            val hosting by viewModel.listenTogetherHosting.collectAsState()
+            val labelOf = { item: dev.nami.domain.NowPlayingMoreItem ->
+                when {
+                    item == dev.nami.domain.NowPlayingMoreItem.SHARE_OVER_NETWORK && dropping -> "Раздаю трек"
+                    item == dev.nami.domain.NowPlayingMoreItem.LISTEN_TOGETHER && hosting -> "Слушают со мной"
+                    else -> nowPlayingMoreLabel(item)
+                }
+            }
+            val isOn = { item: dev.nami.domain.NowPlayingMoreItem ->
+                (item == dev.nami.domain.NowPlayingMoreItem.SHARE_OVER_NETWORK && dropping) ||
+                    (item == dev.nami.domain.NowPlayingMoreItem.LISTEN_TOGETHER && hosting)
+            }
             NowPlayingMoreSheet(
                 onDismiss = { showOverflowMenu = false },
                 header = {
@@ -334,17 +349,21 @@ fun NowPlayingScreen(
                 grid = visible.filter { it.section == dev.nami.domain.NowPlayingMoreSection.GRID }.map { config ->
                     MoreGridItem(
                         action = ContextAction(
-                            label = nowPlayingMoreLabel(config.item),
+                            label = labelOf(config.item),
                             icon = nowPlayingMoreIcon(config.item),
                             keepParentOpen = config.item !in closesSheet,
                             onClick = moreActions.getValue(config.item),
                         ),
-                        accent = nowPlayingMoreAccentColor(config.accent),
+                        accent = if (isOn(config.item)) {
+                            NamiColors.Wakaba
+                        } else {
+                            nowPlayingMoreAccentColor(config.accent)
+                        },
                     )
                 },
                 list = visible.filter { it.section == dev.nami.domain.NowPlayingMoreSection.LIST }.map { config ->
                     ContextAction(
-                        label = nowPlayingMoreLabel(config.item),
+                        label = labelOf(config.item),
                         icon = nowPlayingMoreIcon(config.item),
                         keepParentOpen = config.item !in closesSheet,
                         onClick = moreActions.getValue(config.item),

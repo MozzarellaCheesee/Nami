@@ -60,7 +60,44 @@ class NowPlayingViewModel @Inject constructor(
     private val loopsRepository: LoopsRepository? = null,
     // Same reasoning - only used for MiniPlayer's слепое-прослушивание mask.
     private val blindListenState: BlindListenState? = null,
+    // Same reasoning - только для двух пунктов меню "Ещё" (раздача трека и "слушать со мной"),
+    // которые переключаются прямо в меню, без ухода на экран "Локальная сеть".
+    private val localShareRepository: dev.nami.domain.LocalShareRepository? = null,
 ) : ViewModel() {
+
+    /** Раздаётся ли сейчас трек по локальной сети (/drop) - меню "Ещё" показывает это подписью
+     * и цветом прямо на ячейке, вместо перехода на отдельный экран. */
+    val droppingTrack: StateFlow<Boolean> =
+        localShareRepository?.dropTrack?.map { it != null }
+            ?.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+            ?: MutableStateFlow(false)
+
+    /** Включена ли раздача "что сейчас играет" для гостей ("Слушать со мной"). */
+    val listenTogetherHosting: StateFlow<Boolean> =
+        localShareRepository?.listenTogetherHostEnabled ?: MutableStateFlow(false)
+
+    /** Включает/выключает раздачу текущего трека. Сервер поднимается сам: без него раздавать
+     * нечему, а спрашивать об этом пользователя отдельной кнопкой смысла нет. */
+    fun toggleDropCurrentTrack() {
+        val repo = localShareRepository ?: return
+        if (repo.dropTrack.value != null) {
+            repo.setDropTrack(null)
+            return
+        }
+        val nowPlayingId = playerRepository.queue.value.nowPlaying?.id ?: return
+        viewModelScope.launch {
+            val track = libraryRepository.track(nowPlayingId).first() ?: return@launch
+            repo.startServer()
+            repo.setDropTrack(track)
+        }
+    }
+
+    fun toggleListenTogetherHost() {
+        val repo = localShareRepository ?: return
+        val next = !repo.listenTogetherHostEnabled.value
+        if (next) repo.startServer()
+        repo.setListenTogetherHost(next)
+    }
     val blindModeActive: StateFlow<Boolean> = blindListenState?.active ?: MutableStateFlow(false)
 
     private val waveformDiskCache = WaveformCache(context)
