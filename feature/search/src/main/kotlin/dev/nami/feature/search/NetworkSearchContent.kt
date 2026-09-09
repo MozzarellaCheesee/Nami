@@ -44,12 +44,18 @@ private fun sourceLabel(source: NetworkImportSource) = when (source) {
     NetworkImportSource.AUDIUS -> "Свободная музыка"
     NetworkImportSource.ARCHIVE -> "Lossless-архив"
     NetworkImportSource.PIPED -> "Весь мир"
+    NetworkImportSource.JAMENDO -> "Creative Commons"
+    NetworkImportSource.BANDCAMP -> "Bandcamp"
+    NetworkImportSource.SOUNDCLOUD -> "SoundCloud"
 }
 
 private fun sourceHint(source: NetworkImportSource) = when (source) {
     NetworkImportSource.AUDIUS -> "Audius - артисты сами разрешили раздачу. Инди и электроника, MP3 320."
     NetworkImportSource.ARCHIVE -> "Internet Archive - оцифровки и концерты, часто в чистом FLAC."
     NetworkImportSource.PIPED -> "YouTube через Piped - не гарантированно доступно всегда."
+    NetworkImportSource.JAMENDO -> "Jamendo - каталог под Creative Commons. Нужен свой client_id в настройках."
+    NetworkImportSource.BANDCAMP -> "Bandcamp - только то, что артист отдаёт бесплатно. Разбор страницы, может сломаться."
+    NetworkImportSource.SOUNDCLOUD -> "SoundCloud - скачивается лишь то, что автор разрешил скачивать. Нужен client_id в настройках."
 }
 
 /** Вкладка "В сети" - поиск и скачивание из открытых источников. Поле ввода общее с локальным
@@ -95,6 +101,12 @@ internal fun NetworkSearchContent(
             state.loading && state.results.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = NamiColors.Shu)
             }
+            state.clientIdMissing -> NetworkPlaceholder(
+                title = "Нужен client_id",
+                hint = "Настройки → Связь → Источники в сети: там поле для этого источника и инструкция, " +
+                    "как получить ключ. Без него источник не ищет.",
+                offline = true,
+            )
             state.query.isBlank() -> NetworkPlaceholder(
                 title = "Поиск в сети",
                 hint = "Набери название трека или исполнителя - результаты придут из выбранного источника",

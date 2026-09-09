@@ -1,8 +1,9 @@
 package dev.nami.domain
 
-/** Источники, из которых можно легально (Audius/Archive) или "на свой страх" (Piped) забрать
- * трек в библиотеку - см. План-Импорт-из-сети.md. */
-enum class NetworkImportSource { AUDIUS, ARCHIVE, PIPED }
+/** Источники, из которых можно легально (Audius/Archive/Jamendo) или "на свой страх"
+ * (Piped/Bandcamp/SoundCloud) забрать трек в библиотеку - см. План-Импорт-из-сети.md и
+ * План-Импорт-из-сети-2.md. */
+enum class NetworkImportSource { AUDIUS, ARCHIVE, PIPED, JAMENDO, BANDCAMP, SOUNDCLOUD }
 
 /**
  * Найденный в сети трек до скачивания. [downloadUrl] пуст только у Piped - там прямую ссылку

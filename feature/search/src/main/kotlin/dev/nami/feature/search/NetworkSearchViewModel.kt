@@ -28,12 +28,16 @@ data class NetworkSearchUiState(
     val downloading: Set<String> = emptySet(),
     val imported: Set<String> = emptySet(),
     val message: String? = null,
+    /** Источник требует client_id, а он не заполнен. Без этого флага источник молча отдавал бы
+     * ноль находок - неотличимо от "ничего не нашлось". */
+    val clientIdMissing: Boolean = false,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 @HiltViewModel
 class NetworkSearchViewModel @Inject constructor(
     private val repository: NetworkImportRepository,
+    private val settingsRepository: dev.nami.domain.SettingsRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(NetworkSearchUiState())
@@ -66,8 +70,20 @@ class NetworkSearchViewModel @Inject constructor(
     }
 
     fun onSourceChange(source: NetworkImportSource) {
-        _uiState.value = _uiState.value.copy(source = source, results = emptyList(), searched = false, message = null)
+        _uiState.value = _uiState.value.copy(
+            source = source,
+            results = emptyList(),
+            searched = false,
+            message = null,
+            clientIdMissing = clientIdMissing(source),
+        )
         requests.value = source to _uiState.value.query
+    }
+
+    private fun clientIdMissing(source: NetworkImportSource): Boolean = when (source) {
+        NetworkImportSource.JAMENDO -> settingsRepository.jamendoClientId.value.isNullOrBlank()
+        NetworkImportSource.SOUNDCLOUD -> settingsRepository.soundCloudClientId.value.isNullOrBlank()
+        else -> false
     }
 
     fun onDownload(track: NetworkTrack) {

@@ -9,6 +9,7 @@ import dev.nami.domain.LibraryRepository
 import dev.nami.domain.NetworkImportRepository
 import dev.nami.domain.NetworkImportSource
 import dev.nami.domain.NetworkTrack
+import dev.nami.domain.SettingsRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -36,6 +37,7 @@ import javax.inject.Singleton
 class NetworkImportRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val libraryRepository: LibraryRepository,
+    private val settingsRepository: SettingsRepository,
 ) : NetworkImportRepository {
 
     override suspend fun search(source: NetworkImportSource, query: String): List<NetworkTrack> =
@@ -47,6 +49,9 @@ class NetworkImportRepositoryImpl @Inject constructor(
                     NetworkImportSource.AUDIUS -> searchAudius(trimmed)
                     NetworkImportSource.ARCHIVE -> searchArchive(trimmed)
                     NetworkImportSource.PIPED -> searchPiped(trimmed)
+                    NetworkImportSource.JAMENDO -> searchJamendo(trimmed)
+                    NetworkImportSource.BANDCAMP -> emptyList()
+                    NetworkImportSource.SOUNDCLOUD -> emptyList()
                 }
             }.getOrElse {
                 Log.w(TAG, "поиск в $source не удался", it)
@@ -173,6 +178,57 @@ class NetworkImportRepositoryImpl @Inject constructor(
                 detail = listOfNotNull(ext.takeIf { it.isNotEmpty() }, sizeMb?.let { "$it МБ" }).joinToString(" · "),
                 downloadUrl = "https://archive.org/download/$identifier/${encodePath(name)}",
                 fileName = name.substringAfterLast('/'),
+            )
+        }
+    }
+
+    // ------------------------------------------------------------------ Jamendo
+
+    /**
+     * 350 000+ треков под Creative Commons, официальный версионированный REST API - самый чистый
+     * источник из всех, наравне с Audius. client_id берётся из настроек, а не из константы: у
+     * Jamendo ключ выдаётся на приложение, и один захардкоженный ключ означал бы, что трафик всех
+     * установок NAMI идёт по чужой квоте (см. План-Импорт-из-сети-2.md).
+     *
+     * Ответ всегда обёрнут в headers/results, причём отказ (протухший или заблокированный ключ)
+     * приходит с HTTP 200 и status=failed внутри - то есть проверять надо тело, а не код ответа.
+     */
+    private fun searchJamendo(query: String): List<NetworkTrack> {
+        val clientId = settingsRepository.jamendoClientId.value?.trim().orEmpty()
+        if (clientId.isEmpty()) return emptyList()
+        val body = httpGet(
+            "https://api.jamendo.com/v3.0/tracks/?client_id=${encode(clientId)}&format=json&limit=40" +
+                "&audioformat=mp32&search=${encode(query)}",
+        ) ?: return emptyList()
+        val json = JSONObject(body)
+        val status = json.optJSONObject("headers")?.optString("status")
+        if (status != null && status != "success") {
+            Log.w(TAG, "Jamendo отказал: ${json.optJSONObject("headers")?.optString("error_message")}")
+            return emptyList()
+        }
+        val results = json.optJSONArray("results") ?: return emptyList()
+        return (0 until results.length()).mapNotNull { i ->
+            val t = results.optJSONObject(i) ?: return@mapNotNull null
+            val id = t.optString("id").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val title = t.optString("name").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            // audiodownload - файл целиком, audio - потоковая версия. Первый есть не у всех треков
+            // (артист мог запретить скачивание), тогда честнее взять поток, чем прятать трек.
+            val download = t.optString("audiodownload").takeIf {
+                it.isNotBlank() && t.optBoolean("audiodownload_allowed", true)
+            } ?: t.optString("audio").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            NetworkTrack(
+                source = NetworkImportSource.JAMENDO,
+                id = id,
+                title = title,
+                artistName = t.optString("artist_name").takeIf { it.isNotBlank() },
+                durationSec = t.optInt("duration").takeIf { it > 0 },
+                artworkUrl = t.optString("image").takeIf { it.isNotBlank() },
+                detail = listOfNotNull(
+                    t.optString("album_name").takeIf { it.isNotBlank() },
+                    "CC",
+                ).joinToString(" · "),
+                downloadUrl = download,
+                fileName = "$title.mp3",
             )
         }
     }
