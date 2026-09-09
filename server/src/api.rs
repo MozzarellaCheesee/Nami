@@ -82,6 +82,12 @@ pub fn router(state: Shared) -> Router {
         .route("/api/tracks", get(tracks))
         .route("/api/tracks/{id}", get(track))
         .route("/api/tracks/{id}/stream", get(stream))
+        .route(
+            "/api/tracks/upload",
+            // Тело пишется в файл потоком, поэтому потолок axum по умолчанию (2 МБ)
+            // здесь не нужен: он бы отсекал любой нормальный альбомный FLAC.
+            post(upload).layer(axum::extract::DefaultBodyLimit::disable()),
+        )
         .route("/api/transcode/profiles", get(transcode_profiles))
         .route("/api/scan", post(scan))
         .route("/api/sync", get(sync_pull).post(sync_push))
@@ -405,11 +411,16 @@ async fn scan(State(st): State<Shared>) -> ApiResult<Json<scanner::ScanReport>> 
     let rep = tokio::task::spawn_blocking(move || -> crate::Res<scanner::ScanReport> {
         let mut db = st.db.lock().unwrap();
         // Библиотека по умолчанию (music_dirs), затем каждая заведённая отдельно.
-        let mut total = scanner::scan(&mut db, &st.cfg.music_dirs, 0)?;
-        for (id, dirs) in scanner::library_dirs(&db)? {
+        // Папка загрузок сканируется вместе со своей библиотекой - иначе всё,
+        // что клиенты прислали, вычистилось бы как "файлы, которых больше нет".
+        let mut dirs0 = st.cfg.music_dirs.clone();
+        dirs0.push(st.cfg.upload_dir(0));
+        let mut total = scanner::scan(&mut db, &dirs0, 0)?;
+        for (id, mut dirs) in scanner::library_dirs(&db)? {
             if id == 0 || dirs.is_empty() {
                 continue;
             }
+            dirs.push(st.cfg.upload_dir(id));
             let r = scanner::scan(&mut db, &dirs, id)?;
             total.scanned += r.scanned;
             total.added += r.added;
@@ -981,6 +992,135 @@ async fn now_playing(
 ) -> ApiResult<Json<Vec<sync::NowPlaying>>> {
     let db = st.db.lock().unwrap();
     Ok(Json(sync::now_playing(&db, &ident)?))
+}
+
+// ---------------------------------------------------------------- загрузка треков
+
+#[derive(Deserialize)]
+struct UploadQuery {
+    /// Имя файла клиента - от него берётся только расширение и безопасная основа.
+    filename: Option<String>,
+}
+
+#[derive(Serialize)]
+struct Uploaded {
+    track_id: i64,
+    /// Почему трек не создан заново; null - создан.
+    duplicate_of: Option<scanner::DuplicateOf>,
+}
+
+/// Оставляет от присланного имени только безопасную основу: ни разделителей пути,
+/// ни `..`, ни управляющих символов - файл ложится строго внутрь папки загрузок.
+fn safe_name(raw: &str) -> String {
+    let base = raw.rsplit(['/', '\\']).next().unwrap_or(raw);
+    let cleaned: String = base
+        .chars()
+        .map(|c| if c.is_control() || "<>:\"|?*".contains(c) { '_' } else { c })
+        .collect();
+    let cleaned = cleaned.trim_matches(['.', ' ']).to_string();
+    if cleaned.is_empty() {
+        "upload".into()
+    } else {
+        cleaned
+    }
+}
+
+/// Приём файла с клиента: тело запроса - сам файл, метаданные берутся из тегов
+/// тем же кодом, что и при сканировании.
+///
+/// Дедупликация: сначала по sha256 файла, затем по (исполнитель, название,
+/// длительность с допуском). Уже имеющийся трек не создаёт вторую запись -
+/// возвращается id существующего.
+async fn upload(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Query(q): Query<UploadQuery>,
+    body: axum::body::Body,
+) -> ApiResult<Json<Uploaded>> {
+    let library_id = {
+        let db = st.db.lock().unwrap();
+        match users::library_mode(&db) {
+            users::LibraryMode::Separate => ident
+                .user_id
+                .and_then(|id| users::get(&db, id).map(|u| u.library_id))
+                .unwrap_or(0),
+            users::LibraryMode::Shared => 0,
+        }
+    };
+    let dir = st.cfg.upload_dir(library_id);
+    std::fs::create_dir_all(&dir).map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let name = safe_name(q.filename.as_deref().unwrap_or("upload"));
+    // Расширение сохраняем и у временного файла: lofty выбирает разборщик по нему,
+    // а безымянный .part не опознаётся ни как FLAC, ни как что-либо ещё.
+    let ext = std::path::Path::new(&name)
+        .extension()
+        .map(|e| format!(".{}", e.to_string_lossy()))
+        .unwrap_or_default();
+
+    // Пишем во временный файл: под настоящим именем он появится только когда
+    // окажется, что это не дубль, - иначе папка загрузок копила бы мусор.
+    let tmp = dir.join(format!("{}{ext}", users::random_token()));
+    let written = write_body(&tmp, body).await;
+    if let Err(e) = written {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(ApiError(StatusCode::BAD_REQUEST, e.to_string()));
+    }
+
+    let result = tokio::task::spawn_blocking(move || -> crate::Res<Uploaded> {
+        // Что бы дальше ни случилось, временный файл в папке загрузок не остаётся.
+        let cleanup = |r: crate::Res<Uploaded>| {
+            let _ = std::fs::remove_file(&tmp);
+            r
+        };
+        let meta = match scanner::read_meta(&tmp) {
+            Ok(m) => m,
+            Err(e) => return cleanup(Err(e)),
+        };
+        let hash = match scanner::file_hash(&tmp) {
+            Ok(h) => h,
+            Err(e) => return cleanup(Err(e.into())),
+        };
+        let db = st.db.lock().unwrap();
+        if let Some((id, why)) = scanner::find_duplicate(&db, &hash, &meta, library_id) {
+            return cleanup(Ok(Uploaded { track_id: id, duplicate_of: Some(why) }));
+        }
+        // Префикс хеша спереди - от совпадения имён у разных людей.
+        let final_path = dir.join(format!("{}_{name}", &hash[..12]));
+        if let Err(e) = std::fs::rename(&tmp, &final_path) {
+            return cleanup(Err(e.into()));
+        }
+        let (id, dup) = scanner::add_file(&db, &final_path, library_id)?;
+        Ok(Uploaded { track_id: id, duplicate_of: dup })
+    })
+    .await
+    .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    match result {
+        Ok(u) => Ok(Json(u)),
+        // Не аудио или битые теги - это ошибка клиента, а не сервера.
+        Err(e) => Err(ApiError(StatusCode::BAD_REQUEST, format!("файл не принят: {e}"))),
+    }
+}
+
+/// Сливает тело запроса в файл кусками: память не зависит от размера файла.
+async fn write_body(path: &std::path::Path, body: axum::body::Body) -> crate::Res<()> {
+    use http_body_util::BodyExt;
+    let mut file = std::fs::File::create(path)?;
+    let mut body = body;
+    let mut empty = true;
+    while let Some(frame) = body.frame().await {
+        if let Ok(data) = frame?.into_data() {
+            if !data.is_empty() {
+                empty = false;
+                std::io::Write::write_all(&mut file, &data)?;
+            }
+        }
+    }
+    if empty {
+        return Err("пустое тело запроса".into());
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------- гостевые ссылки

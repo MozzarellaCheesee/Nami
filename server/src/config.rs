@@ -24,6 +24,11 @@ pub struct Config {
     /// Потолок кеша транскодов в мегабайтах: старейшие файлы вытесняются.
     #[serde(default = "default_cache_mb")]
     pub transcode_cache_mb: u64,
+    /// Куда складываются файлы, загруженные клиентами. Относительный путь - от data_dir.
+    /// Эта папка сканируется наравне с music_dirs, иначе первый же пересканер вычистил бы
+    /// загруженное как "файлы, которых больше нет".
+    #[serde(default = "default_upload_dir")]
+    pub upload_dir: PathBuf,
     /// Сколько дней хранить tombstone-записи синхронизации до физического удаления.
     #[serde(default = "default_tombstone_days")]
     pub tombstone_ttl_days: i64,
@@ -50,6 +55,9 @@ fn default_transcode_cache() -> PathBuf {
 fn default_cache_mb() -> u64 {
     2048
 }
+fn default_upload_dir() -> PathBuf {
+    PathBuf::from("uploads")
+}
 fn default_tombstone_days() -> i64 {
     30
 }
@@ -65,6 +73,7 @@ impl Default for Config {
             watch: default_true(),
             transcode_cache_dir: default_transcode_cache(),
             transcode_cache_mb: default_cache_mb(),
+            upload_dir: default_upload_dir(),
             tombstone_ttl_days: default_tombstone_days(),
         }
     }
@@ -79,6 +88,17 @@ impl Config {
         } else {
             self.data_dir.join(&self.transcode_cache_dir)
         }
+    }
+
+    /// Папка загрузок конкретной библиотеки: у каждой своя, чтобы пересканирование
+    /// одной не задевало чужие файлы.
+    pub fn upload_dir(&self, library_id: i64) -> PathBuf {
+        let base = if self.upload_dir.is_absolute() {
+            self.upload_dir.clone()
+        } else {
+            self.data_dir.join(&self.upload_dir)
+        };
+        base.join(library_id.to_string())
     }
 
     /// Читает config.toml (если есть) и накладывает сверху переменные окружения NAMI_*.
@@ -115,6 +135,9 @@ impl Config {
         }
         if let Ok(v) = std::env::var("NAMI_TRANSCODE_CACHE_DIR") {
             cfg.transcode_cache_dir = PathBuf::from(v);
+        }
+        if let Ok(v) = std::env::var("NAMI_UPLOAD_DIR") {
+            cfg.upload_dir = PathBuf::from(v);
         }
         if let Ok(v) = std::env::var("NAMI_TRANSCODE_CACHE_MB") {
             cfg.transcode_cache_mb =

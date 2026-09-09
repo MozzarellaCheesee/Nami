@@ -182,6 +182,121 @@ pub fn scan(conn: &mut Connection, dirs: &[PathBuf], library_id: i64) -> crate::
     Ok(rep)
 }
 
+/// Допуск длительности при поиске дубля по тегам. Тот же принцип, что в
+/// Android-фингерпринте: перекодированная копия отличается на доли секунды.
+pub const DURATION_TOLERANCE_MS: i64 = 2000;
+
+/// sha256 файла потоком - целиком в память файл не читается.
+pub fn file_hash(path: &Path) -> std::io::Result<String> {
+    use sha2::Digest;
+    use std::io::Read;
+    let mut f = std::fs::File::open(path)?;
+    let mut hasher = sha2::Sha256::new();
+    let mut buf = [0u8; 64 * 1024];
+    loop {
+        let n = f.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(hex::encode(hasher.finalize()))
+}
+
+/// Почему трек считается уже имеющимся.
+#[derive(Debug, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DuplicateOf {
+    /// Побайтово тот же файл.
+    Hash,
+    /// Другой файл, но тот же трек: совпали исполнитель, название и длительность.
+    Metadata,
+}
+
+/// Ищет уже имеющийся в библиотеке трек: сначала по хешу файла, потом по тегам.
+///
+/// Поиск по тегам - в пределах одной библиотеки: в режиме раздельных библиотек
+/// одинаковые треки у разных людей это разные записи, а не дубли.
+pub fn find_duplicate(
+    conn: &Connection,
+    hash: &str,
+    meta: &TrackMeta,
+    library_id: i64,
+) -> Option<(i64, DuplicateOf)> {
+    if let Ok(id) = conn.query_row(
+        "SELECT id FROM tracks WHERE file_hash=?1 AND library_id=?2",
+        rusqlite::params![hash, library_id],
+        |r| r.get::<_, i64>(0),
+    ) {
+        return Some((id, DuplicateOf::Hash));
+    }
+    conn.query_row(
+        "SELECT id FROM tracks
+         WHERE library_id=?4 AND lower(title)=lower(?1)
+           AND lower(COALESCE(artist,''))=lower(COALESCE(?2,''))
+           AND abs(duration_ms - ?3) <= ?5",
+        rusqlite::params![
+            meta.title,
+            meta.artist,
+            meta.duration_ms as i64,
+            library_id,
+            DURATION_TOLERANCE_MS
+        ],
+        |r| r.get::<_, i64>(0),
+    )
+    .ok()
+    .map(|id| (id, DuplicateOf::Metadata))
+}
+
+/// Заносит уже лежащий на диске файл в библиотеку - через тот же разбор тегов,
+/// что и сканер. Возвращает id и признак дубля.
+pub fn add_file(
+    conn: &Connection,
+    path: &Path,
+    library_id: i64,
+) -> crate::Res<(i64, Option<DuplicateOf>)> {
+    let meta = read_meta(path)?;
+    let hash = file_hash(path)?;
+    if let Some((id, why)) = find_duplicate(conn, &hash, &meta, library_id) {
+        return Ok((id, Some(why)));
+    }
+    let m = std::fs::metadata(path)?;
+    let mtime = m
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    conn.execute(
+        "INSERT INTO tracks (path, title, artist, album, album_artist, track_no, year,
+                             duration_ms, size_bytes, mtime, format, seen_at, library_id, file_hash)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)
+         ON CONFLICT(path) DO UPDATE SET file_hash=?14, seen_at=?12",
+        rusqlite::params![
+            path.to_string_lossy(),
+            meta.title,
+            meta.artist,
+            meta.album,
+            meta.album_artist,
+            meta.track_no,
+            meta.year,
+            meta.duration_ms as i64,
+            m.len() as i64,
+            mtime,
+            meta.format,
+            crate::db::now(),
+            library_id,
+            hash,
+        ],
+    )?;
+    let id = conn.query_row(
+        "SELECT id FROM tracks WHERE path=?1",
+        [path.to_string_lossy()],
+        |r| r.get(0),
+    )?;
+    Ok((id, None))
+}
+
 /// Папки каждой заведённой библиотеки (режим раздельных библиотек).
 pub fn library_dirs(conn: &Connection) -> rusqlite::Result<Vec<(i64, Vec<PathBuf>)>> {
     let mut stmt = conn.prepare("SELECT id, dirs FROM libraries ORDER BY id")?;
@@ -258,6 +373,46 @@ mod tests {
 
         let rep = scan(&mut conn, &[fixtures()], 0).unwrap();
         assert_eq!(rep.removed, 1, "запись без файла должна была уйти: {rep:?}");
+    }
+
+    #[test]
+    fn загруженный_файл_добавляется_один_раз() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(crate::db::SCHEMA).unwrap();
+        let f = fixtures().join("sample.flac");
+
+        let (id, dup) = add_file(&conn, &f, 0).unwrap();
+        assert_eq!(dup, None, "первая загрузка - новый трек");
+
+        // Тот же файл ещё раз: побайтово совпал.
+        let (again, dup) = add_file(&conn, &f, 0).unwrap();
+        assert_eq!(again, id);
+        assert_eq!(dup, Some(DuplicateOf::Hash));
+
+        // Другой файл, но тот же трек по тегам и длительности.
+        let meta = read_meta(&f).unwrap();
+        let found = find_duplicate(&conn, "другой-хеш", &meta, 0);
+        assert_eq!(found.map(|(i, w)| (i, w)), Some((id, DuplicateOf::Metadata)));
+
+        // В другой библиотеке это отдельный трек, а не дубль.
+        assert!(find_duplicate(&conn, "другой-хеш", &meta, 7).is_none());
+
+        let n: i64 = conn.query_row("SELECT COUNT(*) FROM tracks", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 1, "вторая запись создаваться не должна");
+    }
+
+    #[test]
+    fn длительность_сверяется_с_допуском() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(crate::db::SCHEMA).unwrap();
+        let f = fixtures().join("sample.wav");
+        add_file(&conn, &f, 0).unwrap();
+
+        let mut meta = read_meta(&f).unwrap();
+        meta.duration_ms += DURATION_TOLERANCE_MS as u64 - 100;
+        assert!(find_duplicate(&conn, "х", &meta, 0).is_some(), "в допуске - дубль");
+        meta.duration_ms += 1000;
+        assert!(find_duplicate(&conn, "х", &meta, 0).is_none(), "вне допуска - другой трек");
     }
 
     #[test]

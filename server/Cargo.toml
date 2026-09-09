@@ -12,6 +12,8 @@ axum = { version = "0.8", features = ["ws", "http1", "http2", "json", "tokio"] }
 axum-server = { version = "0.8", default-features = false, features = ["tls-rustls-no-provider"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "sync"] }
 tower = "0.5"
+# Уже приезжает транзитивно с axum; объявляем явно ради BodyExt в потоковой загрузке.
+http-body-util = "0.1"
 tower-http = { version = "0.7", features = ["fs"] }
 
 # rusqlite вместо sqlx: цель "1 ядро / 512 МБ" - sqlx тянет async-пул, макросы и

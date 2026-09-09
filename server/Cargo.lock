@@ -889,6 +889,7 @@ dependencies = [
  "axum-server",
  "getrandom 0.4.3",
  "hex",
+ "http-body-util",
  "lofty",
  "notify",
  "qrcode",
