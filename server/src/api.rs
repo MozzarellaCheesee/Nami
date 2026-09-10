@@ -89,6 +89,7 @@ pub fn router(state: Shared) -> Router {
         .route("/api/tracks/{id}", get(track))
         .route("/api/tracks/{id}/stream", get(stream))
         .route("/api/tracks/{id}/stream/auto", get(stream_auto))
+        .route("/api/tracks/{id}/artwork", get(artwork_handler))
         .route("/api/tracks/{id}/lyrics", get(lyrics))
         .route(
             "/api/tracks/upload",
@@ -420,6 +421,38 @@ async fn stream_auto(
     };
 
     serve_track(st, id, profile, req).await
+}
+
+/// Обложка трека: встроенная или файл рядом (см. artwork.rs). Отдаётся как есть,
+/// с годовым immutable-кешем - на смену обложки клиент дёргает URL с новым `?v=`.
+async fn artwork_handler(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Path(id): Path<i64>,
+) -> Response {
+    serve_artwork(st, id, &ident).await
+}
+
+/// Общая отдача обложки: и для `/api/tracks/{id}/artwork`, и для Subsonic `getCoverArt`.
+pub async fn serve_artwork(st: Shared, id: i64, ident: &Ident) -> Response {
+    let path: Option<String> = {
+        let db = st.db.lock().unwrap();
+        if !users::can_see_track(&db, ident, id) {
+            return ApiError(StatusCode::NOT_FOUND, "нет такого трека".into()).into_response();
+        }
+        db.query_row("SELECT path FROM tracks WHERE id=?1", [id], |r| r.get(0)).ok()
+    };
+    let Some((bytes, mime)) = path.and_then(|p| crate::artwork::load(&p)) else {
+        return ApiError(StatusCode::NOT_FOUND, "у трека нет обложки".into()).into_response();
+    };
+    (
+        [
+            (header::CONTENT_TYPE, mime),
+            (header::CACHE_CONTROL, "public, max-age=31536000, immutable".into()),
+        ],
+        bytes,
+    )
+        .into_response()
 }
 
 /// Отдача файла трека (passthrough или транскод). Проверку прав делает вызывающий:

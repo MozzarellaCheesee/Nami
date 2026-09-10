@@ -348,6 +348,32 @@ fn row_to_song(r: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
 const CREDITED: &str =
     "COALESCE(NULLIF(TRIM(album_artist),''), NULLIF(TRIM(artist),''), 'Unknown Artist')";
 
+/// По Subsonic-id обложки находит трек, чью картинку отдать: сам номер трека,
+/// либо любой видимый трек альбома (`al-`) или исполнителя (`ar-`).
+fn cover_track_id(conn: &Connection, ident: &Ident, raw: &str) -> Option<i64> {
+    if let Ok(id) = raw.parse::<i64>() {
+        return crate::users::can_see_track(conn, ident, id).then_some(id);
+    }
+    let (clause, vis) = crate::users::visibility(conn, ident);
+    let (extra, ps): (&str, Vec<SqlValue>) = if let Some(s) = dec_id(ALBUM, raw) {
+        let (artist, album) = s.split_once(SEP)?;
+        (
+            "AND COALESCE(album,'') = ? AND {C} = ?",
+            vec![SqlValue::Text(album.into()), SqlValue::Text(artist.into())],
+        )
+    } else if let Some(name) = dec_id(ARTIST, raw) {
+        ("AND {C} = ?", vec![SqlValue::Text(name)])
+    } else {
+        return None;
+    };
+    let sql = format!(
+        "SELECT id FROM tracks WHERE 1=1{clause} {} ORDER BY id LIMIT 1",
+        extra.replace("{C}", CREDITED)
+    );
+    let all = vis.into_iter().chain(ps);
+    conn.query_row(&sql, rusqlite::params_from_iter(all), |r| r.get(0)).ok()
+}
+
 fn songs_where(
     conn: &Connection,
     clause: &str,
@@ -607,6 +633,22 @@ async fn dispatch(
         }
         let profile = if action == "download" { None } else { profile_for(&params) };
         return crate::api::serve_track(st, id, profile, req).await;
+    }
+
+    // getCoverArt тоже отдаёт байты. id - номер трека, либо al-/ar- (тогда берём
+    // обложку любого видимого трека этого альбома/исполнителя).
+    if action == "getCoverArt" {
+        let Some(raw) = params.get("id").cloned() else {
+            return fail(&params, E_MISSING_PARAM, "нужен параметр id");
+        };
+        let track_id = {
+            let db = st.db.lock().unwrap();
+            cover_track_id(&db, &ident, &raw)
+        };
+        return match track_id {
+            Some(tid) => crate::api::serve_artwork(st, tid, &ident).await,
+            None => fail(&params, E_NOT_FOUND, "нет обложки"),
+        };
     }
 
     let db = st.db.lock().unwrap();

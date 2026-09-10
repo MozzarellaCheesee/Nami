@@ -6,6 +6,7 @@
 
 mod analyzer;
 mod api;
+mod artwork;
 mod auth;
 mod cli;
 mod config;
