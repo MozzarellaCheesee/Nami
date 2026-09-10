@@ -10,6 +10,7 @@ mod config;
 mod db;
 mod host;
 mod jam;
+mod library;
 mod lyrics;
 mod scanner;
 mod share;

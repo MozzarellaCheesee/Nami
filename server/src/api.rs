@@ -91,6 +91,8 @@ pub fn router(state: Shared) -> Router {
         )
         .route("/api/transcode/profiles", get(transcode_profiles))
         .route("/api/scan", post(scan))
+        .route("/api/library/health", get(library_health))
+        .route("/api/library/enrich", post(library_enrich))
         .route("/api/sync", get(sync_pull).post(sync_push))
         .route("/api/position", get(position_get).post(position_post))
         .route("/api/auth/devices", get(devices))
@@ -1122,6 +1124,48 @@ async fn write_body(path: &std::path::Path, body: axum::body::Body) -> crate::Re
         return Err("пустое тело запроса".into());
     }
     Ok(())
+}
+
+// ---------------------------------------------------------------- здоровье библиотеки
+
+/// Отчёт о здоровье в пределах видимости запрашивающего. Файлы, не открывшиеся при
+/// сканировании, попадают в отчёт целиком - их не к чему привязать по папкам, поэтому
+/// их видит только владелец (в одиночном режиме - любое устройство).
+async fn library_health(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+) -> ApiResult<Json<crate::library::Health>> {
+    let db = st.db.lock().unwrap();
+    let mut h = crate::library::health(&db, &ident)?;
+    if need_owner(&db, &ident).is_err() {
+        h.broken = crate::library::Sampled { count: 0, items: Vec::new() };
+    }
+    Ok(Json(h))
+}
+
+#[derive(Deserialize)]
+struct EnrichQuery {
+    /// Сколько треков обработать за один вызов.
+    limit: Option<usize>,
+}
+
+/// Обогащение метаданных из MusicBrainz - порциями: их политика позволяет не больше
+/// одного запроса в секунду, поэтому вызов с limit=20 честно длится около двадцати
+/// секунд, а `remaining` в ответе говорит, сколько осталось на следующий раз.
+async fn library_enrich(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Query(q): Query<EnrichQuery>,
+) -> ApiResult<Json<crate::library::EnrichReport>> {
+    need_owner(&st.db.lock().unwrap(), &ident)?;
+    let limit = q.limit.unwrap_or(20).clamp(1, 100);
+    let rep = tokio::task::spawn_blocking(move || {
+        let db = st.db.lock().unwrap();
+        crate::library::enrich(&db, limit)
+    })
+    .await
+    .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))??;
+    Ok(Json(rep))
 }
 
 // ---------------------------------------------------------------- лирика

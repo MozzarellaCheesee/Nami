@@ -112,7 +112,7 @@ fn parse_stamp(s: &str) -> Option<i64> {
 ///
 /// ponytail: отдельный крейт ради одной функции не нужен - здесь кодируется всё,
 /// кроме незарезервированного набора RFC 3986, и этого достаточно.
-fn urlencode(s: &str) -> String {
+pub fn urlencode(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for b in s.as_bytes() {
         match b {

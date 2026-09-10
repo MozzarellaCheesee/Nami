@@ -26,7 +26,9 @@ CREATE TABLE IF NOT EXISTS tracks (
     format      TEXT,
     seen_at     INTEGER NOT NULL DEFAULT 0,
     library_id  INTEGER NOT NULL DEFAULT 0,
-    file_hash   TEXT
+    file_hash   TEXT,
+    mbid        TEXT,       -- MusicBrainz recording id, если нашёлся при обогащении
+    enriched_at INTEGER     -- когда трек рассматривали в MusicBrainz (NULL - ещё нет)
 );
 CREATE INDEX IF NOT EXISTS idx_tracks_artist ON tracks(artist);
 CREATE INDEX IF NOT EXISTS idx_tracks_album  ON tracks(album);
@@ -205,6 +207,8 @@ pub fn migrate(conn: &Connection) -> crate::Res<()> {
     };
     add("tracks", "library_id", "INTEGER NOT NULL DEFAULT 0")?;
     add("tracks", "file_hash", "TEXT")?;
+    add("tracks", "mbid", "TEXT")?;
+    add("tracks", "enriched_at", "INTEGER")?;
     add("devices", "user_id", "INTEGER")?;
     add("pairing_codes", "user_id", "INTEGER")?;
 

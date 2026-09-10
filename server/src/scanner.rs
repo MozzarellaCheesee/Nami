@@ -94,7 +94,14 @@ pub fn scan(conn: &mut Connection, dirs: &[PathBuf], library_id: i64) -> crate::
     let mut rep = ScanReport::default();
 
     let tx = conn.transaction()?;
+    // Список битых файлов пересобирается каждым проходом: чинить их будут снаружи,
+    // а старая запись про уже вылеченный файл - это ложная тревога в отчёте здоровья.
+    tx.execute("DELETE FROM scan_failures WHERE library_id=?1", [library_id])?;
     {
+        let mut fail = tx.prepare(
+            "INSERT OR REPLACE INTO scan_failures (path, error, library_id, failed_at)
+             VALUES (?1,?2,?3,?4)",
+        )?;
         let mut upsert = tx.prepare(
             "INSERT INTO tracks (path, title, artist, album, album_artist, track_no, year,
                                  duration_ms, size_bytes, mtime, format, seen_at, library_id)
@@ -127,7 +134,8 @@ pub fn scan(conn: &mut Connection, dirs: &[PathBuf], library_id: i64) -> crate::
                             .map(|d| d.as_secs() as i64)
                             .unwrap_or(0),
                     ),
-                    Err(_) => {
+                    Err(e) => {
+                        fail.execute(rusqlite::params![path, e.to_string(), library_id, started])?;
                         rep.failed += 1;
                         continue;
                     }
@@ -141,6 +149,7 @@ pub fn scan(conn: &mut Connection, dirs: &[PathBuf], library_id: i64) -> crate::
                     Ok(m) => m,
                     Err(e) => {
                         tracing::warn!("не разобран {path}: {e}");
+                        fail.execute(rusqlite::params![path, e.to_string(), library_id, started])?;
                         rep.failed += 1;
                         continue;
                     }
