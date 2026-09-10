@@ -29,12 +29,43 @@ class PlaylistDetailViewModel @Inject constructor(
     // строить этот ViewModel одним репозиторием и SavedStateHandle.
     private val libraryRepository: dev.nami.domain.LibraryRepository? = null,
     private val settingsRepository: dev.nami.domain.SettingsRepository? = null,
+    private val serverLibraryRepository: dev.nami.domain.ServerLibraryRepository? = null,
 ) : ViewModel() {
 
     val playlistId = PlaylistId(checkNotNull(savedStateHandle.get<String>("playlistId")))
 
     private val _uiState = MutableStateFlow(PlaylistDetailUiState())
     val uiState: StateFlow<PlaylistDetailUiState> = _uiState.asStateFlow()
+
+    private val _guestLink = MutableStateFlow<String?>(null)
+    /** URL созданной гостевой ссылки - экран отправляет его в системный share-sheet. */
+    val guestLink: StateFlow<String?> = _guestLink.asStateFlow()
+    fun clearGuestLink() { _guestLink.value = null }
+
+    private val _shareError = MutableStateFlow<String?>(null)
+    val shareError: StateFlow<String?> = _shareError.asStateFlow()
+    fun clearShareError() { _shareError.value = null }
+
+    fun serverActive(): Boolean = serverLibraryRepository?.isServerActive() == true
+
+    /** Создаёт гостевую ссылку на треки плейлиста, что нашлись на сервере. */
+    fun createGuestLink() {
+        val repo = serverLibraryRepository ?: return
+        val state = _uiState.value
+        val tracks = state.tracks
+        if (tracks.isEmpty()) {
+            _shareError.value = "Плейлист пуст"
+            return
+        }
+        viewModelScope.launch {
+            val link = repo.createGuestLink(
+                title = state.playlist?.name ?: "Плейлист из NAMI",
+                tracks = tracks.map { Triple(it.artistName, it.title, it.durationMs) },
+            )
+            if (link != null) _guestLink.value = link
+            else _shareError.value = "Ни один трек плейлиста не найден на сервере"
+        }
+    }
 
     init {
         playlistRepository.playlist(playlistId)

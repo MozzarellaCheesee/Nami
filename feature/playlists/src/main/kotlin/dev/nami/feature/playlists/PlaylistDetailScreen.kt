@@ -121,6 +121,28 @@ fun PlaylistDetailScreen(
         if (!listState.isScrollInProgress) headerState.snapToNearestEdge()
     }
 
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val guestLink by viewModel.guestLink.collectAsState()
+    LaunchedEffect(guestLink) {
+        val link = guestLink ?: return@LaunchedEffect
+        ctx.startActivity(
+            android.content.Intent.createChooser(
+                android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(android.content.Intent.EXTRA_TEXT, link)
+                },
+                "Поделиться ссылкой",
+            ),
+        )
+        viewModel.clearGuestLink()
+    }
+    val shareError by viewModel.shareError.collectAsState()
+    LaunchedEffect(shareError) {
+        val err = shareError ?: return@LaunchedEffect
+        android.widget.Toast.makeText(ctx, err, android.widget.Toast.LENGTH_SHORT).show()
+        viewModel.clearShareError()
+    }
+
     var rootOffset by remember { mutableStateOf(Offset.Zero) }
     var avatarSlotOffset by remember { mutableStateOf(Offset.Zero) }
     val screenWidthPx = with(density) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
@@ -229,6 +251,9 @@ fun PlaylistDetailScreen(
                             },
                             ContextAction("Настройки воспроизведения", Icons.Outlined.Tune) { showPlaybackSettings = true },
                             ContextAction("Экспорт в .m3u8", Icons.Outlined.Share) { onExportRequested(viewModel.playlistId) },
+                            if (viewModel.serverActive()) {
+                                ContextAction("Гостевая ссылка", Icons.Outlined.Link) { viewModel.createGuestLink() }
+                            } else null,
                             ContextAction("Удалить плейлист", Icons.Outlined.Delete) { showDeleteDialog = true },
                         ),
                     )
