@@ -154,6 +154,13 @@ fun LibraryScreen(
         }
     }
 
+    val serverActionMsg by viewModel.serverActionMsg.collectAsState()
+    LaunchedEffect(serverActionMsg) {
+        val msg = serverActionMsg ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(msg, duration = SnackbarDuration.Short)
+        viewModel.clearServerActionMsg()
+    }
+
     val trackListState = rememberLazyListState()
     val albumGridState = rememberLazyGridState()
     val artistListState = rememberLazyListState()
@@ -228,6 +235,9 @@ fun LibraryScreen(
                         onShowTrackInfo = onShowTrackInfo,
                         onStartRadio = onStartRadio,
                         onShareCard = onShareCard,
+                        onUploadToServer = if (viewModel.isServerActive()) {
+                            { track -> viewModel.uploadTrackToServer(track) }
+                        } else null,
                         nowPlaying = nowPlaying,
                         sort = uiState.sort,
                     )
@@ -643,6 +653,7 @@ private fun TrackListContent(
     onShowTrackInfo: (TrackId) -> Unit,
     onStartRadio: (TrackId) -> Unit,
     onShareCard: (Track) -> Unit,
+    onUploadToServer: ((Track) -> Unit)? = null,
     nowPlaying: NowPlayingRow?,
     sort: dev.nami.domain.TrackSort,
 ) {
@@ -777,6 +788,9 @@ private fun TrackListContent(
                         onShowInfo = if (selectionMode) null else { { onShowTrackInfo(track.id) } },
                         onStartRadio = if (selectionMode) null else { { onStartRadio(track.id) } },
                         onShareCard = if (selectionMode) null else { { onShareCard(track) } },
+                        onUploadToServer = if (selectionMode || onUploadToServer == null) null else {
+                            { onUploadToServer(track) }
+                        },
                         isCurrentTrack = track.id == nowPlaying?.trackId,
                         isPlaying = track.id == nowPlaying?.trackId && nowPlaying.isPlaying,
                     )

@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Edit
@@ -84,6 +85,7 @@ fun TrackListItem(
     onShowInfo: (() -> Unit)? = null,
     onStartRadio: (() -> Unit)? = null,
     onShareCard: (() -> Unit)? = null,
+    onUploadToServer: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
     selectionMode: Boolean = false,
     isSelected: Boolean = false,
@@ -203,7 +205,7 @@ fun TrackListItem(
         }
         if (selectionMode) {
             Checkbox(checked = isSelected, onCheckedChange = null)
-        } else if (onAddToPlaylist != null || onAddToQueue != null || onDelete != null || onRename != null || onRemoveFromAlbum != null || onRemoveFromArtist != null || onLikeTrack != null || onEditNote != null || onEditTags != null || onShowInfo != null) {
+        } else if (onAddToPlaylist != null || onAddToQueue != null || onDelete != null || onRename != null || onRemoveFromAlbum != null || onRemoveFromArtist != null || onLikeTrack != null || onEditNote != null || onEditTags != null || onShowInfo != null || onUploadToServer != null) {
             IconButton(onClick = { showMenu = true }) {
                 Icon(Icons.Outlined.MoreVert, contentDescription = "Ещё", tint = NamiColors.Paper40)
             }
@@ -220,6 +222,7 @@ fun TrackListItem(
                         onShowInfo?.let { ContextAction("Информация о треке", Icons.Outlined.Info, onClick = it) },
                         onStartRadio?.let { ContextAction("Начать радио от трека", Icons.Outlined.PlayCircleOutline, onClick = it) },
                         onShareCard?.let { ContextAction("Поделиться карточкой", Icons.Outlined.Share, onClick = it) },
+                        onUploadToServer?.let { ContextAction("Отправить на сервер", Icons.Outlined.CloudUpload, onClick = it) },
                         onRemoveFromAlbum?.let { ContextAction("Убрать из альбома", Icons.Outlined.Delete, onClick = it) },
                         onRemoveFromArtist?.let { ContextAction("Убрать у артиста", Icons.Outlined.Delete, onClick = it) },
                         onDelete?.let { ContextAction("Удалить", Icons.Outlined.Delete, onClick = it) },

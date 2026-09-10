@@ -74,7 +74,23 @@ class LibraryViewModel @Inject constructor(
     private val playlistRepository: PlaylistRepository,
     private val settingsRepository: SettingsRepository,
     private val tagRepository: TagRepository,
+    private val serverLibraryRepository: dev.nami.domain.ServerLibraryRepository,
 ) : ViewModel() {
+
+    private val _serverActionMsg = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+    /** Итог последнего действия «Отправить на сервер» - экран показывает Snackbar. */
+    val serverActionMsg: kotlinx.coroutines.flow.StateFlow<String?> = _serverActionMsg
+    fun clearServerActionMsg() { _serverActionMsg.value = null }
+
+    /** Виден ли пункт меню «Отправить на сервер». */
+    fun isServerActive(): Boolean = serverLibraryRepository.isServerActive()
+
+    fun uploadTrackToServer(track: Track) {
+        viewModelScope.launch {
+            _serverActionMsg.value = serverLibraryRepository.uploadLocalTrack(track.path)
+                ?: "Не удалось отправить на сервер"
+        }
+    }
 
     fun likeTrack(trackId: TrackId) {
         viewModelScope.launch { playlistRepository.likeTrack(trackId) }
