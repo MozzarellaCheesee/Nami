@@ -96,6 +96,7 @@ pub fn router(state: Shared) -> Router {
         .route("/api/tracks/{id}/hls/{profile}/index.m3u8", get(hls_index))
         .route("/api/tracks/{id}/hls/{profile}/{seg}", get(hls_segment))
         .route("/api/tracks/{id}/lyrics", get(lyrics))
+        .route("/api/lyrics", get(lyrics_by_meta))
         .route(
             "/api/tracks/upload",
             // Тело пишется в файл потоком, поэтому потолок axum по умолчанию (2 МБ)
@@ -1946,6 +1947,57 @@ async fn lyrics(
     })
     .await
     .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))??;
+    Ok(Json(out))
+}
+
+#[derive(Deserialize)]
+struct LyricsMetaQuery {
+    title: String,
+    artist: Option<String>,
+    album: Option<String>,
+    duration_ms: Option<i64>,
+    translate: Option<u8>,
+    lang: Option<String>,
+}
+
+/// Лирика по метаданным - для клиента, чьи треки серверу не известны (нет track_id).
+/// Поиск в LRCLIB + разбор + опционально перевод серверным ключом DeepL. Без кеша:
+/// кеш лирики привязан к track_id, а его тут нет.
+async fn lyrics_by_meta(
+    State(st): State<Shared>,
+    Extension(_ident): Extension<Ident>,
+    Query(q): Query<LyricsMetaQuery>,
+) -> ApiResult<Json<crate::lyrics::Lyrics>> {
+    if q.title.trim().is_empty() {
+        return Err(ApiError(StatusCode::BAD_REQUEST, "нужен параметр title".into()));
+    }
+    let translate = q.translate == Some(1);
+    let lang = q.lang.unwrap_or_else(|| st.cfg.lyrics_target_lang.clone());
+    let out = tokio::task::spawn_blocking(move || -> crate::lyrics::Lyrics {
+        use crate::lyrics::{self, Lyrics};
+        let now = crate::db::now();
+        let Some((raw, synced)) = lyrics::fetch_lrclib(
+            q.title.trim(),
+            q.artist.as_deref(),
+            q.album.as_deref(),
+            q.duration_ms.unwrap_or(0),
+        ) else {
+            return Lyrics { track_id: 0, source: "none".into(), synced: false, lines: vec![], fetched_at: now };
+        };
+        let mut lines = lyrics::parse_lrc(&raw);
+        if translate && !st.cfg.deepl_api_key.trim().is_empty() {
+            let texts: Vec<String> = lines.iter().map(|l| l.text.clone()).collect();
+            if let Some(tr) = lyrics::translate_deepl(&texts, st.cfg.deepl_api_key.trim(), &lang) {
+                for (l, t) in lines.iter_mut().zip(tr) {
+                    l.translation = Some(t);
+                }
+            }
+        }
+        let has_time = lines.iter().any(|l| l.time_ms.is_some());
+        Lyrics { track_id: 0, source: "lrclib".into(), synced: synced && has_time, lines, fetched_at: now }
+    })
+    .await
+    .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok(Json(out))
 }
 
