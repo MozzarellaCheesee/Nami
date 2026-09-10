@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nami.fullname" . }}
+  labels:
+    {{- include "nami.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "nami.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nami.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      containers:
+      - name: {{ .Chart.Name }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.env.port }}
+          protocol: TCP
+        env:
+        - name: TLS
+          value: {{ .Values.env.tls | quote }}
+        - name: PORT
+          value: {{ .Values.env.port | quote }}
+        - name: MUSIC_DIRS
+          value: {{ .Values.persistence.music.mountPath }}
+        - name: TRANSCODE_CACHE_MB
+          value: {{ .Values.env.transcodeCacheMb | quote }}
+        - name: WATCH
+          value: {{ .Values.env.watch | quote }}
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: cache
+          mountPath: /cache
+        - name: music
+          mountPath: {{ .Values.persistence.music.mountPath }}
+          readOnly: {{ .Values.persistence.music.readOnly }}
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: http
+            scheme: {{ if eq .Values.env.tls "true" }}HTTPS{{ else }}HTTP{{ end }}
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: http
+            scheme: {{ if eq .Values.env.tls "true" }}HTTPS{{ else }}HTTP{{ end }}
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+      - name: data
+        {{- if .Values.persistence.data.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ include "nami.fullname" . }}-data
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
+      - name: cache
+        {{- if .Values.persistence.cache.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ include "nami.fullname" . }}-cache
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
+      - name: music
+        {{- if .Values.persistence.music.existingClaim }}
+        persistentVolumeClaim:
+          claimName: {{ .Values.persistence.music.existingClaim }}
+        {{- else }}
+        hostPath:
+          path: /mnt/music
+          type: Directory
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

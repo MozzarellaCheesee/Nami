@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  nami:
+    image: ghcr.io/your-org/nami:latest
+    container_name: nami
+    restart: unless-stopped
+    ports:
+      - "3030:3030"
+    volumes:
+      # Музыкальная библиотека (только чтение)
+      - /volume1/music:/music:ro
+      # Данные приложения (БД, настройки)
+      - /volume1/docker/nami/data:/data
+      # Кеш транскодов
+      - /volume1/docker/nami/cache:/cache
+    environment:
+      # Включить TLS (самоподписанный сертификат)
+      - TLS=true
+      # Порт сервера
+      - PORT=3030
+      # Музыкальные папки (через двоеточие если несколько)
+      - MUSIC_DIRS=/music
+      # Лимит кеша транскодов (МБ)
+      - TRANSCODE_CACHE_MB=2048
+      # Автосканирование при изменении файлов
+      - WATCH=true
+      # Пользователь и группа (опционально)
+      - PUID=1000
+      - PGID=1000
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3030/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Опционально: Watchtower для автообновления
+  watchtower:
+    image: containrrr/watchtower
+    container_name: nami-watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_INCLUDE_RESTARTING=true
+      - WATCHTOWER_LABEL_ENABLE=true
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+networks:
+  default:
+    name: nami-network

@@ -1,0 +1,18 @@
+apiVersion: v2
+name: nami
+description: Self-hosted музыкальный сервер с транскодингом и OpenSubsonic API
+type: application
+version: 1.0.0
+appVersion: "0.1.0"
+keywords:
+  - music
+  - audio
+  - streaming
+  - subsonic
+home: https://github.com/your-org/nami
+sources:
+  - https://github.com/your-org/nami
+maintainers:
+  - name: Nami Team
+    url: https://github.com/your-org/nami
+icon: https://raw.githubusercontent.com/your-org/nami/main/assets/icon.png

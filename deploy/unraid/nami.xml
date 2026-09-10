@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>Nami</Name>
+  <Repository>ghcr.io/your-org/nami</Repository>
+  <Registry>https://ghcr.io/</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/your-org/nami/issues</Support>
+  <Project>https://github.com/your-org/nami</Project>
+  <Overview>Self-hosted музыкальный сервер с транскодингом, синхронизацией и OpenSubsonic API</Overview>
+  <Category>MediaApp:Music</Category>
+  <WebUI>https://[IP]:[PORT:3030]</WebUI>
+  <TemplateURL/>
+  <Icon>https://raw.githubusercontent.com/your-org/nami/main/assets/icon.png</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+  <Config Name="WebUI Port" Target="3030" Default="3030" Mode="tcp" Description="Порт веб-интерфейса" Type="Port" Display="always" Required="true" Mask="false">3030</Config>
+  <Config Name="Music Directory" Target="/music" Default="/mnt/user/Music" Mode="ro" Description="Папка с музыкой (только чтение)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/Music</Config>
+  <Config Name="Data Directory" Target="/data" Default="/mnt/user/appdata/nami" Mode="rw" Description="Данные приложения (БД, кеш)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/nami</Config>
+  <Config Name="Cache Directory" Target="/cache" Default="/mnt/user/appdata/nami/cache" Mode="rw" Description="Кеш транскодов" Type="Path" Display="always" Required="false" Mask="false">/mnt/user/appdata/nami/cache</Config>
+  <Config Name="TLS" Target="TLS" Default="true" Mode="" Description="Включить TLS (самоподписанный сертификат)" Type="Variable" Display="always" Required="false" Mask="false">true</Config>
+  <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User ID" Type="Variable" Display="advanced" Required="false" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group ID" Type="Variable" Display="advanced" Required="false" Mask="false">100</Config>
+</Container>

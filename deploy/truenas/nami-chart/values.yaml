@@ -1,0 +1,67 @@
+# Default values for nami helm chart
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/your-org/nami
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 3030
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: nami.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+persistence:
+  data:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 10Gi
+  cache:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 20Gi
+  music:
+    enabled: true
+    existingClaim: ""
+    mountPath: /music
+    readOnly: true
+
+env:
+  tls: "true"
+  port: "3030"
+  transcodeCacheMb: "2048"
+  watch: "true"
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+securityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
