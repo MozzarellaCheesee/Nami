@@ -240,6 +240,49 @@ pub fn logout(conn: &Connection, token: &str) -> rusqlite::Result<usize> {
     conn.execute("DELETE FROM sessions WHERE token_hash=?1", [hash_token(token)])
 }
 
+/// Смена своего пароля: нужен текущий. Все сессии пользователя гасятся - утёкшая
+/// сессия не должна пережить смену пароля. Токены устройств не трогаем: это
+/// сопряжённое железо, а не украденный вход.
+pub fn change_password(
+    conn: &Connection,
+    user_id: i64,
+    old: &str,
+    new: &str,
+) -> Result<(), UserError> {
+    if new.chars().count() < 8 {
+        return Err(UserError::BadInput);
+    }
+    let hash: String =
+        conn.query_row("SELECT password_hash FROM users WHERE id=?1", [user_id], |r| r.get(0))?;
+    if !verify_password(old, &hash) {
+        return Err(UserError::BadCredentials);
+    }
+    let new_hash = hash_password(new).map_err(|e| UserError::Db(e.to_string()))?;
+    conn.execute(
+        "UPDATE users SET password_hash=?2 WHERE id=?1",
+        rusqlite::params![user_id, new_hash],
+    )?;
+    conn.execute("DELETE FROM sessions WHERE user_id=?1", [user_id])?;
+    Ok(())
+}
+
+/// Сброс пароля владельцем: без текущего. Сессии сбрасываемого пользователя гасятся.
+pub fn reset_password(conn: &Connection, target: i64, new: &str) -> Result<(), UserError> {
+    if new.chars().count() < 8 {
+        return Err(UserError::BadInput);
+    }
+    let new_hash = hash_password(new).map_err(|e| UserError::Db(e.to_string()))?;
+    let n = conn.execute(
+        "UPDATE users SET password_hash=?2 WHERE id=?1",
+        rusqlite::params![target, new_hash],
+    )?;
+    if n == 0 {
+        return Err(UserError::Db("нет такого пользователя".into()));
+    }
+    conn.execute("DELETE FROM sessions WHERE user_id=?1", [target])?;
+    Ok(())
+}
+
 // ---------------------------------------------------------------- инвайты
 
 #[derive(Debug, Serialize)]
@@ -453,6 +496,36 @@ mod tests {
         assert_eq!(login(&c, "хозяин", "не тот"), Err(UserError::BadCredentials));
         logout(&c, &token).unwrap();
         assert_eq!(verify_session(&c, &token), None);
+    }
+
+    #[test]
+    fn смена_и_сброс_пароля() {
+        let c = db();
+        let id = create(&c, "хозяин", "пароль12345", "owner", 0).unwrap();
+        let (_, tok) = login(&c, "хозяин", "пароль12345").unwrap();
+
+        // Неверный текущий пароль - отказ, сессия жива.
+        assert_eq!(
+            change_password(&c, id, "не тот", "новыйпароль1"),
+            Err(UserError::BadCredentials)
+        );
+        assert_eq!(verify_session(&c, &tok), Some(id));
+
+        // Верный - пароль сменился, старая сессия погашена.
+        change_password(&c, id, "пароль12345", "новыйпароль1").unwrap();
+        assert_eq!(verify_session(&c, &tok), None);
+        assert!(login(&c, "хозяин", "новыйпароль1").is_ok());
+        assert_eq!(login(&c, "хозяин", "пароль12345"), Err(UserError::BadCredentials));
+
+        // Короткий новый пароль отвергается.
+        assert_eq!(change_password(&c, id, "новыйпароль1", "abc"), Err(UserError::BadInput));
+
+        // Сброс владельцем - без текущего пароля.
+        let (_, tok2) = login(&c, "хозяин", "новыйпароль1").unwrap();
+        reset_password(&c, id, "сброшенный99").unwrap();
+        assert_eq!(verify_session(&c, &tok2), None);
+        assert!(login(&c, "хозяин", "сброшенный99").is_ok());
+        assert!(matches!(reset_password(&c, 999, "сброшенный99"), Err(UserError::Db(_))));
     }
 
     #[test]

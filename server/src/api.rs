@@ -108,8 +108,10 @@ pub fn router(state: Shared) -> Router {
         .route("/api/auth/logout", post(logout))
         .route("/api/me", get(me).patch(patch_me))
         .route("/api/me/subsonic-password", axum::routing::put(put_subsonic_password))
+        .route("/api/me/password", axum::routing::put(put_my_password))
         .route("/api/users", get(list_users).post(create_user))
         .route("/api/users/{id}", delete(delete_user))
+        .route("/api/users/{id}/password", axum::routing::put(reset_user_password))
         .route("/api/users/{id}/folders", get(get_folders).put(put_folders))
         .route("/api/invites", post(create_invite))
         .route("/api/library-mode", get(get_library_mode).put(put_library_mode))
@@ -1124,6 +1126,45 @@ async fn put_subsonic_password(
         "UPDATE users SET subsonic_password=?2 WHERE id=?1",
         rusqlite::params![id, if value.is_empty() { None } else { Some(value) }],
     )?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct ChangePassword {
+    old: String,
+    new: String,
+}
+
+/// Смена своего пароля. Нужен текущий пароль; после смены все сессии этого
+/// пользователя гаснут (текущую придётся получить логином заново).
+async fn put_my_password(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Json(b): Json<ChangePassword>,
+) -> ApiResult<StatusCode> {
+    let id = ident
+        .user_id
+        .ok_or_else(|| ApiError(StatusCode::BAD_REQUEST, "вход не как пользователь".into()))?;
+    users::change_password(&st.db.lock().unwrap(), id, &b.old, &b.new)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct ResetPassword {
+    new: String,
+}
+
+/// Сброс пароля пользователю - только владельцем, без текущего пароля.
+/// Сессии сбрасываемого пользователя гаснут.
+async fn reset_user_password(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Path(id): Path<i64>,
+    Json(b): Json<ResetPassword>,
+) -> ApiResult<StatusCode> {
+    let db = st.db.lock().unwrap();
+    need_owner(&db, &ident)?;
+    users::reset_password(&db, id, &b.new)?;
     Ok(StatusCode::NO_CONTENT)
 }
 
