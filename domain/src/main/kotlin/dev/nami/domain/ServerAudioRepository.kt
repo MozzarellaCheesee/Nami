@@ -30,6 +30,10 @@ interface ServerAudioRepository {
     /** Анализ трека с сервера (ReplayGain/R128/BPM/тональность). Null - недоступно. */
     suspend fun serverAnalysis(artist: String?, title: String, durationMs: Long): ServerAnalysis?
 
+    /** Форма волны трека с сервера - 120 значений RMS 0..1 (`GET /api/tracks/{id}/waveform`).
+     * Null - сервера нет, трек ему не известен, или анализ на сервере ещё не прогонялся. */
+    suspend fun serverWaveform(artist: String?, title: String, durationMs: Long): List<Float>?
+
     /**
      * URL потока с сервера для уже известного `serverTrackId`, с токеном в query
      * (`<base>/api/tracks/{id}/stream/auto?token=...`). Null - сервера нет. Пиннинг

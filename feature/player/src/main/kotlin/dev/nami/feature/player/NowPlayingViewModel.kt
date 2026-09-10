@@ -63,6 +63,8 @@ class NowPlayingViewModel @Inject constructor(
     // Same reasoning - только для двух пунктов меню "Ещё" (раздача трека и "слушать со мной"),
     // которые переключаются прямо в меню, без ухода на экран "Локальная сеть".
     private val localShareRepository: dev.nami.domain.LocalShareRepository? = null,
+    // Same reasoning - форма волны с сервера, если он подключён (иначе локальный WaveformScanner).
+    private val serverAudioRepository: dev.nami.domain.ServerAudioRepository? = null,
 ) : ViewModel() {
 
     /** Раздаётся ли сейчас трек по локальной сети (/drop) - меню "Ещё" показывает это подписью
@@ -263,13 +265,13 @@ class NowPlayingViewModel @Inject constructor(
 
     init {
         currentTrackDetails
-            .map { it?.path }
-            .distinctUntilChanged()
-            .onEach { path -> loadWaveform(path) }
+            .distinctUntilChanged { a, b -> a?.path == b?.path }
+            .onEach { track -> loadWaveform(track) }
             .launchIn(viewModelScope)
     }
 
-    private fun loadWaveform(path: String?) {
+    private fun loadWaveform(track: Track?) {
+        val path = track?.path
         if (path == null) {
             _waveform.value = null
             return
@@ -293,9 +295,17 @@ class NowPlayingViewModel @Inject constructor(
         }
         _waveform.value = null
         viewModelScope.launch {
-            val scanned = withContext(Dispatchers.Default) { WaveformScanner.scan(path) } ?: return@launch
-            rememberWaveform(path, scanned)
-            withContext(Dispatchers.IO) { waveformDiskCache.write(path, scanned) }
+            // Сначала с сервера (он уже посчитал при сканировании библиотеки), при промахе -
+            // локальный полный декод.
+            val fromServer =
+                if (track != null && serverAudioRepository?.isServerActive() == true) {
+                    serverAudioRepository.serverWaveform(track.artistName, track.title, track.durationMs)
+                } else null
+            val bars = fromServer
+                ?: withContext(Dispatchers.Default) { WaveformScanner.scan(path) }
+                ?: return@launch
+            rememberWaveform(path, bars)
+            withContext(Dispatchers.IO) { waveformDiskCache.write(path, bars) }
         }
     }
 

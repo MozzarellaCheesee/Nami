@@ -68,6 +68,13 @@ class ServerAudioRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun serverWaveform(artist: String?, title: String, durationMs: Long): List<Float>? =
+        withContext(Dispatchers.IO) {
+            val cfg = activeConfig() ?: return@withContext null
+            val id = serverTrackId(artist, title, durationMs) ?: return@withContext null
+            NamiServerClient.waveform(cfg, id)?.takeIf { it.isNotEmpty() }
+        }
+
     override fun serverStreamUrl(serverTrackId: Long): String? {
         val cfg = activeConfig() ?: return null
         return streamUrlOn(cfg.baseUrl, cfg.token, serverTrackId)

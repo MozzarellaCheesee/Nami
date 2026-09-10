@@ -85,6 +85,15 @@ object NamiServerClient {
         return (0 until res.length()).map { if (res.isNull(it)) null else res.getLong(it) }
     }
 
+    /** GET /api/tracks/{id}/waveform - JSON-массив из 120 значений RMS 0..1. */
+    fun waveform(cfg: Config, serverTrackId: Long): List<Float>? {
+        val (code, text) = request("GET", "${cfg.baseUrl}/api/tracks/$serverTrackId/waveform", null, cfg.token, cfg.certSha256)
+            ?: return null
+        if (code != 200) return null
+        val arr = runCatching { org.json.JSONArray(text) }.getOrNull() ?: return null
+        return (0 until arr.length()).map { arr.optDouble(it).toFloat() }
+    }
+
     /** GET /api/tracks/{id} - метаданные трека, включая поля анализатора. */
     fun trackDetail(cfg: Config, serverTrackId: Long): JSONObject? {
         val (code, text) = request("GET", "${cfg.baseUrl}/api/tracks/$serverTrackId", null, cfg.token, cfg.certSha256)
