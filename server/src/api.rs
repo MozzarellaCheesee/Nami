@@ -92,6 +92,9 @@ pub fn router(state: Shared) -> Router {
         .route("/api/tracks/{id}/artwork", get(artwork_handler))
         .route("/api/tracks/{id}/waveform", get(waveform_handler))
         .route("/api/tracks/{id}/radio", get(radio_handler))
+        .route("/api/tracks/{id}/hls/master.m3u8", get(hls_master))
+        .route("/api/tracks/{id}/hls/{profile}/index.m3u8", get(hls_index))
+        .route("/api/tracks/{id}/hls/{profile}/{seg}", get(hls_segment))
         .route("/api/tracks/{id}/lyrics", get(lyrics))
         .route(
             "/api/tracks/upload",
@@ -579,6 +582,110 @@ async fn waveform_handler(
         )
             .into_response(),
         None => ApiError(StatusCode::NOT_FOUND, "форма волны ещё не посчитана".into()).into_response(),
+    }
+}
+
+// ---------------------------------------------------------------- HLS
+
+/// Путь, размер и mtime трека - если он видим запрашивающему.
+fn track_src(st: &Shared, ident: &Ident, id: i64) -> Option<(std::path::PathBuf, i64, i64)> {
+    let db = st.db.lock().unwrap();
+    if !users::can_see_track(&db, ident, id) {
+        return None;
+    }
+    db.query_row("SELECT path, size_bytes, mtime FROM tracks WHERE id=?1", [id], |r| {
+        Ok((r.get::<_, String>(0)?, r.get(1)?, r.get(2)?))
+    })
+    .ok()
+    .map(|(p, s, m)| (std::path::PathBuf::from(p), s, m))
+}
+
+/// Готовит каталог HLS-варианта в кеше (нарезает при промахе).
+async fn hls_ready(
+    st: &Shared,
+    ident: &Ident,
+    id: i64,
+    profile: &str,
+) -> Result<std::path::PathBuf, Response> {
+    if !crate::hls::is_variant(profile) {
+        return Err(ApiError(StatusCode::NOT_FOUND, "нет такого HLS-варианта".into()).into_response());
+    }
+    if !st.ffmpeg {
+        return Err(ApiError(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "ffmpeg не найден в PATH - HLS недоступен".into(),
+        )
+        .into_response());
+    }
+    let Some((src, size, mtime)) = track_src(st, ident, id) else {
+        return Err(ApiError(StatusCode::NOT_FOUND, "нет такого трека".into()).into_response());
+    };
+    let bitrate = crate::hls::VARIANTS.iter().find(|(n, _, _)| *n == profile).map(|(_, b, _)| *b).unwrap();
+    let cache_dir = st.cfg.cache_dir();
+    let profile = profile.to_string();
+    tokio::task::spawn_blocking(move || {
+        crate::hls::ensure(&cache_dir, &src, id, size, mtime, &profile, bitrate)
+    })
+    .await
+    .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response())?
+    .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response())
+}
+
+async fn hls_master(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Path(id): Path<i64>,
+) -> Response {
+    if track_src(&st, &ident, id).is_none() {
+        return ApiError(StatusCode::NOT_FOUND, "нет такого трека".into()).into_response();
+    }
+    (
+        [(header::CONTENT_TYPE, "application/vnd.apple.mpegurl")],
+        crate::hls::master_playlist(),
+    )
+        .into_response()
+}
+
+async fn hls_index(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Path((id, profile)): Path<(i64, String)>,
+) -> Response {
+    let dir = match hls_ready(&st, &ident, id, &profile).await {
+        Ok(d) => d,
+        Err(r) => return r,
+    };
+    match std::fs::read_to_string(dir.join("index.m3u8")) {
+        Ok(body) => (
+            [(header::CONTENT_TYPE, "application/vnd.apple.mpegurl")],
+            body,
+        )
+            .into_response(),
+        Err(e) => ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+async fn hls_segment(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Path((id, profile, seg)): Path<(i64, String, String)>,
+    req: Request,
+) -> Response {
+    if !crate::hls::valid_segment(&seg) {
+        return ApiError(StatusCode::NOT_FOUND, "нет такого сегмента".into()).into_response();
+    }
+    let dir = match hls_ready(&st, &ident, id, &profile).await {
+        Ok(d) => d,
+        Err(r) => return r,
+    };
+    match ServeFile::new(dir.join(&seg)).oneshot(req).await {
+        Ok(resp) => {
+            let mut resp = resp.map(axum::body::Body::new);
+            resp.headers_mut()
+                .insert(header::CONTENT_TYPE, header::HeaderValue::from_static("video/mp2t"));
+            resp
+        }
+        Err(e) => ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
 }
 
