@@ -8,14 +8,17 @@
 //!
 //! Канал тот же, что у синхронизации (`/api/ws`): второй сокет ради джема не заводится.
 //!
-//! ponytail: сессии живут в памяти процесса, в БД их нет. Джем - это то, что происходит
-//! прямо сейчас; переживать перезапуск сервера ему незачем, а один процесс - ровно
-//! то, подо что писан весь сервер (см. бюджет в main.rs).
+//! ponytail: живая сессия - это broadcast-канал в памяти процесса, перезапуск она не
+//! переживает (клиенты всё равно рвут сокет, проще создать джем заново). В БД
+//! (`jam_sessions`) ведётся только ЖУРНАЛ: код, библиотека, когда началась и кончилась,
+//! сколько треков прозвучало, сколько было участников в пике. Один процесс - ровно то,
+//! подо что писан весь сервер (см. бюджет в main.rs).
 
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use serde::Deserialize;
+use rusqlite::Connection;
+use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 
 use crate::api::Shared;
@@ -36,6 +39,57 @@ pub struct Session {
 /// Все живые сессии процесса.
 #[derive(Default)]
 pub struct Registry(Mutex<HashMap<String, Session>>);
+
+/// Одна запись журнала джемов.
+#[derive(Serialize)]
+pub struct JamRecord {
+    pub code: String,
+    pub created_at: i64,
+    pub ended_at: Option<i64>,
+    pub tracks_played: i64,
+    pub peak_members: i64,
+}
+
+impl Registry {
+    /// Журнал джемов библиотеки, свежие сверху.
+    pub fn history(conn: &Connection, library_id: i64, limit: i64) -> rusqlite::Result<Vec<JamRecord>> {
+        let mut stmt = conn.prepare(
+            "SELECT code, created_at, ended_at, tracks_played, peak_members FROM jam_sessions
+             WHERE library_id=?1 ORDER BY created_at DESC LIMIT ?2",
+        )?;
+        let rows = stmt
+            .query_map(rusqlite::params![library_id, limit], |r| {
+                Ok(JamRecord {
+                    code: r.get(0)?,
+                    created_at: r.get(1)?,
+                    ended_at: r.get(2)?,
+                    tracks_played: r.get(3)?,
+                    peak_members: r.get(4)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+}
+
+/// Отмечает сессию завершённой в журнале (идемпотентно).
+fn record_end(conn: &Connection, code: &str) {
+    let _ = conn.execute(
+        "UPDATE jam_sessions SET ended_at=?2 WHERE code=?1 AND ended_at IS NULL",
+        rusqlite::params![code, crate::db::now()],
+    );
+}
+
+/// Убирает сессии, из которых все разошлись, и помечает их завершёнными в журнале.
+fn sweep(reg: &mut HashMap<String, Session>, conn: &Connection) {
+    reg.retain(|code, s| {
+        let alive = s.tx.receiver_count() > 0;
+        if !alive {
+            record_end(conn, code);
+        }
+        alive
+    });
+}
 
 /// Состояние одного WebSocket-подключения относительно джема.
 #[derive(Default)]
@@ -58,7 +112,7 @@ impl Membership {
 /// Ключ библиотеки участника. В режиме раздельных библиотек это её id, в общем
 /// режиме - 0 (библиотека одна на всех). Ровно это и делает раздельные библиотеки
 /// закрытыми друг для друга, отдельной ветки под режим не нужно.
-fn library_key(st: &Shared, ident: &Ident) -> i64 {
+pub fn library_key(st: &Shared, ident: &Ident) -> i64 {
     let db = st.db.lock().unwrap();
     match users::library_mode(&db) {
         users::LibraryMode::Separate => ident
@@ -102,12 +156,21 @@ pub fn handle(st: &Shared, ident: &Ident, m: &mut Membership, text: &str) -> Opt
     match msg.kind.as_str() {
         "jam_create" => {
             let library = library_key(st, ident);
-            let mut reg = st.jams.0.lock().unwrap();
-            // Заодно выкидываем сессии, из которых все разошлись.
-            reg.retain(|_, s| s.tx.receiver_count() > 0);
+            let now = crate::db::now();
             let code = new_code();
-            let (tx, rx) = broadcast::channel(BUFFER);
-            reg.insert(code.clone(), Session { library, queue: Vec::new(), tx });
+            let rx = {
+                let db = st.db.lock().unwrap();
+                db.execute(
+                    "INSERT INTO jam_sessions (code, library_id, created_at) VALUES (?1,?2,?3)",
+                    rusqlite::params![code, library, now],
+                )
+                .ok();
+                let mut reg = st.jams.0.lock().unwrap();
+                sweep(&mut reg, &db);
+                let (tx, rx) = broadcast::channel(BUFFER);
+                reg.insert(code.clone(), Session { library, queue: Vec::new(), tx });
+                rx
+            };
             m.code = Some(code.clone());
             m.rx = Some(rx);
             Some(serde_json::json!({ "type": "jam_created", "code": code }).to_string())
@@ -115,6 +178,7 @@ pub fn handle(st: &Shared, ident: &Ident, m: &mut Membership, text: &str) -> Opt
         "jam_join" => {
             let library = library_key(st, ident);
             let code = msg.code?.trim().to_uppercase();
+            let db = st.db.lock().unwrap();
             let mut reg = st.jams.0.lock().unwrap();
             let Some(s) = reg.get_mut(&code) else {
                 return err("нет такой сессии");
@@ -126,6 +190,12 @@ pub fn handle(st: &Shared, ident: &Ident, m: &mut Membership, text: &str) -> Opt
             m.rx = Some(s.tx.subscribe());
             m.code = Some(code.clone());
             let queue = s.queue.clone();
+            // receiver_count включает только что оформленную подписку.
+            let members = s.tx.receiver_count() as i64;
+            let _ = db.execute(
+                "UPDATE jam_sessions SET peak_members=MAX(peak_members, ?2) WHERE code=?1",
+                rusqlite::params![code, members],
+            );
             Some(
                 serde_json::json!({ "type": "jam_joined", "code": code, "queue": queue })
                     .to_string(),
@@ -133,7 +203,11 @@ pub fn handle(st: &Shared, ident: &Ident, m: &mut Membership, text: &str) -> Opt
         }
         "jam_leave" => {
             m.rx = None;
-            m.code = None;
+            if m.code.take().is_some() {
+                let db = st.db.lock().unwrap();
+                let mut reg = st.jams.0.lock().unwrap();
+                sweep(&mut reg, &db);
+            }
             Some(serde_json::json!({ "type": "jam_left" }).to_string())
         }
         "jam_play" => {
@@ -157,6 +231,10 @@ pub fn handle(st: &Shared, ident: &Ident, m: &mut Membership, text: &str) -> Opt
                     "by": ident.user_id,
                 }),
             );
+            let _ = st.db.lock().unwrap().execute(
+                "UPDATE jam_sessions SET tracks_played=tracks_played+1 WHERE code=?1",
+                [&code],
+            );
             None
         }
         "jam_queue_add" => {
@@ -171,6 +249,10 @@ pub fn handle(st: &Shared, ident: &Ident, m: &mut Membership, text: &str) -> Opt
                 s.queue.push(track_id);
                 s.queue.clone()
             };
+            let _ = st.db.lock().unwrap().execute(
+                "UPDATE jam_sessions SET queue=?2 WHERE code=?1",
+                rusqlite::params![code, serde_json::to_string(&queue).unwrap_or_else(|_| "[]".into())],
+            );
             broadcast_to(
                 st,
                 &code,
@@ -199,6 +281,26 @@ mod tests {
         assert!(a.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit()));
         assert!(!a.contains('O') && !a.contains('I'), "похожие символы исключены");
         assert_ne!(a, new_code());
+    }
+
+    #[test]
+    fn журнал_пишется_и_виден_только_своей_библиотеке() {
+        let c = Connection::open_in_memory().unwrap();
+        c.execute_batch(crate::db::SCHEMA).unwrap();
+        c.execute(
+            "INSERT INTO jam_sessions (code, library_id, created_at) VALUES ('ABC234', 0, 100)",
+            [],
+        )
+        .unwrap();
+        c.execute("UPDATE jam_sessions SET tracks_played=3 WHERE code='ABC234'", []).unwrap();
+        record_end(&c, "ABC234");
+
+        let h = Registry::history(&c, 0, 10).unwrap();
+        assert_eq!(h.len(), 1);
+        assert_eq!(h[0].code, "ABC234");
+        assert_eq!(h[0].tracks_played, 3);
+        assert!(h[0].ended_at.is_some(), "record_end проставляет метку завершения");
+        assert!(Registry::history(&c, 7, 10).unwrap().is_empty(), "чужая библиотека журнал не видит");
     }
 
     #[test]

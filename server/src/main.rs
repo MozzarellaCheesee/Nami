@@ -97,6 +97,13 @@ async fn main() -> Res<()> {
         None
     };
 
+    // Живые джем-сессии перезапуск не переживают (см. jam.rs): подчистим их хвосты
+    // в журнале, чтобы история не копила вечно открытые записи.
+    let _ = conn.execute(
+        "UPDATE jam_sessions SET ended_at=created_at WHERE ended_at IS NULL",
+        [],
+    );
+
     let state = Arc::new(api::AppState {
         db: Mutex::new(conn),
         fingerprint: tls_cfg.as_ref().map(|t| t.fingerprint.clone()),

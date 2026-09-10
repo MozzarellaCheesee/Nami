@@ -114,6 +114,7 @@ pub fn router(state: Shared) -> Router {
         .route("/api/invites", post(create_invite))
         .route("/api/library-mode", get(get_library_mode).put(put_library_mode))
         .route("/api/now-playing", get(now_playing))
+        .route("/api/jam/history", get(jam_history))
         .route("/api/share", post(create_share))
         .route("/api/share/{token}", delete(revoke_share))
         .route_layer(axum::middleware::from_fn_with_state(state.clone(), require_token));
@@ -1262,6 +1263,19 @@ async fn now_playing(
 ) -> ApiResult<Json<Vec<sync::NowPlaying>>> {
     let db = st.db.lock().unwrap();
     Ok(Json(sync::now_playing(&db, &ident)?))
+}
+
+/// Журнал прошедших джем-сессий своей библиотеки. Живые сессии в памяти, а тут -
+/// история: код, время, сколько треков и участников.
+async fn jam_history(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Query(p): Query<Page>,
+) -> ApiResult<Json<Vec<crate::jam::JamRecord>>> {
+    let library = crate::jam::library_key(&st, &ident);
+    let limit = p.limit.unwrap_or(50).clamp(1, 200);
+    let db = st.db.lock().unwrap();
+    Ok(Json(crate::jam::Registry::history(&db, library, limit)?))
 }
 
 // ---------------------------------------------------------------- загрузка треков

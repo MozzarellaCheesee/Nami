@@ -182,6 +182,24 @@ CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+-- ---------------------------------------------------------------- этап 5
+
+-- Джем-сессии. Сами по себе они живут в памяти процесса (см. jam.rs), а эта таблица -
+-- их журнал: код, библиотека, когда началась и кончилась, сколько треков прозвучало,
+-- сколько было участников в пике. Строка с ended_at IS NULL - сессия, которая шла в
+-- момент последнего запуска: при старте сервер поднимает её обратно из queue, а всё,
+-- что так и не подхватилось, помечает завершённым.
+CREATE TABLE IF NOT EXISTS jam_sessions (
+    code          TEXT PRIMARY KEY,
+    library_id    INTEGER NOT NULL DEFAULT 0,
+    queue         TEXT NOT NULL DEFAULT '[]',   -- JSON-массив id треков
+    created_at    INTEGER NOT NULL,
+    ended_at      INTEGER,
+    tracks_played INTEGER NOT NULL DEFAULT 0,
+    peak_members  INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS idx_jam_created ON jam_sessions(created_at);
 "#;
 
 /// Открывает БД, накатывает схему и миграции (идемпотентно).
