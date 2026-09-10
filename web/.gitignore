@@ -1,4 +1,0 @@
-# Сборочные артефакты (dist собирается через build-web.sh)
-node_modules/
-dist/
-*.log

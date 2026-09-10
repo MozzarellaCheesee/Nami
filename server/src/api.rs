@@ -159,6 +159,17 @@ fn bearer(req: &Request) -> Option<&str> {
         .and_then(|v| v.strip_prefix("Bearer "))
 }
 
+/// Токен из query-параметра `?token=` - для `<audio>`/`<img>` в веб-клиенте, которым
+/// заголовок Authorization задать нечем (как уже сделано для WebSocket). Токены
+/// hex/alphanumeric, percent-декодирование не нужно.
+fn query_token(req: &Request) -> Option<String> {
+    req.uri()
+        .query()?
+        .split('&')
+        .find_map(|kv| kv.strip_prefix("token="))
+        .map(|s| s.to_string())
+}
+
 /// Опознаёт токен: сначала как токен устройства, потом как сессию человека.
 ///
 /// Один заголовок на два вида токенов намеренно: клиенту всё равно, чем он вошёл,
@@ -176,8 +187,8 @@ pub fn identify(conn: &Connection, token: &str) -> Option<Ident> {
 
 /// Bearer-токен устройства или сессии. Публичны только health, пейринг, вход и мастер.
 async fn require_token(State(st): State<Shared>, req: Request, next: Next) -> Response {
-    let ident = match bearer(&req) {
-        Some(t) => identify(&st.db.lock().unwrap(), t),
+    let ident = match bearer(&req).map(str::to_string).or_else(|| query_token(&req)) {
+        Some(t) => identify(&st.db.lock().unwrap(), &t),
         None => None,
     };
     if let Some(ident) = ident {

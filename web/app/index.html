@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0a0a0a">
+<link rel="manifest" href="/manifest.json">
+<title>NAMI</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font: 15px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; background: #0a0a0a; color: #e6e6e6; }
+  a { color: #7db3ff; }
+  header { position: sticky; top: 0; display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px; background: #111; border-bottom: 1px solid #222; z-index: 5; }
+  header h1 { font-size: 18px; letter-spacing: 2px; }
+  header .grow { flex: 1; }
+  button { font: inherit; background: #1f1f1f; color: #e6e6e6; border: 1px solid #333;
+    border-radius: 8px; padding: 8px 12px; cursor: pointer; }
+  button:hover { background: #2a2a2a; }
+  button.primary { background: #2d5bd7; border-color: #2d5bd7; }
+  input, select { font: inherit; background: #161616; color: #e6e6e6; border: 1px solid #333;
+    border-radius: 8px; padding: 9px 11px; width: 100%; }
+  main { max-width: 900px; margin: 0 auto; padding: 16px; padding-bottom: 96px; }
+  .card { background: #131313; border: 1px solid #222; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  .card h2 { font-size: 15px; margin-bottom: 12px; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
+  .row { display: flex; align-items: center; gap: 12px; padding: 8px; border-radius: 8px; cursor: pointer; }
+  .row:hover { background: #1b1b1b; }
+  .row.playing { background: #1a2540; }
+  .row img { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; background: #222; flex: none; }
+  .row .meta { min-width: 0; flex: 1; }
+  .row .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .s { font-size: 13px; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stack > * + * { margin-top: 10px; }
+  #player { position: fixed; left: 0; right: 0; bottom: 0; background: #111; border-top: 1px solid #222; padding: 10px 16px; }
+  #player .np { font-size: 13px; color: #aaa; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #player audio { width: 100%; }
+  .msg { font-size: 13px; color: #8fd18f; min-height: 18px; }
+  .msg.err { color: #e88; }
+  .hidden { display: none !important; }
+  @media (max-width: 560px) { .grid2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div id="login" class="hidden">
+  <main>
+    <div class="card stack" style="max-width:360px;margin:60px auto;">
+      <h1 style="letter-spacing:3px;text-align:center;">NAMI</h1>
+      <input id="lu" placeholder="Пользователь" autocomplete="username">
+      <input id="lp" type="password" placeholder="Пароль" autocomplete="current-password">
+      <button class="primary" onclick="doLogin()">Войти</button>
+      <div id="loginMsg" class="msg err"></div>
+    </div>
+  </main>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <h1>NAMI</h1>
+    <div class="grow"></div>
+    <button id="tabLib" onclick="showTab('lib')">Библиотека</button>
+    <button id="tabSettings" onclick="showTab('settings')">Настройки</button>
+    <button onclick="logout()">Выйти</button>
+  </header>
+  <main>
+    <section id="lib">
+      <div class="card">
+        <input id="q" placeholder="Поиск по названию и исполнителю" oninput="renderTracks()">
+      </div>
+      <div class="card">
+        <h2>Треки (<span id="count">0</span>)</h2>
+        <div id="tracks"></div>
+      </div>
+    </section>
+
+    <section id="settings" class="hidden">
+      <div class="card stack">
+        <h2>Аккаунт</h2>
+        <div class="grid2">
+          <input id="pwOld" type="password" placeholder="Текущий пароль">
+          <input id="pwNew" type="password" placeholder="Новый пароль (8+)">
+        </div>
+        <button onclick="changePw()">Сменить пароль</button>
+        <div class="grid2">
+          <input id="lbToken" placeholder="Токен ListenBrainz">
+          <button onclick="saveLb()">Сохранить токен</button>
+        </div>
+        <div id="acctMsg" class="msg"></div>
+      </div>
+
+      <div id="ownerBox" class="card stack hidden">
+        <h2>Владелец</h2>
+        <div class="grid2">
+          <select id="mode"><option value="shared">Общая библиотека</option><option value="separate">Раздельные</option></select>
+          <button onclick="saveMode()">Сменить режим (чистит tracks)</button>
+        </div>
+        <button onclick="rescan()">Пересканировать библиотеку</button>
+        <div class="grid2">
+          <select id="invRole"><option value="user">user</option><option value="guest">guest</option></select>
+          <button onclick="makeInvite()">Создать инвайт</button>
+        </div>
+        <div id="inviteOut" class="msg"></div>
+        <div id="users"></div>
+        <div id="ownerMsg" class="msg"></div>
+      </div>
+    </section>
+  </main>
+  <div id="player">
+    <div class="np" id="np">Ничего не играет</div>
+    <audio id="audio" controls></audio>
+  </div>
+</div>
+
+<script>
+const T = () => localStorage.getItem('nami_token');
+let ALL = [], me = null, CUR = null;
+
+async function api(path, opts = {}) {
+  const r = await fetch('/api' + path, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + T(), ...(opts.headers || {}) },
+  });
+  if (r.status === 401) { logout(); throw new Error('нужен вход'); }
+  if (!r.ok) throw new Error((await r.text()) || ('HTTP ' + r.status));
+  const ct = r.headers.get('content-type') || '';
+  return ct.includes('json') ? r.json() : r.text();
+}
+
+function show(id) { document.getElementById(id).classList.remove('hidden'); }
+function hide(id) { document.getElementById(id).classList.add('hidden'); }
+
+async function doLogin() {
+  const msg = document.getElementById('loginMsg');
+  msg.textContent = '';
+  try {
+    const d = await (await fetch('/api/auth/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: lu.value, password: lp.value }),
+    })).json();
+    if (!d.token) throw new Error(d.error || 'неверный логин или пароль');
+    localStorage.setItem('nami_token', d.token);
+    start();
+  } catch (e) { msg.textContent = e.message; }
+}
+
+function logout() {
+  localStorage.removeItem('nami_token');
+  hide('app'); show('login');
+}
+
+function showTab(t) {
+  document.getElementById('lib').classList.toggle('hidden', t !== 'lib');
+  document.getElementById('settings').classList.toggle('hidden', t !== 'settings');
+}
+
+async function start() {
+  hide('login'); show('app');
+  me = await api('/me');
+  if (me.user && me.user.role === 'owner') {
+    show('ownerBox');
+    document.getElementById('mode').value = me.library_mode || 'shared';
+    loadUsers();
+  }
+  ALL = await api('/tracks?limit=1000');
+  renderTracks();
+}
+
+function renderTracks() {
+  const q = (document.getElementById('q').value || '').toLowerCase();
+  const list = ALL.filter(t =>
+    !q || (t.title || '').toLowerCase().includes(q) || (t.artist || '').toLowerCase().includes(q));
+  document.getElementById('count').textContent = list.length;
+  const box = document.getElementById('tracks');
+  box.innerHTML = '';
+  for (const t of list) {
+    const row = document.createElement('div');
+    row.className = 'row' + (CUR === t.id ? ' playing' : '');
+    row.onclick = () => play(t);
+    const img = new Image();
+    img.src = '/api/tracks/' + t.id + '/artwork?token=' + T();
+    img.onerror = () => { img.style.visibility = 'hidden'; };
+    row.appendChild(img);
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.innerHTML = '<div class="t"></div><div class="s"></div>';
+    meta.querySelector('.t').textContent = t.title || '(без названия)';
+    meta.querySelector('.s').textContent = [t.artist, t.album].filter(Boolean).join(' — ');
+    row.appendChild(meta);
+    box.appendChild(row);
+  }
+}
+
+function play(t) {
+  CUR = t.id;
+  const a = document.getElementById('audio');
+  a.src = '/api/tracks/' + t.id + '/stream?token=' + T();
+  a.play();
+  document.getElementById('np').textContent = (t.title || '') + ' — ' + (t.artist || '');
+  renderTracks();
+}
+
+async function changePw() {
+  const m = document.getElementById('acctMsg'); m.className = 'msg'; m.textContent = '';
+  try {
+    await api('/me/password', { method: 'PUT', body: JSON.stringify({ old: pwOld.value, new: pwNew.value }) });
+    m.textContent = 'Пароль изменён, войдите заново.'; setTimeout(logout, 1500);
+  } catch (e) { m.className = 'msg err'; m.textContent = e.message; }
+}
+async function saveLb() {
+  const m = document.getElementById('acctMsg'); m.className = 'msg'; m.textContent = '';
+  try {
+    await api('/me/listenbrainz-token', { method: 'PUT', body: JSON.stringify({ token: lbToken.value }) });
+    m.textContent = 'Токен сохранён.';
+  } catch (e) { m.className = 'msg err'; m.textContent = e.message; }
+}
+async function saveMode() {
+  const m = document.getElementById('ownerMsg'); m.className = 'msg'; m.textContent = '';
+  try { const d = await api('/library-mode', { method: 'PUT', body: JSON.stringify({ mode: mode.value }) });
+    m.textContent = d.note || 'Готово.'; } catch (e) { m.className = 'msg err'; m.textContent = e.message; }
+}
+async function rescan() {
+  const m = document.getElementById('ownerMsg'); m.className = 'msg'; m.textContent = 'Сканирую…';
+  try { const r = await api('/scan', { method: 'POST' });
+    m.textContent = `Готово: +${r.added} обновлено ${r.updated} удалено ${r.removed}`;
+    ALL = await api('/tracks?limit=1000'); renderTracks();
+  } catch (e) { m.className = 'msg err'; m.textContent = e.message; }
+}
+async function makeInvite() {
+  const out = document.getElementById('inviteOut');
+  try { const d = await api('/invites', { method: 'POST', body: JSON.stringify({ role: invRole.value, library_id: 0, ttl_secs: 604800 }) });
+    out.textContent = 'Инвайт (7 дней): ' + (d.token || JSON.stringify(d));
+  } catch (e) { out.className = 'msg err'; out.textContent = e.message; }
+}
+async function loadUsers() {
+  try {
+    const us = await api('/users');
+    document.getElementById('users').innerHTML = us.map(u =>
+      `<div class="row" style="cursor:default"><div class="meta"><div class="t">${u.username} · ${u.role}</div>
+      <div class="s">библиотека ${u.library_id}</div></div>
+      ${u.role !== 'owner' ? `<button onclick="delUser(${u.id})">Удалить</button>` : ''}</div>`).join('');
+  } catch (e) {}
+}
+async function delUser(id) {
+  if (!confirm('Удалить пользователя и всё его состояние?')) return;
+  try { await api('/users/' + id, { method: 'DELETE' }); loadUsers(); } catch (e) { alert(e.message); }
+}
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+if (T()) start(); else show('login');
+</script>
+</body>
+</html>
