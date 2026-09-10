@@ -101,6 +101,9 @@ struct SaveConfigRequest {
     admin_password: String,
     transcode_cache_mb: u32,
     watch: bool,
+    /// Внешний адрес (Tailscale MagicDNS, домен, Cloudflare Tunnel). Пусто - только дома.
+    #[serde(default)]
+    external_url: String,
 }
 
 async fn save_config(Json(req): Json<SaveConfigRequest>) -> Response {
@@ -119,14 +122,28 @@ async fn save_config(Json(req): Json<SaveConfigRequest>) -> Response {
         .map(|p| format!("\"{}\"", p.trim().replace('\\', "\\\\").replace('"', "")))
         .collect::<Vec<_>>()
         .join(", ");
+    // Нормализуем внешний адрес: без завершающего слэша, с явной схемой.
+    let ext = req.external_url.trim().trim_end_matches('/');
+    let ext = if ext.is_empty() {
+        String::new()
+    } else if ext.starts_with("http://") || ext.starts_with("https://") {
+        ext.to_string()
+    } else {
+        format!("https://{ext}")
+    };
     let config = format!(
         "# Конфигурация Nami, создана мастером настройки.\n\
          port = {}\n\
          tls = {}\n\
          music_dirs = [{dirs}]\n\
          transcode_cache_mb = {}\n\
-         watch = {}\n",
-        req.port, req.tls, req.transcode_cache_mb, req.watch,
+         watch = {}\n\
+         external_url = \"{}\"\n",
+        req.port,
+        req.tls,
+        req.transcode_cache_mb,
+        req.watch,
+        ext.replace('\\', "\\\\").replace('"', ""),
     );
     if let Err(e) = std::fs::write("config.toml", config) {
         return (StatusCode::INTERNAL_SERVER_ERROR, Json(msg(&format!("config.toml: {e}"))))

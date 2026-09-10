@@ -51,6 +51,16 @@ input:focus { outline: none; border-color: #666; }
 .music-dir-item button { background: #333; border: none; color: #e0e0e0;
   padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;
 }
+.radio-group label { display: flex; align-items: flex-start; cursor: pointer;
+  background: #1a1a1a; border: 1px solid #333; border-radius: 8px;
+  padding: 12px; margin-bottom: 8px; font-weight: 400;
+}
+.radio-group input { margin-right: 10px; margin-top: 2px; }
+.radio-group .hint { display: block; color: #888; font-size: 13px; margin-top: 4px; }
+.ext-detail { background: #141414; border: 1px solid #333; border-radius: 8px;
+  padding: 14px; margin-bottom: 16px; font-size: 13px; line-height: 1.6; color: #aaa;
+}
+.ext-detail code { background: #000; padding: 2px 6px; border-radius: 4px; color: #8ef0a8; }
 </style>
 </head>
 <body>
@@ -126,19 +136,80 @@ input:focus { outline: none; border-color: #666; }
   </div>
   <div class="btn-group">
     <button class="btn btn-secondary" onclick="prevStep()">Назад</button>
+    <button class="btn btn-primary" onclick="nextStep()">Далее</button>
+  </div>
+</div>
+
+<!-- Экран 5: Доступ извне -->
+<div class="step" id="step5">
+  <h1>Доступ вне дома</h1>
+  <p class="subtitle">
+    Как подключаться к серверу, когда вы не в домашней сети. Приложение всё равно
+    сначала пробует локальный адрес - этот нужен только «в дороге».
+  </p>
+  <div class="radio-group">
+    <label>
+      <input type="radio" name="extMode" value="none" checked onchange="onExtMode()">
+      <span>Только дома
+        <span class="hint">Сервер доступен по локальной сети. Настраивать нечего, наружу ничего не открывается.</span>
+      </span>
+    </label>
+    <label>
+      <input type="radio" name="extMode" value="tailscale" onchange="onExtMode()">
+      <span>Tailscale
+        <span class="hint">Приватная сеть между вашими устройствами. Порты на роутере открывать не нужно.</span>
+      </span>
+    </label>
+    <label>
+      <input type="radio" name="extMode" value="cloudflare" onchange="onExtMode()">
+      <span>Cloudflare Tunnel
+        <span class="hint">Демон сам устанавливает исходящее соединение с Cloudflare. Портов открывать не нужно.</span>
+      </span>
+    </label>
+    <label>
+      <input type="radio" name="extMode" value="domain" onchange="onExtMode()">
+      <span>Свой домен
+        <span class="hint">Нужен домен с A/AAAA-записью на этот хост и открытые снаружи порты 80 и 443.</span>
+      </span>
+    </label>
+  </div>
+
+  <div id="extTailscale" class="ext-detail" style="display:none">
+    На сервере: <code>tailscale up</code>, затем по желанию
+    <code>tailscale serve --bg --https=443 http://localhost:PORT</code>.<br>
+    Введите MagicDNS-имя или адрес Tailscale:
+    <input type="text" id="extTailscaleUrl" placeholder="https://nami.your-tailnet.ts.net">
+  </div>
+  <div id="extCloudflare" class="ext-detail" style="display:none">
+    На сервере: <code>cloudflared tunnel create nami</code>,
+    <code>cloudflared tunnel route dns nami music.example.com</code>,
+    <code>cloudflared tunnel run --url http://localhost:PORT nami</code>.<br>
+    Введите домен Cloudflare:
+    <input type="text" id="extCloudflareUrl" placeholder="https://music.example.com">
+  </div>
+  <div id="extDomain" class="ext-detail" style="display:none">
+    Поднимите обратный прокси с TLS (Caddy получает и обновляет сертификат сам),
+    NAMI за ним слушает по HTTP. В этом сценарии TLS-сертификат NAMI не нужен -
+    имеет смысл <code>NAMI_TLS=false</code>.<br>
+    Введите ваш домен:
+    <input type="text" id="extDomainUrl" placeholder="https://music.example.com">
+  </div>
+
+  <div class="btn-group">
+    <button class="btn btn-secondary" onclick="prevStep()">Назад</button>
     <button class="btn btn-primary" onclick="saveConfig()">Завершить</button>
   </div>
 </div>
 
-<!-- Экран 5: Готово -->
-<div class="step" id="step5">
+<!-- Экран 6: Готово -->
+<div class="step" id="step6">
   <h1>Настройка завершена</h1>
   <p class="subtitle">
     Конфигурация сохранена в config.toml.
     <br><br>
     Перезапустите сервер для применения настроек.
   </p>
-  <div id="status5" class="status" style="display:none"></div>
+  <div id="status6" class="status" style="display:none"></div>
 </div>
 
 </div>
@@ -212,6 +283,27 @@ function removeDir(idx) {
   renderMusicDirs()
 }
 
+function extMode() {
+  const el = document.querySelector('input[name="extMode"]:checked')
+  return el ? el.value : 'none'
+}
+
+function onExtMode() {
+  const m = extMode()
+  document.getElementById('extTailscale').style.display = m === 'tailscale' ? 'block' : 'none'
+  document.getElementById('extCloudflare').style.display = m === 'cloudflare' ? 'block' : 'none'
+  document.getElementById('extDomain').style.display = m === 'domain' ? 'block' : 'none'
+}
+
+function externalUrl() {
+  switch (extMode()) {
+    case 'tailscale': return document.getElementById('extTailscaleUrl').value.trim()
+    case 'cloudflare': return document.getElementById('extCloudflareUrl').value.trim()
+    case 'domain': return document.getElementById('extDomainUrl').value.trim()
+    default: return ''
+  }
+}
+
 async function saveConfig() {
   const payload = {
     music_dirs: musicDirs,
@@ -221,6 +313,7 @@ async function saveConfig() {
     admin_password: document.getElementById('adminPass').value,
     transcode_cache_mb: parseInt(document.getElementById('cacheLimit').value),
     watch: document.getElementById('watch').checked,
+    external_url: externalUrl(),
   }
 
   const res = await fetch('/setup/api/save', {
@@ -230,12 +323,12 @@ async function saveConfig() {
   })
 
   const data = await res.json()
-  showStep(5)
+  showStep(6)
 
   if (res.ok) {
-    showStatus('status5', 'success', data.message)
+    showStatus('status6', 'success', data.message)
   } else {
-    showStatus('status5', 'error', data.message || 'Ошибка сохранения')
+    showStatus('status6', 'error', data.message || 'Ошибка сохранения')
   }
 }
 </script>
