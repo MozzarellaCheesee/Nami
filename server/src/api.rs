@@ -919,8 +919,13 @@ async fn qr_start(
         None => (String::new(), format!("&port={}", st.cfg.port)),
     };
 
+    let ext_part = if st.cfg.external_url.trim().is_empty() {
+        String::new()
+    } else {
+        format!("&ext={}", crate::lyrics::urlencode(st.cfg.external_url.trim()))
+    };
     let uri = format!(
-        "nami://auth?challenge={challenge}{fp_part}{port_part}&hosts={hosts_str}"
+        "nami://auth?challenge={challenge}{fp_part}{port_part}&hosts={hosts_str}{ext_part}"
     );
 
     let qr_svg = match qrcode::QrCode::new(uri.as_bytes()) {

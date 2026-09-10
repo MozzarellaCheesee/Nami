@@ -44,6 +44,10 @@ pub struct Config {
     /// как было. Расширение добавляется само.
     #[serde(default = "default_import_pattern")]
     pub import_pattern: String,
+    /// Внешний адрес сервера (домен, Tailscale MagicDNS) - попадает в QR как `ext=`,
+    /// чтобы клиент мог подключаться и вне домашней сети. Пусто - только локальные адреса.
+    #[serde(default)]
+    pub external_url: String,
 }
 
 fn default_port() -> u16 {
@@ -96,6 +100,7 @@ impl Default for Config {
             deepl_api_key: String::new(),
             lyrics_target_lang: default_lyrics_lang(),
             import_pattern: default_import_pattern(),
+            external_url: String::new(),
         }
     }
 }
@@ -168,6 +173,9 @@ impl Config {
         }
         if let Ok(v) = std::env::var("NAMI_IMPORT_PATTERN") {
             cfg.import_pattern = v;
+        }
+        if let Ok(v) = std::env::var("NAMI_EXTERNAL_URL") {
+            cfg.external_url = v;
         }
         if let Ok(v) = std::env::var("NAMI_TRANSCODE_CACHE_MB") {
             cfg.transcode_cache_mb =
