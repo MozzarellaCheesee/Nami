@@ -29,16 +29,17 @@ class SyncRepositoryImpl @Inject constructor(
         val since = _lastSyncTimestamp.value
         val result = NamiServerClient.syncPull(cfg, since) ?: return false
         
-        // ponytail: парсим changes и применяем к локальной DB
+        // Сервер отдаёт { now, changes, truncated } - см. sync.rs::Pull.
         val changes = result.optJSONArray("changes") ?: JSONArray()
-        val currentTs = result.optLong("current_ts", System.currentTimeMillis())
-        
-        Log.d(TAG, "pullFromServer: got ${changes.length()} changes since=$since")
-        
-        // TODO: применить changes к TrackDao (play_count, last_played), MomentDao, LoopDao
-        // ponytail: пока заглушка - просто обновляем timestamp
-        
-        _lastSyncTimestamp.value = currentTs
+        val now = result.optLong("now", System.currentTimeMillis() / 1000)
+
+        Log.d(TAG, "pullFromServer: got ${changes.length()} changes since=$since now=$now")
+
+        // ponytail: применение изменений к Room (rating, moment, loop, listening_history)
+        // требует миграции сущностей под updated_at/deleted_at по полям - отдельная задача.
+        // Пока pull только двигает метку, чтобы push-сторона не слала уже применённое.
+
+        _lastSyncTimestamp.value = now
         return true
     }
 

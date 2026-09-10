@@ -22,7 +22,20 @@ class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val appSettingsRepository: AppSettingsRepository,
     playerRepository: dev.nami.domain.PlayerRepository,
+    private val syncRepository: dev.nami.domain.SyncRepository,
 ) : ViewModel() {
+
+    private val _syncMsg = MutableStateFlow<String?>(null)
+    val syncMsg: StateFlow<String?> = _syncMsg
+    fun clearSyncMsg() { _syncMsg.value = null }
+
+    /** Ручная синхронизация состояния с сервером (кнопка на экране «Сервер NAMI»). */
+    fun syncNow() {
+        viewModelScope.launch {
+            _syncMsg.value = "Синхронизация…"
+            _syncMsg.value = if (syncRepository.sync()) "Синхронизировано" else "Не удалось синхронизировать"
+        }
+    }
 
     /** Только для пресета темы "Из обложки" (П.md §26) - экрану настроек нужен один путь к
      * картинке текущего трека, а не весь плеер. */
