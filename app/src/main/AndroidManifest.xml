@@ -61,6 +61,15 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="audio/*" />
             </intent-filter>
+
+            <!-- Сопряжение с self-hosted сервером: QR-код мастера настройки открывается как
+                 nami://auth?challenge=...&fp=sha256:...&port=...&hosts=ip1,ip2 -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="nami" android:host="auth" />
+            </intent-filter>
         </activity>
 
         <!-- Icon picker (Settings): each alias targets the same MainActivity, just with its own
