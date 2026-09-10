@@ -104,4 +104,10 @@ abstract class DataModule {
     @Binds
     @Singleton
     abstract fun bindSyncRepository(impl: SyncRepositoryImpl): SyncRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindServerLibraryRepository(
+        impl: dev.nami.data.ServerLibraryRepositoryImpl,
+    ): dev.nami.domain.ServerLibraryRepository
 }

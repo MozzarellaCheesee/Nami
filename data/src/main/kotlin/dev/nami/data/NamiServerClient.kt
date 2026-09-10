@@ -224,6 +224,34 @@ object NamiServerClient {
     }
 
     /**
+     * Скачать трек с сервера в файл. GET /api/tracks/{id}/stream/auto.
+     * Возвращает true при успехе.
+     */
+    fun downloadTrack(cfg: Config, trackId: Long, destFile: java.io.File): Boolean {
+        val base = reachableBase(cfg.bases, cfg.certSha256) ?: return false
+        return runCatching {
+            val url = "$base/api/tracks/$trackId/stream/auto?token=${cfg.token}"
+            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 30_000
+                readTimeout = 60_000
+                if (this is HttpsURLConnection && cfg.certSha256 != null && hostIsIpLiteral(url)) {
+                    sslSocketFactory = pinnedFactory(cfg.certSha256)
+                    setHostnameVerifier { _, _ -> true }
+                }
+            }
+            if (conn.responseCode != 200) return false
+            conn.inputStream.use { input ->
+                destFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            conn.disconnect()
+            true
+        }.onFailure { Log.w(TAG, "downloadTrack: ${it.message}") }.getOrElse { false }
+    }
+
+    /**
      * GET /api/sync?since={timestamp} - pull изменений с сервера.
      * Возвращает JSON: { "changes": [...], "current_ts": Long }.
      */
@@ -242,6 +270,62 @@ object NamiServerClient {
         val body = JSONObject().put("changes", changes).toString()
         val (code, _) = request("POST", "$base/api/sync", body, cfg.token, cfg.certSha256) ?: return false
         return code == 200
+    }
+
+    /**
+     * POST /api/tracks/upload?filename=<имя> - тело запроса = сам файл. Дедупликация на
+     * сервере. Возвращает `{track_id, duplicate_of}` либо null.
+     */
+    fun uploadTrack(cfg: Config, file: java.io.File): JSONObject? {
+        val base = reachableBase(cfg.bases, cfg.certSha256) ?: return null
+        val name = java.net.URLEncoder.encode(file.name, "UTF-8")
+        val url = "$base/api/tracks/upload?filename=$name"
+        return runCatching {
+            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = 30_000
+                readTimeout = 120_000
+                doOutput = true
+                setChunkedStreamingMode(64 * 1024)
+                setRequestProperty("Authorization", "Bearer ${cfg.token}")
+                setRequestProperty("Content-Type", "application/octet-stream")
+                if (this is HttpsURLConnection && cfg.certSha256 != null && hostIsIpLiteral(url)) {
+                    sslSocketFactory = pinnedFactory(cfg.certSha256)
+                    setHostnameVerifier { _, _ -> true }
+                }
+            }
+            file.inputStream().use { input -> conn.outputStream.use { input.copyTo(it) } }
+            val code = conn.responseCode
+            val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                ?.bufferedReader()?.use { it.readText() }.orEmpty()
+            conn.disconnect()
+            if (code in 200..299) runCatching { JSONObject(text) }.getOrNull() else null
+        }.onFailure { Log.w(TAG, "uploadTrack: ${it.message}") }.getOrNull()
+    }
+
+    /**
+     * POST /api/share - гостевая ссылка `{title, track_ids, ttl_secs, max_plays}`.
+     * Возвращает полный URL ссылки (`<base>/share/<token>`) либо null.
+     */
+    fun createShare(
+        cfg: Config,
+        title: String,
+        serverTrackIds: List<Long>,
+        ttlSecs: Long?,
+        maxPlays: Int?,
+    ): String? {
+        val base = reachableBase(cfg.bases, cfg.certSha256) ?: return null
+        val body = JSONObject().apply {
+            put("title", title)
+            put("track_ids", org.json.JSONArray(serverTrackIds))
+            if (ttlSecs != null) put("ttl_secs", ttlSecs)
+            if (maxPlays != null) put("max_plays", maxPlays)
+        }.toString()
+        val (code, text) = request("POST", "$base/api/share", body, cfg.token, cfg.certSha256) ?: return null
+        if (code != 200) return null
+        val o = runCatching { JSONObject(text) }.getOrNull() ?: return null
+        o.optString("url").takeIf { it.isNotBlank() }?.let { return it }
+        return o.optString("token").takeIf { it.isNotBlank() }?.let { "$base/share/$it" }
     }
 
     // ---------------------------------------------------------------- HTTP

@@ -13,6 +13,7 @@ import javax.inject.Singleton
 @Singleton
 class ServerAudioRepositoryImpl @Inject constructor(
     private val settingsRepository: SettingsRepository,
+    private val serverLibraryRepository: dev.nami.domain.ServerLibraryRepository,
 ) : ServerAudioRepository {
 
     /** key = "artist|title|durSec" -> id сервера (или null - «искали, не нашли»). */
@@ -100,7 +101,12 @@ class ServerAudioRepositoryImpl @Inject constructor(
                     idCache[cacheKey(artist, title, dur)] = id
                 }
             }
-            ids.map { id -> id?.let { streamUrlOn(cfg.baseUrl, cfg.token, it) } }
+            ids.map { id ->
+                id ?: return@map null
+                // Скачанный в офлайн файл - приоритетнее сети.
+                serverLibraryRepository.cachedFile(id)?.let { return@map android.net.Uri.fromFile(it).toString() }
+                streamUrlOn(cfg.baseUrl, cfg.token, id)
+            }
         }
 
     companion object {

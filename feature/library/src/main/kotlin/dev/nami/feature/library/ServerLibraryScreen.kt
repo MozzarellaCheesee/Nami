@@ -1,14 +1,18 @@
 package dev.nami.feature.library
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -18,7 +22,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,33 +29,31 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dev.nami.data.NamiServerClient
-import dev.nami.domain.SettingsRepository
-import dev.nami.ui.theme.NamiColors
-import kotlinx.coroutines.Dispatchers
+import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.NamiScreenHeader
+import dev.nami.domain.ServerLibraryRepository
+import dev.nami.domain.ServerTrackMeta
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import org.json.JSONObject
 import javax.inject.Inject
-
-// ponytail: минимальная data class для серверного трека
-data class ServerTrack(
-    val id: Long,
-    val artist: String,
-    val title: String,
-    val album: String?,
-)
 
 @HiltViewModel
 class ServerLibraryViewModel @Inject constructor(
-    private val settingsRepository: SettingsRepository,
+    private val serverLibraryRepository: ServerLibraryRepository,
 ) : ViewModel() {
 
-    var tracks by mutableStateOf<List<ServerTrack>>(emptyList())
+    var tracks by mutableStateOf<List<ServerTrackMeta>>(emptyList())
         private set
     var loading by mutableStateOf(false)
         private set
     var error by mutableStateOf<String?>(null)
+        private set
+
+    /** id треков, скачивание которых сейчас идёт. */
+    var downloading by mutableStateOf<Set<Long>>(emptySet())
+        private set
+
+    /** id треков, лежащих в офлайн-кеше. */
+    var cached by mutableStateOf<Set<Long>>(emptySet())
         private set
 
     fun load() {
@@ -61,46 +62,39 @@ class ServerLibraryViewModel @Inject constructor(
             loading = true
             error = null
             try {
-                val cfg = serverConfig()
-                if (cfg == null) {
+                if (!serverLibraryRepository.isServerActive()) {
                     error = "Сервер не подключён"
                     return@launch
                 }
-                val result = withContext(Dispatchers.IO) {
-                    NamiServerClient.tracks(cfg, limit = 500, offset = 0)
-                }
+                cached = serverLibraryRepository.cachedTrackIds()
+                val result = serverLibraryRepository.listTracks()
                 if (result == null) {
                     error = "Не удалось загрузить треки"
                     return@launch
                 }
-                tracks = (0 until result.length()).mapNotNull { i ->
-                    parseTrack(result.optJSONObject(i))
-                }
+                tracks = result
             } finally {
                 loading = false
             }
         }
     }
 
-    // ponytail: минимальный парсер
-    private fun parseTrack(o: JSONObject?): ServerTrack? {
-        o ?: return null
-        val id = o.optLong("id", -1)
-        if (id < 0) return null
-        return ServerTrack(
-            id = id,
-            artist = o.optString("artist", ""),
-            title = o.optString("title", ""),
-            album = o.optString("album").takeIf { it.isNotBlank() },
-        )
-    }
-
-    private fun serverConfig(): NamiServerClient.Config? {
-        if (!settingsRepository.namiServerPreferred.value) return null
-        val urls = settingsRepository.namiServerUrl.value?.split("\n")?.filter { it.isNotBlank() } ?: return null
-        val token = settingsRepository.namiServerToken.value ?: return null
-        val cert = settingsRepository.namiServerCertSha256.value
-        return NamiServerClient.Config(urls.first(), token, cert, urls)
+    fun toggleDownload(track: ServerTrackMeta) {
+        if (track.id in downloading) return
+        if (track.id in cached) {
+            serverLibraryRepository.removeFromCache(track.id)
+            cached = cached - track.id
+            return
+        }
+        viewModelScope.launch {
+            downloading = downloading + track.id
+            try {
+                val file = serverLibraryRepository.downloadTrack(track.id)
+                if (file != null) cached = cached + track.id
+            } finally {
+                downloading = downloading - track.id
+            }
+        }
     }
 }
 
@@ -111,34 +105,53 @@ fun ServerLibraryScreen(
 ) {
     LaunchedEffect(Unit) { viewModel.load() }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Header
-        dev.nami.ui.components.TopBar(
-            title = { Text("Серверная библиотека") },
-            navigationIcon = {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.Outlined.ArrowBack, contentDescription = "Назад")
-                }
-            },
-        )
+    Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
+        NamiScreenHeader(title = "Серверная библиотека", onBack = onBack)
 
         when {
-            viewModel.loading -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            viewModel.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = NamiColors.Shu)
             }
-            viewModel.error != null -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            viewModel.error != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(viewModel.error ?: "", color = NamiColors.Paper70)
             }
-            viewModel.tracks.isEmpty() -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            viewModel.tracks.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("Нет треков на сервере", color = NamiColors.Paper70)
             }
             else -> LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                items(viewModel.tracks) { track ->
-                    Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-                        Text(track.title, color = NamiColors.Paper100, style = MaterialTheme.typography.bodyLarge)
-                        Text(track.artist, color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall)
-                        track.album?.let {
-                            Text(it, color = NamiColors.Paper40, style = MaterialTheme.typography.bodySmall)
+                items(viewModel.tracks, key = { it.id }) { track ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(track.title, color = NamiColors.Paper100, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                listOfNotNull(track.artist.ifBlank { null }, track.album).joinToString(" — "),
+                                color = NamiColors.Paper70,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        val isDownloading = track.id in viewModel.downloading
+                        val isCached = track.id in viewModel.cached
+                        IconButton(onClick = { viewModel.toggleDownload(track) }, enabled = !isDownloading) {
+                            when {
+                                isDownloading -> CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    color = NamiColors.Shu,
+                                    strokeWidth = 2.dp,
+                                )
+                                isCached -> Icon(
+                                    Icons.Outlined.CheckCircle,
+                                    contentDescription = "В офлайн-кеше, нажмите чтобы удалить",
+                                    tint = NamiColors.Shu,
+                                )
+                                else -> Icon(
+                                    Icons.Outlined.CloudDownload,
+                                    contentDescription = "Скачать в офлайн",
+                                    tint = NamiColors.Paper70,
+                                )
+                            }
                         }
                     }
                 }

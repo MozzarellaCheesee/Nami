@@ -243,6 +243,7 @@ fun SettingsScrobblingScreen(onBack: () -> Unit, viewModel: SettingsViewModel = 
 fun SettingsServerScreen(
     onBack: () -> Unit,
     onScanClick: () -> Unit,
+    onLibraryClick: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val url by viewModel.namiServerUrl.collectAsState()
@@ -382,6 +383,27 @@ fun SettingsServerScreen(
                     trailing = { NamiSwitch(checked = preferred, onCheckedChange = viewModel::setNamiServerPreferred) },
                     onClick = { viewModel.setNamiServerPreferred(!preferred) },
                 )
+                SettingsRow(
+                    icon = Icons.Outlined.CloudDownload,
+                    title = "Серверная библиотека",
+                    subtitle = "Треки с сервера, скачивание в офлайн",
+                    trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
+                    onClick = onLibraryClick,
+                )
+            }
+            val syncMsg by viewModel.syncMsg.collectAsState()
+            SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    NamiPill(text = "Синхронизировать сейчас", onClick = viewModel::syncNow)
+                    if (syncMsg != null) {
+                        Text(
+                            syncMsg!!,
+                            color = NamiColors.Paper40,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                }
             }
             SettingsCard(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {

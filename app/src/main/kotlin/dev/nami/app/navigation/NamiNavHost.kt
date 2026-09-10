@@ -72,6 +72,7 @@ private const val ROUTE_PLAYLISTS = "playlists"
 private const val ROUTE_SETTINGS = "settings"
 private const val ROUTE_SETTINGS_SERVER = "settings_server"
 private const val ROUTE_SETTINGS_SERVER_SCAN = "settings_server_scan"
+private const val ROUTE_SERVER_LIBRARY = "server_library"
 private const val ROUTE_ALBUM_DETAIL = "album/{albumId}"
 private const val ROUTE_ARTIST_DETAIL = "artist/{artistId}"
 private const val ROUTE_ARTIST_DISCOGRAPHY = "artist/{artistId}/discography"
@@ -531,7 +532,11 @@ fun NamiNavHost(
                 dev.nami.app.SettingsServerScreen(
                     onBack = { navController.popBackStack() },
                     onScanClick = { navController.navigate(ROUTE_SETTINGS_SERVER_SCAN) },
+                    onLibraryClick = { navController.navigate(ROUTE_SERVER_LIBRARY) },
                 )
+            }
+            composable(ROUTE_SERVER_LIBRARY) {
+                dev.nami.feature.library.ServerLibraryScreen(onBack = { navController.popBackStack() })
             }
             composable(ROUTE_SETTINGS_SERVER_SCAN) {
                 val vm: dev.nami.app.SettingsViewModel =
