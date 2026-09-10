@@ -37,6 +37,7 @@ import javax.inject.Singleton
 import kotlin.math.pow
 
 private const val SMART_RESUME_THRESHOLD_MS = 12 * 60 * 60 * 1000L
+private const val SAVED_QUEUE_TTL_MS = 30L * 24 * 60 * 60 * 1000L // 30 days
 
 @Singleton
 class PlayerRepositoryImpl @Inject constructor(
@@ -322,7 +323,10 @@ class PlayerRepositoryImpl @Inject constructor(
         val queueIds = settingsRepository.lastPlaybackQueueTrackIds.value
         if (queueIds.isEmpty()) return
         val pausedAt = settingsRepository.lastPlaybackPausedAt.value
-        if (System.currentTimeMillis() - pausedAt >= SMART_RESUME_THRESHOLD_MS) return
+        val elapsed = System.currentTimeMillis() - pausedAt
+        // ponytail: TTL 30 дней - если больше, очередь устарела
+        if (elapsed > SAVED_QUEUE_TTL_MS) return
+        if (elapsed >= SMART_RESUME_THRESHOLD_MS) return
         val savedIndex = settingsRepository.lastPlaybackQueueIndex.value
         // Tracks can vanish between the pause and this restore (deleted, moved) - resolve what's
         // still there and keep going, rather than aborting the whole restore over one missing

@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Настройка Nami</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #0a0a0a;
+  color: #e0e0e0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.container { max-width: 600px; width: 100%; padding: 40px 20px; }
+.step { display: none; }
+.step.active { display: block; animation: fadeIn 0.3s; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+h1 { font-size: 28px; margin-bottom: 12px; font-weight: 600; }
+.subtitle { color: #888; margin-bottom: 32px; font-size: 15px; line-height: 1.6; }
+label { display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500; }
+input[type="text"], input[type="password"], input[type="number"] {
+  width: 100%; padding: 12px; background: #1a1a1a; border: 1px solid #333;
+  border-radius: 8px; color: #e0e0e0; font-size: 15px; margin-bottom: 16px;
+}
+input:focus { outline: none; border-color: #666; }
+.checkbox-group { margin-bottom: 16px; }
+.checkbox-group label { display: flex; align-items: center; cursor: pointer; }
+.checkbox-group input { margin-right: 10px; }
+.btn {
+  padding: 12px 24px; border: none; border-radius: 8px; font-size: 15px;
+  font-weight: 500; cursor: pointer; transition: background 0.2s;
+}
+.btn-primary { background: #1a73e8; color: white; }
+.btn-primary:hover { background: #1557b0; }
+.btn-secondary { background: #333; color: #e0e0e0; margin-right: 12px; }
+.btn-secondary:hover { background: #444; }
+.btn-group { display: flex; margin-top: 32px; }
+.status { padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; }
+.status.success { background: #0d4f1c; color: #8ef0a8; }
+.status.error { background: #4f0d0d; color: #f08e8e; }
+.music-dirs { margin-bottom: 16px; }
+.music-dir-item {
+  display: flex; align-items: center; background: #1a1a1a; padding: 10px;
+  border-radius: 6px; margin-bottom: 8px;
+}
+.music-dir-item span { flex: 1; font-family: monospace; font-size: 13px; }
+.music-dir-item button { background: #333; border: none; color: #e0e0e0;
+  padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- Экран 0: Приветствие -->
+<div class="step active" id="step0">
+  <h1>Добро пожаловать в Nami</h1>
+  <p class="subtitle">
+    Настройка займёт около 3 минут. Вам понадобится:
+    <br>• Путь к папке с музыкой
+    <br>• Логин и пароль администратора
+    <br><br>
+    Исходные файлы не будут изменены.
+  </p>
+  <div class="btn-group">
+    <button class="btn btn-primary" onclick="nextStep()">Начать</button>
+  </div>
+</div>
+
+<!-- Экран 1: Папка с музыкой -->
+<div class="step" id="step1">
+  <h1>Где находится ваша музыка?</h1>
+  <p class="subtitle">Укажите папку с аудиофайлами. Можно добавить несколько.</p>
+  <div id="status1" class="status" style="display:none"></div>
+  <label>Путь к папке:</label>
+  <input type="text" id="musicPath" placeholder="/home/user/Music">
+  <button class="btn btn-secondary" onclick="validateAndAdd()">Добавить папку</button>
+  <div class="music-dirs" id="musicDirs"></div>
+  <div class="btn-group">
+    <button class="btn btn-secondary" onclick="prevStep()">Назад</button>
+    <button class="btn btn-primary" onclick="nextStep()">Далее</button>
+  </div>
+</div>
+
+<!-- Экран 2: Порт и TLS -->
+<div class="step" id="step2">
+  <h1>Сетевые настройки</h1>
+  <p class="subtitle">Порт сервера и TLS-шифрование.</p>
+  <label>Порт:</label>
+  <input type="number" id="port" value="3030">
+  <div class="checkbox-group">
+    <label><input type="checkbox" id="tls" checked> Включить TLS (рекомендуется)</label>
+  </div>
+  <div class="btn-group">
+    <button class="btn btn-secondary" onclick="prevStep()">Назад</button>
+    <button class="btn btn-primary" onclick="nextStep()">Далее</button>
+  </div>
+</div>
+
+<!-- Экран 3: Администратор -->
+<div class="step" id="step3">
+  <h1>Создание администратора</h1>
+  <p class="subtitle">Логин и пароль для первого пользователя.</p>
+  <label>Логин:</label>
+  <input type="text" id="adminUser" placeholder="admin">
+  <label>Пароль:</label>
+  <input type="password" id="adminPass" placeholder="Минимум 8 символов">
+  <div class="btn-group">
+    <button class="btn btn-secondary" onclick="prevStep()">Назад</button>
+    <button class="btn btn-primary" onclick="nextStep()">Далее</button>
+  </div>
+</div>
+
+<!-- Экран 4: Кеш и watcher -->
+<div class="step" id="step4">
+  <h1>Дополнительные настройки</h1>
+  <p class="subtitle">Кеш транскодов и автоматическое сканирование.</p>
+  <label>Лимит кеша транскодов (МБ):</label>
+  <input type="number" id="cacheLimit" value="1024">
+  <div class="checkbox-group">
+    <label><input type="checkbox" id="watch" checked> Автосканирование при изменении файлов</label>
+  </div>
+  <div class="btn-group">
+    <button class="btn btn-secondary" onclick="prevStep()">Назад</button>
+    <button class="btn btn-primary" onclick="saveConfig()">Завершить</button>
+  </div>
+</div>
+
+<!-- Экран 5: Готово -->
+<div class="step" id="step5">
+  <h1>Настройка завершена</h1>
+  <p class="subtitle">
+    Конфигурация сохранена в config.toml.
+    <br><br>
+    Перезапустите сервер для применения настроек.
+  </p>
+  <div id="status5" class="status" style="display:none"></div>
+</div>
+
+</div>
+
+<script>
+let currentStep = 0
+let musicDirs = []
+
+function showStep(n) {
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('active'))
+  document.getElementById('step' + n).classList.add('active')
+  currentStep = n
+}
+
+function nextStep() {
+  if (currentStep === 1 && musicDirs.length === 0) {
+    showStatus('status1', 'error', 'Добавьте хотя бы одну папку')
+    return
+  }
+  if (currentStep === 3) {
+    const user = document.getElementById('adminUser').value
+    const pass = document.getElementById('adminPass').value
+    if (!user || !pass || pass.length < 8) {
+      alert('Заполните логин и пароль (минимум 8 символов)')
+      return
+    }
+  }
+  showStep(currentStep + 1)
+}
+
+function prevStep() {
+  showStep(currentStep - 1)
+}
+
+function showStatus(id, type, msg) {
+  const el = document.getElementById(id)
+  el.className = 'status ' + type
+  el.textContent = msg
+  el.style.display = 'block'
+}
+
+async function validateAndAdd() {
+  const path = document.getElementById('musicPath').value.trim()
+  if (!path) return
+
+  const res = await fetch('/setup/api/validate-path?path=' + encodeURIComponent(path))
+  const data = await res.json()
+
+  if (data.ok) {
+    musicDirs.push(path)
+    renderMusicDirs()
+    document.getElementById('musicPath').value = ''
+    showStatus('status1', 'success', data.message)
+  } else {
+    showStatus('status1', 'error', data.message)
+  }
+}
+
+function renderMusicDirs() {
+  const container = document.getElementById('musicDirs')
+  container.innerHTML = musicDirs.map((dir, i) =>
+    `<div class="music-dir-item">
+      <span>${dir}</span>
+      <button onclick="removeDir(${i})">Удалить</button>
+    </div>`
+  ).join('')
+}
+
+function removeDir(idx) {
+  musicDirs.splice(idx, 1)
+  renderMusicDirs()
+}
+
+async function saveConfig() {
+  const payload = {
+    music_dirs: musicDirs,
+    port: parseInt(document.getElementById('port').value),
+    tls: document.getElementById('tls').checked,
+    admin_username: document.getElementById('adminUser').value,
+    admin_password: document.getElementById('adminPass').value,
+    transcode_cache_mb: parseInt(document.getElementById('cacheLimit').value),
+    watch: document.getElementById('watch').checked,
+  }
+
+  const res = await fetch('/setup/api/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+
+  const data = await res.json()
+  showStep(5)
+
+  if (res.ok) {
+    showStatus('status5', 'success', data.message)
+  } else {
+    showStatus('status5', 'error', data.message || 'Ошибка сохранения')
+  }
+}
+</script>
+</body>
+</html>
