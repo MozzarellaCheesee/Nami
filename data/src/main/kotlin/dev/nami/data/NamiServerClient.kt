@@ -59,6 +59,59 @@ object NamiServerClient {
         return parseLyrics(text)
     }
 
+    /**
+     * POST /api/auth/pair - обменивает восьмизначный код сопряжения (его показывает мастер
+     * настройки рядом с QR) на постоянный токен устройства. Для ручного ввода в приложении,
+     * когда камера не сработала.
+     */
+    fun pairWithCode(
+        baseUrl: String,
+        code: String,
+        deviceName: String,
+        certSha256: String?,
+    ): String? {
+        val body = JSONObject().put("code", code).put("device_name", deviceName).toString()
+        val (c, text) = request("POST", "$baseUrl/api/auth/pair", body, null, certSha256) ?: return null
+        if (c != 200) return null
+        return runCatching { JSONObject(text).optString("token").ifBlank { null } }.getOrNull()
+    }
+
+    /**
+     * Отпечаток SHA-256 сертификата сервера - для ручного подключения по HTTPS без QR
+     * (trust on first use): один запрос к `/api/health`, из рукопожатия берётся leaf-сертификат.
+     * Null для `http://` или при ошибке соединения.
+     */
+    fun fetchCertSha256(baseUrl: String): String? {
+        if (!baseUrl.startsWith("https://")) return null
+        return runCatching {
+            val captured = arrayOfNulls<String>(1)
+            val conn = (URL("$baseUrl/api/health").openConnection() as HttpsURLConnection).apply {
+                connectTimeout = TIMEOUT_MS
+                readTimeout = TIMEOUT_MS
+                sslSocketFactory = capturingFactory(captured)
+                setHostnameVerifier { _, _ -> true }
+            }
+            conn.responseCode
+            conn.disconnect()
+            captured[0]
+        }.getOrNull()
+    }
+
+    private fun capturingFactory(out: Array<String?>): SSLSocketFactory {
+        val tm = object : X509TrustManager {
+            override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+            override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {
+                chain?.firstOrNull()?.let { cert ->
+                    out[0] = MessageDigest.getInstance("SHA-256").digest(cert.encoded)
+                        .joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+                }
+            }
+
+            override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+        }
+        return SSLContext.getInstance("TLS").apply { init(null, arrayOf(tm), null) }.socketFactory
+    }
+
     /** GET по готовому URL лирики (`/api/lyrics?title=...` или `/api/tracks/{id}/lyrics`). */
     fun lyricsFromUrl(url: String, token: String, certSha256: String?): Lyrics? {
         val (code, text) = request("GET", url, null, token, certSha256) ?: return null

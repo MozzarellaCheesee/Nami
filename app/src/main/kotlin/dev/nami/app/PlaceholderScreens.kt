@@ -244,17 +244,56 @@ fun SettingsServerScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hilt
     val url by viewModel.namiServerUrl.collectAsState()
     val token by viewModel.namiServerToken.collectAsState()
     val preferred by viewModel.namiServerPreferred.collectAsState()
+    val connectMsg by viewModel.serverConnectMsg.collectAsState()
     val paired = token != null && url.isNotBlank()
+    var addr by remember { mutableStateOf("") }
+    var code by remember { mutableStateOf("") }
 
     SettingsSubScreenScaffold(title = "Сервер NAMI", onBack = onBack) {
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                 Text(
-                    text = if (paired) "Подключён: $url" else "Не сопряжён. Откройте мастер настройки " +
-                        "сервера и отсканируйте его QR-код камерой - ссылка nami:// откроет приложение.",
+                    text = if (paired) "Подключён: $url" else "Не сопряжён. Либо отсканируйте QR-код " +
+                        "мастера настройки камерой (ссылка nami:// откроет приложение), либо введите " +
+                        "адрес и восьмизначный код вручную ниже.",
                     color = NamiColors.Paper40,
                     style = MaterialTheme.typography.bodySmall,
                 )
+            }
+        }
+        if (!paired) {
+            SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    androidx.compose.material3.OutlinedTextField(
+                        value = addr,
+                        onValueChange = { addr = it; viewModel.clearServerConnectMsg() },
+                        label = { Text("Адрес сервера") },
+                        placeholder = { Text("192.168.1.5:4533") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    androidx.compose.material3.OutlinedTextField(
+                        value = code,
+                        onValueChange = { code = it.filter { c -> c.isDigit() }.take(8); viewModel.clearServerConnectMsg() },
+                        label = { Text("Код сопряжения") },
+                        placeholder = { Text("8 цифр из мастера настройки") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                    )
+                    NamiPill(
+                        text = "Подключить",
+                        modifier = Modifier.padding(top = 12.dp),
+                        onClick = { viewModel.connectNamiServer(addr, code) },
+                    )
+                    if (connectMsg != null) {
+                        Text(
+                            text = connectMsg!!,
+                            color = NamiColors.Paper70,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                }
             }
         }
         if (paired) {

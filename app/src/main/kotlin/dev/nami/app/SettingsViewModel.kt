@@ -8,6 +8,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.nami.data.AppSettingsRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -68,6 +69,35 @@ class SettingsViewModel @Inject constructor(
         appSettingsRepository.setNamiServerCertSha256(null)
         appSettingsRepository.setNamiServerUrl("")
         appSettingsRepository.setNamiServerPreferred(false)
+    }
+
+    private val _serverConnectMsg = MutableStateFlow<String?>(null)
+    /** Статус ручного подключения к серверу для экрана «Сервер NAMI». */
+    val serverConnectMsg: StateFlow<String?> = _serverConnectMsg
+    fun clearServerConnectMsg() { _serverConnectMsg.value = null }
+
+    /** Ручное подключение: адрес + восьмизначный код из мастера настройки сервера.
+     * По HTTPS отпечаток сертификата берётся из первого рукопожатия (trust on first use). */
+    fun connectNamiServer(rawUrl: String, code: String) {
+        val url = rawUrl.trim().trimEnd('/').let {
+            if (it.startsWith("http://") || it.startsWith("https://")) it else "https://$it"
+        }
+        viewModelScope.launch {
+            _serverConnectMsg.value = "Подключение…"
+            val err = withContext(Dispatchers.IO) {
+                val cert = dev.nami.data.NamiServerClient.fetchCertSha256(url)
+                if (!dev.nami.data.NamiServerClient.health(url, cert)) return@withContext "Сервер не отвечает по $url"
+                val token = dev.nami.data.NamiServerClient.pairWithCode(
+                    url, code.trim(), android.os.Build.MODEL ?: "Android", cert,
+                ) ?: return@withContext "Код неверен или уже использован"
+                appSettingsRepository.setNamiServerUrl(url)
+                appSettingsRepository.setNamiServerCertSha256(cert)
+                appSettingsRepository.setNamiServerToken(token)
+                appSettingsRepository.setNamiServerPreferred(true)
+                null
+            }
+            _serverConnectMsg.value = err ?: "Подключено"
+        }
     }
     val nowPlayingShowTechInfo: StateFlow<Boolean> = appSettingsRepository.nowPlayingShowTechInfo
     val nowPlayingShowShuffle: StateFlow<Boolean> = appSettingsRepository.nowPlayingShowShuffle
