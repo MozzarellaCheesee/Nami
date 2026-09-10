@@ -59,6 +59,13 @@ object NamiServerClient {
         return parseLyrics(text)
     }
 
+    /** GET по готовому URL лирики (`/api/lyrics?title=...` или `/api/tracks/{id}/lyrics`). */
+    fun lyricsFromUrl(url: String, token: String, certSha256: String?): Lyrics? {
+        val (code, text) = request("GET", url, null, token, certSha256) ?: return null
+        if (code != 200) return null
+        return parseLyrics(text)
+    }
+
     /**
      * Разбор ответа ручки лирики - вынесен из сети, чтобы проверять без сервера.
      * Форма: `{ "lines": [ { "time_ms"?: Long, "text": String } ], ... }`.

@@ -45,8 +45,26 @@ class LyricsRepositoryImpl @Inject constructor(
 
     override suspend fun fetchFromLrcLib(title: String, artistName: String?, durationMs: Long): Lyrics? =
         withContext(Dispatchers.IO) {
-            LrcLibClient.findSyncedLyrics(title, artistName, durationMs)?.let { LrcParser.parse(it) }
+            // Когда подключён self-hosted сервер - лирику берём у него: тот же поиск в LRCLIB,
+            // но плюс кеш и перевод серверным ключом DeepL (клиенту свой ключ не нужен).
+            serverLyrics(title, artistName, durationMs)
+                ?: LrcLibClient.findSyncedLyrics(title, artistName, durationMs)?.let { LrcParser.parse(it) }
         }
+
+    private fun serverLyrics(title: String, artistName: String?, durationMs: Long): Lyrics? {
+        if (!settingsRepository.namiServerPreferred.value) return null
+        val base = settingsRepository.namiServerUrl.value.ifBlank { return null }
+        val token = settingsRepository.namiServerToken.value ?: return null
+        val cert = settingsRepository.namiServerCertSha256.value
+        val translate = settingsRepository.deeplApiKey.value.isBlank() // свой ключ есть - переводим сами
+        val q = buildString {
+            append(base).append("/api/lyrics?title=").append(java.net.URLEncoder.encode(title, "UTF-8"))
+            if (!artistName.isNullOrBlank()) append("&artist=").append(java.net.URLEncoder.encode(artistName, "UTF-8"))
+            if (durationMs > 0) append("&duration_ms=").append(durationMs)
+            if (translate) append("&translate=1")
+        }
+        return NamiServerClient.lyricsFromUrl(q, token, cert)
+    }
 
     override suspend fun fetchFromStands4(title: String, artistName: String?, durationMs: Long): Lyrics? {
         val uid = settingsRepository.stands4Uid.value

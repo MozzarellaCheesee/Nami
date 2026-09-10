@@ -58,6 +58,17 @@ class SettingsViewModel @Inject constructor(
     val soundCloudClientId: StateFlow<String?> = appSettingsRepository.soundCloudClientId
     fun setSoundCloudClientId(value: String?) = appSettingsRepository.setSoundCloudClientId(value)
     val listenBrainzToken: StateFlow<String?> = appSettingsRepository.listenBrainzToken
+
+    val namiServerUrl: StateFlow<String> = appSettingsRepository.namiServerUrl
+    val namiServerToken: StateFlow<String?> = appSettingsRepository.namiServerToken
+    val namiServerPreferred: StateFlow<Boolean> = appSettingsRepository.namiServerPreferred
+    fun setNamiServerPreferred(value: Boolean) = appSettingsRepository.setNamiServerPreferred(value)
+    fun unpairNamiServer() {
+        appSettingsRepository.setNamiServerToken(null)
+        appSettingsRepository.setNamiServerCertSha256(null)
+        appSettingsRepository.setNamiServerUrl("")
+        appSettingsRepository.setNamiServerPreferred(false)
+    }
     val nowPlayingShowTechInfo: StateFlow<Boolean> = appSettingsRepository.nowPlayingShowTechInfo
     val nowPlayingShowShuffle: StateFlow<Boolean> = appSettingsRepository.nowPlayingShowShuffle
     val nowPlayingShowRepeat: StateFlow<Boolean> = appSettingsRepository.nowPlayingShowRepeat

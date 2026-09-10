@@ -99,6 +99,7 @@ fun SettingsScreen(
     onLocalShareClick: () -> Unit,
     onScrobblingClick: () -> Unit,
     onNetworkSourcesClick: () -> Unit,
+    onServerClick: () -> Unit,
     onBatteryClick: () -> Unit,
 ) {
     var showExtras by remember { mutableStateOf(false) }
@@ -141,6 +142,7 @@ fun SettingsScreen(
         NamiSectionLabel("Связь")
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
             NavRow(Icons.Outlined.Share, "Локальная сеть", "Wi-Fi Drop, синхронизация, слушать вместе", onLocalShareClick)
+            NavRow(Icons.Outlined.Cast, "Сервер NAMI", "Self-hosted: лирика, анализ, стрим", onServerClick)
             NavRow(Icons.Outlined.BarChart, "Скробблинг", "ListenBrainz", onScrobblingClick)
             NavRow(Icons.Outlined.CloudDownload, "Источники в сети", "Ключи для Jamendo и SoundCloud", onNetworkSourcesClick)
         }
@@ -229,6 +231,46 @@ fun SettingsScrobblingScreen(onBack: () -> Unit, viewModel: SettingsViewModel = 
                     modifier = Modifier.padding(top = 12.dp),
                     onClick = { viewModel.setListenBrainzToken(tokenText) },
                 )
+            }
+        }
+    }
+}
+
+/** Часть VII - self-hosted сервер NAMI. Сопряжение делается сканированием QR из мастера
+ * настройки сервера (`nami://auth`, обрабатывается в MainActivity), здесь - только состояние,
+ * тумблер «брать лирику с сервера» и отвязка. */
+@Composable
+fun SettingsServerScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
+    val url by viewModel.namiServerUrl.collectAsState()
+    val token by viewModel.namiServerToken.collectAsState()
+    val preferred by viewModel.namiServerPreferred.collectAsState()
+    val paired = token != null && url.isNotBlank()
+
+    SettingsSubScreenScaffold(title = "Сервер NAMI", onBack = onBack) {
+        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Text(
+                    text = if (paired) "Подключён: $url" else "Не сопряжён. Откройте мастер настройки " +
+                        "сервера и отсканируйте его QR-код камерой - ссылка nami:// откроет приложение.",
+                    color = NamiColors.Paper40,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+        if (paired) {
+            SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+                SettingsRow(
+                    icon = Icons.Outlined.CloudDownload,
+                    title = "Брать лирику с сервера",
+                    subtitle = "Поиск, кеш и перевод делает сервер",
+                    trailing = { NamiSwitch(checked = preferred, onCheckedChange = viewModel::setNamiServerPreferred) },
+                    onClick = { viewModel.setNamiServerPreferred(!preferred) },
+                )
+            }
+            SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    NamiPill(text = "Отвязать сервер", onClick = viewModel::unpairNamiServer)
+                }
             }
         }
     }

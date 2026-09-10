@@ -236,6 +236,27 @@ interface SettingsRepository {
     val airPlayEnabled: StateFlow<Boolean>
     fun setAirPlayEnabled(value: Boolean)
 
+    /** Часть VII - self-hosted сервер NAMI. Адрес (`https://192.168.1.5:4533`); пусто - сервер
+     * не подключён, клиент работает как раньше (лирика из LRCLIB, стрим из локальных файлов). */
+    val namiServerUrl: StateFlow<String>
+    fun setNamiServerUrl(value: String)
+
+    /** Отпечаток TLS-сертификата сервера (`sha256:hex`) из QR-кода сопряжения - в локальной сети
+     * сертификат самоподписанный, доверие даёт пиннинг отпечатка, а не CA. Null - HTTP или ещё
+     * не сопряжено. */
+    val namiServerCertSha256: StateFlow<String?>
+    fun setNamiServerCertSha256(value: String?)
+
+    /** Токен устройства, выданный сервером при сопряжении. Секрет - лежит в шифрованном файле.
+     * Null - не сопряжено. */
+    val namiServerToken: StateFlow<String?>
+    fun setNamiServerToken(token: String?)
+
+    /** Брать лирику (позже - анализ и стрим) с сервера, когда он подключён и сопряжён.
+     * Off по умолчанию: подключение сервера само по себе не меняет поведение, пока не включат. */
+    val namiServerPreferred: StateFlow<Boolean>
+    fun setNamiServerPreferred(value: Boolean)
+
     /** Трансляция на Яндекс Станцию (протокол Glagol). Off по умолчанию по тем же причинам, что и
      * AirPlay, плюс требует входа в личный Яндекс ID - неофициальный API, Яндекс вправе сломать
      * его без предупреждения. */

@@ -788,6 +788,14 @@ private object NoOpSettingsRepository : dev.nami.domain.SettingsRepository {
     override fun setScrobblingEnabled(value: Boolean) {}
     override val airPlayEnabled = MutableStateFlow(false)
     override fun setAirPlayEnabled(value: Boolean) {}
+    override val namiServerUrl = MutableStateFlow("")
+    override fun setNamiServerUrl(value: String) {}
+    override val namiServerCertSha256 = MutableStateFlow<String?>(null)
+    override fun setNamiServerCertSha256(value: String?) {}
+    override val namiServerToken = MutableStateFlow<String?>(null)
+    override fun setNamiServerToken(token: String?) {}
+    override val namiServerPreferred = MutableStateFlow(false)
+    override fun setNamiServerPreferred(value: Boolean) {}
     override val yandexStationEnabled = MutableStateFlow(false)
     override fun setYandexStationEnabled(value: Boolean) {}
     override val yandexOAuthToken = MutableStateFlow<String?>(null)

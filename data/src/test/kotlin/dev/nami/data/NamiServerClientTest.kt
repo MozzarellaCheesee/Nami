@@ -1,9 +1,14 @@
 package dev.nami.data
 
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
+// Robolectric: `org.json` под plain-JVM unit-тестом заглушён и бросает "not mocked"
+// (та же причина, по которой LrcLibClient не покрыт обычным тестом).
+@RunWith(RobolectricTestRunner::class)
 class NamiServerClientTest {
 
     @Test

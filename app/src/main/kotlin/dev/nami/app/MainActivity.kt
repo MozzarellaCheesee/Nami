@@ -2,7 +2,9 @@ package dev.nami.app
 
 import android.content.Intent
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -28,6 +30,10 @@ import dagger.hilt.android.AndroidEntryPoint
 import dev.nami.app.navigation.NamiNavHost
 import dev.nami.core.designsystem.NamiTheme
 import dev.nami.data.AppSettingsRepository
+import dev.nami.data.NamiServerClient
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import dev.nami.feature.library.BackupViewModel
 import dev.nami.feature.library.LibraryViewModel
 import dev.nami.player.EXTRA_OPEN_PLAYER
@@ -57,6 +63,7 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         if (intent.getBooleanExtra(EXTRA_OPEN_PLAYER, false)) openPlayerSignal.value++
         handleShareIntent(intent)
+        handlePairingIntent(intent)
     }
 
     // П.md §2 "Share-target на audio MIME type" - ACTION_SEND/SEND_MULTIPLE from another app
@@ -70,6 +77,48 @@ class MainActivity : ComponentActivity() {
             else -> null
         }
         if (!uris.isNullOrEmpty()) libraryViewModel.importFiles(uris.map { it.toString() })
+    }
+
+    /** Сопряжение с self-hosted сервером: QR мастера настройки открывается как
+     * `nami://auth?challenge=...&fp=sha256:...&port=...&hosts=ip1,ip2`. Пробуем адреса по
+     * очереди, на первом живом меняем challenge на токен устройства и сохраняем в настройки. */
+    private fun handlePairingIntent(intent: Intent) {
+        val data = intent.data ?: return
+        if (data.scheme != "nami" || data.host != "auth") return
+        val challenge = data.getQueryParameter("challenge") ?: return
+        val fp = data.getQueryParameter("fp")
+        val port = data.getQueryParameter("port")?.toIntOrNull() ?: 4533
+        val hosts = data.getQueryParameter("hosts")
+            ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
+        if (hosts.isEmpty()) return
+        val scheme = if (fp != null) "https" else "http"
+        lifecycleScope.launch {
+            val paired = withContext(Dispatchers.IO) {
+                for (h in hosts) {
+                    val base = "$scheme://$h:$port"
+                    if (!NamiServerClient.health(base, fp)) continue
+                    val token = NamiServerClient.confirmPairing(
+                        base, challenge, Build.MODEL ?: "Android", fp,
+                    )
+                    if (token != null) return@withContext Triple(base, token, fp)
+                }
+                null
+            }
+            if (paired != null) {
+                val (base, token, cert) = paired
+                appSettingsRepository.setNamiServerUrl(base)
+                appSettingsRepository.setNamiServerCertSha256(cert)
+                appSettingsRepository.setNamiServerToken(token)
+                appSettingsRepository.setNamiServerPreferred(true)
+                Toast.makeText(this@MainActivity, "Сервер NAMI подключён", Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(
+                    this@MainActivity,
+                    "Не удалось подключиться к серверу NAMI",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
     }
 
     private val pickFiles = registerForActivityResult(
@@ -170,6 +219,7 @@ class MainActivity : ComponentActivity() {
         IconPicker.ensureValidState(this)
         if (intent.getBooleanExtra(EXTRA_OPEN_PLAYER, false)) openPlayerSignal.value++
         handleShareIntent(intent)
+        handlePairingIntent(intent)
         // Watched folders (П.md §2) have no true background watch on Android - rescanned once
         // per cold start instead.
         libraryViewModel.rescanWatchedFolders()

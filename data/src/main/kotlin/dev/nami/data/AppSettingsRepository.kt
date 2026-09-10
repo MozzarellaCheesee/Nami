@@ -88,6 +88,10 @@ private const val KEY_YANDEX_CLIENT_ID = "yandex_client_id"
 private const val KEY_JAMENDO_CLIENT_ID = "jamendo_client_id"
 private const val KEY_SOUNDCLOUD_CLIENT_ID = "soundcloud_client_id"
 private const val KEY_LISTENBRAINZ_TOKEN = "listenbrainz_token"
+private const val KEY_NAMI_SERVER_URL = "nami_server_url"
+private const val KEY_NAMI_SERVER_CERT = "nami_server_cert_sha256"
+private const val KEY_NAMI_SERVER_TOKEN = "nami_server_token"
+private const val KEY_NAMI_SERVER_PREFERRED = "nami_server_preferred"
 private const val KEY_HOME_BLOCKS = "home_blocks" // JSON array [{type, enabled}], see readHomeBlocks
 private const val KEY_NOW_PLAYING_SHOW_TECH_INFO = "now_playing_show_tech_info"
 // Устаревший общий ключ на обе кнопки - остался только как дефолт для двух ключей ниже.
@@ -416,6 +420,35 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
     override fun setDeeplApiKey(value: String) {
         prefs.edit { putString(KEY_DEEPL_API_KEY, value) }
         _deeplApiKey.value = value
+    }
+
+    private val _namiServerUrl = MutableStateFlow(prefs.getString(KEY_NAMI_SERVER_URL, "") ?: "")
+    override val namiServerUrl: StateFlow<String> = _namiServerUrl
+    override fun setNamiServerUrl(value: String) {
+        prefs.edit { putString(KEY_NAMI_SERVER_URL, value.trim().trimEnd('/')) }
+        _namiServerUrl.value = value.trim().trimEnd('/')
+    }
+
+    private val _namiServerCertSha256 = MutableStateFlow(prefs.getString(KEY_NAMI_SERVER_CERT, null))
+    override val namiServerCertSha256: StateFlow<String?> = _namiServerCertSha256
+    override fun setNamiServerCertSha256(value: String?) {
+        prefs.edit { putString(KEY_NAMI_SERVER_CERT, value) }
+        _namiServerCertSha256.value = value
+    }
+
+    private val _namiServerToken = MutableStateFlow(securePrefs.getString(KEY_NAMI_SERVER_TOKEN, null))
+    override val namiServerToken: StateFlow<String?> = _namiServerToken
+    override fun setNamiServerToken(token: String?) {
+        securePrefs.edit { putString(KEY_NAMI_SERVER_TOKEN, token) }
+        _namiServerToken.value = token
+    }
+
+    private val _namiServerPreferred =
+        MutableStateFlow(prefs.getBoolean(KEY_NAMI_SERVER_PREFERRED, false))
+    override val namiServerPreferred: StateFlow<Boolean> = _namiServerPreferred
+    override fun setNamiServerPreferred(value: Boolean) {
+        prefs.edit { putBoolean(KEY_NAMI_SERVER_PREFERRED, value) }
+        _namiServerPreferred.value = value
     }
 
     // Comma-joined track ids - they're UUID-shaped (no commas of their own), same "plain
