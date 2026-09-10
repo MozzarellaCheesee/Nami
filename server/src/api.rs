@@ -89,6 +89,7 @@ pub fn router(state: Shared) -> Router {
         .route("/api/tracks/{id}", get(track))
         .route("/api/tracks/{id}/stream", get(stream))
         .route("/api/tracks/{id}/stream/auto", get(stream_auto))
+        .route("/api/tracks/match", post(tracks_match))
         .route("/api/tracks/{id}/artwork", get(artwork_handler))
         .route("/api/tracks/{id}/waveform", get(waveform_handler))
         .route("/api/tracks/{id}/radio", get(radio_handler))
@@ -478,6 +479,54 @@ pub async fn serve_artwork(st: Shared, id: i64, ident: &Ident) -> Response {
         bytes,
     )
         .into_response()
+}
+
+#[derive(Deserialize)]
+struct MatchItem {
+    title: String,
+    artist: Option<String>,
+    duration_ms: Option<i64>,
+}
+
+#[derive(Deserialize)]
+struct MatchBody {
+    tracks: Vec<MatchItem>,
+}
+
+/// Сопоставление треков клиента с библиотекой сервера по (исполнитель, название,
+/// длительность ±2 с) - та же эвристика, что при дедупликации загрузок. Ответ -
+/// массив `matches` той же длины и порядка, элемент = id трека сервера или null.
+/// Нужно клиенту, чтобы стримить/брать анализ с сервера для локально известного трека.
+async fn tracks_match(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Json(b): Json<MatchBody>,
+) -> ApiResult<Json<serde_json::Value>> {
+    if b.tracks.len() > 1000 {
+        return Err(ApiError(StatusCode::BAD_REQUEST, "не больше 1000 треков за запрос".into()));
+    }
+    let db = st.db.lock().unwrap();
+    let (clause, vis) = users::visibility(&db, &ident);
+    let sql = format!(
+        "SELECT id FROM tracks WHERE 1=1{clause}
+           AND lower(title)=lower(?) AND lower(COALESCE(artist,''))=lower(COALESCE(?,''))
+           AND abs(duration_ms - ?) <= {} LIMIT 1",
+        scanner::DURATION_TOLERANCE_MS
+    );
+    let mut stmt = db.prepare(&sql)?;
+    let mut matches: Vec<Option<i64>> = Vec::with_capacity(b.tracks.len());
+    for t in &b.tracks {
+        let mut params = vis.clone();
+        params.push(rusqlite::types::Value::Text(t.title.clone()));
+        params.push(match &t.artist {
+            Some(a) => rusqlite::types::Value::Text(a.clone()),
+            None => rusqlite::types::Value::Null,
+        });
+        params.push(rusqlite::types::Value::Integer(t.duration_ms.unwrap_or(0)));
+        let id = stmt.query_row(rusqlite::params_from_iter(params), |r| r.get::<_, i64>(0)).ok();
+        matches.push(id);
+    }
+    Ok(Json(serde_json::json!({ "matches": matches })))
 }
 
 /// Радио от трека: похожие по исполнителю, темпу и тональности. Порт `RadioBuilder.kt` -

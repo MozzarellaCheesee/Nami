@@ -42,6 +42,7 @@ MagicDNS) - ещё и его как `ext=`. Клиент запоминает в
 | GET | `/api/host-capabilities` | да | измеренные CPU/RAM и пороги тяжёлых фич |
 | GET | `/api/tracks?limit&offset` | да | список треков |
 | GET | `/api/tracks/{id}` | да | метаданные трека |
+| POST | `/api/tracks/match` | да | сопоставить треки клиента с id сервера (артист+название+длит.) |
 | GET | `/api/tracks/{id}/stream` | да | файл байт-в-байт, HTTP Range/206 |
 | GET | `/api/tracks/{id}/stream?profile=opus128` | да | транскод, см. профили |
 | GET | `/api/tracks/{id}/hls/master.m3u8` | да | HLS: мастер-плейлист (варианты 128/192) |
