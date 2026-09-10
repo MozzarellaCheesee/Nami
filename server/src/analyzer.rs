@@ -29,7 +29,13 @@ pub struct Analysis {
     pub bpm: Option<f32>,
     /// Тональность, например `A Minor`. По первым 90 с трека.
     pub musical_key: Option<String>,
+    /// RMS-огибающая трека: WAVEFORM_BARS значений 0..1, нормировано к своему максимуму.
+    /// Клиент рисует ей скраббер, не декодируя файл сам (§34).
+    pub waveform: Option<Vec<f32>>,
 }
+
+/// Столбиков в форме волны - как в Android-клиенте (`WaveformScanner.BAR_COUNT`).
+const WAVEFORM_BARS: usize = 120;
 
 /// Сколько секунд трека берём на BPM/тональность: полный декод+FFT ограничен по CPU/RAM.
 const ANALYSIS_SECS: u32 = 90;
@@ -80,10 +86,14 @@ pub fn analyze(path: &Path, need_fingerprint: bool) -> Res<Analysis> {
         }
     }
 
-    // BPM и тональность: один декод в mono f32 PCM, дальше чистый DSP.
-    if let Some(samples) = decode_mono(path) {
+    // BPM и тональность: декод первых 90 с в mono f32 PCM, дальше чистый DSP.
+    if let Some(samples) = decode_mono(path, Some(ANALYSIS_SECS)) {
         result.bpm = estimate_bpm(&samples, ANALYSIS_RATE);
         result.musical_key = estimate_key(&samples, ANALYSIS_RATE);
+    }
+    // Форма волны - по всему треку (отдельный декод: буферы BPM/ключа не хватило бы).
+    if let Some(full) = decode_mono(path, None) {
+        result.waveform = waveform_bars(&full);
     }
 
     // Chromaprint fingerprint через fpcalc
@@ -110,19 +120,17 @@ pub fn analyze(path: &Path, need_fingerprint: bool) -> Res<Analysis> {
 
 /// Декодирует первые ANALYSIS_SECS секунд в mono f32 PCM через ffmpeg.
 /// ~8 МБ на 90 с при 22050 Гц - в память помещается, для целевого бюджета терпимо.
-fn decode_mono(path: &Path) -> Option<Vec<f32>> {
-    let out = Command::new("ffmpeg")
-        .args([
-            "-v", "error",
-            "-i", path.to_str()?,
-            "-t", &ANALYSIS_SECS.to_string(),
-            "-ac", "1",
-            "-ar", &ANALYSIS_RATE.to_string(),
-            "-f", "f32le",
-            "-",
-        ])
-        .output()
-        .ok()?;
+fn decode_mono(path: &Path, limit_secs: Option<u32>) -> Option<Vec<f32>> {
+    let mut args: Vec<String> = vec!["-v".into(), "error".into(), "-i".into(), path.to_str()?.into()];
+    if let Some(s) = limit_secs {
+        args.push("-t".into());
+        args.push(s.to_string());
+    }
+    args.extend(
+        ["-ac", "1", "-ar", &ANALYSIS_RATE.to_string(), "-f", "f32le", "-"]
+            .map(String::from),
+    );
+    let out = Command::new("ffmpeg").args(&args).output().ok()?;
     // Меньше секунды звука - анализировать нечего.
     if !out.status.success() || out.stdout.len() < 4 * ANALYSIS_RATE as usize {
         return None;
@@ -231,6 +239,51 @@ fn estimate_key(samples: &[f32], rate: u32) -> Option<String> {
         }
     }
     Some(format!("{} {}", NOTE_NAMES[best_root], if best_major { "Major" } else { "Minor" }))
+}
+
+/// Форма волны: WAVEFORM_BARS столбиков RMS-громкости по всему треку, нормировано к
+/// своему максимуму, со сглаживанием 5-точечным взвешенным средним. Порт
+/// `WaveformScanner.kt`: RMS, а не пик - у современных мастерингов пик почти везде у
+/// потолка, «кирпич»; RMS показывает реальный контур тихо/громко.
+fn waveform_bars(samples: &[f32]) -> Option<Vec<f32>> {
+    if samples.len() < WAVEFORM_BARS {
+        return None;
+    }
+    let mut sum_sq = vec![0.0f64; WAVEFORM_BARS];
+    let mut counts = vec![0u64; WAVEFORM_BARS];
+    for (i, s) in samples.iter().enumerate() {
+        let bucket = i * WAVEFORM_BARS / samples.len();
+        sum_sq[bucket] += *s as f64 * *s as f64;
+        counts[bucket] += 1;
+    }
+    let rms: Vec<f64> = (0..WAVEFORM_BARS)
+        .map(|i| if counts[i] > 0 { (sum_sq[i] / counts[i] as f64).sqrt() } else { 0.0 })
+        .collect();
+    let max = rms.iter().cloned().fold(0.0f64, f64::max);
+    if max <= 0.0 {
+        return None;
+    }
+    let norm: Vec<f32> = rms.iter().map(|v| (v / max).clamp(0.05, 1.0) as f32).collect();
+
+    // 5-точечное взвешенное сглаживание, у краёв окно укорачивается (не паддим нулями).
+    let weights = [1.0f32, 2.0, 4.0, 2.0, 1.0];
+    let radius = 2i32;
+    Some(
+        (0..WAVEFORM_BARS as i32)
+            .map(|i| {
+                let (mut acc, mut wt) = (0.0f32, 0.0f32);
+                for off in -radius..=radius {
+                    let j = i + off;
+                    if (0..WAVEFORM_BARS as i32).contains(&j) {
+                        let w = weights[(off + radius) as usize];
+                        acc += norm[j as usize] * w;
+                        wt += w;
+                    }
+                }
+                acc / wt
+            })
+            .collect(),
+    )
 }
 
 /// Корреляция Пирсона хромаграммы с профилем тональности, повёрнутым тоникой на `root`.
@@ -349,9 +402,11 @@ pub fn analyze_batch(
         let Ok(a) = analyze(Path::new(path), need_fingerprint) else {
             continue;
         };
+        let wf = a.waveform.as_ref().map(|w| serde_json::to_string(w).unwrap_or_default());
         conn.execute(
             "UPDATE tracks SET rg_track_gain=?2, rg_track_peak=?3, r128_loudness=?4,
-                fingerprint=COALESCE(?5, fingerprint), bpm=?6, musical_key=?7 WHERE id=?1",
+                fingerprint=COALESCE(?5, fingerprint), bpm=?6, musical_key=?7,
+                waveform=COALESCE(?8, waveform) WHERE id=?1",
             rusqlite::params![
                 id,
                 a.replaygain_track_gain,
@@ -360,6 +415,7 @@ pub fn analyze_batch(
                 a.fingerprint,
                 a.bpm,
                 a.musical_key,
+                wf,
             ],
         )?;
         if a.r128_loudness.is_some() || a.fingerprint.is_some() || a.bpm.is_some() {
@@ -409,6 +465,23 @@ mod tests {
         let rep = analyze_batch(&c, 10, false).unwrap();
         assert_eq!(rep.checked, 1);
         assert_eq!(rep.remaining, 0);
+    }
+
+    #[test]
+    fn форма_волны_нормируется_и_сглаживается() {
+        let rate = ANALYSIS_RATE as usize;
+        // Первая половина тихая, вторая громкая.
+        let mut s = vec![0.05f32; rate * 4];
+        for x in s.iter_mut().skip(rate * 2) {
+            *x = 0.8;
+        }
+        let w = waveform_bars(&s).expect("форма волны должна посчитаться");
+        assert_eq!(w.len(), WAVEFORM_BARS);
+        assert!(w.iter().all(|v| (0.05..=1.0).contains(v)), "значения в диапазоне 0.05..1");
+        assert!(w.last().unwrap() > &0.9, "громкий хвост нормируется к ~1");
+        assert!(w[10] < w[110], "тихое начало ниже громкого конца");
+        // Короткий вход - None, не паника.
+        assert!(waveform_bars(&[0.1; 10]).is_none());
     }
 
     #[test]

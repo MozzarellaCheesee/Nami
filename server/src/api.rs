@@ -90,6 +90,7 @@ pub fn router(state: Shared) -> Router {
         .route("/api/tracks/{id}/stream", get(stream))
         .route("/api/tracks/{id}/stream/auto", get(stream_auto))
         .route("/api/tracks/{id}/artwork", get(artwork_handler))
+        .route("/api/tracks/{id}/waveform", get(waveform_handler))
         .route("/api/tracks/{id}/lyrics", get(lyrics))
         .route(
             "/api/tracks/upload",
@@ -461,6 +462,29 @@ pub async fn serve_artwork(st: Shared, id: i64, ident: &Ident) -> Response {
         bytes,
     )
         .into_response()
+}
+
+/// Форма волны трека: 120 значений RMS-громкости 0..1, посчитанных анализатором.
+/// Пусто (404), пока трек не прошёл `POST /api/library/analyze`.
+async fn waveform_handler(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Path(id): Path<i64>,
+) -> Response {
+    let db = st.db.lock().unwrap();
+    if !users::can_see_track(&db, &ident, id) {
+        return ApiError(StatusCode::NOT_FOUND, "нет такого трека".into()).into_response();
+    }
+    let raw: Option<String> =
+        db.query_row("SELECT waveform FROM tracks WHERE id=?1", [id], |r| r.get(0)).ok().flatten();
+    match raw {
+        Some(json) => (
+            [(header::CONTENT_TYPE, "application/json"), (header::CACHE_CONTROL, "public, max-age=86400")],
+            json,
+        )
+            .into_response(),
+        None => ApiError(StatusCode::NOT_FOUND, "форма волны ещё не посчитана".into()).into_response(),
+    }
 }
 
 /// Отдача файла трека (passthrough или транскод). Проверку прав делает вызывающий:
