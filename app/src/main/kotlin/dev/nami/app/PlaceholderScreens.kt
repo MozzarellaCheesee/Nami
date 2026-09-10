@@ -240,7 +240,11 @@ fun SettingsScrobblingScreen(onBack: () -> Unit, viewModel: SettingsViewModel = 
  * настройки сервера (`nami://auth`, обрабатывается в MainActivity), здесь - только состояние,
  * тумблер «брать лирику с сервера» и отвязка. */
 @Composable
-fun SettingsServerScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
+fun SettingsServerScreen(
+    onBack: () -> Unit,
+    onScanClick: () -> Unit,
+    viewModel: SettingsViewModel = hiltViewModel(),
+) {
     val url by viewModel.namiServerUrl.collectAsState()
     val token by viewModel.namiServerToken.collectAsState()
     val preferred by viewModel.namiServerPreferred.collectAsState()
@@ -250,18 +254,31 @@ fun SettingsServerScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hilt
     var code by remember { mutableStateOf("") }
 
     SettingsSubScreenScaffold(title = "Сервер NAMI", onBack = onBack) {
+        SettingsSectionLabel(if (paired) "Подключён" else "Не сопряжён")
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                 Text(
-                    text = if (paired) "Подключён: $url" else "Не сопряжён. Либо отсканируйте QR-код " +
-                        "мастера настройки камерой (ссылка nami:// откроет приложение), либо введите " +
-                        "адрес и восьмизначный код вручную ниже.",
+                    text = if (paired) url else "Отсканируйте QR-код мастера настройки сервера, " +
+                        "либо введите адрес и восьмизначный код вручную.",
                     color = NamiColors.Paper40,
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
         }
+
         if (!paired) {
+            SettingsSectionLabel("Сканировать")
+            SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+                SettingsRow(
+                    icon = Icons.Outlined.Cast,
+                    title = "Сканировать QR камерой",
+                    subtitle = "Мастер настройки сервера показывает QR",
+                    trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
+                    onClick = onScanClick,
+                )
+            }
+
+            SettingsSectionLabel("Вручную")
             SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                     androidx.compose.material3.OutlinedTextField(
@@ -296,7 +313,9 @@ fun SettingsServerScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hilt
                 }
             }
         }
+
         if (paired) {
+            SettingsSectionLabel("Что берём с сервера")
             SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
                 SettingsRow(
                     icon = Icons.Outlined.CloudDownload,
@@ -306,7 +325,7 @@ fun SettingsServerScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hilt
                     onClick = { viewModel.setNamiServerPreferred(!preferred) },
                 )
             }
-            SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            SettingsCard(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                     NamiPill(text = "Отвязать сервер", onClick = viewModel::unpairNamiServer)
                 }

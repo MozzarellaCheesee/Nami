@@ -77,6 +77,29 @@ object NamiServerClient {
     }
 
     /**
+     * Разбирает `nami://auth?challenge=...&fp=sha256:...&port=...&hosts=ip1,ip2` (из QR
+     * мастера настройки), пробует адреса по очереди и на первом живом меняет challenge на
+     * токен устройства. Возвращает готовую конфигурацию или null.
+     */
+    fun pairFromAuthUri(uriString: String, deviceName: String): Config? {
+        val uri = runCatching { android.net.Uri.parse(uriString) }.getOrNull() ?: return null
+        if (uri.scheme != "nami" || uri.host != "auth") return null
+        val challenge = uri.getQueryParameter("challenge") ?: return null
+        val fp = uri.getQueryParameter("fp")
+        val port = uri.getQueryParameter("port")?.toIntOrNull() ?: 4533
+        val hosts = uri.getQueryParameter("hosts")
+            ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
+        val scheme = if (fp != null) "https" else "http"
+        for (h in hosts) {
+            val base = "$scheme://$h:$port"
+            if (!health(base, fp)) continue
+            val token = confirmPairing(base, challenge, deviceName, fp) ?: continue
+            return Config(base, token, fp)
+        }
+        return null
+    }
+
+    /**
      * Отпечаток SHA-256 сертификата сервера - для ручного подключения по HTTPS без QR
      * (trust on first use): один запрос к `/api/health`, из рукопожатия берётся leaf-сертификат.
      * Null для `http://` или при ошибке соединения.

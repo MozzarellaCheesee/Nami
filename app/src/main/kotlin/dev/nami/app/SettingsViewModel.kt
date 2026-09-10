@@ -99,6 +99,24 @@ class SettingsViewModel @Inject constructor(
             _serverConnectMsg.value = err ?: "Подключено"
         }
     }
+
+    /** Подключение из отсканированного в приложении QR (`nami://auth?...`). */
+    fun connectNamiServerFromScan(rawUri: String) {
+        viewModelScope.launch {
+            _serverConnectMsg.value = "Подключение…"
+            val ok = withContext(Dispatchers.IO) {
+                val cfg = dev.nami.data.NamiServerClient.pairFromAuthUri(
+                    rawUri, android.os.Build.MODEL ?: "Android",
+                ) ?: return@withContext false
+                appSettingsRepository.setNamiServerUrl(cfg.baseUrl)
+                appSettingsRepository.setNamiServerCertSha256(cfg.certSha256)
+                appSettingsRepository.setNamiServerToken(cfg.token)
+                appSettingsRepository.setNamiServerPreferred(true)
+                true
+            }
+            _serverConnectMsg.value = if (ok) "Подключено" else "QR не подошёл или сервер недоступен"
+        }
+    }
     val nowPlayingShowTechInfo: StateFlow<Boolean> = appSettingsRepository.nowPlayingShowTechInfo
     val nowPlayingShowShuffle: StateFlow<Boolean> = appSettingsRepository.nowPlayingShowShuffle
     val nowPlayingShowRepeat: StateFlow<Boolean> = appSettingsRepository.nowPlayingShowRepeat

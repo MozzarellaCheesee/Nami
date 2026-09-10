@@ -85,30 +85,14 @@ class MainActivity : ComponentActivity() {
     private fun handlePairingIntent(intent: Intent) {
         val data = intent.data ?: return
         if (data.scheme != "nami" || data.host != "auth") return
-        val challenge = data.getQueryParameter("challenge") ?: return
-        val fp = data.getQueryParameter("fp")
-        val port = data.getQueryParameter("port")?.toIntOrNull() ?: 4533
-        val hosts = data.getQueryParameter("hosts")
-            ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
-        if (hosts.isEmpty()) return
-        val scheme = if (fp != null) "https" else "http"
         lifecycleScope.launch {
-            val paired = withContext(Dispatchers.IO) {
-                for (h in hosts) {
-                    val base = "$scheme://$h:$port"
-                    if (!NamiServerClient.health(base, fp)) continue
-                    val token = NamiServerClient.confirmPairing(
-                        base, challenge, Build.MODEL ?: "Android", fp,
-                    )
-                    if (token != null) return@withContext Triple(base, token, fp)
-                }
-                null
+            val cfg = withContext(Dispatchers.IO) {
+                NamiServerClient.pairFromAuthUri(data.toString(), Build.MODEL ?: "Android")
             }
-            if (paired != null) {
-                val (base, token, cert) = paired
-                appSettingsRepository.setNamiServerUrl(base)
-                appSettingsRepository.setNamiServerCertSha256(cert)
-                appSettingsRepository.setNamiServerToken(token)
+            if (cfg != null) {
+                appSettingsRepository.setNamiServerUrl(cfg.baseUrl)
+                appSettingsRepository.setNamiServerCertSha256(cfg.certSha256)
+                appSettingsRepository.setNamiServerToken(cfg.token)
                 appSettingsRepository.setNamiServerPreferred(true)
                 Toast.makeText(this@MainActivity, "Сервер NAMI подключён", Toast.LENGTH_LONG).show()
             } else {

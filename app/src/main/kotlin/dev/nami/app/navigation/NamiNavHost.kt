@@ -71,6 +71,7 @@ private const val ROUTE_SEARCH = "search"
 private const val ROUTE_PLAYLISTS = "playlists"
 private const val ROUTE_SETTINGS = "settings"
 private const val ROUTE_SETTINGS_SERVER = "settings_server"
+private const val ROUTE_SETTINGS_SERVER_SCAN = "settings_server_scan"
 private const val ROUTE_ALBUM_DETAIL = "album/{albumId}"
 private const val ROUTE_ARTIST_DETAIL = "artist/{artistId}"
 private const val ROUTE_ARTIST_DISCOGRAPHY = "artist/{artistId}/discography"
@@ -527,7 +528,18 @@ fun NamiNavHost(
                 dev.nami.app.SettingsScrobblingScreen(onBack = { navController.popBackStack() })
             }
             composable(ROUTE_SETTINGS_SERVER) {
-                dev.nami.app.SettingsServerScreen(onBack = { navController.popBackStack() })
+                dev.nami.app.SettingsServerScreen(
+                    onBack = { navController.popBackStack() },
+                    onScanClick = { navController.navigate(ROUTE_SETTINGS_SERVER_SCAN) },
+                )
+            }
+            composable(ROUTE_SETTINGS_SERVER_SCAN) {
+                val vm: dev.nami.app.SettingsViewModel =
+                    androidx.hilt.navigation.compose.hiltViewModel()
+                dev.nami.feature.library.LocalShareScanScreen(
+                    onBack = { navController.popBackStack() },
+                    onResult = { raw -> vm.connectNamiServerFromScan(raw) },
+                )
             }
             composable(ROUTE_NETWORK_SOURCES) {
                 dev.nami.app.SettingsNetworkSourcesScreen(onBack = { navController.popBackStack() })
