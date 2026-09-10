@@ -76,21 +76,40 @@ class SettingsViewModel @Inject constructor(
     val serverConnectMsg: StateFlow<String?> = _serverConnectMsg
     fun clearServerConnectMsg() { _serverConnectMsg.value = null }
 
-    /** Ручное подключение: адрес + восьмизначный код из мастера настройки сервера.
+    /** Правка списка адресов уже сопряжённого сервера (добавить внешний адрес и т.п.),
+     * без повторного сопряжения. */
+    fun setNamiServerBases(raw: String) {
+        val bases = raw.split('\n', ',').map { normalizeBase(it) }.filter { it.isNotEmpty() }.distinct()
+        if (bases.isNotEmpty()) {
+            appSettingsRepository.setNamiServerUrl(bases.joinToString("\n"))
+            _serverConnectMsg.value = "Адреса сохранены"
+        }
+    }
+
+    private fun normalizeBase(s: String): String = s.trim().trimEnd('/').let {
+        if (it.isEmpty() || it.startsWith("http://") || it.startsWith("https://")) it else "https://$it"
+    }
+
+    /** Ручное подключение: один или несколько адресов (по одному в строке: локальный,
+     * Tailscale, внешний домен) + восьмизначный код из мастера настройки сервера.
      * По HTTPS отпечаток сертификата берётся из первого рукопожатия (trust on first use). */
-    fun connectNamiServer(rawUrl: String, code: String) {
-        val url = rawUrl.trim().trimEnd('/').let {
-            if (it.startsWith("http://") || it.startsWith("https://")) it else "https://$it"
+    fun connectNamiServer(rawUrls: String, code: String) {
+        val bases = rawUrls.split('\n', ',').map { normalizeBase(it) }.filter { it.isNotEmpty() }.distinct()
+        if (bases.isEmpty()) {
+            _serverConnectMsg.value = "Укажите адрес сервера"
+            return
         }
         viewModelScope.launch {
             _serverConnectMsg.value = "Подключение…"
             val err = withContext(Dispatchers.IO) {
-                val cert = dev.nami.data.NamiServerClient.fetchCertSha256(url)
-                if (!dev.nami.data.NamiServerClient.health(url, cert)) return@withContext "Сервер не отвечает по $url"
+                val cert = bases.firstNotNullOfOrNull { dev.nami.data.NamiServerClient.fetchCertSha256(it) }
+                val working = dev.nami.data.NamiServerClient.reachableBase(bases, cert)
+                    ?: return@withContext "Ни один адрес не отвечает"
                 val token = dev.nami.data.NamiServerClient.pairWithCode(
-                    url, code.trim(), android.os.Build.MODEL ?: "Android", cert,
+                    working, code.trim(), android.os.Build.MODEL ?: "Android", cert,
                 ) ?: return@withContext "Код неверен или уже использован"
-                appSettingsRepository.setNamiServerUrl(url)
+                val ordered = listOf(working) + bases.filter { it != working }
+                appSettingsRepository.setNamiServerUrl(ordered.joinToString("\n"))
                 appSettingsRepository.setNamiServerCertSha256(cert)
                 appSettingsRepository.setNamiServerToken(token)
                 appSettingsRepository.setNamiServerPreferred(true)
@@ -108,7 +127,7 @@ class SettingsViewModel @Inject constructor(
                 val cfg = dev.nami.data.NamiServerClient.pairFromAuthUri(
                     rawUri, android.os.Build.MODEL ?: "Android",
                 ) ?: return@withContext false
-                appSettingsRepository.setNamiServerUrl(cfg.baseUrl)
+                appSettingsRepository.setNamiServerUrl(cfg.bases.joinToString("\n"))
                 appSettingsRepository.setNamiServerCertSha256(cfg.certSha256)
                 appSettingsRepository.setNamiServerToken(cfg.token)
                 appSettingsRepository.setNamiServerPreferred(true)

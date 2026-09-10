@@ -90,7 +90,7 @@ class MainActivity : ComponentActivity() {
                 NamiServerClient.pairFromAuthUri(data.toString(), Build.MODEL ?: "Android")
             }
             if (cfg != null) {
-                appSettingsRepository.setNamiServerUrl(cfg.baseUrl)
+                appSettingsRepository.setNamiServerUrl(cfg.bases.joinToString("\n"))
                 appSettingsRepository.setNamiServerCertSha256(cfg.certSha256)
                 appSettingsRepository.setNamiServerToken(cfg.token)
                 appSettingsRepository.setNamiServerPreferred(true)

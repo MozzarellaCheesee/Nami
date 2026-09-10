@@ -257,12 +257,32 @@ fun SettingsServerScreen(
         SettingsSectionLabel(if (paired) "Подключён" else "Не сопряжён")
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                Text(
-                    text = if (paired) url else "Отсканируйте QR-код мастера настройки сервера, " +
-                        "либо введите адрес и восьмизначный код вручную.",
-                    color = NamiColors.Paper40,
-                    style = MaterialTheme.typography.bodySmall,
-                )
+                if (paired) {
+                    val addrs = url.split('\n').map { it.trim() }.filter { it.isNotEmpty() }
+                    Text("Активный: ${addrs.firstOrNull() ?: "-"}", color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall)
+                    if (addrs.size > 1) {
+                        Text(
+                            "Запасные: " + addrs.drop(1).joinToString(", "),
+                            color = NamiColors.Paper40,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                    Text(
+                        "Вне дома нужен адрес, доступный извне (Tailscale, домен или Cloudflare " +
+                            "Tunnel на сервере). Локальный IP работает только в домашней сети.",
+                        color = NamiColors.Paper40,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                } else {
+                    Text(
+                        "Отсканируйте QR-код мастера настройки сервера, либо введите адрес(а) и " +
+                            "восьмизначный код вручную.",
+                        color = NamiColors.Paper40,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
             }
         }
 
@@ -284,9 +304,17 @@ fun SettingsServerScreen(
                     androidx.compose.material3.OutlinedTextField(
                         value = addr,
                         onValueChange = { addr = it; viewModel.clearServerConnectMsg() },
-                        label = { Text("Адрес сервера") },
-                        placeholder = { Text("192.168.1.5:4533") },
-                        singleLine = true,
+                        label = { Text("Адреса сервера, по одному в строке") },
+                        placeholder = { Text("192.168.1.5:4533\nnami.example.com\n100.x.y.z:4533 (Tailscale)") },
+                        supportingText = {
+                            Text(
+                                "Локальный - для дома, Tailscale/домен - чтобы подключаться вне дома. " +
+                                    "Приложение само выберет доступный.",
+                                color = NamiColors.Paper40,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        },
+                        minLines = 2,
                         modifier = Modifier.fillMaxWidth(),
                     )
                     androidx.compose.material3.OutlinedTextField(
@@ -315,6 +343,36 @@ fun SettingsServerScreen(
         }
 
         if (paired) {
+            SettingsSectionLabel("Адреса")
+            SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    var edit by remember(url) { mutableStateOf(url) }
+                    androidx.compose.material3.OutlinedTextField(
+                        value = edit,
+                        onValueChange = { edit = it; viewModel.clearServerConnectMsg() },
+                        label = { Text("Адреса сервера, по одному в строке") },
+                        supportingText = {
+                            Text(
+                                "Добавьте Tailscale-адрес или домен, чтобы подключаться вне дома. " +
+                                    "Первый рабочий выбирается автоматически.",
+                                color = NamiColors.Paper40,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        },
+                        minLines = 2,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    NamiPill(
+                        text = "Сохранить адреса",
+                        modifier = Modifier.padding(top = 12.dp),
+                        onClick = { viewModel.setNamiServerBases(edit) },
+                    )
+                    if (connectMsg != null) {
+                        Text(connectMsg!!, color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
+                    }
+                }
+            }
+
             SettingsSectionLabel("Что берём с сервера")
             SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
                 SettingsRow(

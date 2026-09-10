@@ -53,9 +53,17 @@ class LyricsRepositoryImpl @Inject constructor(
 
     private fun serverLyrics(title: String, artistName: String?, durationMs: Long): Lyrics? {
         if (!settingsRepository.namiServerPreferred.value) return null
-        val base = settingsRepository.namiServerUrl.value.ifBlank { return null }
         val token = settingsRepository.namiServerToken.value ?: return null
         val cert = settingsRepository.namiServerCertSha256.value
+        // Адресов может быть несколько (локальный, Tailscale, домен) - берём первый живой
+        // и запоминаем его первым, чтобы в следующий раз не перебирать.
+        val bases = settingsRepository.namiServerUrl.value.split('\n', ',')
+            .map { it.trim() }.filter { it.isNotEmpty() }
+        if (bases.isEmpty()) return null
+        val base = NamiServerClient.reachableBase(bases, cert) ?: return null
+        if (base != bases.firstOrNull()) {
+            settingsRepository.setNamiServerUrl((listOf(base) + bases.filter { it != base }).joinToString("\n"))
+        }
         val translate = settingsRepository.deeplApiKey.value.isBlank() // свой ключ есть - переводим сами
         val q = buildString {
             append(base).append("/api/lyrics?title=").append(java.net.URLEncoder.encode(title, "UTF-8"))

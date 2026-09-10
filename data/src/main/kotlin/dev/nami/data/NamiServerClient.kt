@@ -25,14 +25,28 @@ object NamiServerClient {
     private const val TAG = "NamiServerClient"
     private const val TIMEOUT_MS = 10_000
 
-    /** Куда и с чем ходить: адрес сервера, токен устройства, отпечаток сертификата. */
-    data class Config(val baseUrl: String, val token: String, val certSha256: String? = null)
+    /**
+     * Куда и с чем ходить. `bases` - все известные адреса сервера (локальный, Tailscale,
+     * внешний домен) в порядке предпочтения: дома сработает первый, в дороге - следующий.
+     * `baseUrl` - рабочий на данный момент (для однократного запроса без перебора).
+     */
+    data class Config(
+        val baseUrl: String,
+        val token: String,
+        val certSha256: String? = null,
+        val bases: List<String> = listOf(baseUrl),
+    )
 
     /** GET /api/health - жив ли сервер по этому адресу. */
     fun health(baseUrl: String, certSha256: String? = null): Boolean {
         val (code, _) = request("GET", "$baseUrl/api/health", null, null, certSha256) ?: return false
         return code == 200
     }
+
+    /** Первый из адресов, отвечающий на `/api/health`. null - ни один не доступен. */
+    fun reachableBase(candidates: List<String>, certSha256: String?): String? =
+        candidates.map { it.trim().trimEnd('/') }.filter { it.isNotEmpty() }
+            .firstOrNull { health(it, certSha256) }
 
     /**
      * POST /api/auth/qr/confirm - меняет challenge из QR на постоянный токен устройства.
@@ -90,11 +104,15 @@ object NamiServerClient {
         val hosts = uri.getQueryParameter("hosts")
             ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
         val scheme = if (fp != null) "https" else "http"
-        for (h in hosts) {
-            val base = "$scheme://$h:$port"
+        // ext - внешний адрес (Tailscale MagicDNS, домен) как есть, с настоящим сертификатом.
+        val ext = uri.getQueryParameter("ext")?.trim()?.trimEnd('/')?.takeIf { it.isNotEmpty() }
+            ?.let { if (it.startsWith("http")) it else "https://$it" }
+        val bases = hosts.map { "$scheme://$it:$port" } + listOfNotNull(ext)
+        for (base in bases) {
             if (!health(base, fp)) continue
             val token = confirmPairing(base, challenge, deviceName, fp) ?: continue
-            return Config(base, token, fp)
+            // Рабочий адрес - первым, остальные (Tailscale, домен) - как запасные в дорогу.
+            return Config(base, token, fp, listOf(base) + bases.filter { it != base })
         }
         return null
     }
@@ -171,9 +189,10 @@ object NamiServerClient {
             requestMethod = method
             connectTimeout = TIMEOUT_MS
             readTimeout = TIMEOUT_MS
-            if (this is HttpsURLConnection && certSha256 != null) {
+            // Пиннинг отпечатка - только для адреса-IP в локальной сети (самоподписанный
+            // сертификат). У внешнего домена настоящий сертификат от CA - обычная проверка.
+            if (this is HttpsURLConnection && certSha256 != null && hostIsIpLiteral(url)) {
                 sslSocketFactory = pinnedFactory(certSha256)
-                // Имя не проверяем: адрес - IP, а доверие даёт совпавший отпечаток.
                 setHostnameVerifier { _, _ -> true }
             }
             if (bearer != null) setRequestProperty("Authorization", "Bearer $bearer")
@@ -189,6 +208,11 @@ object NamiServerClient {
         conn.disconnect()
         code to text
     }.onFailure { Log.w(TAG, "$method $url: ${it.message}") }.getOrNull()
+
+    private fun hostIsIpLiteral(url: String): Boolean {
+        val host = runCatching { URL(url).host }.getOrNull().orEmpty()
+        return host.matches(Regex("^\\d{1,3}(\\.\\d{1,3}){3}$")) || host.contains(':')
+    }
 
     /** SSLSocketFactory, доверяющий любому серверу с совпавшим SHA-256 сертификата. */
     private fun pinnedFactory(expected: String): SSLSocketFactory {
