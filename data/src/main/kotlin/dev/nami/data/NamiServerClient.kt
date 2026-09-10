@@ -214,6 +214,16 @@ object NamiServerClient {
     }
 
     /**
+     * GET /api/tracks?limit={limit}&offset={offset} - список треков с сервера.
+     * Возвращает JSONArray треков.
+     */
+    fun tracks(cfg: Config, limit: Int = 200, offset: Int = 0): org.json.JSONArray? {
+        val base = reachableBase(cfg.bases, cfg.certSha256) ?: return null
+        val (code, body) = request("GET", "$base/api/tracks?limit=$limit&offset=$offset", null, cfg.token, cfg.certSha256) ?: return null
+        return if (code == 200) runCatching { org.json.JSONArray(body) }.getOrNull() else null
+    }
+
+    /**
      * GET /api/sync?since={timestamp} - pull изменений с сервера.
      * Возвращает JSON: { "changes": [...], "current_ts": Long }.
      */
