@@ -651,6 +651,44 @@ async fn dispatch(
         };
     }
 
+    // Звёзды и оценки пишутся в общий state (форма - README «Форма оценок в состоянии»),
+    // откуда их подхватывает синхронизация и другие клиенты. Отдельная ветка до общего
+    // лока БД: push() требует `&mut Connection`, а дальше лок держится как `&`.
+    if matches!(action.as_str(), "star" | "unstar" | "setRating") {
+        let Some(track_id) = params.get("id").and_then(|v| v.parse::<i64>().ok()) else {
+            return fail(&params, E_MISSING_PARAM, "нужен числовой id трека");
+        };
+        {
+            let db = st.db.lock().unwrap();
+            if !crate::users::can_see_track(&db, &ident, track_id) {
+                return fail(&params, E_NOT_FOUND, "нет такого трека");
+            }
+        }
+        let (field, value) = match action.as_str() {
+            "star" => ("starred", json!(crate::db::now())),
+            "unstar" => ("starred", Value::Null),
+            _ => {
+                let r: i64 = params.get("rating").and_then(|v| v.parse().ok()).unwrap_or(0);
+                ("stars", if (1..=5).contains(&r) { json!(r) } else { Value::Null })
+            }
+        };
+        let change = crate::sync::Change {
+            entity: "rating".into(),
+            id: track_id.to_string(),
+            field: field.into(),
+            value,
+            updated_at: crate::db::now(),
+        };
+        {
+            let mut db = st.db.lock().unwrap();
+            if crate::sync::push(&mut db, user_id, std::slice::from_ref(&change)).is_err() {
+                return fail(&params, 0, "не удалось сохранить оценку");
+            }
+        }
+        st.notify(json!({ "type": "changed", "user_id": user_id, "entities": ["rating"], "at": crate::db::now() }));
+        return respond(&params, json!({}));
+    }
+
     let db = st.db.lock().unwrap();
     let (clause, vis) = crate::users::visibility(&db, &ident);
     let owner = crate::users::get(&db, user_id).map(|u| u.username).unwrap_or_default();
@@ -745,6 +783,18 @@ async fn dispatch(
                 Ok(_) => return fail(&params, E_NOT_FOUND, "нет такого трека"),
                 Err(e) => Err(e),
             }
+        }
+        "getStarred" | "getStarred2" => {
+            // Звёзды лежат в state: entity='rating', field='starred', value - метка
+            // времени (не null/0/false). CAST нужен, потому что id записи там строковый.
+            let extra = "AND id IN (SELECT CAST(id AS INTEGER) FROM state
+                 WHERE user_id=? AND entity='rating' AND field='starred'
+                   AND value NOT IN ('null','0','false'))";
+            songs_where(&db, &clause, &vis, extra, vec![SqlValue::Integer(user_id)], "artist, album, track_no", 500)
+                .map(|song| {
+                    let key = if action == "getStarred2" { "starred2" } else { "starred" };
+                    json!({ key: { "song": song } })
+                })
         }
         "search3" | "search2" => {
             let q = params.get("query").map(String::as_str).unwrap_or("").trim();
@@ -1022,6 +1072,30 @@ mod tests {
         assert_eq!(playlist_track_ids(&c, 1, "p1").unwrap(), vec![1, 2]);
         // Чужое состояние в свой плейлист не подмешивается.
         assert!(state_records(&c, 2, "playlist").unwrap().is_empty());
+    }
+
+    #[test]
+    fn getstarred_берёт_только_треки_с_непустым_starred() {
+        let c = db();
+        for (id, v) in [("1", "1699999999"), ("2", "null"), ("3", "0"), ("4", "false")] {
+            c.execute(
+                "INSERT INTO state (user_id,entity,id,field,value,updated_at)
+                 VALUES (0,'rating',?1,'starred',?2,1)",
+                rusqlite::params![id, v],
+            )
+            .unwrap();
+        }
+        let ids: Vec<i64> = c
+            .prepare(
+                "SELECT CAST(id AS INTEGER) FROM state WHERE user_id=0 AND entity='rating'
+                 AND field='starred' AND value NOT IN ('null','0','false') ORDER BY 1",
+            )
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        assert_eq!(ids, vec![1], "звезда только у трека 1");
     }
 
     #[test]
