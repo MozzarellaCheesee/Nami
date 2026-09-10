@@ -18,6 +18,10 @@ class ServerAudioRepositoryImpl @Inject constructor(
     /** key = "artist|title|durSec" -> id сервера (или null - «искали, не нашли»). */
     private val idCache = ConcurrentHashMap<String, Long?>()
 
+    /** Тот же ключ -> анализ трека с сервера. Чтобы параллельные проверки (ReplayGain и
+     * BPM/тональность идут разными корутинами) не дёргали `/api/tracks/{id}` дважды. */
+    private val analysisCache = ConcurrentHashMap<String, ServerAnalysis>()
+
     override fun isServerActive(): Boolean =
         settingsRepository.namiServerPreferred.value &&
             settingsRepository.namiServerToken.value != null &&
@@ -53,13 +57,16 @@ class ServerAudioRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun serverAnalysis(artist: String?, title: String, durationMs: Long): ServerAnalysis? =
-        withContext(Dispatchers.IO) {
+    override suspend fun serverAnalysis(artist: String?, title: String, durationMs: Long): ServerAnalysis? {
+        val key = cacheKey(artist, title, durationMs)
+        analysisCache[key]?.let { return it }
+        return withContext(Dispatchers.IO) {
             val cfg = activeConfig() ?: return@withContext null
             val id = serverTrackId(artist, title, durationMs) ?: return@withContext null
             val obj = NamiServerClient.trackDetail(cfg, id) ?: return@withContext null
-            parseAnalysis(obj)
+            parseAnalysis(obj)?.also { analysisCache[key] = it }
         }
+    }
 
     override fun serverStreamUrl(serverTrackId: Long): String? {
         val cfg = activeConfig() ?: return null

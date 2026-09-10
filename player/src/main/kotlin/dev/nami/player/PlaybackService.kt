@@ -142,6 +142,7 @@ class PlaybackService : MediaSessionService() {
     @Inject lateinit var settingsRepository: SettingsRepository
     @Inject lateinit var libraryRepository: LibraryRepository
     @Inject lateinit var playlistRepository: PlaylistRepository
+    @Inject lateinit var serverAudioRepository: dev.nami.domain.ServerAudioRepository
 
     /** Группа E "системный мини-плеер" - лайк-кнопка в уведомлении/на экране блокировки, не
      * только в своём собственном MiniPlayer. Media3's MediaSession.Callback is the extension
@@ -547,9 +548,14 @@ class PlaybackService : MediaSessionService() {
         val gain = if (cachedGain != null) {
             cachedGain
         } else {
-            // Blocking decode - runs on Dispatchers.Default so it doesn't touch Main.immediate,
-            // which the rest of this scope (and the player itself) lives on.
-            val scanned = kotlinx.coroutines.withContext(Dispatchers.Default) { ReplayGainScanner.scan(track.path) }
+            // Сначала - у сервера (он уже посчитал при сканировании библиотеки), только при
+            // промахе локальный декод. Локальный блокирующий - на Dispatchers.Default, чтобы
+            // не трогать Main.immediate, на котором живёт плеер.
+            val fromServer =
+                serverAudioRepository.serverAnalysis(track.artistName, track.title, track.durationMs)
+                    ?.replayGainTrackGainDb
+            val scanned = fromServer
+                ?: kotlinx.coroutines.withContext(Dispatchers.Default) { ReplayGainScanner.scan(track.path) }
             if (scanned != null) libraryRepository.setTrackReplayGain(trackId, scanned)
             scanned
         }
@@ -590,11 +596,22 @@ class PlaybackService : MediaSessionService() {
         // "either") avoids a stuck-forever gap where a partial result (say the tempo estimator
         // failed but the key one didn't) permanently skips ever retrying the field that failed.
         if (track.bpm != null && track.musicalKey != null) return
-        val result = kotlinx.coroutines.withContext(Dispatchers.Default) {
-            dev.nami.player.analysis.BpmKeyAnalyzer.scan(track.path)
+        val server =
+            serverAudioRepository.serverAnalysis(track.artistName, track.title, track.durationMs)
+        val bpm: Float?
+        val key: String?
+        if (server?.bpm != null || server?.musicalKey != null) {
+            bpm = server.bpm
+            key = server.musicalKey
+        } else {
+            val result = kotlinx.coroutines.withContext(Dispatchers.Default) {
+                dev.nami.player.analysis.BpmKeyAnalyzer.scan(track.path)
+            }
+            bpm = result.bpm
+            key = result.musicalKey
         }
-        if (result.bpm != null || result.musicalKey != null) {
-            libraryRepository.setTrackBpmKey(trackId, result.bpm, result.musicalKey)
+        if (bpm != null || key != null) {
+            libraryRepository.setTrackBpmKey(trackId, bpm, key)
         }
     }
 
