@@ -56,6 +56,17 @@ async fn main() -> Res<()> {
         return command.execute(&cfg);
     }
 
+    // Нет config.toml - первый запуск: поднимаем ТОЛЬКО мастер настройки по HTTP.
+    // Он запишет config.toml и отложит логин владельца, дальше нужен перезапуск.
+    if !std::path::Path::new("config.toml").exists() && std::env::var("NAMI_MUSIC_DIRS").is_err() {
+        let addr = SocketAddr::from(([0, 0, 0, 0], cfg.port));
+        tracing::warn!("config.toml не найден - мастер настройки на http://{addr}/setup");
+        axum_server::bind(addr)
+            .serve(setup::routes().into_make_service())
+            .await?;
+        return Ok(());
+    }
+
     // Иначе запускаем сервер как обычно
     if cfg.music_dirs.is_empty() {
         tracing::warn!("music_dirs пуст - сканировать нечего, см. config.example.toml");
@@ -86,6 +97,16 @@ async fn main() -> Res<()> {
         Err(e) => tracing::warn!("чистка надгробий не удалась: {e}"),
     }
     tracing::info!("библиотека: {} треков", api::track_count(&conn));
+
+    // Первый запуск после мастера настройки: заводим владельца из отложенного файла.
+    if users::count(&conn) == 0 {
+        if let Some((user, pass)) = setup::pending_owner() {
+            match users::create(&conn, &user, &pass, "owner", 0) {
+                Ok(_) => tracing::info!("владелец «{user}» заведён по данным мастера настройки"),
+                Err(e) => tracing::warn!("не удалось завести владельца из мастера: {e}"),
+            }
+        }
+    }
 
     // Провайдер криптографии выбирается явно: собираем rustls без aws-lc-rs (см. Cargo.toml),
     // а без установленного провайдера rustls отказывается создавать конфигурацию.
