@@ -107,7 +107,9 @@ CREATE TABLE IF NOT EXISTS users (
     -- Отдельный пароль для Subsonic-протокола, хранится как есть: протокол требует
     -- md5(пароль+соль), а из argon2-хеша пароль не достать. Обоснование размена -
     -- в доккомментарии subsonic.rs. NULL - Subsonic-доступа у пользователя нет.
-    subsonic_password TEXT
+    subsonic_password TEXT,
+    -- Пользовательский токен ListenBrainz для скробблинга. NULL/пусто - не скробблим.
+    listenbrainz_token TEXT
 );
 
 -- Режим "общая библиотека с ограничением доступа к папкам". Ни одной строки на
@@ -200,6 +202,21 @@ CREATE TABLE IF NOT EXISTS jam_sessions (
     peak_members  INTEGER NOT NULL DEFAULT 1
 );
 CREATE INDEX IF NOT EXISTS idx_jam_created ON jam_sessions(created_at);
+
+-- Офлайн-очередь скробблинга. Клиент присылает событие «трек прослушан», сервер
+-- кладёт сюда и фоновым потоком отправляет в ListenBrainz (см. scrobble.rs).
+-- sent=1 - либо доставлено, либо брошено после MAX_ATTEMPTS.
+CREATE TABLE IF NOT EXISTS scrobble_queue (
+    id         INTEGER PRIMARY KEY,
+    user_id    INTEGER NOT NULL,
+    artist     TEXT NOT NULL,
+    title      TEXT NOT NULL,
+    album      TEXT,
+    played_at  INTEGER NOT NULL,
+    sent       INTEGER NOT NULL DEFAULT 0,
+    attempts   INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_scrobble_pending ON scrobble_queue(sent, played_at);
 "#;
 
 /// Открывает БД, накатывает схему и миграции (идемпотентно).
@@ -242,6 +259,7 @@ pub fn migrate(conn: &Connection) -> crate::Res<()> {
     add("tracks", "fingerprint", "TEXT")?;
     add("tracks", "analyzed_at", "INTEGER")?;
     add("users", "subsonic_password", "TEXT")?;
+    add("users", "listenbrainz_token", "TEXT")?;
     add("devices", "user_id", "INTEGER")?;
     add("pairing_codes", "user_id", "INTEGER")?;
 

@@ -17,6 +17,7 @@ mod library;
 mod lyrics;
 mod metrics;
 mod scanner;
+mod scrobble;
 mod setup;
 mod share;
 mod subsonic;
@@ -122,6 +123,7 @@ async fn main() -> Res<()> {
     if cfg.watch {
         watcher::spawn(state.clone());
     }
+    scrobble::spawn(state.clone());
 
     let addr = SocketAddr::from(([0, 0, 0, 0], cfg.port));
     // PWA первым: если запрос не совпадёт с его роутами, пойдёт в API.

@@ -110,6 +110,8 @@ pub fn router(state: Shared) -> Router {
         .route("/api/me", get(me).patch(patch_me))
         .route("/api/me/subsonic-password", axum::routing::put(put_subsonic_password))
         .route("/api/me/password", axum::routing::put(put_my_password))
+        .route("/api/me/listenbrainz-token", axum::routing::put(put_listenbrainz_token))
+        .route("/api/scrobble", post(scrobble_handler))
         .route("/api/users", get(list_users).post(create_user))
         .route("/api/users/{id}", delete(delete_user))
         .route("/api/users/{id}/password", axum::routing::put(reset_user_password))
@@ -1198,6 +1200,66 @@ async fn reset_user_password(
     let db = st.db.lock().unwrap();
     need_owner(&db, &ident)?;
     users::reset_password(&db, id, &b.new)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct LbToken {
+    /// Пустая строка - отключить скробблинг.
+    token: String,
+}
+
+/// Задаёт или снимает пользовательский токен ListenBrainz для скробблинга.
+async fn put_listenbrainz_token(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Json(b): Json<LbToken>,
+) -> ApiResult<StatusCode> {
+    let id = ident
+        .user_id
+        .ok_or_else(|| ApiError(StatusCode::BAD_REQUEST, "вход не как пользователь".into()))?;
+    let t = b.token.trim();
+    st.db.lock().unwrap().execute(
+        "UPDATE users SET listenbrainz_token=?2 WHERE id=?1",
+        rusqlite::params![id, if t.is_empty() { None } else { Some(t) }],
+    )?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct ScrobbleBody {
+    track_id: i64,
+    /// Unix-секунды момента прослушивания. Без него - сейчас.
+    played_at: Option<i64>,
+}
+
+/// Клиент сообщает «трек прослушан». Кладём в очередь; отправку в ListenBrainz
+/// делает фоновый поток (scrobble.rs). Порог «прослушано» - решение клиента.
+async fn scrobble_handler(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Json(b): Json<ScrobbleBody>,
+) -> ApiResult<StatusCode> {
+    let user_id = ident
+        .user_id
+        .ok_or_else(|| ApiError(StatusCode::BAD_REQUEST, "вход не как пользователь".into()))?;
+    let db = st.db.lock().unwrap();
+    if !users::can_see_track(&db, &ident, b.track_id) {
+        return Err(ApiError(StatusCode::NOT_FOUND, "нет такого трека".into()));
+    }
+    let (artist, title, album): (Option<String>, String, Option<String>) = db.query_row(
+        "SELECT artist, title, album FROM tracks WHERE id=?1",
+        [b.track_id],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+    )?;
+    crate::scrobble::enqueue(
+        &db,
+        user_id,
+        artist.as_deref().unwrap_or(""),
+        &title,
+        album.as_deref(),
+        b.played_at.unwrap_or_else(crate::db::now),
+    )?;
     Ok(StatusCode::NO_CONTENT)
 }
 

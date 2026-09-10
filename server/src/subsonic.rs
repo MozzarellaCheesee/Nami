@@ -881,7 +881,42 @@ async fn dispatch(
         }
         // Клиенты шлют его после каждого трека и ругаются на ошибку. Историю
         // прослушиваний ведёт клиент в своём состоянии (sync.rs), сервер её не выдумывает.
-        "scrobble" => Ok(json!({})),
+        "scrobble" => {
+            // submission=false - это «сейчас играет», без записи в историю.
+            let submit = params.get("submission").map(|v| v != "false").unwrap_or(true);
+            if submit {
+                if let Some(tid) = params.get("id").and_then(|v| v.parse::<i64>().ok()) {
+                    if crate::users::can_see_track(&db, &ident, tid) {
+                        if let Ok((artist, title, album)) = db.query_row(
+                            "SELECT COALESCE(artist,''), title, album FROM tracks WHERE id=?1",
+                            [tid],
+                            |r| {
+                                Ok((
+                                    r.get::<_, String>(0)?,
+                                    r.get::<_, String>(1)?,
+                                    r.get::<_, Option<String>>(2)?,
+                                ))
+                            },
+                        ) {
+                            let at = params
+                                .get("time")
+                                .and_then(|v| v.parse::<i64>().ok())
+                                .map(|ms| ms / 1000)
+                                .unwrap_or_else(crate::db::now);
+                            let _ = crate::scrobble::enqueue(
+                                &db,
+                                user_id,
+                                &artist,
+                                &title,
+                                album.as_deref(),
+                                at,
+                            );
+                        }
+                    }
+                }
+            }
+            Ok(json!({}))
+        }
         _ => {
             return fail(
                 &params,
