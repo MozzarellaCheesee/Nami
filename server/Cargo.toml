@@ -30,6 +30,7 @@ serde_json = "1"
 toml = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+clap = { version = "4", features = ["derive"] }
 
 getrandom = "0.4"
 # Хеш паролей людей (у устройств токены случайные, им хеш пароля не нужен).
@@ -49,6 +50,10 @@ ureq = { version = "3.4.1", default-features = false, features = ["rustls"] }
 # MD5 нужен ровно для одного: исторический токен Subsonic - md5(пароль + соль).
 # Свой безопасностью он не является и нигде больше не используется (см. subsonic.rs).
 md-5 = { version = "0.11.0", default-features = false }
+
+# Встраивание PWA-клиента в бинарник: статика из web/dist компилируется в сервер.
+rust-embed = "8"
+mime_guess = "2"
 
 [profile.release]
 opt-level = "z"

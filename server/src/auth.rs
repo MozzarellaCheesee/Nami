@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Mutex;
 
 use rusqlite::Connection;
@@ -9,13 +9,15 @@ use crate::db::now;
 
 /// Сколько живёт одноразовый код сопряжения.
 pub const CODE_TTL_SECS: i64 = 600;
+/// Сколько живёт QR-challenge для авторизации Android-клиента.
+pub const QR_CHALLENGE_TTL_SECS: i64 = 120;
 /// Не более стольких попыток обмена кода с одного IP за окно.
 pub const RATE_LIMIT_ATTEMPTS: usize = 10;
 pub const RATE_LIMIT_WINDOW_SECS: i64 = 60;
 
 /// Криптостойкие случайные байты в hex. Источник - getrandom (системный CSPRNG),
 /// отдельный PRNG-крейт ради этого не нужен.
-fn random_hex(bytes: usize) -> String {
+pub fn random_hex(bytes: usize) -> String {
     let mut buf = vec![0u8; bytes];
     getrandom::fill(&mut buf).expect("системный источник случайности недоступен");
     hex::encode(buf)
@@ -24,6 +26,28 @@ fn random_hex(bytes: usize) -> String {
 /// В БД лежит только хеш токена - см. комментарий к схеме devices.
 pub fn hash_token(token: &str) -> String {
     hex::encode(Sha256::digest(token.as_bytes()))
+}
+
+/// Возвращает список локальных IPv4-адресов (кроме loopback).
+/// Используется для поля hosts в QR-коде.
+pub fn local_ips() -> Vec<Ipv4Addr> {
+    use std::net::UdpSocket;
+    let mut ips = Vec::new();
+
+    // Попытка получить основной IP через connect к внешнему адресу (не отправляет пакет)
+    if let Ok(socket) = UdpSocket::bind("0.0.0.0:0") {
+        if socket.connect("8.8.8.8:80").is_ok() {
+            if let Ok(addr) = socket.local_addr() {
+                if let IpAddr::V4(ip) = addr.ip() {
+                    if !ip.is_loopback() {
+                        ips.push(ip);
+                    }
+                }
+            }
+        }
+    }
+
+    ips
 }
 
 /// Создаёт одноразовый код сопряжения на 10 минут.
@@ -102,6 +126,43 @@ pub fn verify(conn: &Connection, token: &str) -> Option<i64> {
         let _ = conn.execute("UPDATE devices SET last_seen_at = ?2 WHERE id = ?1", rusqlite::params![id, now()]);
     }
     id
+}
+
+/// QR-challenge для авторизации Android-клиента. Живёт 2 минуты, одноразовый.
+#[derive(Clone)]
+struct QrChallenge {
+    challenge: String,
+    created_at: i64,
+    user_id: Option<i64>,
+}
+
+/// Реестр активных QR-challenge. В памяти, чистится лениво.
+#[derive(Default)]
+pub struct QrChallenges {
+    items: Mutex<HashMap<String, QrChallenge>>,
+}
+
+impl QrChallenges {
+    /// Создаёт новый challenge, чистит протухшие.
+    pub fn create(&self, user_id: Option<i64>) -> String {
+        let challenge = random_hex(32);
+        let t = now();
+        let mut map = self.items.lock().unwrap();
+        // Чистим протухшие
+        map.retain(|_, v| t - v.created_at < QR_CHALLENGE_TTL_SECS);
+        map.insert(challenge.clone(), QrChallenge { challenge: challenge.clone(), created_at: t, user_id });
+        challenge
+    }
+
+    /// Проверяет и сжигает challenge. Возвращает user_id, кому принадлежит устройство.
+    pub fn consume(&self, challenge: &str) -> Option<Option<i64>> {
+        let t = now();
+        let mut map = self.items.lock().unwrap();
+        // Чистим протухшие
+        map.retain(|_, v| t - v.created_at < QR_CHALLENGE_TTL_SECS);
+        // Забираем challenge (одноразовый)
+        map.remove(challenge).map(|c| c.user_id)
+    }
 }
 
 /// Ограничитель частоты попыток сопряжения по IP.
@@ -190,5 +251,29 @@ mod tests {
         assert!(!rl.allow(ip), "лимит должен был сработать");
         // Другой IP лимитом соседа не задет.
         assert!(rl.allow("192.168.1.6".parse().unwrap()));
+    }
+
+    #[test]
+    fn qr_challenge_создаётся_и_потребляется() {
+        let qr = QrChallenges::default();
+        let challenge = qr.create(None);
+        assert_eq!(challenge.len(), 64); // 32 байта в hex
+        let user_id = qr.consume(&challenge);
+        assert_eq!(user_id, Some(None));
+    }
+
+    #[test]
+    fn qr_challenge_одноразовый() {
+        let qr = QrChallenges::default();
+        let challenge = qr.create(Some(42));
+        assert_eq!(qr.consume(&challenge), Some(Some(42)));
+        // Повторное использование не работает
+        assert_eq!(qr.consume(&challenge), None);
+    }
+
+    #[test]
+    fn qr_challenge_неверный_отвергается() {
+        let qr = QrChallenges::default();
+        assert_eq!(qr.consume("несуществующий"), None);
     }
 }

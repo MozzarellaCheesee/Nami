@@ -29,6 +29,7 @@ pub struct Profile {
 /// Opus - основной набор (Android и большинство современных клиентов его умеют),
 /// AAC - запасной для тех, кто Opus не понимает.
 pub const PROFILES: &[Profile] = &[
+    Profile { name: "mobile", codec: "libopus", bitrate_kbps: 128, ext: "opus", mime: "audio/ogg" },
     Profile { name: "opus96", codec: "libopus", bitrate_kbps: 96, ext: "opus", mime: "audio/ogg" },
     Profile { name: "opus128", codec: "libopus", bitrate_kbps: 128, ext: "opus", mime: "audio/ogg" },
     Profile { name: "opus192", codec: "libopus", bitrate_kbps: 192, ext: "opus", mime: "audio/ogg" },

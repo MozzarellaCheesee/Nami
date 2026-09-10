@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use tower::ServiceExt;
 use tower_http::services::ServeFile;
 
-use crate::auth::{self, RateLimiter};
+use crate::auth::{self, QrChallenges, RateLimiter};
 use crate::config::Config;
 use crate::share;
 use crate::users::{self, Ident};
@@ -27,6 +27,8 @@ pub struct AppState {
     /// None, когда сервер поднят без TLS - тогда пейринг помечается небезопасным.
     pub fingerprint: Option<String>,
     pub rate: RateLimiter,
+    /// QR-challenge для авторизации Android-клиента.
+    pub qr_challenges: QrChallenges,
     /// Найден ли ffmpeg в PATH - проверяется один раз на старте.
     pub ffmpeg: bool,
     /// События изменений состояния для подключённых по WebSocket.
@@ -39,6 +41,8 @@ pub struct AppState {
     pub positions: tokio::sync::broadcast::Sender<String>,
     /// Живые джем-сессии (только в памяти, см. jam.rs).
     pub jams: crate::jam::Registry,
+    /// Метрики Prometheus
+    pub metrics: crate::metrics::Metrics,
 }
 
 impl AppState {
@@ -82,6 +86,7 @@ pub fn router(state: Shared) -> Router {
         .route("/api/tracks", get(tracks))
         .route("/api/tracks/{id}", get(track))
         .route("/api/tracks/{id}/stream", get(stream))
+        .route("/api/tracks/{id}/stream/auto", get(stream_auto))
         .route("/api/tracks/{id}/lyrics", get(lyrics))
         .route(
             "/api/tracks/upload",
@@ -112,7 +117,10 @@ pub fn router(state: Shared) -> Router {
 
     Router::new()
         .route("/api/health", get(health))
+        .route("/metrics", get(metrics_handler))
         .route("/api/auth/pair", post(pair))
+        .route("/api/auth/qr/start", post(qr_start))
+        .route("/api/auth/qr/confirm", post(qr_confirm))
         .route("/api/auth/register", post(register))
         .route("/api/auth/login", post(login))
         .route("/api/invites/{token}/accept", post(accept_invite))
@@ -325,6 +333,60 @@ async fn stream(
     serve_track(st, id, q.profile.as_deref(), req).await
 }
 
+#[derive(Deserialize)]
+struct StreamAutoQuery {
+    /// Явное указание типа сети: wifi или cellular. Без него - определение по User-Agent.
+    network: Option<String>,
+}
+
+/// Умный стриминг: Wi-Fi - оригинал, cellular - транскод в Opus 128kbps.
+///
+/// Определение типа сети: query `?network=wifi|cellular` или анализ User-Agent
+/// (Android/iOS без "wifi" в строке агента считаются cellular). Fallback - Wi-Fi.
+async fn stream_auto(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Path(id): Path<i64>,
+    Query(q): Query<StreamAutoQuery>,
+    req: Request,
+) -> Response {
+    if !users::can_see_track(&st.db.lock().unwrap(), &ident, id) {
+        return ApiError(StatusCode::NOT_FOUND, "нет такого трека".into()).into_response();
+    }
+
+    let is_cellular = match q.network.as_deref() {
+        Some("cellular") => true,
+        Some("wifi") => false,
+        _ => {
+            // Определяем по User-Agent: Android/iOS без "wifi" считаем cellular
+            req.headers()
+                .get(header::USER_AGENT)
+                .and_then(|v| v.to_str().ok())
+                .map(|ua| {
+                    let lower = ua.to_lowercase();
+                    (lower.contains("android") || lower.contains("iphone") || lower.contains("ipad"))
+                        && !lower.contains("wifi")
+                })
+                .unwrap_or(false)
+        }
+    };
+
+    let profile = if is_cellular {
+        if !st.ffmpeg {
+            return ApiError(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "транскодинг недоступен (ffmpeg не найден в PATH)".into(),
+            )
+            .into_response();
+        }
+        Some("mobile")
+    } else {
+        None
+    };
+
+    serve_track(st, id, profile, req).await
+}
+
 /// Отдача файла трека (passthrough или транскод). Проверку прав делает вызывающий:
 /// у гостевой ссылки она своя (токен ссылки), у обычного клиента - видимость библиотеки.
 pub async fn serve_track(
@@ -472,6 +534,148 @@ async fn pair(
             ApiError(StatusCode::UNAUTHORIZED, "код неверен или уже использован".into())
                 .into_response()
         }
+    }
+}
+
+#[derive(Serialize)]
+struct QrStartResp {
+    /// QR-код в формате SVG
+    qr_svg: String,
+    /// Challenge для подтверждения
+    challenge: String,
+}
+
+/// Генерирует QR-код для авторизации Android-клиента.
+/// QR содержит: nami://auth?challenge=...&fp=sha256:...&hosts=ip1,ip2
+async fn qr_start(
+    State(st): State<Shared>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    req: Request,
+) -> Response {
+    if !st.rate.allow(peer.ip()) {
+        return ApiError(StatusCode::TOO_MANY_REQUESTS, "слишком много попыток".into())
+            .into_response();
+    }
+
+    // Определяем владельца: если устройства уже есть - нужен токен
+    let ident = bearer(&req).and_then(|t| identify(&st.db.lock().unwrap(), t));
+    let db = st.db.lock().unwrap();
+    let paired: i64 = match db.query_row("SELECT COUNT(*) FROM devices", [], |r| r.get(0)) {
+        Ok(n) => n,
+        Err(_) => 0,
+    };
+
+    if paired > 0 && ident.is_none() {
+        return ApiError(
+            StatusCode::UNAUTHORIZED,
+            "устройства уже сопряжены: новый QR доступен только по токену".into(),
+        )
+        .into_response();
+    }
+
+    let user_id = ident.and_then(|i| i.user_id);
+    drop(db);
+
+    // Создаём challenge
+    let challenge = st.qr_challenges.create(user_id);
+
+    // Собираем список хостов: локальные IP + публичный из заголовка Host
+    let mut hosts = Vec::new();
+
+    // Локальные IP
+    for ip in auth::local_ips() {
+        hosts.push(ip.to_string());
+    }
+
+    // Публичный адрес из Host заголовка (если отличается от локальных)
+    if let Some(host_header) = req.headers().get(header::HOST) {
+        if let Ok(host_str) = host_header.to_str() {
+            let host = host_str.split(':').next().unwrap_or(host_str);
+            if !host.is_empty() && !hosts.contains(&host.to_string()) {
+                hosts.push(host.to_string());
+            }
+        }
+    }
+
+    let hosts_str = hosts.join(",");
+
+    // Формируем URI для QR
+    let (fp_part, port_part) = match &st.fingerprint {
+        Some(fp) => (format!("&fp=sha256:{fp}"), format!("&port={}", st.cfg.port)),
+        None => (String::new(), format!("&port={}", st.cfg.port)),
+    };
+
+    let uri = format!(
+        "nami://auth?challenge={challenge}{fp_part}{port_part}&hosts={hosts_str}"
+    );
+
+    let qr_svg = match qrcode::QrCode::new(uri.as_bytes()) {
+        Ok(qr) => qr
+            .render::<qrcode::render::svg::Color>()
+            .min_dimensions(280, 280)
+            .build(),
+        Err(e) => {
+            return ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
+        }
+    };
+
+    Json(QrStartResp { qr_svg, challenge }).into_response()
+}
+
+#[derive(Deserialize)]
+struct QrConfirmReq {
+    challenge: String,
+    /// Подпись устройства (пока не проверяется - добавится с криптографией устройств)
+    #[serde(default)]
+    signature: String,
+    #[serde(default)]
+    device_name: String,
+}
+
+/// Подтверждает QR-авторизацию: Android отправляет challenge + подпись, получает токен.
+async fn qr_confirm(
+    State(st): State<Shared>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Json(req): Json<QrConfirmReq>,
+) -> Response {
+    if !st.rate.allow(peer.ip()) {
+        return ApiError(StatusCode::TOO_MANY_REQUESTS, "слишком много попыток".into())
+            .into_response();
+    }
+
+    // Проверяем и сжигаем challenge
+    let user_id = match st.qr_challenges.consume(&req.challenge) {
+        Some(uid) => uid,
+        None => {
+            return ApiError(
+                StatusCode::UNAUTHORIZED,
+                "challenge неверен или уже использован".into(),
+            )
+            .into_response()
+        }
+    };
+
+    // Создаём устройство
+    let token = auth::random_hex(32);
+    let name = if req.device_name.trim().is_empty() {
+        "Android"
+    } else {
+        req.device_name.trim()
+    };
+
+    let db = st.db.lock().unwrap();
+    let result = db.execute(
+        "INSERT INTO devices (name, token_hash, created_at, user_id) VALUES (?1, ?2, ?3, ?4)",
+        rusqlite::params![name, auth::hash_token(&token), crate::db::now(), user_id],
+    );
+
+    match result {
+        Ok(_) => Json(PairResp {
+            token,
+            device_name: name.to_string(),
+        })
+        .into_response(),
+        Err(e) => ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
 }
 
@@ -1359,4 +1563,13 @@ async fn share_stream(
 /// Кол-во треков в библиотеке - используется в логе старта.
 pub fn track_count(conn: &Connection) -> i64 {
     conn.query_row("SELECT COUNT(*) FROM tracks", [], |r| r.get(0)).unwrap_or(0)
+}
+
+/// Prometheus метрики
+async fn metrics_handler(State(st): State<Shared>) -> Response {
+    (
+        [(header::CONTENT_TYPE, "text/plain; version=0.0.4")],
+        st.metrics.export(),
+    )
+        .into_response()
 }

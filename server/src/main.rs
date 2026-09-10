@@ -4,15 +4,19 @@
 //! sqlx, потоковое сканирование без буферизации библиотеки в памяти и жёсткий потолок страницы
 //! в /api/tracks.
 
+mod analyzer;
 mod api;
 mod auth;
+mod cli;
 mod config;
 mod db;
 mod host;
 mod jam;
 mod library;
 mod lyrics;
+mod metrics;
 mod scanner;
+mod setup;
 mod share;
 mod subsonic;
 mod sync;
@@ -20,9 +24,12 @@ mod tls;
 mod transcode;
 mod users;
 mod watcher;
+mod web;
 
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
+
+use clap::Parser;
 
 pub type Err = Box<dyn std::error::Error + Send + Sync>;
 pub type Res<T> = std::result::Result<T, Err>;
@@ -37,6 +44,16 @@ async fn main() -> Res<()> {
         .init();
 
     let cfg = config::Config::load(std::path::Path::new("config.toml"))?;
+
+    // Парсим CLI аргументы
+    let cli = cli::Cli::parse();
+
+    // Если есть подкоманда, выполняем её и выходим
+    if let Some(command) = cli.command {
+        return command.execute(&cfg);
+    }
+
+    // Иначе запускаем сервер как обычно
     if cfg.music_dirs.is_empty() {
         tracing::warn!("music_dirs пуст - сканировать нечего, см. config.example.toml");
     }
@@ -80,11 +97,13 @@ async fn main() -> Res<()> {
         db: Mutex::new(conn),
         fingerprint: tls_cfg.as_ref().map(|t| t.fingerprint.clone()),
         rate: auth::RateLimiter::default(),
+        qr_challenges: auth::QrChallenges::default(),
         ffmpeg,
         events: tokio::sync::broadcast::channel(64).0,
         positions: tokio::sync::broadcast::channel(64).0,
         jams: Default::default(),
         cfg: cfg.clone(),
+        metrics: metrics::Metrics::new(),
     });
 
     if cfg.watch {
@@ -92,7 +111,10 @@ async fn main() -> Res<()> {
     }
 
     let addr = SocketAddr::from(([0, 0, 0, 0], cfg.port));
-    let app = api::router(state).into_make_service_with_connect_info::<SocketAddr>();
+    // PWA первым: если запрос не совпадёт с его роутами, пойдёт в API.
+    let app = web::router()
+        .merge(api::router(state))
+        .into_make_service_with_connect_info::<SocketAddr>();
     let scheme = if tls_cfg.is_some() { "https" } else { "http" };
     tracing::info!("слушаю {scheme}://{addr} - мастер настройки на {scheme}://<адрес>:{}/setup", cfg.port);
 
