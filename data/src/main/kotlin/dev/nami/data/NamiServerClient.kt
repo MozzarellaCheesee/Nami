@@ -213,6 +213,27 @@ object NamiServerClient {
         return if (lines.isEmpty()) null else Lyrics(lines)
     }
 
+    /**
+     * GET /api/sync?since={timestamp} - pull изменений с сервера.
+     * Возвращает JSON: { "changes": [...], "current_ts": Long }.
+     */
+    fun syncPull(cfg: Config, since: Long): JSONObject? {
+        val base = reachableBase(cfg.bases, cfg.certSha256) ?: return null
+        val (code, body) = request("GET", "$base/api/sync?since=$since", null, cfg.token, cfg.certSha256) ?: return null
+        return if (code == 200) runCatching { JSONObject(body) }.getOrNull() else null
+    }
+
+    /**
+     * POST /api/sync - push изменений на сервер.
+     * Body: { "changes": [...] }. Возвращает true при успехе.
+     */
+    fun syncPush(cfg: Config, changes: org.json.JSONArray): Boolean {
+        val base = reachableBase(cfg.bases, cfg.certSha256) ?: return false
+        val body = JSONObject().put("changes", changes).toString()
+        val (code, _) = request("POST", "$base/api/sync", body, cfg.token, cfg.certSha256) ?: return false
+        return code == 200
+    }
+
     // ---------------------------------------------------------------- HTTP
 
     private fun request(

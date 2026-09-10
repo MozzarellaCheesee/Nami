@@ -13,6 +13,7 @@ import dev.nami.data.AppSettingsRepository
 import dev.nami.data.LoopsRepositoryImpl
 import dev.nami.data.MomentsRepositoryImpl
 import dev.nami.data.PlaylistRepositoryImpl
+import dev.nami.data.SyncRepositoryImpl
 import dev.nami.data.TagRepositoryImpl
 import dev.nami.data.TrashRepositoryImpl
 import dev.nami.data.VocabularyRepositoryImpl
@@ -29,6 +30,7 @@ import dev.nami.domain.NetworkImportRepository
 import dev.nami.domain.PlaylistRepository
 import dev.nami.domain.SearchRepository
 import dev.nami.domain.SettingsRepository
+import dev.nami.domain.SyncRepository
 import dev.nami.domain.TagRepository
 import dev.nami.domain.TrashRepository
 import dev.nami.domain.VocabularyRepository
@@ -98,4 +100,8 @@ abstract class DataModule {
     abstract fun bindServerAudioRepository(
         impl: dev.nami.data.ServerAudioRepositoryImpl,
     ): dev.nami.domain.ServerAudioRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSyncRepository(impl: SyncRepositoryImpl): SyncRepository
 }
