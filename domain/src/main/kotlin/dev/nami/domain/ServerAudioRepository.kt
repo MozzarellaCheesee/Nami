@@ -36,4 +36,12 @@ interface ServerAudioRepository {
      * самоподписанного сертификата для проигрывателя тут не решается - см. реализацию.
      */
     fun serverStreamUrl(serverTrackId: Long): String?
+
+    /**
+     * Один `POST /api/tracks/match` на всю очередь -> список URL потока той же длины и
+     * порядка. Элемент null - трек серверу не известен ЛИБО адрес - `https://<IP>` с
+     * самоподписанным сертификатом (ExoPlayer его не проверит без своего датасорса).
+     * Вызывающий на такие позиции ставит локальный файл.
+     */
+    suspend fun serverStreamUrls(tracks: List<Triple<String?, String, Long>>): List<String?>
 }

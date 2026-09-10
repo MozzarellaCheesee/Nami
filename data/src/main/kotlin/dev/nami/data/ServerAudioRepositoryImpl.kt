@@ -70,8 +70,31 @@ class ServerAudioRepositoryImpl @Inject constructor(
 
     override fun serverStreamUrl(serverTrackId: Long): String? {
         val cfg = activeConfig() ?: return null
-        return "${cfg.baseUrl}/api/tracks/$serverTrackId/stream/auto?token=${cfg.token}"
+        return streamUrlOn(cfg.baseUrl, cfg.token, serverTrackId)
     }
+
+    /** URL потока, но только если адрес пригоден для ExoPlayer: `http://` или реальный
+     * домен. Для `https://<IP>` (самоподписанный) - null, там нужен свой датасорс. */
+    private fun streamUrlOn(base: String, token: String, id: Long): String? {
+        val host = runCatching { java.net.URL(base).host }.getOrNull().orEmpty()
+        val isIp = host.matches(Regex("^\\d{1,3}(\\.\\d{1,3}){3}$")) || host.contains(':')
+        if (base.startsWith("https://") && isIp) return null
+        return "$base/api/tracks/$id/stream/auto?token=$token"
+    }
+
+    override suspend fun serverStreamUrls(tracks: List<Triple<String?, String, Long>>): List<String?> =
+        withContext(Dispatchers.IO) {
+            val cfg = activeConfig() ?: return@withContext List(tracks.size) { null }
+            val ids = NamiServerClient.matchTrackIds(cfg, tracks)
+                ?: return@withContext List(tracks.size) { null }
+            ids.forEachIndexed { i, id ->
+                if (i < tracks.size) {
+                    val (artist, title, dur) = tracks[i]
+                    idCache[cacheKey(artist, title, dur)] = id
+                }
+            }
+            ids.map { id -> id?.let { streamUrlOn(cfg.baseUrl, cfg.token, it) } }
+        }
 
     companion object {
         /** Разбор полей анализа из ответа `GET /api/tracks/{id}` - отдельно, чтобы тестировать. */

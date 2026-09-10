@@ -79,6 +79,7 @@ class BlindListenViewModel @Inject constructor(
                         path = track.path,
                         artworkPath = track.albumArtworkPath,
                         format = track.format,
+                        durationMs = track.durationMs,
                         cueStartMs = track.cueStartMs,
                         cueEndMs = track.cueEndMs,
                     ),

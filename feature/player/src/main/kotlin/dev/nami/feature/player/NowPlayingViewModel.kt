@@ -518,6 +518,7 @@ class NowPlayingViewModel @Inject constructor(
             path = path,
             artworkPath = albumArtworkPath,
             format = format,
+            durationMs = durationMs,
             cueStartMs = cueStartMs,
             cueEndMs = cueEndMs,
         )

@@ -39,6 +39,7 @@ class DjViewModel @Inject constructor(
                 path = track.path,
                 artworkPath = track.albumArtworkPath,
                 format = track.format,
+                durationMs = track.durationMs,
             ),
         )
     }

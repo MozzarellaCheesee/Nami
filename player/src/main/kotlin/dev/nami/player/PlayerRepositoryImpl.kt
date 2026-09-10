@@ -43,6 +43,7 @@ class PlayerRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val libraryRepository: LibraryRepository,
     private val settingsRepository: SettingsRepository,
+    private val serverAudioRepository: dev.nami.domain.ServerAudioRepository,
 ) : PlayerRepository {
 
     private val _state = MutableStateFlow<PlaybackState>(PlaybackState.Idle)
@@ -87,6 +88,21 @@ class PlayerRepositoryImpl @Inject constructor(
     // already have the real data locally at play()/addToQueue() time, so cache it here and prefer
     // it over whatever the controller reports for that mediaId.
     private val trackInfoByMediaId = mutableMapOf<String, MediaItemInfo>()
+
+    /** mediaId (локальный id трека) -> URL потока с сервера, если сервер подключён и трек
+     * ему известен. Заполняется при построении очереди, читается в [toMediaItem]. */
+    private val serverUrlByMediaId = mutableMapOf<String, String>()
+
+    /** Один match-запрос на список треков; результат кладётся в [serverUrlByMediaId].
+     * `replace=true` (новая очередь) очищает карту, `false` (добавление трека) - нет. */
+    private suspend fun resolveServerUrls(tracks: List<PlayableTrack>, replace: Boolean = true) {
+        if (replace) serverUrlByMediaId.clear()
+        if (tracks.isEmpty() || !serverAudioRepository.isServerActive()) return
+        val urls = serverAudioRepository.serverStreamUrls(
+            tracks.map { Triple(it.artistName, it.title, it.durationMs) },
+        )
+        tracks.forEachIndexed { i, t -> urls.getOrNull(i)?.let { serverUrlByMediaId[t.id.value] = it } }
+    }
     // MediaController's onEvents only fires on discrete state changes (buffering, play/pause,
     // track change, etc.) - during steady playback that can be many seconds apart, so the
     // scrubber/position only advanced in visible jumps instead of smoothly. Player calls must
@@ -273,7 +289,9 @@ class PlayerRepositoryImpl @Inject constructor(
     // and free - no eager I/O added.
     private fun PlayableTrack.toMediaItem(): MediaItem = MediaItem.Builder()
         .setMediaId(id.value)
-        .setUri(path)
+        // Стрим с сервера, если он подключён и трек ему известен; иначе локальный файл.
+        // mediaId остаётся локальным - на нём завязаны скробблинг, история, восстановление.
+        .setUri(serverUrlByMediaId[id.value] ?: path)
         .apply {
             val start = cueStartMs
             if (start != null) {
@@ -323,6 +341,7 @@ class PlayerRepositoryImpl @Inject constructor(
                 path = track.path,
                 artworkPath = track.albumArtworkPath,
                 format = track.format,
+                durationMs = track.durationMs,
                 cueStartMs = track.cueStartMs,
                 cueEndMs = track.cueEndMs,
             )
@@ -330,6 +349,7 @@ class PlayerRepositoryImpl @Inject constructor(
         if (playables.isEmpty()) return
         val startIndex = resolvedIndex.coerceIn(0, playables.lastIndex)
         playables.forEach { trackInfoByMediaId[it.id.value] = it.toMediaItemInfo() }
+        resolveServerUrls(playables)
         val positionMs = settingsRepository.lastPlaybackPositionMs.value
         player.setMediaItems(playables.map { it.toMediaItem() }, startIndex, positionMs)
         player.prepare()
@@ -353,6 +373,7 @@ class PlayerRepositoryImpl @Inject constructor(
         // воспроизведение с чужой позиции.
         val anchorId = tracks.getOrNull(startIndex)?.id?.value
         val newStartIndex = ordered.indexOfFirst { it.id.value == anchorId }.coerceAtLeast(0)
+        resolveServerUrls(ordered)
         val items = ordered.map { it.toMediaItem() }
         controller?.apply {
             setMediaItems(items, newStartIndex, startMs)
@@ -430,6 +451,7 @@ class PlayerRepositoryImpl @Inject constructor(
 
     override suspend fun addToQueue(track: PlayableTrack) {
         val player = controller ?: return
+        resolveServerUrls(listOf(track), replace = false)
         // No duplicates in the visible queue (current track + everything upcoming) - repeatedly
         // swiping/tapping "add to queue" on the same row used to stack a second copy right after
         // itself every time. If it's already queued somewhere ahead, MOVE that existing item to

@@ -136,6 +136,7 @@ private fun Track.toPlayableTrack() = PlayableTrack(
     path = path,
     artworkPath = albumArtworkPath,
     format = format,
+    durationMs = durationMs,
     cueStartMs = cueStartMs,
     cueEndMs = cueEndMs,
 )
