@@ -33,6 +33,7 @@ cargo run --release
 | GET | `/api/tracks/{id}/stream?profile=opus128` | да | транскод, см. профили |
 | GET | `/api/tracks/{id}/artwork` | да | обложка трека (встроенная или файл рядом) |
 | GET | `/api/tracks/{id}/waveform` | да | форма волны (120 значений RMS), после анализа |
+| GET | `/api/tracks/{id}/radio?limit=` | да | радио от трека: похожие по исполнителю/BPM/тональности |
 | GET | `/api/transcode/profiles` | да | список профилей |
 | POST | `/api/scan` | да | пересканировать библиотеку |
 | GET | `/api/sync?since=<unix>` | да | все изменения состояния после метки |

@@ -91,6 +91,7 @@ pub fn router(state: Shared) -> Router {
         .route("/api/tracks/{id}/stream/auto", get(stream_auto))
         .route("/api/tracks/{id}/artwork", get(artwork_handler))
         .route("/api/tracks/{id}/waveform", get(waveform_handler))
+        .route("/api/tracks/{id}/radio", get(radio_handler))
         .route("/api/tracks/{id}/lyrics", get(lyrics))
         .route(
             "/api/tracks/upload",
@@ -462,6 +463,100 @@ pub async fn serve_artwork(st: Shared, id: i64, ident: &Ident) -> Response {
         bytes,
     )
         .into_response()
+}
+
+/// Радио от трека: похожие по исполнителю, темпу и тональности. Порт `RadioBuilder.kt` -
+/// эвристика по локальной библиотеке, не рекомендатель. Взвешенный рулеточный выбор,
+/// поэтому два радио от одного трека идут не в одинаковом порядке. Seed первым.
+async fn radio_handler(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Path(id): Path<i64>,
+    Query(p): Query<Page>,
+) -> ApiResult<Json<Vec<Track>>> {
+    let want = p.limit.unwrap_or(40).clamp(2, 100) as usize;
+    let db = st.db.lock().unwrap();
+    let (clause, vis) = users::visibility(&db, &ident);
+
+    let mut seed_params = vec![rusqlite::types::Value::Integer(id)];
+    seed_params.extend(vis.iter().cloned());
+    let seed = db
+        .query_row(
+            &format!("SELECT {TRACK_COLS} FROM tracks WHERE id=?{clause}"),
+            rusqlite::params_from_iter(seed_params),
+            row_to_track,
+        )
+        .map_err(|_| ApiError(StatusCode::NOT_FOUND, "нет такого трека".into()))?;
+
+    let mut pool_params = vec![rusqlite::types::Value::Integer(id)];
+    pool_params.extend(vis.iter().cloned());
+    let mut stmt = db.prepare(&format!(
+        "SELECT {TRACK_COLS} FROM tracks WHERE id<>?{clause} LIMIT 3000"
+    ))?;
+    let mut scored: Vec<(Track, i64)> = stmt
+        .query_map(rusqlite::params_from_iter(pool_params), row_to_track)?
+        .collect::<rusqlite::Result<Vec<_>>>()?
+        .into_iter()
+        .map(|t| {
+            let s = radio_score(&seed, &t);
+            (t, s)
+        })
+        .collect();
+
+    // Рулетка: вес = score+1 (трек с нулём тоже может выпасть, просто редко).
+    let mut rng = Xorshift::seeded();
+    let mut out = vec![seed];
+    let target = want.min(scored.len() + 1);
+    while out.len() < target && !scored.is_empty() {
+        let total: i64 = scored.iter().map(|(_, s)| s + 1).sum();
+        let mut pick = (rng.next_f64() * total as f64) as i64;
+        let mut idx = 0;
+        while idx < scored.len() - 1 && pick >= scored[idx].1 + 1 {
+            pick -= scored[idx].1 + 1;
+            idx += 1;
+        }
+        out.push(scored.remove(idx).0);
+    }
+    Ok(Json(out))
+}
+
+fn radio_score(seed: &Track, c: &Track) -> i64 {
+    let mut s = 0;
+    if let (Some(a), Some(b)) = (&seed.artist, &c.artist) {
+        if a.eq_ignore_ascii_case(b) {
+            s += 3;
+        }
+    }
+    if let (Some(a), Some(b)) = (&seed.musical_key, &c.musical_key) {
+        if a == b {
+            s += 2;
+        }
+    }
+    if let (Some(a), Some(b)) = (seed.bpm, c.bpm) {
+        if (a - b).abs() <= 15.0 {
+            s += 1;
+        }
+    }
+    s
+}
+
+/// Крошечный xorshift64* - для рулетки radio крипто-стойкость не нужна, а отдельный
+/// PRNG-крейт ради одного места незачем. Затравка - из системного getrandom.
+struct Xorshift(u64);
+impl Xorshift {
+    fn seeded() -> Self {
+        let mut b = [0u8; 8];
+        getrandom::fill(&mut b).ok();
+        Xorshift(u64::from_le_bytes(b) | 1)
+    }
+    fn next_f64(&mut self) -> f64 {
+        let mut x = self.0;
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        self.0 = x;
+        (x >> 11) as f64 / (1u64 << 53) as f64
+    }
 }
 
 /// Форма волны трека: 120 значений RMS-громкости 0..1, посчитанных анализатором.
