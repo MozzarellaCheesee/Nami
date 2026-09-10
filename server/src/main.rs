@@ -71,6 +71,10 @@ async fn main() -> Res<()> {
     if !ffmpeg {
         tracing::warn!("ffmpeg не найден в PATH - транскодинг недоступен, остаётся passthrough");
     }
+    let (_, fpcalc) = analyzer::check_tools();
+    if !fpcalc {
+        tracing::warn!("fpcalc не найден в PATH - анализ посчитает громкость, но не chromaprint");
+    }
 
     let conn = db::open(&cfg.db_path)?;
     match sync::purge_tombstones(&conn, cfg.tombstone_ttl_days) {
@@ -99,6 +103,7 @@ async fn main() -> Res<()> {
         rate: auth::RateLimiter::default(),
         qr_challenges: auth::QrChallenges::default(),
         ffmpeg,
+        fpcalc,
         events: tokio::sync::broadcast::channel(64).0,
         positions: tokio::sync::broadcast::channel(64).0,
         jams: Default::default(),

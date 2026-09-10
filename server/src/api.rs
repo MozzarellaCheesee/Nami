@@ -31,6 +31,8 @@ pub struct AppState {
     pub qr_challenges: QrChallenges,
     /// Найден ли ffmpeg в PATH - проверяется один раз на старте.
     pub ffmpeg: bool,
+    /// Найден ли fpcalc (chromaprint) в PATH - без него анализ не считает fingerprint.
+    pub fpcalc: bool,
     /// События изменений состояния для подключённых по WebSocket.
     ///
     /// broadcast, а не список сокетов под мьютексом: рассылка "всем подписчикам"
@@ -98,6 +100,7 @@ pub fn router(state: Shared) -> Router {
         .route("/api/scan", post(scan))
         .route("/api/library/health", get(library_health))
         .route("/api/library/enrich", post(library_enrich))
+        .route("/api/library/analyze", post(library_analyze))
         .route("/api/sync", get(sync_pull).post(sync_push))
         .route("/api/position", get(position_get).post(position_post))
         .route("/api/auth/devices", get(devices))
@@ -211,6 +214,8 @@ struct Health {
     tls: bool,
     /// Найден ли ffmpeg: false - профили транскодинга отвечают 503.
     ffmpeg: bool,
+    /// Найден ли fpcalc: false - анализ считает громкость, но не chromaprint.
+    fpcalc: bool,
 }
 
 async fn health(State(st): State<Shared>) -> ApiResult<Json<Health>> {
@@ -225,6 +230,7 @@ async fn health(State(st): State<Shared>) -> ApiResult<Json<Health>> {
         tracks,
         tls: st.fingerprint.is_some(),
         ffmpeg: st.ffmpeg,
+        fpcalc: st.fpcalc,
     }))
 }
 
@@ -250,10 +256,15 @@ struct Track {
     duration_ms: i64,
     size_bytes: i64,
     format: Option<String>,
+    /// ReplayGain track gain, дБ. NULL - трек ещё не анализировали.
+    replaygain_track_gain: Option<f64>,
+    replaygain_track_peak: Option<f64>,
+    /// Интегральная громкость EBU R128, LUFS.
+    r128_loudness: Option<f64>,
 }
 
-const TRACK_COLS: &str =
-    "id, title, artist, album, album_artist, track_no, year, duration_ms, size_bytes, format";
+const TRACK_COLS: &str = "id, title, artist, album, album_artist, track_no, year, duration_ms, \
+     size_bytes, format, rg_track_gain, rg_track_peak, r128_loudness";
 
 fn row_to_track(r: &rusqlite::Row<'_>) -> rusqlite::Result<Track> {
     Ok(Track {
@@ -267,6 +278,9 @@ fn row_to_track(r: &rusqlite::Row<'_>) -> rusqlite::Result<Track> {
         duration_ms: r.get(7)?,
         size_bytes: r.get(8)?,
         format: r.get(9)?,
+        replaygain_track_gain: r.get(10)?,
+        replaygain_track_peak: r.get(11)?,
+        r128_loudness: r.get(12)?,
     })
 }
 
@@ -292,18 +306,36 @@ async fn tracks(
     Ok(Json(rows))
 }
 
+/// Один трек со всеми деталями. Отдельно от списочного `Track`: сюда добавлен
+/// chromaprint-fingerprint - в списке на тысячу треков он был бы лишними килобайтами
+/// на строку, а на экране информации о треке нужен.
+#[derive(Serialize)]
+struct TrackDetail {
+    #[serde(flatten)]
+    track: Track,
+    fingerprint: Option<String>,
+    /// Когда трек прогнали через анализатор. NULL - ещё нет.
+    analyzed_at: Option<i64>,
+}
+
 async fn track(
     State(st): State<Shared>,
     Extension(ident): Extension<Ident>,
     Path(id): Path<i64>,
-) -> ApiResult<Json<Track>> {
+) -> ApiResult<Json<TrackDetail>> {
     let db = st.db.lock().unwrap();
     let (clause, mut params) = users::visibility(&db, &ident);
     params.insert(0, rusqlite::types::Value::Integer(id));
     db.query_row(
-        &format!("SELECT {TRACK_COLS} FROM tracks WHERE id=?{clause}"),
+        &format!("SELECT {TRACK_COLS}, fingerprint, analyzed_at FROM tracks WHERE id=?{clause}"),
         rusqlite::params_from_iter(params),
-        row_to_track,
+        |r| {
+            Ok(TrackDetail {
+                track: row_to_track(r)?,
+                fingerprint: r.get(13)?,
+                analyzed_at: r.get(14)?,
+            })
+        },
     )
     .map(Json)
     .map_err(|_| ApiError(StatusCode::NOT_FOUND, "нет такого трека".into()))
@@ -1397,6 +1429,31 @@ async fn library_enrich(
     let rep = tokio::task::spawn_blocking(move || {
         let db = st.db.lock().unwrap();
         crate::library::enrich(&db, limit)
+    })
+    .await
+    .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))??;
+    Ok(Json(rep))
+}
+
+#[derive(Deserialize)]
+struct AnalyzeQuery {
+    /// Сколько треков обработать за один вызов.
+    limit: Option<usize>,
+}
+
+/// Анализ аудио (ReplayGain/R128 через ffmpeg, chromaprint через fpcalc) - порциями:
+/// ffmpeg декодирует файл целиком, это секунды на трек. `remaining` в ответе говорит,
+/// сколько треков осталось без анализа.
+async fn library_analyze(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Query(q): Query<AnalyzeQuery>,
+) -> ApiResult<Json<crate::analyzer::AnalyzeReport>> {
+    need_owner(&st.db.lock().unwrap(), &ident)?;
+    let limit = q.limit.unwrap_or(20).clamp(1, 200);
+    let rep = tokio::task::spawn_blocking(move || {
+        let db = st.db.lock().unwrap();
+        crate::analyzer::analyze_batch(&db, limit, true)
     })
     .await
     .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))??;

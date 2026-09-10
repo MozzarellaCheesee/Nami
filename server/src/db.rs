@@ -28,7 +28,12 @@ CREATE TABLE IF NOT EXISTS tracks (
     library_id  INTEGER NOT NULL DEFAULT 0,
     file_hash   TEXT,
     mbid        TEXT,       -- MusicBrainz recording id, если нашёлся при обогащении
-    enriched_at INTEGER     -- когда трек рассматривали в MusicBrainz (NULL - ещё нет)
+    enriched_at INTEGER,    -- когда трек рассматривали в MusicBrainz (NULL - ещё нет)
+    rg_track_gain REAL,     -- ReplayGain track gain, дБ (относительно -18 LUFS)
+    rg_track_peak REAL,     -- пиковая амплитуда, 0..1+
+    r128_loudness REAL,     -- интегральная громкость EBU R128, LUFS
+    fingerprint   TEXT,     -- chromaprint (fpcalc -raw), для дедупликации и поиска
+    analyzed_at   INTEGER   -- когда трек прогнали через анализатор (NULL - ещё нет)
 );
 CREATE INDEX IF NOT EXISTS idx_tracks_artist ON tracks(artist);
 CREATE INDEX IF NOT EXISTS idx_tracks_album  ON tracks(album);
@@ -213,6 +218,11 @@ pub fn migrate(conn: &Connection) -> crate::Res<()> {
     add("tracks", "file_hash", "TEXT")?;
     add("tracks", "mbid", "TEXT")?;
     add("tracks", "enriched_at", "INTEGER")?;
+    add("tracks", "rg_track_gain", "REAL")?;
+    add("tracks", "rg_track_peak", "REAL")?;
+    add("tracks", "r128_loudness", "REAL")?;
+    add("tracks", "fingerprint", "TEXT")?;
+    add("tracks", "analyzed_at", "INTEGER")?;
     add("users", "subsonic_password", "TEXT")?;
     add("devices", "user_id", "INTEGER")?;
     add("pairing_codes", "user_id", "INTEGER")?;
