@@ -41,3 +41,8 @@ deepl_api_key = ""
 
 # NAMI_LYRICS_TARGET_LANG - язык перевода по умолчанию, код DeepL.
 lyrics_target_lang = "RU"
+
+# NAMI_IMPORT_PATTERN - раскладка загруженных файлов внутри папки загрузок.
+# Плейсхолдеры: %artist% %albumartist% %album% %title% %track% %year%. Расширение
+# добавляется само. Пусто - без подпапок (файл кладётся в корень папки загрузок).
+import_pattern = "%albumartist%/%album%/%track% %title%"

@@ -39,6 +39,11 @@ pub struct Config {
     /// Язык перевода лирики по умолчанию, код DeepL.
     #[serde(default = "default_lyrics_lang")]
     pub lyrics_target_lang: String,
+    /// Шаблон раскладки загруженных файлов внутри папки загрузок. Плейсхолдеры:
+    /// `%artist% %albumartist% %album% %title% %track% %year%`. Пусто - без подпапок,
+    /// как было. Расширение добавляется само.
+    #[serde(default = "default_import_pattern")]
+    pub import_pattern: String,
 }
 
 fn default_port() -> u16 {
@@ -71,6 +76,9 @@ fn default_tombstone_days() -> i64 {
 fn default_lyrics_lang() -> String {
     "RU".into()
 }
+fn default_import_pattern() -> String {
+    "%albumartist%/%album%/%track% %title%".into()
+}
 
 impl Default for Config {
     fn default() -> Self {
@@ -87,6 +95,7 @@ impl Default for Config {
             tombstone_ttl_days: default_tombstone_days(),
             deepl_api_key: String::new(),
             lyrics_target_lang: default_lyrics_lang(),
+            import_pattern: default_import_pattern(),
         }
     }
 }
@@ -156,6 +165,9 @@ impl Config {
         }
         if let Ok(v) = std::env::var("NAMI_LYRICS_TARGET_LANG") {
             cfg.lyrics_target_lang = v;
+        }
+        if let Ok(v) = std::env::var("NAMI_IMPORT_PATTERN") {
+            cfg.import_pattern = v;
         }
         if let Ok(v) = std::env::var("NAMI_TRANSCODE_CACHE_MB") {
             cfg.transcode_cache_mb =

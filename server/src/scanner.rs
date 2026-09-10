@@ -70,6 +70,54 @@ fn file_stem(path: &Path) -> String {
         .unwrap_or_else(|| path.to_string_lossy().to_string())
 }
 
+/// Чистит один сегмент пути: ни разделителей, ни `..`, ни того, что ломает Windows-ФС.
+fn sanitize_segment(seg: &str) -> String {
+    let cleaned: String = seg
+        .chars()
+        .map(|c| if c.is_control() || "<>:\"|?*/\\".contains(c) { '_' } else { c })
+        .collect();
+    let cleaned = cleaned.trim_matches(['.', ' ']).to_string();
+    if cleaned.is_empty() || cleaned == ".." { "_".into() } else { cleaned }
+}
+
+/// Строит относительный путь загруженного файла по шаблону автосортировки.
+/// Плейсхолдеры: `%artist% %albumartist% %album% %title% %track% %year%`.
+/// Пустой шаблон - файл в корень папки загрузок (как было). `ext` - с точкой.
+pub fn sort_path(pattern: &str, meta: &TrackMeta, ext: &str) -> PathBuf {
+    let pattern = pattern.trim();
+    if pattern.is_empty() {
+        return PathBuf::from(format!("{}{ext}", sanitize_segment(&meta.title)));
+    }
+    let track = meta.track_no.map(|n| format!("{n:02}")).unwrap_or_default();
+    let year = meta.year.map(|y| y.to_string()).unwrap_or_default();
+    let album_artist =
+        meta.album_artist.as_deref().or(meta.artist.as_deref()).unwrap_or("Unknown Artist");
+    // Подстановка - посегментно: подпапки задаёт только шаблон, а `/` внутри тега
+    // (например в названии) вычищается, а не режет путь на части.
+    let render = |seg: &str| {
+        seg.replace("%albumartist%", album_artist)
+            .replace("%artist%", meta.artist.as_deref().unwrap_or("Unknown Artist"))
+            .replace("%album%", meta.album.as_deref().unwrap_or("Unknown Album"))
+            .replace("%title%", &meta.title)
+            .replace("%track%", track.trim())
+            .replace("%year%", year.trim())
+    };
+
+    let mut p = PathBuf::new();
+    for seg in pattern.split(['/', '\\']) {
+        let seg = sanitize_segment(render(seg).trim());
+        if !seg.is_empty() {
+            p.push(seg);
+        }
+    }
+    if p.as_os_str().is_empty() {
+        p.push(sanitize_segment(&meta.title));
+    }
+    let stem = p.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    p.set_file_name(format!("{stem}{ext}"));
+    p
+}
+
 fn is_audio(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
@@ -429,5 +477,34 @@ mod tests {
         assert!(is_audio(Path::new("a/b.FLAC")));
         assert!(!is_audio(Path::new("a/cover.jpg")));
         assert!(!is_audio(Path::new("a/album.cue")));
+    }
+
+    #[test]
+    fn автосортировка_раскладывает_по_шаблону() {
+        let meta = TrackMeta {
+            title: "Song / Two".into(),
+            artist: Some("The Band".into()),
+            album: Some("Album: Live".into()),
+            album_artist: None,
+            track_no: Some(3),
+            year: Some(2020),
+            duration_ms: 1000,
+            format: "Flac".into(),
+        };
+        // album_artist пуст - берётся artist; слэш в названии не создаёт подпапку;
+        // двоеточие в альбоме вычищено.
+        let p = sort_path("%albumartist%/%album%/%track% %title%", &meta, ".flac");
+        assert_eq!(
+            p,
+            PathBuf::from("The Band").join("Album_ Live").join("03 Song _ Two.flac")
+        );
+
+        // Пустой шаблон - плоско, только имя из названия.
+        assert_eq!(sort_path("", &meta, ".mp3"), PathBuf::from("Song _ Two.mp3"));
+
+        // Нет тегов - подставляются заглушки, а не пустые сегменты.
+        let bare = TrackMeta { artist: None, album: None, track_no: None, year: None, ..meta };
+        let p = sort_path("%artist%/%album%/%title%", &bare, ".ogg");
+        assert_eq!(p, PathBuf::from("Unknown Artist").join("Unknown Album").join("Song _ Two.ogg"));
     }
 }

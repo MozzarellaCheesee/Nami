@@ -1505,8 +1505,24 @@ async fn upload(
         if let Some((id, why)) = scanner::find_duplicate(&db, &hash, &meta, library_id) {
             return cleanup(Ok(Uploaded { track_id: id, duplicate_of: Some(why) }));
         }
-        // Префикс хеша спереди - от совпадения имён у разных людей.
-        let final_path = dir.join(format!("{}_{name}", &hash[..12]));
+        // Раскладка по шаблону автосортировки (config.import_pattern). Пустой шаблон -
+        // файл в корень папки загрузок, как было.
+        let rel = scanner::sort_path(&st.cfg.import_pattern, &meta, &ext);
+        let mut final_path = dir.join(&rel);
+        if let Some(parent) = final_path.parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                return cleanup(Err(e.into()));
+            }
+        }
+        // Столкновение имён у разных треков - добавляем короткий хеш перед расширением.
+        if final_path.exists() {
+            let stem = rel.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+            let suf_ext = rel
+                .extension()
+                .map(|e| format!(".{}", e.to_string_lossy()))
+                .unwrap_or_default();
+            final_path.set_file_name(format!("{stem}_{}{suf_ext}", &hash[..8]));
+        }
         if let Err(e) = std::fs::rename(&tmp, &final_path) {
             return cleanup(Err(e.into()));
         }
