@@ -99,6 +99,7 @@ pub fn router(state: Shared) -> Router {
         .route("/api/auth/devices/{id}", delete(revoke_device))
         .route("/api/auth/logout", post(logout))
         .route("/api/me", get(me).patch(patch_me))
+        .route("/api/me/subsonic-password", axum::routing::put(put_subsonic_password))
         .route("/api/users", get(list_users).post(create_user))
         .route("/api/users/{id}", delete(delete_user))
         .route("/api/users/{id}/folders", get(get_folders).put(put_folders))
@@ -121,6 +122,9 @@ pub fn router(state: Shared) -> Router {
         .route("/share/{token}/stream/{id}", get(share_stream))
         // Токен проверяется внутри: у WebSocket-рукопожатия нет заголовка Authorization.
         .route("/api/ws", get(ws))
+        // OpenSubsonic живёт со своей аутентификацией (u/t/s в query), поэтому мимо
+        // общей прослойки Bearer-токена.
+        .merge(crate::subsonic::router())
         .merge(protected)
         .with_state(state)
 }
@@ -856,6 +860,33 @@ async fn patch_me(
             rusqlite::params![id, v as i64],
         )?;
     }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct SubsonicPassword {
+    /// Пустая строка - отозвать доступ по Subsonic-протоколу.
+    password: String,
+}
+
+/// Задаёт или снимает отдельный Subsonic-пароль (см. doc-комментарий subsonic.rs:
+/// исторический протокол требует знать пароль, поэтому он отдельный от основного).
+async fn put_subsonic_password(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Json(b): Json<SubsonicPassword>,
+) -> ApiResult<StatusCode> {
+    let id = ident
+        .user_id
+        .ok_or_else(|| ApiError(StatusCode::BAD_REQUEST, "вход не как пользователь".into()))?;
+    let value = b.password.trim();
+    if !value.is_empty() && value.chars().count() < 8 {
+        return Err(ApiError(StatusCode::BAD_REQUEST, "пароль - от 8 символов".into()));
+    }
+    st.db.lock().unwrap().execute(
+        "UPDATE users SET subsonic_password=?2 WHERE id=?1",
+        rusqlite::params![id, if value.is_empty() { None } else { Some(value) }],
+    )?;
     Ok(StatusCode::NO_CONTENT)
 }
 

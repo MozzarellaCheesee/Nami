@@ -14,6 +14,7 @@ mod library;
 mod lyrics;
 mod scanner;
 mod share;
+mod subsonic;
 mod sync;
 mod tls;
 mod transcode;

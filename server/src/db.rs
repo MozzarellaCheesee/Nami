@@ -98,7 +98,11 @@ CREATE TABLE IF NOT EXISTS users (
     role          TEXT NOT NULL,             -- owner | user | guest
     library_id    INTEGER NOT NULL DEFAULT 0,
     now_playing_visible INTEGER NOT NULL DEFAULT 1,
-    created_at    INTEGER NOT NULL
+    created_at    INTEGER NOT NULL,
+    -- Отдельный пароль для Subsonic-протокола, хранится как есть: протокол требует
+    -- md5(пароль+соль), а из argon2-хеша пароль не достать. Обоснование размена -
+    -- в доккомментарии subsonic.rs. NULL - Subsonic-доступа у пользователя нет.
+    subsonic_password TEXT
 );
 
 -- Режим "общая библиотека с ограничением доступа к папкам". Ни одной строки на
@@ -209,6 +213,7 @@ pub fn migrate(conn: &Connection) -> crate::Res<()> {
     add("tracks", "file_hash", "TEXT")?;
     add("tracks", "mbid", "TEXT")?;
     add("tracks", "enriched_at", "INTEGER")?;
+    add("users", "subsonic_password", "TEXT")?;
     add("devices", "user_id", "INTEGER")?;
     add("pairing_codes", "user_id", "INTEGER")?;
 

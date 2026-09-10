@@ -46,6 +46,9 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 # походы наружу и так живут в spawn_blocking, и его rustls собирается на ring - том же
 # провайдере, что уже линкуется для TLS сервера, без второй криптобиблиотеки в образе.
 ureq = { version = "3.4.1", default-features = false, features = ["rustls"] }
+# MD5 нужен ровно для одного: исторический токен Subsonic - md5(пароль + соль).
+# Свой безопасностью он не является и нигде больше не используется (см. subsonic.rs).
+md-5 = { version = "0.11.0", default-features = false }
 
 [profile.release]
 opt-level = "z"
