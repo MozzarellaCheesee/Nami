@@ -92,4 +92,10 @@ abstract class DataModule {
     @Binds
     @Singleton
     abstract fun bindTagRepository(impl: TagRepositoryImpl): TagRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindServerAudioRepository(
+        impl: dev.nami.data.ServerAudioRepositoryImpl,
+    ): dev.nami.domain.ServerAudioRepository
 }
