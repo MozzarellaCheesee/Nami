@@ -267,10 +267,14 @@ struct Track {
     replaygain_track_peak: Option<f64>,
     /// Интегральная громкость EBU R128, LUFS.
     r128_loudness: Option<f64>,
+    /// Оценка темпа, ударов в минуту. NULL - трек ещё не анализировали.
+    bpm: Option<f64>,
+    /// Тональность, например `A Minor`.
+    musical_key: Option<String>,
 }
 
 const TRACK_COLS: &str = "id, title, artist, album, album_artist, track_no, year, duration_ms, \
-     size_bytes, format, rg_track_gain, rg_track_peak, r128_loudness";
+     size_bytes, format, rg_track_gain, rg_track_peak, r128_loudness, bpm, musical_key";
 
 fn row_to_track(r: &rusqlite::Row<'_>) -> rusqlite::Result<Track> {
     Ok(Track {
@@ -287,6 +291,8 @@ fn row_to_track(r: &rusqlite::Row<'_>) -> rusqlite::Result<Track> {
         replaygain_track_gain: r.get(10)?,
         replaygain_track_peak: r.get(11)?,
         r128_loudness: r.get(12)?,
+        bpm: r.get(13)?,
+        musical_key: r.get(14)?,
     })
 }
 
@@ -338,8 +344,8 @@ async fn track(
         |r| {
             Ok(TrackDetail {
                 track: row_to_track(r)?,
-                fingerprint: r.get(13)?,
-                analyzed_at: r.get(14)?,
+                fingerprint: r.get(15)?,
+                analyzed_at: r.get(16)?,
             })
         },
     )

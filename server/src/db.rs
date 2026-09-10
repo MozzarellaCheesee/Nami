@@ -33,6 +33,8 @@ CREATE TABLE IF NOT EXISTS tracks (
     rg_track_peak REAL,     -- пиковая амплитуда, 0..1+
     r128_loudness REAL,     -- интегральная громкость EBU R128, LUFS
     fingerprint   TEXT,     -- chromaprint (fpcalc -raw), для дедупликации и поиска
+    bpm           REAL,     -- оценка темпа, ударов в минуту
+    musical_key   TEXT,     -- тональность, например 'A Minor'
     analyzed_at   INTEGER   -- когда трек прогнали через анализатор (NULL - ещё нет)
 );
 CREATE INDEX IF NOT EXISTS idx_tracks_artist ON tracks(artist);
@@ -257,6 +259,8 @@ pub fn migrate(conn: &Connection) -> crate::Res<()> {
     add("tracks", "rg_track_peak", "REAL")?;
     add("tracks", "r128_loudness", "REAL")?;
     add("tracks", "fingerprint", "TEXT")?;
+    add("tracks", "bpm", "REAL")?;
+    add("tracks", "musical_key", "TEXT")?;
     add("tracks", "analyzed_at", "INTEGER")?;
     add("users", "subsonic_password", "TEXT")?;
     add("users", "listenbrainz_token", "TEXT")?;
