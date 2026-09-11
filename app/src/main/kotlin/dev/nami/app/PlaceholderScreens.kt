@@ -98,6 +98,7 @@ fun SettingsScreen(
     onStatsClick: () -> Unit,
     onWatchedFoldersClick: () -> Unit,
     onExportClick: () -> Unit,
+    onImportZipClick: () -> Unit = {},
     onDjModeClick: () -> Unit,
     onBlindListenClick: () -> Unit,
     onCardSortClick: () -> Unit,
@@ -139,6 +140,7 @@ fun SettingsScreen(
             NavRow(Icons.Outlined.BarChart, "Статистика", "Что и сколько слушалось", onStatsClick)
             NavRow(Icons.Outlined.Delete, "Хранилище", "Корзина и занятое место", onTrashClick)
             NavRow(Icons.Outlined.Archive, "Экспорт в .zip", "Треки и плейлисты одним архивом", onExportClick)
+            NavRow(Icons.Outlined.Archive, "Импорт из .zip", "Восстановить треки и плейлисты из архива", onImportZipClick)
         }
 
         NamiSectionLabel("Оформление")
