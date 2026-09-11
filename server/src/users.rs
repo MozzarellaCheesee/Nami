@@ -436,6 +436,11 @@ pub fn folder_access(conn: &Connection, user_id: i64) -> Vec<String> {
 /// Видит ли пользователь конкретный трек - та же проверка, что и в списке,
 /// но одним запросом (нужна перед отдачей файла).
 pub fn can_see_track(conn: &Connection, ident: &Ident, track_id: i64) -> bool {
+    if ident.user_id.is_none() && ident.device_id.is_some() {
+        return conn
+            .query_row("SELECT 1 FROM tracks WHERE id=?1", [track_id], |_| Ok(()))
+            .is_ok();
+    }
     let (clause, mut params) = visibility(conn, ident);
     params.insert(0, Value::Integer(track_id));
     conn.query_row(

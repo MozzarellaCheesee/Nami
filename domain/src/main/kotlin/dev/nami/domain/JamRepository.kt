@@ -26,11 +26,15 @@ interface JamRepository {
     /** Whether the Nami server is configured and ready for Jam (token and URL are set). */
     val isServerConfigured: StateFlow<Boolean>
 
+    /** Active host URL for this session (either configured server or guest server). */
+    val activeHostUrl: StateFlow<String?>
+
     /** Create a new Jam room. On success, [session] will emit with isHost=true. */
     fun createRoom()
 
-    /** Join an existing Jam room by code. On success, [session] will emit with isHost=false. */
-    fun joinRoom(code: String)
+    /** Join an existing Jam room by code. On success, [session] will emit with isHost=false.
+     * If [hostUrl] is provided, connects directly as a guest without requiring local server setup. */
+    fun joinRoom(code: String, hostUrl: String? = null)
 
     /** Leave the current Jam session and disconnect. */
     fun leave()

@@ -956,14 +956,26 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
         writeThemeShapeOverrides(updated)
     }
 
-    private val _themeDensityScale = MutableStateFlow(prefs.getFloat(KEY_THEME_DENSITY_SCALE, 1f))
+    private fun safeGetFloat(key: String, defValue: Float): Float {
+        return try {
+            prefs.getFloat(key, defValue)
+        } catch (_: ClassCastException) {
+            try {
+                prefs.getInt(key, defValue.toInt()).toFloat()
+            } catch (_: Exception) {
+                defValue
+            }
+        }
+    }
+
+    private val _themeDensityScale = MutableStateFlow(safeGetFloat(KEY_THEME_DENSITY_SCALE, 1f))
     override val themeDensityScale: StateFlow<Float> = _themeDensityScale
     override fun setThemeDensityScale(value: Float) {
         prefs.edit { putFloat(KEY_THEME_DENSITY_SCALE, value) }
         _themeDensityScale.value = value
     }
 
-    private val _themeFontScale = MutableStateFlow(prefs.getFloat(KEY_THEME_FONT_SCALE, 1f))
+    private val _themeFontScale = MutableStateFlow(safeGetFloat(KEY_THEME_FONT_SCALE, 1f))
     override val themeFontScale: StateFlow<Float> = _themeFontScale
     override fun setThemeFontScale(value: Float) {
         prefs.edit { putFloat(KEY_THEME_FONT_SCALE, value) }

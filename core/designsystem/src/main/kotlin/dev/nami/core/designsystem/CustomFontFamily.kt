@@ -18,9 +18,25 @@ import java.io.File
  * раньше, дорисовывает системный fallback Android, просто не выбранной пользователем гарнитурой.
  */
 fun customFontFamily(latinPath: String?, cjkPath: String?): FontFamily? {
-    val latinFamily = latinPath?.let { FontFamily(Font(File(it))) }
-    if (cjkPath == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return latinFamily
-    return runCatching { fallbackFamily(latinPath, cjkPath) }.getOrElse { latinFamily }
+    val latinFile = latinPath?.let { File(it) }?.takeIf { it.exists() && it.canRead() && it.length() > 0 }
+    val cjkFile = cjkPath?.let { File(it) }?.takeIf { it.exists() && it.canRead() && it.length() > 0 }
+
+    val latinValid = latinFile?.takeIf {
+        runCatching { Typeface.createFromFile(it) }.isSuccess
+    }?.absolutePath
+
+    val cjkValid = cjkFile?.takeIf {
+        runCatching { Typeface.createFromFile(it) }.isSuccess
+    }?.absolutePath
+
+    if (latinValid == null && cjkValid == null) return null
+
+    val latinFamily = latinValid?.let {
+        runCatching { FontFamily(Font(File(it))) }.getOrNull()
+    }
+
+    if (cjkValid == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return latinFamily
+    return runCatching { fallbackFamily(latinValid, cjkValid) }.getOrElse { latinFamily }
 }
 
 @RequiresApi(Build.VERSION_CODES.Q)

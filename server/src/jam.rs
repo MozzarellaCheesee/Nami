@@ -51,6 +51,11 @@ pub struct JamRecord {
 }
 
 impl Registry {
+    /// Проверяет, активна ли сессия с таким кодом в памяти.
+    pub fn contains(&self, code: &str) -> bool {
+        self.0.lock().unwrap().contains_key(code)
+    }
+
     /// Журнал джемов библиотеки, свежие сверху.
     pub fn history(conn: &Connection, library_id: i64, limit: i64) -> rusqlite::Result<Vec<JamRecord>> {
         let mut stmt = conn.prepare(
@@ -183,8 +188,8 @@ pub fn handle(st: &Shared, ident: &Ident, m: &mut Membership, text: &str) -> Opt
             let Some(s) = reg.get_mut(&code) else {
                 return err("нет такой сессии");
             };
-            // Раздельные библиотеки закрыты друг для друга по определению.
-            if s.library != library {
+            // Раздельные библиотеки закрыты друг для друга по определению. Гости джема с кодом допускаются.
+            if ident.user_id.is_some() && s.library != library {
                 return err("сессия в другой библиотеке");
             }
             m.rx = Some(s.tx.subscribe());

@@ -141,6 +141,8 @@ pub fn router(state: Shared) -> Router {
         .route("/api/auth/login", post(login))
         .route("/api/invites/{token}/accept", post(accept_invite))
         .route("/setup", get(setup_page))
+        // Гостевая авторизация в Jam без аккаунта
+        .route("/api/jam/guest-auth", post(jam_guest_auth))
         // Гостевые ссылки: без логина и без приложения, проверка - токен в пути.
         .route("/share/{token}", get(share_page))
         .route("/share/{token}/stream/{id}", get(share_stream))
@@ -354,7 +356,11 @@ async fn track(
     Path(id): Path<i64>,
 ) -> ApiResult<Json<TrackDetail>> {
     let db = st.db.lock().unwrap();
-    let (clause, mut params) = users::visibility(&db, &ident);
+    let (clause, mut params) = if ident.user_id.is_none() && ident.device_id.is_some() {
+        (String::new(), Vec::new())
+    } else {
+        users::visibility(&db, &ident)
+    };
     params.insert(0, rusqlite::types::Value::Integer(id));
     db.query_row(
         &format!("SELECT {TRACK_COLS}, fingerprint, analyzed_at FROM tracks WHERE id=?{clause}"),
@@ -1231,6 +1237,43 @@ struct WsQuery {
     /// 1 - подписаться ещё и на поток позиции воспроизведения. По умолчанию нет:
     /// позиция обновляется каждые несколько секунд и забила бы редкие события изменений.
     position: Option<u8>,
+    /// Код сессии джема для гостевого подключения без токена
+    jam_code: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct JamGuestAuthReq {
+    code: String,
+}
+
+#[derive(Serialize)]
+struct JamGuestAuthResp {
+    token: String,
+    code: String,
+}
+
+async fn jam_guest_auth(
+    State(st): State<Shared>,
+    Json(body): Json<JamGuestAuthReq>,
+) -> ApiResult<Json<JamGuestAuthResp>> {
+    let code_upper = body.code.trim().to_uppercase();
+    if !st.jams.contains(&code_upper) {
+        return Err(ApiError(StatusCode::NOT_FOUND, "нет такой сессии джема".into()));
+    }
+    let raw_token = format!("jam_{}", auth::random_hex(24));
+    let token_hash = auth::hash_token(&raw_token);
+    let now = crate::db::now();
+    {
+        let db = st.db.lock().unwrap();
+        db.execute(
+            "INSERT INTO devices (name, token_hash, paired_at, last_seen_at) VALUES (?1, ?2, ?3, ?3)",
+            rusqlite::params![format!("Jam Guest ({})", code_upper), token_hash, now],
+        )?;
+    }
+    Ok(Json(JamGuestAuthResp {
+        token: raw_token,
+        code: code_upper,
+    }))
 }
 
 /// WebSocket с событиями изменений. Не заменяет `GET /api/sync?since=`, а ускоряет его:
@@ -1243,10 +1286,21 @@ async fn ws(
 ) -> Response {
     let ident = match q.token.as_deref() {
         Some(t) => identify(&st.db.lock().unwrap(), t),
-        None => None,
+        None => {
+            if let Some(code) = q.jam_code.as_deref() {
+                let code_upper = code.trim().to_uppercase();
+                if st.jams.contains(&code_upper) {
+                    Some(Ident { user_id: None, device_id: None })
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }
     };
     let Some(ident) = ident else {
-        return ApiError(StatusCode::UNAUTHORIZED, "нужен токен устройства (?token=)".into())
+        return ApiError(StatusCode::UNAUTHORIZED, "нужен токен устройства (?token=) или код джема (?jam_code=)".into())
             .into_response();
     };
     let with_position = q.position == Some(1);

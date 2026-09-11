@@ -72,6 +72,15 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="nami" android:host="auth" />
             </intent-filter>
+
+            <!-- Подключение к сессии совместного прослушивания (Jam):
+                 nami://jam?code=ABC234&host=http://... -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="nami" android:host="jam" />
+            </intent-filter>
         </activity>
 
         <!-- Icon picker (Settings): each alias targets the same MainActivity, just with its own

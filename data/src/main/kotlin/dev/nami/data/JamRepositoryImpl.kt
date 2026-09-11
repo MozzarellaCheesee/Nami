@@ -1,6 +1,11 @@
 package dev.nami.data
 
+import android.content.Context
+import android.net.Uri
+import android.net.nsd.NsdManager
+import android.net.nsd.NsdServiceInfo
 import android.util.Log
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.nami.core.model.TrackId
 import dev.nami.domain.JamRepository
 import dev.nami.domain.JamSession
@@ -20,9 +25,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
@@ -36,12 +45,23 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import javax.net.ssl.SSLContext
 import javax.net.ssl.X509TrustManager
+import kotlin.coroutines.resume
 
 private const val TAG = "JamRepository"
 private const val RECONNECT_DELAY_MS = 3000L
+private const val NSD_SERVICE_TYPE = "_nami-jam._tcp."
+
+private data class TrackMeta(
+    val streamUrl: String,
+    val title: String,
+    val artist: String?,
+    val durationMs: Long,
+    val format: String?,
+)
 
 @Singleton
 class JamRepositoryImpl @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val settingsRepository: SettingsRepository,
     private val playerRepository: PlayerRepository,
     private val serverAudioRepository: ServerAudioRepository,
@@ -58,6 +78,9 @@ class JamRepositoryImpl @Inject constructor(
 
     private val _connected = MutableStateFlow(false)
     override val connected: StateFlow<Boolean> = _connected
+
+    private val _activeHostUrl = MutableStateFlow<String?>(null)
+    override val activeHostUrl: StateFlow<String?> = _activeHostUrl
 
     override val isServerConfigured: StateFlow<Boolean> =
         combine(settingsRepository.namiServerToken, settingsRepository.namiServerUrl) { token, url ->
@@ -76,29 +99,74 @@ class JamRepositoryImpl @Inject constructor(
     @Volatile private var intentionalClose = false
     private val pendingActions = mutableListOf<() -> Unit>()
 
-    @Volatile
-    private var currentBaseUrl: String? = null
+    @Volatile private var currentBaseUrl: String? = null
+    @Volatile private var guestServerUrl: String? = null
+    @Volatile private var guestToken: String? = null
+    @Volatile private var nsdRegistrationListener: NsdManager.RegistrationListener? = null
 
     override fun createRoom() {
         clearError()
         intentionalClose = false
+        if (!isServerConfigured.value) {
+            _error.value = "Для создания комнаты необходимо подключить сервер NAMI в Настройках"
+            return
+        }
         scope.launch {
-            connectWebSocket {
+            connectWebSocket(onOpened = {
                 send(JSONObject().apply { put("type", "jam_create") })
-            }
+            })
         }
     }
 
-    override fun joinRoom(code: String) {
+    override fun joinRoom(code: String, hostUrl: String?) {
         clearError()
         intentionalClose = false
-        val trimmed = code.trim().uppercase()
+
+        var parsedCode = code.trim()
+        var parsedHost = hostUrl?.trim()?.trimEnd('/')
+
+        // Распознаём глубокие ссылки вида nami://jam?code=ABC234&host=http://...
+        if (parsedCode.startsWith("nami://", ignoreCase = true) || parsedCode.contains("?code=")) {
+            val uri = runCatching { Uri.parse(parsedCode) }.getOrNull()
+            if (uri != null) {
+                uri.getQueryParameter("code")?.let { parsedCode = it }
+                uri.getQueryParameter("host")?.let { parsedHost = it.trimEnd('/') }
+            }
+        } else if (parsedCode.contains("@")) {
+            val parts = parsedCode.split("@", limit = 2)
+            parsedCode = parts[0].trim()
+            parsedHost = parts[1].trim().trimEnd('/')
+        }
+
+        val trimmedCode = parsedCode.uppercase().filter { it in "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" }
+
+        if (trimmedCode.length < 4) {
+            _error.value = "Неверный код комнаты"
+            return
+        }
+
         scope.launch {
-            connectWebSocket {
-                send(JSONObject().apply {
-                    put("type", "jam_join")
-                    put("code", trimmed)
+            val targetHost = parsedHost
+            if (targetHost != null) {
+                Log.d(TAG, "Connecting to Jam as guest to $targetHost with code $trimmedCode")
+                connectAsGuest(targetHost, trimmedCode)
+            } else if (isServerConfigured.value) {
+                Log.d(TAG, "Connecting to Jam via configured server with code $trimmedCode")
+                connectWebSocket(onOpened = {
+                    send(JSONObject().apply {
+                        put("type", "jam_join")
+                        put("code", trimmedCode)
+                    })
                 })
+            } else {
+                Log.d(TAG, "Server not configured, searching for Jam $trimmedCode on Wi-Fi via NSD...")
+                val discovered = discoverJamHostOnWifi(trimmedCode)
+                if (discovered != null) {
+                    Log.d(TAG, "Discovered Jam host on Wi-Fi: $discovered")
+                    connectAsGuest(discovered, trimmedCode)
+                } else {
+                    _error.value = "Сервер не найден в локальной сети. Отсканируйте QR-код или укажите адрес сервера."
+                }
             }
         }
     }
@@ -109,6 +177,7 @@ class JamRepositoryImpl @Inject constructor(
         reconnectJob = null
         previousSession = null
         clearPendingActions()
+        unregisterNsdJam()
         send(JSONObject().apply { put("type", "jam_leave") })
         try {
             webSocket?.close(1000, "leave")
@@ -116,6 +185,9 @@ class JamRepositoryImpl @Inject constructor(
         webSocket = null
         _session.value = null
         _connected.value = false
+        _activeHostUrl.value = null
+        guestServerUrl = null
+        guestToken = null
     }
 
     override fun play(serverTrackId: Long, positionMs: Long) {
@@ -156,6 +228,57 @@ class JamRepositoryImpl @Inject constructor(
         return ws.send(text)
     }
 
+    private suspend fun connectAsGuest(hostUrl: String, code: String) = withContext(Dispatchers.IO) {
+        val cleanHost = hostUrl.trim().trimEnd('/')
+        guestServerUrl = cleanHost
+        _activeHostUrl.value = cleanHost
+
+        val client = okHttpClient ?: OkHttpClient.Builder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(0, TimeUnit.MILLISECONDS)
+            .pingInterval(30, TimeUnit.SECONDS)
+            .build()
+        okHttpClient = client
+
+        // Запрашиваем гостевую авторизацию у сервера хоста
+        val token = runCatching {
+            val jsonReq = JSONObject().apply { put("code", code) }
+            val mediaType = "application/json; charset=utf-8".toMediaType()
+            val reqBody = jsonReq.toString().toRequestBody(mediaType)
+            val authReq = Request.Builder()
+                .url("$cleanHost/api/jam/guest-auth")
+                .post(reqBody)
+                .build()
+            client.newCall(authReq).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val bodyStr = resp.body?.string().orEmpty()
+                    val json = JSONObject(bodyStr)
+                    json.optString("token").ifBlank { null }
+                } else null
+            }
+        }.getOrNull()
+
+        guestToken = token
+
+        val wsBase = when {
+            cleanHost.startsWith("https://", ignoreCase = true) -> "wss://" + cleanHost.substring("https://".length)
+            cleanHost.startsWith("http://", ignoreCase = true) -> "ws://" + cleanHost.substring("http://".length)
+            else -> "ws://$cleanHost"
+        }
+        val wsUrl = if (token != null) {
+            "$wsBase/api/ws?token=$token"
+        } else {
+            "$wsBase/api/ws?jam_code=$code"
+        }
+
+        startWebSocketConnection(wsBase, wsUrl, null, onOpened = {
+            send(JSONObject().apply {
+                put("type", "jam_join")
+                put("code", code)
+            })
+        })
+    }
+
     private suspend fun connectWebSocket(onOpened: (() -> Unit)? = null) = withContext(Dispatchers.IO) {
         if (onOpened != null) {
             synchronized(pendingActions) {
@@ -184,6 +307,7 @@ class JamRepositoryImpl @Inject constructor(
 
         val reachable = NamiServerClient.reachableBase(bases, cert) ?: bases.first()
         currentBaseUrl = reachable
+        _activeHostUrl.value = reachable
         val wsBase = when {
             reachable.startsWith("https://", ignoreCase = true) -> "wss://" + reachable.substring("https://".length)
             reachable.startsWith("http://", ignoreCase = true) -> "ws://" + reachable.substring("http://".length)
@@ -191,13 +315,22 @@ class JamRepositoryImpl @Inject constructor(
         }
         val wsUrl = "$wsBase/api/ws?token=$token"
 
+        startWebSocketConnection(wsBase, wsUrl, cert, null)
+    }
+
+    private fun startWebSocketConnection(
+        wsBase: String,
+        wsUrl: String,
+        certSha256: String?,
+        onOpened: (() -> Unit)?,
+    ) {
         try {
             webSocket?.close(1000, "reconnecting")
         } catch (_: Exception) {}
         webSocket = null
 
         try {
-            val client = createOkHttpClient(wsBase, cert)
+            val client = createOkHttpClient(wsBase, certSha256)
             okHttpClient = client
             val request = Request.Builder().url(wsUrl).build()
 
@@ -206,6 +339,7 @@ class JamRepositoryImpl @Inject constructor(
                     Log.d(TAG, "Jam WebSocket connected to $wsBase")
                     isConnecting = false
                     _connected.value = true
+                    onOpened?.invoke()
                     drainPendingActions()
                 }
 
@@ -259,10 +393,15 @@ class JamRepositoryImpl @Inject constructor(
             if (intentionalClose || previousSession == null) return@launch
             val sessionToRestore = previousSession ?: return@launch
             Log.d(TAG, "Attempting reconnect to Jam session ${sessionToRestore.code}")
-            connectWebSocket {
-                send(JSONObject().apply {
-                    put("type", "jam_join")
-                    put("code", sessionToRestore.code)
+            val host = guestServerUrl
+            if (host != null) {
+                connectAsGuest(host, sessionToRestore.code)
+            } else {
+                connectWebSocket(onOpened = {
+                    send(JSONObject().apply {
+                        put("type", "jam_join")
+                        put("code", sessionToRestore.code)
+                    })
                 })
             }
         }
@@ -283,6 +422,10 @@ class JamRepositoryImpl @Inject constructor(
                         lastSyncAt = 0L,
                         playedBy = null,
                     )
+                    val host = currentBaseUrl ?: _activeHostUrl.value
+                    if (host != null) {
+                        registerNsdJam(code, host)
+                    }
                 }
                 "jam_joined" -> {
                     val code = json.optString("code")
@@ -307,6 +450,7 @@ class JamRepositoryImpl @Inject constructor(
                 }
                 "jam_left" -> {
                     _session.value = null
+                    unregisterNsdJam()
                 }
                 "jam_play" -> {
                     val trackId = json.optLong("track_id")
@@ -353,35 +497,159 @@ class JamRepositoryImpl @Inject constructor(
     }
 
     private suspend fun handleJamPlay(trackId: Long, adjustedPositionMs: Long) {
-        val cfg = activeConfig()
-        val streamUrl = serverAudioRepository.serverStreamUrl(trackId)
-            ?: cfg?.let { "${it.baseUrl}/api/tracks/$trackId/stream/auto?token=${it.token}" }
-            ?: return
+        val gHost = guestServerUrl
+        val gToken = guestToken
 
-        val detail = cfg?.let { NamiServerClient.trackDetail(it, trackId) }
-        val trackObj = detail?.optJSONObject("track")
-        val title = trackObj?.optString("title")?.ifBlank { null }
-            ?: detail?.optString("title")?.ifBlank { null }
-            ?: "Трек #$trackId"
-        val artist = trackObj?.optString("artist")?.ifBlank { null }
-            ?: detail?.optString("artist")?.ifBlank { null }
-        val durationMs = trackObj?.optLong("duration_ms", 0L)
-            ?: detail?.optLong("duration_ms", 0L)
-            ?: 0L
-        val format = trackObj?.optString("format")?.ifBlank { null }
-            ?: detail?.optString("format")?.ifBlank { null }
+        val meta = if (gHost != null) {
+            val tokenParam = if (gToken != null) "?token=$gToken" else "?jam_code=${_session.value?.code.orEmpty()}"
+            val sUrl = "$gHost/api/tracks/$trackId/stream/auto$tokenParam"
+
+            var tTitle = "Трек #$trackId"
+            var tArtist: String? = null
+            var tDuration = 0L
+            var tFormat: String? = null
+
+            try {
+                val detailUrl = "$gHost/api/tracks/$trackId$tokenParam"
+                val req = Request.Builder().url(detailUrl).build()
+                val client = okHttpClient ?: OkHttpClient()
+                client.newCall(req).execute().use { resp ->
+                    if (resp.isSuccessful) {
+                        val body = resp.body?.string().orEmpty()
+                        val detail = JSONObject(body)
+                        val trackObj = detail.optJSONObject("track")
+                        tTitle = trackObj?.optString("title")?.ifBlank { null }
+                            ?: detail.optString("title").ifBlank { null }
+                            ?: "Трек #$trackId"
+                        tArtist = trackObj?.optString("artist")?.ifBlank { null }
+                            ?: detail.optString("artist").ifBlank { null }
+                        tDuration = trackObj?.optLong("duration_ms", 0L)
+                            ?: detail.optLong("duration_ms", 0L)
+                            ?: 0L
+                        tFormat = trackObj?.optString("format")?.ifBlank { null }
+                            ?: detail.optString("format").ifBlank { null }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to load guest track detail: ${e.message}")
+            }
+            TrackMeta(sUrl, tTitle, tArtist, tDuration, tFormat)
+        } else {
+            val cfg = activeConfig()
+            val sUrl = serverAudioRepository.serverStreamUrl(trackId)
+                ?: cfg?.let { "${it.baseUrl}/api/tracks/$trackId/stream/auto?token=${it.token}" }
+                ?: return
+
+            val detail = cfg?.let { NamiServerClient.trackDetail(it, trackId) }
+            val trackObj = detail?.optJSONObject("track")
+            val tTitle = trackObj?.optString("title")?.ifBlank { null }
+                ?: detail?.optString("title")?.ifBlank { null }
+                ?: "Трек #$trackId"
+            val tArtist = trackObj?.optString("artist")?.ifBlank { null }
+                ?: detail?.optString("artist")?.ifBlank { null }
+            val tDuration = trackObj?.optLong("duration_ms", 0L)
+                ?: detail?.optLong("duration_ms", 0L)
+                ?: 0L
+            val tFormat = trackObj?.optString("format")?.ifBlank { null }
+                ?: detail?.optString("format")?.ifBlank { null }
+
+            TrackMeta(sUrl, tTitle, tArtist, tDuration, tFormat)
+        }
 
         val playable = PlayableTrack(
-            id = TrackId("server_$trackId"),
-            title = title,
-            artistName = artist,
-            path = streamUrl,
-            format = format,
-            durationMs = durationMs,
+            id = TrackId("jam_$trackId"),
+            title = meta.title,
+            artistName = meta.artist,
+            path = meta.streamUrl,
+            format = meta.format,
+            durationMs = meta.durationMs,
         )
 
         withContext(Dispatchers.Main) {
             playerRepository.play(listOf(playable), startIndex = 0, startMs = adjustedPositionMs)
+        }
+    }
+
+    private fun registerNsdJam(code: String, host: String) {
+        val nsdManager = context.getSystemService(Context.NSD_SERVICE) as? NsdManager ?: return
+        try {
+            unregisterNsdJam()
+            val uri = runCatching { URI(if (host.contains("://")) host else "http://$host") }.getOrNull()
+            val port = uri?.port?.takeIf { it > 0 } ?: 4533
+            val serviceInfo = NsdServiceInfo().apply {
+                serviceName = "NamiJam-$code"
+                serviceType = NSD_SERVICE_TYPE
+                setPort(port)
+                setAttribute("code", code)
+                setAttribute("host", host)
+            }
+            val listener = object : NsdManager.RegistrationListener {
+                override fun onServiceRegistered(serviceInfo: NsdServiceInfo?) {
+                    Log.d(TAG, "NSD Jam registered: ${serviceInfo?.serviceName}")
+                }
+                override fun onRegistrationFailed(serviceInfo: NsdServiceInfo?, errorCode: Int) {
+                    Log.w(TAG, "NSD Jam registration failed: $errorCode")
+                }
+                override fun onServiceUnregistered(serviceInfo: NsdServiceInfo?) {}
+                override fun onUnregistrationFailed(serviceInfo: NsdServiceInfo?, errorCode: Int) {}
+            }
+            nsdRegistrationListener = listener
+            nsdManager.registerService(serviceInfo, NsdManager.PROTOCOL_DNS_SD, listener)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to register NSD Jam service: ${e.message}", e)
+        }
+    }
+
+    private fun unregisterNsdJam() {
+        val listener = nsdRegistrationListener ?: return
+        val nsdManager = context.getSystemService(Context.NSD_SERVICE) as? NsdManager ?: return
+        try {
+            nsdManager.unregisterService(listener)
+        } catch (_: Exception) {}
+        nsdRegistrationListener = null
+    }
+
+    private suspend fun discoverJamHostOnWifi(code: String): String? = withTimeoutOrNull(2500L) {
+        suspendCancellableCoroutine { continuation ->
+            val nsdManager = context.getSystemService(Context.NSD_SERVICE) as? NsdManager
+            if (nsdManager == null) {
+                continuation.resume(null)
+                return@suspendCancellableCoroutine
+            }
+            val discoveryListener = object : NsdManager.DiscoveryListener {
+                override fun onDiscoveryStarted(regType: String) {}
+                override fun onServiceFound(serviceInfo: NsdServiceInfo) {
+                    if (serviceInfo.serviceType.contains("_nami-jam") || serviceInfo.serviceName.contains("NamiJam-$code")) {
+                        nsdManager.resolveService(serviceInfo, object : NsdManager.ResolveListener {
+                            override fun onResolveFailed(serviceInfo: NsdServiceInfo?, errorCode: Int) {}
+                            override fun onServiceResolved(resolved: NsdServiceInfo) {
+                                val attrCode = resolved.attributes["code"]?.let { String(it) }
+                                val attrHost = resolved.attributes["host"]?.let { String(it) }
+                                if (attrCode.equals(code, ignoreCase = true) && !attrHost.isNullOrBlank()) {
+                                    if (continuation.isActive) continuation.resume(attrHost)
+                                } else if (serviceInfo.serviceName.contains(code, ignoreCase = true)) {
+                                    val host = "http://${resolved.host.hostAddress}:${resolved.port}"
+                                    if (continuation.isActive) continuation.resume(host)
+                                }
+                            }
+                        })
+                    }
+                }
+                override fun onServiceLost(serviceInfo: NsdServiceInfo) {}
+                override fun onDiscoveryStopped(serviceType: String) {}
+                override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
+                    if (continuation.isActive) continuation.resume(null)
+                }
+                override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {}
+            }
+            continuation.invokeOnCancellation {
+                try { nsdManager.stopServiceDiscovery(discoveryListener) } catch (_: Exception) {}
+            }
+            try {
+                nsdManager.discoverServices(NSD_SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, discoveryListener)
+            } catch (e: Exception) {
+                if (continuation.isActive) continuation.resume(null)
+            }
         }
     }
 

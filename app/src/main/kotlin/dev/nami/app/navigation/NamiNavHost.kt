@@ -136,6 +136,7 @@ fun NamiNavHost(
     onPickAlbumCover: (AlbumId) -> Unit,
     onPickArtistPhoto: (ArtistId) -> Unit,
     openPlayerSignal: StateFlow<Int> = kotlinx.coroutines.flow.MutableStateFlow(0),
+    openJamSignal: StateFlow<Int> = kotlinx.coroutines.flow.MutableStateFlow(0),
     // Онбординг "отключите оптимизацию батареи": true только на том запуске, где его ещё ни разу
     // не показывали и система реально душит приложение. Решение считает MainActivity (у неё уже
     // есть и Context, и AppSettingsRepository), NavHost только показывает экран.
@@ -221,6 +222,15 @@ fun NamiNavHost(
     LaunchedEffect(openPlayerSignalValue) {
         if (hasSeenInitialOpenSignal) showNowPlaying = true
         hasSeenInitialOpenSignal = true
+    }
+
+    val openJamSignalValue by openJamSignal.collectAsState()
+    var hasSeenInitialOpenJamSignal by remember { mutableStateOf(false) }
+    LaunchedEffect(openJamSignalValue) {
+        if (hasSeenInitialOpenJamSignal) {
+            navController.navigate(ROUTE_JAM)
+        }
+        hasSeenInitialOpenJamSignal = true
     }
 
     // Один раз за всю жизнь установки - флаг гасим сразу при показе, а не по факту согласия:
@@ -671,6 +681,9 @@ fun NamiNavHost(
             composable(ROUTE_JAM) {
                 dev.nami.feature.player.JamScreen(
                     onBack = { navController.popBackStack() },
+                    onScanRequested = { navController.navigate(ROUTE_LOCAL_SHARE_SCAN) },
+                    scannedQr = scannedQrText,
+                    onScannedQrConsumed = { scannedQrText = null },
                 )
             }
             composable(ROUTE_LOCAL_SHARE) {
