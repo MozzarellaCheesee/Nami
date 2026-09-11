@@ -84,64 +84,133 @@ if [ "$(id -u)" -ne 0 ]; then
     fi
 fi
 
-# 5. Проверка наличия ffmpeg
+# 5. Автоматическая установка всех необходимых системных компонентов
 echo
-log_info "Проверка мультимедиа-компонентов..."
-if command -v ffmpeg >/dev/null 2>&1; then
-    log_ok "ffmpeg найден: $(ffmpeg -version | head -n1)"
-else
-    log_warn "ffmpeg не найден в системе!"
-    echo -e "${YELLOW}   Сервер будет работать в режиме passthrough (прямая отдача FLAC/MP3)."
-    echo -e "   Для мобильного транскодинга на лету (Opus/AAC) рекомендуется установить ffmpeg:"
-    echo -e "     Debian/Ubuntu: ${BOLD}sudo apt update && sudo apt install -y ffmpeg${NC}"
-    echo -e "     Arch Linux:    ${BOLD}sudo pacman -S ffmpeg${NC}"
-    echo -e "     Fedora/RHEL:   ${BOLD}sudo dnf install ffmpeg${NC}"
-    echo
+log_info "Автоматическая установка системных компонентов (ffmpeg, Caddy, утилиты)..."
+
+PKG_MANAGER=""
+if command -v apt-get >/dev/null 2>&1; then
+    PKG_MANAGER="apt"
+elif command -v dnf >/dev/null 2>&1; then
+    PKG_MANAGER="dnf"
+elif command -v yum >/dev/null 2>&1; then
+    PKG_MANAGER="yum"
+elif command -v pacman >/dev/null 2>&1; then
+    PKG_MANAGER="pacman"
+elif command -v apk >/dev/null 2>&1; then
+    PKG_MANAGER="apk"
+elif command -v zypper >/dev/null 2>&1; then
+    PKG_MANAGER="zypper"
 fi
 
-# 5.1 Проверка reverse-proxy Caddy (для автоматического SSL/домена)
-log_info "Проверка reverse proxy (Caddy)..."
-if command -v caddy >/dev/null 2>&1; then
-    log_ok "Caddy найден: $(caddy version 2>/dev/null | head -n1 || echo 'активен')"
+case "$PKG_MANAGER" in
+    apt)
+        log_info "Обновление списка пакетов (apt)..."
+        export DEBIAN_FRONTEND=noninteractive
+        $SUDO apt-get update -y >/dev/null 2>&1 || true
+        
+        log_info "Установка ffmpeg, сертификатов и базовых утилит..."
+        $SUDO apt-get install -y \
+            curl \
+            wget \
+            tar \
+            ca-certificates \
+            gnupg \
+            debian-keyring \
+            debian-archive-keyring \
+            apt-transport-https \
+            ffmpeg \
+            libchromaprint-tools >/dev/null 2>&1 || true
+        
+        if ! command -v caddy >/dev/null 2>&1; then
+            log_info "Настройка репозитория и установка Caddy..."
+            curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | $SUDO gpg --dearmor --yes -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg 2>/dev/null || true
+            curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | $SUDO tee /etc/apt/sources.list.d/caddy-stable.list >/dev/null 2>&1 || true
+            $SUDO apt-get update -y >/dev/null 2>&1 || true
+            $SUDO apt-get install -y caddy >/dev/null 2>&1 || true
+        fi
+        ;;
+        
+    dnf|yum)
+        log_info "Установка пакетов через $PKG_MANAGER..."
+        $SUDO $PKG_MANAGER install -y curl wget tar ca-certificates gnupg2 ffmpeg >/dev/null 2>&1 || true
+        if ! command -v caddy >/dev/null 2>&1; then
+            log_info "Настройка репозитория Caddy..."
+            $SUDO $PKG_MANAGER install -y 'dnf-command(copr)' >/dev/null 2>&1 || true
+            $SUDO $PKG_MANAGER copr enable -y @caddy/caddy >/dev/null 2>&1 || true
+            $SUDO $PKG_MANAGER install -y caddy >/dev/null 2>&1 || true
+        fi
+        ;;
+        
+    pacman)
+        log_info "Установка пакетов через pacman..."
+        $SUDO pacman -Sy --noconfirm curl wget tar ca-certificates ffmpeg caddy chromaprint >/dev/null 2>&1 || true
+        ;;
+        
+    apk)
+        log_info "Установка пакетов через apk..."
+        $SUDO apk update >/dev/null 2>&1 || true
+        $SUDO apk add --no-cache curl wget tar ca-certificates ffmpeg caddy >/dev/null 2>&1 || true
+        ;;
+        
+    zypper)
+        log_info "Установка пакетов через zypper..."
+        $SUDO zypper refresh >/dev/null 2>&1 || true
+        $SUDO zypper --non-interactive install curl wget tar ca-certificates ffmpeg caddy >/dev/null 2>&1 || true
+        ;;
+        
+    *)
+        log_warn "Пакетный менеджер не определён, пробуем прямую установку..."
+        ;;
+esac
+
+# Универсальный fallback для Caddy (скачивание официального бинарника)
+if ! command -v caddy >/dev/null 2>&1; then
+    log_info "Загрузка официального исполняемого файла Caddy..."
+    CADDY_ARCH="amd64"
+    [ "$TARGET_ARCH" = "aarch64" ] && CADDY_ARCH="arm64"
+    if curl -fsSL "https://caddyserver.com/api/download?os=linux&arch=${CADDY_ARCH}" -o "/tmp/caddy_bin" 2>/dev/null || \
+       wget -qO "/tmp/caddy_bin" "https://caddyserver.com/api/download?os=linux&arch=${CADDY_ARCH}" 2>/dev/null; then
+        $SUDO install -m 755 "/tmp/caddy_bin" /usr/local/bin/caddy
+        rm -f "/tmp/caddy_bin"
+    fi
+fi
+
+# Универсальный fallback для FFmpeg (статический бинарник)
+if ! command -v ffmpeg >/dev/null 2>&1; then
+    log_info "Загрузка статической сборки ffmpeg..."
+    FFMPEG_ARCH="amd64"
+    [ "$TARGET_ARCH" = "aarch64" ] && FFMPEG_ARCH="arm64"
+    FFMPEG_TAR="/tmp/ffmpeg-release.tar.xz"
+    if curl -fsSL "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-${FFMPEG_ARCH}-static.tar.xz" -o "$FFMPEG_TAR" 2>/dev/null; then
+        mkdir -p /tmp/ffmpeg_ext
+        if tar -xJf "$FFMPEG_TAR" -C /tmp/ffmpeg_ext --strip-components=1 2>/dev/null; then
+            if [ -f "/tmp/ffmpeg_ext/ffmpeg" ]; then
+                $SUDO install -m 755 "/tmp/ffmpeg_ext/ffmpeg" /usr/local/bin/ffmpeg
+                [ -f "/tmp/ffmpeg_ext/ffprobe" ] && $SUDO install -m 755 "/tmp/ffmpeg_ext/ffprobe" /usr/local/bin/ffprobe
+            fi
+        fi
+        rm -rf /tmp/ffmpeg_ext "$FFMPEG_TAR"
+    fi
+fi
+
+# Итог проверки компонентов
+echo
+log_info "Статус установленных компонентов:"
+if command -v ffmpeg >/dev/null 2>&1; then
+    log_ok "ffmpeg:        $(ffmpeg -version 2>/dev/null | head -n1 | cut -d' ' -f1-3)"
 else
-    log_info "Установка Caddy для автоматического выпуска SSL-сертификатов Let's Encrypt..."
-    CADDY_OK=false
-    if command -v apt-get >/dev/null 2>&1; then
-        $SUDO apt-get update -y >/dev/null 2>&1 || true
-        $SUDO apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl gnupg >/dev/null 2>&1 || true
-        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | $SUDO gpg --dearmor --yes -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg 2>/dev/null || true
-        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | $SUDO tee /etc/apt/sources.list.d/caddy-stable.list >/dev/null 2>&1 || true
-        $SUDO apt-get update -y >/dev/null 2>&1 || true
-        if $SUDO apt-get install -y caddy >/dev/null 2>&1; then
-            CADDY_OK=true
-        fi
-    elif command -v dnf >/dev/null 2>&1; then
-        $SUDO dnf install -y 'dnf-command(copr)' >/dev/null 2>&1 || true
-        $SUDO dnf copr enable -y @caddy/caddy >/dev/null 2>&1 || true
-        if $SUDO dnf install -y caddy >/dev/null 2>&1; then
-            CADDY_OK=true
-        fi
-    elif command -v pacman >/dev/null 2>&1; then
-        if $SUDO pacman -S --noconfirm caddy >/dev/null 2>&1; then
-            CADDY_OK=true
-        fi
-    fi
+    log_warn "ffmpeg:        не установлен (транскодинг будет недоступен)"
+fi
 
-    if [ "$CADDY_OK" = false ]; then
-        CADDY_ARCH="amd64"
-        [ "$TARGET_ARCH" = "aarch64" ] && CADDY_ARCH="arm64"
-        if curl -fsSL "https://caddyserver.com/api/download?os=linux&arch=${CADDY_ARCH}" -o "/tmp/caddy_tmp" 2>/dev/null; then
-            $SUDO install -m 755 "/tmp/caddy_tmp" /usr/local/bin/caddy
-            rm -f "/tmp/caddy_tmp"
-            CADDY_OK=true
-        fi
-    fi
+if command -v caddy >/dev/null 2>&1; then
+    log_ok "Caddy:         $(caddy version 2>/dev/null | head -n1 || echo 'готов к работе')"
+else
+    log_warn "Caddy:         не установлен (потребуется ручная установка для авто-SSL)"
+fi
 
-    if [ "$CADDY_OK" = true ]; then
-        log_ok "Caddy успешно установлен."
-    else
-        log_warn "Caddy не удалось установить автоматически (не критично, можно установить позже)."
-    fi
+if command -v curl >/dev/null 2>&1; then
+    log_ok "curl:          $(curl --version 2>/dev/null | head -n1 | cut -d' ' -f1-2)"
 fi
 echo
 
@@ -302,20 +371,26 @@ $SUDO systemctl daemon-reload
 $SUDO systemctl enable "${SERVICE_NAME}.service"
 $SUDO systemctl restart "${SERVICE_NAME}.service"
 
-# Открытие порта в брандмауэре (UFW / firewalld), если они активны
+# Открытие портов в брандмауэре (UFW / firewalld): 4533 (Nami), 80 (HTTP/Caddy), 443 (HTTPS/Caddy)
+PORTS_TO_OPEN=($PORT 80 443)
+
 if command -v ufw >/dev/null 2>&1; then
     if ufw status 2>/dev/null | grep -qw "active"; then
-        log_info "Настройка UFW: открытие входящего порта ${PORT}/tcp..."
-        $SUDO ufw allow ${PORT}/tcp >/dev/null 2>&1 || true
-        log_ok "Порт ${PORT}/tcp разрешён в UFW."
+        log_info "Настройка UFW: открытие входящих портов ${PORT}/tcp (Nami), 80/tcp (HTTP), 443/tcp (HTTPS)..."
+        for p in "${PORTS_TO_OPEN[@]}"; do
+            $SUDO ufw allow ${p}/tcp >/dev/null 2>&1 || true
+        done
+        log_ok "Порты ${PORT}/tcp, 80/tcp, 443/tcp разрешены в UFW."
     fi
 fi
 if command -v firewall-cmd >/dev/null 2>&1; then
     if firewall-cmd --state 2>/dev/null | grep -qw "running"; then
-        log_info "Настройка firewalld: открытие порта ${PORT}/tcp..."
-        $SUDO firewall-cmd --add-port=${PORT}/tcp --permanent >/dev/null 2>&1 || true
+        log_info "Настройка firewalld: открытие портов ${PORT}/tcp, 80/tcp, 443/tcp..."
+        for p in "${PORTS_TO_OPEN[@]}"; do
+            $SUDO firewall-cmd --add-port=${p}/tcp --permanent >/dev/null 2>&1 || true
+        done
         $SUDO firewall-cmd --reload >/dev/null 2>&1 || true
-        log_ok "Порт ${PORT}/tcp разрешён в firewalld."
+        log_ok "Порты ${PORT}/tcp, 80/tcp, 443/tcp разрешены в firewalld."
     fi
 fi
 
