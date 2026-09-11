@@ -163,6 +163,7 @@ pub fn check_domain(input: &str) -> DomainCheck {
 }
 
 /// Выполняет полную автоматическую настройку домена: фаервол, Caddy reverse proxy, Let's Encrypt и config.toml
+/// Выполняет полную автоматическую настройку домена: фаервол, Caddy reverse proxy, Let's Encrypt и config.toml
 pub fn setup_domain(input: &str, nami_port: u16, config_path: &Path) -> Result<DomainSetupReport, String> {
     let _ = nami_port;
     let check = check_domain(input);
@@ -179,20 +180,25 @@ pub fn setup_domain(input: &str, nami_port: u16, config_path: &Path) -> Result<D
         steps.push(format!("⚠ Внимание: домен указывает на {}, но настройка продолжается", check.domain_ips.join(", ")));
     }
 
+    #[cfg(unix)]
+    let is_sys_root = is_root();
+    #[cfg(unix)]
+    let sudo = if is_sys_root { "" } else { "sudo " };
+
     // 2. Открытие портов в брандмауэре (только Linux)
     #[cfg(unix)]
     {
         let mut fw_opened = false;
         if is_command_available("ufw") {
-            let _ = Command::new("ufw").args(["allow", "80/tcp"]).output();
-            let _ = Command::new("ufw").args(["allow", "443/tcp"]).output();
+            let _ = Command::new("sh").arg("-c").arg(format!("{sudo}ufw allow 80/tcp")).output();
+            let _ = Command::new("sh").arg("-c").arg(format!("{sudo}ufw allow 443/tcp")).output();
             steps.push("✓ Порты 80/tcp и 443/tcp разрешены в UFW".into());
             fw_opened = true;
         }
         if is_command_available("firewall-cmd") {
-            let _ = Command::new("firewall-cmd").args(["--add-port=80/tcp", "--permanent"]).output();
-            let _ = Command::new("firewall-cmd").args(["--add-port=443/tcp", "--permanent"]).output();
-            let _ = Command::new("firewall-cmd").arg("--reload").output();
+            let _ = Command::new("sh").arg("-c").arg(format!("{sudo}firewall-cmd --add-port=80/tcp --permanent")).output();
+            let _ = Command::new("sh").arg("-c").arg(format!("{sudo}firewall-cmd --add-port=443/tcp --permanent")).output();
+            let _ = Command::new("sh").arg("-c").arg(format!("{sudo}firewall-cmd --reload")).output();
             steps.push("✓ Порты 80/tcp и 443/tcp разрешены в firewalld".into());
             fw_opened = true;
         }
@@ -205,6 +211,16 @@ pub fn setup_domain(input: &str, nami_port: u16, config_path: &Path) -> Result<D
     #[cfg(unix)]
     {
         if !is_command_available("caddy") {
+            if !is_sys_root && !can_run_sudo() {
+                return Err(format!(
+                    "Caddy не установлен в системе, а сервис Nami работает без прав root.\n\
+                     Для завершения автоматической настройки выполните в консоли сервера через sudo:\n\
+                     \x20 sudo nami domain {domain}\n\
+                     (команда автоматически установит Caddy, настроит порты 80/443 и выпустит SSL-сертификат)\n\
+                     Или установите Caddy вручную: https://caddyserver.com/docs/install"
+                ));
+            }
+
             steps.push("• Caddy не найден, запускаем автоматическую установку...".into());
             install_caddy_linux()?;
             steps.push("✓ Caddy успешно установлен".into());
@@ -225,7 +241,12 @@ pub fn setup_domain(input: &str, nami_port: u16, config_path: &Path) -> Result<D
         );
 
         let caddy_dir = Path::new("/etc/caddy");
-        let _ = std::fs::create_dir_all(caddy_dir);
+        if !caddy_dir.exists() {
+            let _ = std::fs::create_dir_all(caddy_dir);
+            if !caddy_dir.exists() {
+                let _ = Command::new("sh").arg("-c").arg(format!("{sudo}mkdir -p /etc/caddy")).output();
+            }
+        }
         let caddyfile_path = caddy_dir.join("Caddyfile");
 
         // Бэкап старого конфига, если есть
@@ -234,27 +255,59 @@ pub fn setup_domain(input: &str, nami_port: u16, config_path: &Path) -> Result<D
             let _ = std::fs::copy(&caddyfile_path, &backup_path);
         }
 
-        std::fs::write(&caddyfile_path, caddyfile_content)
-            .map_err(|e| format!("Не удалось записать /etc/caddy/Caddyfile: {e}"))?;
+        if let Err(e) = std::fs::write(&caddyfile_path, &caddyfile_content) {
+            let child = Command::new("sh")
+                .arg("-c")
+                .arg(format!("{sudo}tee /etc/caddy/Caddyfile >/dev/null"))
+                .stdin(std::process::Stdio::piped())
+                .spawn();
+            match child {
+                Ok(mut c) => {
+                    if let Some(mut stdin) = c.stdin.take() {
+                        use std::io::Write;
+                        let _ = stdin.write_all(caddyfile_content.as_bytes());
+                    }
+                    let res = c.wait();
+                    if res.is_err() || !res.unwrap().success() {
+                        return Err(format!("Не удалось записать /etc/caddy/Caddyfile: {e}"));
+                    }
+                }
+                Err(se) => return Err(format!("Не удалось записать /etc/caddy/Caddyfile: {e} ({se})")),
+            }
+        }
         steps.push(format!("✓ Конфигурация Caddy сохранена для «{domain}» -> 127.0.0.1:{nami_port}"));
 
         // 5. Запуск и перезагрузка Caddy
-        let _ = Command::new("systemctl").args(["enable", "caddy"]).output();
-        let reload = Command::new("systemctl").args(["reload", "caddy"]).output();
-        let restarted = if reload.is_ok() && reload.unwrap().status.success() {
-            true
-        } else {
-            Command::new("systemctl")
-                .args(["restart", "caddy"])
-                .output()
-                .map(|o| o.status.success())
-                .unwrap_or(false)
-        };
+        let reloaded_via_api = ureq::post("http://127.0.0.1:2019/load")
+            .config()
+            .timeout_global(Some(std::time::Duration::from_secs(3)))
+            .build()
+            .header("Content-Type", "text/caddyfile")
+            .send(caddyfile_content.as_bytes())
+            .map(|r| r.status().is_success())
+            .unwrap_or(false);
 
-        if restarted {
-            steps.push("✓ Служба Caddy запущена: автоматический выпуск Let's Encrypt активен".into());
+        if reloaded_via_api {
+            steps.push("✓ Конфигурация Caddy обновлена на лету через Admin API (localhost:2019)".into());
         } else {
-            steps.push("⚠ Не удалось перезапустить caddy через systemctl (попробуйте sudo systemctl restart caddy)".into());
+            let _ = Command::new("sh").arg("-c").arg(format!("{sudo}systemctl enable caddy")).output();
+            let reload = Command::new("sh").arg("-c").arg(format!("{sudo}systemctl reload caddy")).output();
+            let restarted = if reload.is_ok() && reload.unwrap().status.success() {
+                true
+            } else {
+                Command::new("sh")
+                    .arg("-c")
+                    .arg(format!("{sudo}systemctl restart caddy"))
+                    .output()
+                    .map(|o| o.status.success())
+                    .unwrap_or(false)
+            };
+
+            if restarted {
+                steps.push("✓ Служба Caddy запущена: автоматический выпуск Let's Encrypt активен".into());
+            } else {
+                steps.push("⚠ Не удалось перезапустить caddy через systemctl (попробуйте sudo systemctl restart caddy)".into());
+            }
         }
     }
 
@@ -265,11 +318,32 @@ pub fn setup_domain(input: &str, nami_port: u16, config_path: &Path) -> Result<D
 
     // 6. Обновление external_url в config.toml
     let ext_url = format!("https://{domain}");
-    if config_path.exists() {
-        if let Ok(content) = std::fs::read_to_string(config_path) {
+    let actual_config_path = if config_path.exists() {
+        config_path.to_path_buf()
+    } else {
+        crate::config::find_config_path()
+    };
+
+    if actual_config_path.exists() {
+        if let Ok(content) = std::fs::read_to_string(&actual_config_path) {
             let updated = update_config_external_url(&content, &ext_url);
-            if let Err(e) = std::fs::write(config_path, updated) {
-                steps.push(format!("⚠ Не удалось обновить {}: {e}", config_path.display()));
+            if let Err(_e) = std::fs::write(&actual_config_path, &updated) {
+                #[cfg(unix)]
+                {
+                    let _ = Command::new("sh")
+                        .arg("-c")
+                        .arg(format!("{sudo}tee {} >/dev/null", actual_config_path.display()))
+                        .stdin(std::process::Stdio::piped())
+                        .spawn()
+                        .map(|mut c| {
+                            use std::io::Write;
+                            if let Some(mut s) = c.stdin.take() {
+                                let _ = s.write_all(updated.as_bytes());
+                            }
+                            let _ = c.wait();
+                        });
+                }
+                steps.push(format!("✓ config.toml обновлён: external_url = \"{ext_url}\" (fallback)"));
             } else {
                 steps.push(format!("✓ config.toml обновлён: external_url = \"{ext_url}\""));
             }
@@ -279,7 +353,7 @@ pub fn setup_domain(input: &str, nami_port: u16, config_path: &Path) -> Result<D
     // 7. Перезапуск nami, если работает
     #[cfg(unix)]
     {
-        let _ = Command::new("systemctl").args(["restart", "nami"]).output();
+        let _ = Command::new("sh").arg("-c").arg(format!("{sudo}systemctl restart nami")).output();
         steps.push("✓ Служба nami перезапущена для применения внешнего адреса".into());
     }
 
@@ -295,7 +369,38 @@ pub fn setup_domain(input: &str, nami_port: u16, config_path: &Path) -> Result<D
 }
 
 #[cfg(unix)]
+fn is_root() -> bool {
+    Command::new("id")
+        .arg("-u")
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "0")
+        .unwrap_or(false)
+}
+
+#[cfg(unix)]
+fn can_run_sudo() -> bool {
+    if is_root() {
+        return true;
+    }
+    Command::new("sudo")
+        .args(["-n", "true"])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+#[cfg(unix)]
 fn is_command_available(cmd: &str) -> bool {
+    for dir in ["/usr/bin", "/usr/local/bin", "/bin", "/usr/sbin", "/sbin"] {
+        if Path::new(dir).join(cmd).exists() {
+            return true;
+        }
+    }
+    if let Ok(out) = Command::new("sh").args(["-c", &format!("command -v {cmd}")]).output() {
+        if out.status.success() && !out.stdout.is_empty() {
+            return true;
+        }
+    }
     Command::new("which")
         .arg(cmd)
         .output()
@@ -305,72 +410,116 @@ fn is_command_available(cmd: &str) -> bool {
 
 #[cfg(unix)]
 fn install_caddy_linux() -> Result<(), String> {
-    // 1. Пробуем apt-get (Ubuntu / Debian)
+    let is_sys_root = is_root();
+    let sudo = if is_sys_root { "" } else { "sudo " };
+    let mut errors = Vec::new();
+
+    // 1. Пробуем apt-get (Ubuntu / Debian / Raspberry Pi OS)
     if is_command_available("apt-get") {
-        let script = "apt-get update && \
-            apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl && \
-            curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg 2>/dev/null && \
-            curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list >/dev/null && \
-            apt-get update && \
-            apt-get install -y caddy";
-        let out = Command::new("sh").arg("-c").arg(script).output()
-            .map_err(|e| format!("Ошибка запуска apt: {e}"))?;
-        if out.status.success() {
-            return Ok(());
+        let script = format!(
+            "{sudo}apt-get update -y && \
+             {sudo}apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl gnupg && \
+             curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | {sudo}gpg --dearmor --yes -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg && \
+             curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | {sudo}tee /etc/apt/sources.list.d/caddy-stable.list >/dev/null && \
+             {sudo}apt-get update -y && \
+             {sudo}apt-get install -y caddy"
+        );
+        match Command::new("sh").arg("-c").arg(&script).output() {
+            Ok(out) if out.status.success() => return Ok(()),
+            Ok(out) => {
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                errors.push(format!("apt: {}", stderr.trim()));
+            }
+            Err(e) => errors.push(format!("apt launch: {e}")),
         }
     }
 
-    // 2. Пробуем dnf (Fedora, RHEL)
+    // 2. Пробуем dnf (Fedora, RHEL, Alma, Rocky)
     if is_command_available("dnf") {
-        let script = "dnf install -y 'dnf-command(copr)' && dnf copr enable -y @caddy/caddy && dnf install -y caddy";
-        if let Ok(out) = Command::new("sh").arg("-c").arg(script).output() {
-            if out.status.success() {
-                return Ok(());
+        let script = format!("{sudo}dnf install -y 'dnf-command(copr)' && {sudo}dnf copr enable -y @caddy/caddy && {sudo}dnf install -y caddy");
+        match Command::new("sh").arg("-c").arg(&script).output() {
+            Ok(out) if out.status.success() => return Ok(()),
+            Ok(out) => {
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                errors.push(format!("dnf: {}", stderr.trim()));
             }
+            Err(e) => errors.push(format!("dnf launch: {e}")),
         }
     }
 
-    // 3. Пробуем pacman (Arch Linux)
+    // 3. Пробуем pacman (Arch Linux, Manjaro)
     if is_command_available("pacman") {
-        if let Ok(out) = Command::new("pacman").args(["-S", "--noconfirm", "caddy"]).output() {
-            if out.status.success() {
-                return Ok(());
+        let script = format!("{sudo}pacman -S --noconfirm caddy");
+        match Command::new("sh").arg("-c").arg(&script).output() {
+            Ok(out) if out.status.success() => return Ok(()),
+            Ok(out) => {
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                errors.push(format!("pacman: {}", stderr.trim()));
             }
+            Err(e) => errors.push(format!("pacman launch: {e}")),
         }
     }
 
-    // 4. Универсальный fallback: загрузка готового бинарника caddy
+    // 4. Универсальный fallback: загрузка официального бинарника caddy
     let arch = match std::env::consts::ARCH {
         "x86_64" => "amd64",
         "aarch64" => "arm64",
-        other => return Err(format!("Неподдерживаемая архитектура для автоустановки Caddy: {other}")),
+        other => return Err(format!("Неподдерживаемая архитектура процессора для Caddy: {other}")),
     };
+
     let dl_script = format!(
-        "curl -fsSL 'https://caddyserver.com/api/download?os=linux&arch={arch}' -o /usr/local/bin/caddy && \
-         chmod +x /usr/local/bin/caddy"
+        "(curl -fsSL 'https://caddyserver.com/api/download?os=linux&arch={arch}' -o /tmp/caddy || \
+          wget -qO /tmp/caddy 'https://caddyserver.com/api/download?os=linux&arch={arch}') && \
+         {sudo}install -m 755 /tmp/caddy /usr/local/bin/caddy && \
+         rm -f /tmp/caddy"
     );
-    let out = Command::new("sh").arg("-c").arg(&dl_script).output()
-        .map_err(|e| format!("Ошибка скачивания бинарника caddy: {e}"))?;
-    if out.status.success() {
-        let service = "[Unit]\n\
-            Description=Caddy Web Server\n\
-            After=network.target network-online.target\n\
-            Wants=network-online.target\n\n\
-            [Service]\n\
-            Type=notify\n\
-            ExecStart=/usr/local/bin/caddy run --environ --config /etc/caddy/Caddyfile\n\
-            ExecReload=/usr/local/bin/caddy reload --config /etc/caddy/Caddyfile\n\
-            TimeoutStopSec=5s\n\
-            LimitNOFILE=1048576\n\
-            Restart=always\n\n\
-            [Install]\n\
-            WantedBy=multi-user.target\n";
-        let _ = std::fs::write("/etc/systemd/system/caddy.service", service);
-        let _ = Command::new("systemctl").args(["daemon-reload"]).output();
-        return Ok(());
+
+    match Command::new("sh").arg("-c").arg(&dl_script).output() {
+        Ok(out) if out.status.success() => {
+            let service = "[Unit]\n\
+                Description=Caddy Web Server\n\
+                Documentation=https://caddyserver.com/docs/\n\
+                After=network.target network-online.target\n\
+                Wants=network-online.target\n\n\
+                [Service]\n\
+                Type=notify\n\
+                ExecStart=/usr/local/bin/caddy run --environ --config /etc/caddy/Caddyfile\n\
+                ExecReload=/usr/local/bin/caddy reload --config /etc/caddy/Caddyfile\n\
+                TimeoutStopSec=5s\n\
+                LimitNOFILE=1048576\n\
+                Restart=always\n\n\
+                [Install]\n\
+                WantedBy=multi-user.target\n";
+            let s_path = "/etc/systemd/system/caddy.service";
+            if std::fs::write(s_path, service).is_err() {
+                let _ = Command::new("sh")
+                    .arg("-c")
+                    .arg(format!("cat << 'EOF' | {sudo}tee {s_path} >/dev/null\n{service}\nEOF"))
+                    .output();
+            }
+            let _ = Command::new("sh").arg("-c").arg(format!("{sudo}systemctl daemon-reload")).output();
+            let _ = Command::new("sh").arg("-c").arg(format!("{sudo}systemctl enable caddy")).output();
+            return Ok(());
+        }
+        Ok(out) => {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            errors.push(format!("binary download: {}", stderr.trim()));
+        }
+        Err(e) => errors.push(format!("binary download launch: {e}")),
     }
 
-    Err("Не удалось автоматически установить Caddy. Установите его вручную: https://caddyserver.com/docs/install".into())
+    let detail = if errors.is_empty() {
+        String::new()
+    } else {
+        format!("\nДетали ошибок:\n  • {}", errors.join("\n  • "))
+    };
+
+    Err(format!(
+        "Не удалось автоматически установить Caddy.{detail}\n\
+         Если сервер работает без прав root, выполните команду в консоли через sudo:\n\
+         \x20 sudo nami domain <домен>\n\
+         Либо установите Caddy вручную: https://caddyserver.com/docs/install"
+    ))
 }
 
 /// Заменяет или добавляет external_url в TOML-конфигурацию

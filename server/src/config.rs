@@ -184,3 +184,21 @@ impl Config {
         Ok(cfg)
     }
 }
+
+/// Ищет файл config.toml: сначала проверяет переменную NAMI_CONFIG_PATH,
+/// затем текущую директорию, затем /var/lib/nami/config.toml, затем /etc/nami/config.toml.
+pub fn find_config_path() -> PathBuf {
+    if let Ok(env_path) = std::env::var("NAMI_CONFIG_PATH") {
+        let p = PathBuf::from(env_path);
+        if p.exists() {
+            return p;
+        }
+    }
+    for p in ["config.toml", "/var/lib/nami/config.toml", "/etc/nami/config.toml"] {
+        let path = PathBuf::from(p);
+        if path.exists() {
+            return path;
+        }
+    }
+    PathBuf::from("config.toml")
+}

@@ -99,6 +99,52 @@ else
     echo
 fi
 
+# 5.1 Проверка reverse-proxy Caddy (для автоматического SSL/домена)
+log_info "Проверка reverse proxy (Caddy)..."
+if command -v caddy >/dev/null 2>&1; then
+    log_ok "Caddy найден: $(caddy version 2>/dev/null | head -n1 || echo 'активен')"
+else
+    log_info "Установка Caddy для автоматического выпуска SSL-сертификатов Let's Encrypt..."
+    CADDY_OK=false
+    if command -v apt-get >/dev/null 2>&1; then
+        $SUDO apt-get update -y >/dev/null 2>&1 || true
+        $SUDO apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl gnupg >/dev/null 2>&1 || true
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | $SUDO gpg --dearmor --yes -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg 2>/dev/null || true
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | $SUDO tee /etc/apt/sources.list.d/caddy-stable.list >/dev/null 2>&1 || true
+        $SUDO apt-get update -y >/dev/null 2>&1 || true
+        if $SUDO apt-get install -y caddy >/dev/null 2>&1; then
+            CADDY_OK=true
+        fi
+    elif command -v dnf >/dev/null 2>&1; then
+        $SUDO dnf install -y 'dnf-command(copr)' >/dev/null 2>&1 || true
+        $SUDO dnf copr enable -y @caddy/caddy >/dev/null 2>&1 || true
+        if $SUDO dnf install -y caddy >/dev/null 2>&1; then
+            CADDY_OK=true
+        fi
+    elif command -v pacman >/dev/null 2>&1; then
+        if $SUDO pacman -S --noconfirm caddy >/dev/null 2>&1; then
+            CADDY_OK=true
+        fi
+    fi
+
+    if [ "$CADDY_OK" = false ]; then
+        CADDY_ARCH="amd64"
+        [ "$TARGET_ARCH" = "aarch64" ] && CADDY_ARCH="arm64"
+        if curl -fsSL "https://caddyserver.com/api/download?os=linux&arch=${CADDY_ARCH}" -o "/tmp/caddy_tmp" 2>/dev/null; then
+            $SUDO install -m 755 "/tmp/caddy_tmp" /usr/local/bin/caddy
+            rm -f "/tmp/caddy_tmp"
+            CADDY_OK=true
+        fi
+    fi
+
+    if [ "$CADDY_OK" = true ]; then
+        log_ok "Caddy успешно установлен."
+    else
+        log_warn "Caddy не удалось установить автоматически (не критично, можно установить позже)."
+    fi
+fi
+echo
+
 # 6. Получение бинарника (GitHub Release или fallback на cargo)
 TMP_DIR="$(mktemp -d /tmp/nami-install-XXXXXX)"
 cleanup() {
@@ -207,11 +253,15 @@ else
     log_info "Системный пользователь 'nami' уже существует."
 fi
 
-# 9. Создание рабочей директории
+# 9. Настройка директории данных и каталога конфигурации caddy
 log_info "Настройка директории данных ${DATA_DIR}..."
 $SUDO mkdir -p "$DATA_DIR"
 $SUDO chown -R nami:nami "$DATA_DIR"
 $SUDO chmod 750 "$DATA_DIR"
+
+$SUDO mkdir -p /etc/caddy
+$SUDO chown -R nami:nami /etc/caddy 2>/dev/null || true
+$SUDO chmod 775 /etc/caddy 2>/dev/null || true
 
 # 10. Создание systemd unit
 log_info "Создание systemd службы: ${SYSTEMD_UNIT}..."
@@ -238,7 +288,7 @@ StandardError=journal
 # Sandboxing & Permissions
 ProtectSystem=full
 ProtectHome=read-only
-ReadWritePaths=${DATA_DIR}
+ReadWritePaths=${DATA_DIR} /etc/caddy
 PrivateTmp=true
 NoNewPrivileges=true
 
