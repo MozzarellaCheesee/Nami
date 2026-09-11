@@ -23,7 +23,7 @@ import javax.net.ssl.X509TrustManager
  */
 object NamiServerClient {
     private const val TAG = "NamiServerClient"
-    private const val TIMEOUT_MS = 10_000
+    private const val TIMEOUT_MS = 5_000
 
     /**
      * Куда и с чем ходить. `bases` - все известные адреса сервера (локальный, Tailscale,
@@ -197,8 +197,9 @@ object NamiServerClient {
 
             val bases = (listOfNotNull(ext) + filteredHosts.map { "$scheme://$it:$port" }).distinct()
             for (base in bases) {
-                val token = pairWithCode(base, code, deviceName, fp) ?: continue
-                return Config(base, token, fp, listOf(base) + bases.filter { it != base })
+                val certForBase = if (hostIsIpLiteral(base)) fp else null
+                val token = pairWithCode(base, code, deviceName, certForBase) ?: continue
+                return Config(base, token, certForBase, listOf(base) + bases.filter { it != base })
             }
             return null
         }
@@ -214,12 +215,13 @@ object NamiServerClient {
         // ext - внешний адрес (Tailscale MagicDNS, домен) как есть, с настоящим сертификатом.
         val ext = uri.getQueryParameter("ext")?.trim()?.trimEnd('/')?.takeIf { it.isNotEmpty() }
             ?.let { if (it.startsWith("http")) it else "https://$it" }
-        val bases = hosts.map { "$scheme://$it:$port" } + listOfNotNull(ext)
+        val bases = (listOfNotNull(ext) + hosts.map { "$scheme://$it:$port" }).distinct()
         for (base in bases) {
-            if (!health(base, fp)) continue
-            val token = confirmPairing(base, challenge, deviceName, fp) ?: continue
+            val certForBase = if (hostIsIpLiteral(base)) fp else null
+            if (!health(base, certForBase)) continue
+            val token = confirmPairing(base, challenge, deviceName, certForBase) ?: continue
             // Рабочий адрес - первым, остальные (Tailscale, домен) - как запасные в дорогу.
-            return Config(base, token, fp, listOf(base) + bases.filter { it != base })
+            return Config(base, token, certForBase, listOf(base) + bases.filter { it != base })
         }
         return null
     }
@@ -227,10 +229,11 @@ object NamiServerClient {
     /**
      * Отпечаток SHA-256 сертификата сервера - для ручного подключения по HTTPS без QR
      * (trust on first use): один запрос к `/api/health`, из рукопожатия берётся leaf-сертификат.
-     * Null для `http://` или при ошибке соединения.
+     * Null для `http://`, для доменных имён с публичным CA или при ошибке соединения.
      */
     fun fetchCertSha256(baseUrl: String): String? {
         if (!baseUrl.startsWith("https://")) return null
+        if (!hostIsIpLiteral(baseUrl)) return null
         return runCatching {
             val captured = arrayOfNulls<String>(1)
             val conn = (URL("$baseUrl/api/health").openConnection() as HttpsURLConnection).apply {
@@ -462,7 +465,7 @@ object NamiServerClient {
         code to text
     }.onFailure { Log.w(TAG, "$method $url: ${it.message}") }.getOrNull()
 
-    private fun hostIsIpLiteral(url: String): Boolean {
+    fun hostIsIpLiteral(url: String): Boolean {
         val host = runCatching { URL(url).host }.getOrNull().orEmpty()
         return host.matches(Regex("^\\d{1,3}(\\.\\d{1,3}){3}$")) || host.contains(':')
     }
