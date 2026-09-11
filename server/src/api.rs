@@ -1122,15 +1122,39 @@ async fn setup_page(
         // видимость библиотеки. В одиночном режиме владельца нет - и привязки тоже.
         auth::create_code(&db, ident.and_then(|i| i.user_id))?
     };
-    let host = req
-        .headers()
-        .get(header::HOST)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("localhost")
-        .split(':')
-        .next()
-        .unwrap_or("localhost")
-        .to_string();
+    let mut hosts = Vec::new();
+    if let Some(host_header) = req.headers().get(header::HOST) {
+        if let Ok(host_str) = host_header.to_str() {
+            let h = host_str.split(':').next().unwrap_or(host_str).trim();
+            if !h.is_empty() && h != "localhost" && h != "127.0.0.1" {
+                hosts.push(h.to_string());
+            }
+        }
+    }
+
+    if !st.cfg.external_url.trim().is_empty() {
+        let ext = st.cfg.external_url.trim()
+            .trim_start_matches("https://")
+            .trim_start_matches("http://");
+        let ext_host = ext.split('/').next().unwrap_or("").split(':').next().unwrap_or("").trim();
+        if !ext_host.is_empty() && !hosts.contains(&ext_host.to_string()) {
+            hosts.push(ext_host.to_string());
+        }
+    }
+
+    for ip in auth::local_ips() {
+        let ip_s = ip.to_string();
+        if !hosts.contains(&ip_s) {
+            hosts.push(ip_s);
+        }
+    }
+
+    if hosts.is_empty() {
+        hosts.push("localhost".to_string());
+    }
+
+    let primary_host = hosts.first().unwrap().clone();
+    let hosts_param = hosts.join(",");
 
     let (fp_part, warning) = match &st.fingerprint {
         Some(fp) => (format!("&fp=sha256:{fp}"), String::new()),
@@ -1142,7 +1166,7 @@ async fn setup_page(
         ),
     };
     let uri = format!(
-        "nami://pair?v=1&host={host}&port={}{fp_part}&code={code}",
+        "nami://pair?v=1&host={primary_host}&hosts={hosts_param}&port={}{fp_part}&code={code}",
         st.cfg.port
     );
     let qr = qrcode::QrCode::new(uri.as_bytes())

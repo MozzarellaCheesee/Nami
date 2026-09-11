@@ -171,16 +171,33 @@ object NamiServerClient {
         val uri = runCatching { android.net.Uri.parse(uriString) }.getOrNull() ?: return null
         if (uri.scheme != "nami") return null
 
-        // 1. Формат nami://pair?v=1&host=...&port=...&fp=...&code=...
+        // 1. Формат nami://pair?v=1&host=...&hosts=...&port=...&fp=...&code=...
         if (uri.host == "pair") {
-            val host = uri.getQueryParameter("host") ?: return null
             val port = uri.getQueryParameter("port")?.toIntOrNull() ?: 4533
             val fp = uri.getQueryParameter("fp")?.removePrefix("sha256:")
             val code = uri.getQueryParameter("code") ?: return null
             val scheme = if (fp != null) "https" else "http"
-            val base = "$scheme://$host:$port"
-            val token = pairWithCode(base, code, deviceName, fp) ?: return null
-            return Config(base, token, fp, listOf(base))
+
+            val hostParam = uri.getQueryParameter("host")
+            val hostsParam = uri.getQueryParameter("hosts")
+                ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
+
+            val allHosts = (listOfNotNull(hostParam) + hostsParam).distinct()
+            // Отфильтровываем localhost и 127.0.0.1, если есть другие сетевые адреса
+            val filteredHosts = if (allHosts.any { it != "localhost" && it != "127.0.0.1" }) {
+                allHosts.filter { it != "localhost" && it != "127.0.0.1" }
+            } else {
+                allHosts
+            }
+
+            if (filteredHosts.isEmpty()) return null
+
+            val bases = filteredHosts.map { "$scheme://$it:$port" }
+            for (base in bases) {
+                val token = pairWithCode(base, code, deviceName, fp) ?: continue
+                return Config(base, token, fp, listOf(base) + bases.filter { it != base })
+            }
+            return null
         }
 
         // 2. Формат nami://auth?challenge=...&fp=sha256:...&port=...&hosts=ip1,ip2
