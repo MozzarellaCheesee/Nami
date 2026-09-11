@@ -387,6 +387,11 @@ pub fn set_library_mode(conn: &Connection, mode: LibraryMode) -> rusqlite::Resul
 /// у которого уже есть `WHERE`. Пути подставляются параметрами, а не конкатенацией.
 /// `prefix` - псевдоним таблицы tracks с точкой (`"t."`) или пустая строка.
 pub fn visibility_at(conn: &Connection, ident: &Ident, prefix: &str) -> (String, Vec<Value>) {
+    // Временный токен Jam открывает только треки активной сессии через jam::Registry.
+    // Обычные непривязанные устройства сохраняют прежний доступ ко всей библиотеке.
+    if is_jam_guest(conn, ident) {
+        return (" AND 1=0".to_string(), Vec::new());
+    }
     let Some(uid) = ident.user_id else {
         // Одиночный режим (устройство этапов 1-2, пользователей нет) - видно всё.
         return (String::new(), Vec::new());
@@ -440,7 +445,7 @@ pub fn folder_access(conn: &Connection, user_id: i64) -> Vec<String> {
 /// Видит ли пользователь конкретный трек - та же проверка, что и в списке,
 /// но одним запросом (нужна перед отдачей файла).
 pub fn can_see_track(conn: &Connection, ident: &Ident, track_id: i64) -> bool {
-    if ident.user_id.is_none() && ident.device_id.is_some() {
+    if ident.user_id.is_none() && ident.device_id.is_some() && !is_jam_guest(conn, ident) {
         return conn
             .query_row("SELECT 1 FROM tracks WHERE id=?1", [track_id], |_| Ok(()))
             .is_ok();
@@ -453,6 +458,17 @@ pub fn can_see_track(conn: &Connection, ident: &Ident, track_id: i64) -> bool {
         |_| Ok(()),
     )
     .is_ok()
+}
+
+fn is_jam_guest(conn: &Connection, ident: &Ident) -> bool {
+    ident.device_id.is_some_and(|id| {
+        conn.query_row(
+            "SELECT 1 FROM devices WHERE id=?1 AND name LIKE 'Jam Guest (%)'",
+            [id],
+            |_| Ok(()),
+        )
+        .is_ok()
+    })
 }
 
 #[cfg(test)]
@@ -604,6 +620,21 @@ mod tests {
         assert_eq!(visible(&c, &ident_b), vec!["/муз/рок/один.mp3"]);
         assert!(can_see_track(&c, &ident_b, rock));
         assert!(!can_see_track(&c, &ident_b, rock + 1));
+    }
+
+    #[test]
+    fn гостевой_токен_джема_не_открывает_библиотеку() {
+        let c = db();
+        let track = add_track(&c, "/муз/секрет.mp3", 0);
+        c.execute(
+            "INSERT INTO devices (name, token_hash, created_at) VALUES ('Jam Guest (ABC234)', 'h', 0)",
+            [],
+        )
+        .unwrap();
+        let ident = Ident { user_id: None, device_id: Some(c.last_insert_rowid()) };
+
+        assert!(!can_see_track(&c, &ident, track));
+        assert_eq!(visible(&c, &ident), Vec::<String>::new());
     }
 
     #[test]

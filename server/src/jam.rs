@@ -29,8 +29,6 @@ use crate::users::{self, Ident};
 const BUFFER: usize = 16;
 
 pub struct Session {
-    /// Ключ библиотеки: участвовать можно только внутри одной (см. `library_key`).
-    library: i64,
     host_ident: i64,
     /// Общая очередь - её может пополнить любой участник.
     queue: Vec<i64>,
@@ -42,7 +40,10 @@ pub struct Session {
 
 /// Все живые сессии процесса.
 #[derive(Default)]
-pub struct Registry(Mutex<HashMap<String, Session>>);
+pub struct Registry(
+    Mutex<HashMap<String, Session>>,
+    Mutex<HashMap<(Option<i64>, Option<i64>), String>>,
+);
 
 /// Одна запись журнала джемов.
 #[derive(Serialize)]
@@ -63,6 +64,22 @@ impl Registry {
     /// Список кодов всех активных в памяти сессий.
     pub fn active_codes(&self) -> Vec<String> {
         self.0.lock().unwrap().keys().cloned().collect()
+    }
+
+    fn register(&self, ident: &Ident, code: &str) {
+        self.1.lock().unwrap().insert((ident.user_id, ident.device_id), code.to_string());
+    }
+
+    fn unregister(&self, ident: &Ident) {
+        self.1.lock().unwrap().remove(&(ident.user_id, ident.device_id));
+    }
+
+    pub fn can_access_track(&self, ident: &Ident, track_id: i64) -> bool {
+        let code = self.1.lock().unwrap().get(&(ident.user_id, ident.device_id)).cloned();
+        let Some(code) = code else { return false };
+        self.0.lock().unwrap().get(&code).is_some_and(|s| {
+            s.current_track == Some(track_id) || s.queue.contains(&track_id)
+        })
     }
 
     /// Журнал джемов библиотеки, свежие сверху.
@@ -124,6 +141,7 @@ impl Membership {
 }
 
 pub fn cleanup_host(st: &Shared, m: &mut Membership, ident: &Ident) {
+    st.jams.unregister(ident);
     if let Some(code) = m.code.take() {
         let db = st.db.lock().unwrap();
         let mut reg = st.jams.0.lock().unwrap();
@@ -200,7 +218,6 @@ pub fn handle(st: &Shared, ident: &Ident, m: &mut Membership, text: &str) -> Opt
                 reg.insert(
                     code.clone(),
                     Session {
-                        library,
                         host_ident: ident.state_key(),
                         queue: Vec::new(),
                         current_track: None,
@@ -213,22 +230,20 @@ pub fn handle(st: &Shared, ident: &Ident, m: &mut Membership, text: &str) -> Opt
             };
             m.code = Some(code.clone());
             m.rx = Some(rx);
+            st.jams.register(ident, &code);
             Some(serde_json::json!({ "type": "jam_created", "code": code }).to_string())
         }
         "jam_join" => {
-            let library = library_key(st, ident);
             let code = msg.code?.trim().to_uppercase();
             let db = st.db.lock().unwrap();
             let mut reg = st.jams.0.lock().unwrap();
             let Some(s) = reg.get_mut(&code) else {
                 return err("нет такой сессии");
             };
-            // Раздельные библиотеки закрыты друг для друга по определению. Гости джема с кодом допускаются.
-            if ident.user_id.is_some() && s.library != library {
-                return err("сессия в другой библиотеке");
-            }
+            // Код комнаты даёт участнику доступ только к текущему треку и очереди.
             m.rx = Some(s.tx.subscribe());
             m.code = Some(code.clone());
+            st.jams.register(ident, &code);
             let queue = s.queue.clone();
             let current_track = s.current_track;
             let position_ms = s.position_ms;
@@ -252,6 +267,7 @@ pub fn handle(st: &Shared, ident: &Ident, m: &mut Membership, text: &str) -> Opt
             )
         }
         "jam_leave" => {
+            st.jams.unregister(ident);
             m.rx = None;
             if let Some(code) = m.code.take() {
                 let db = st.db.lock().unwrap();
@@ -496,5 +512,30 @@ mod tests {
         tx.send("играет трек 7".into()).unwrap();
         assert_eq!(a.try_recv().unwrap(), "играет трек 7");
         assert_eq!(b.try_recv().unwrap(), "играет трек 7");
+    }
+
+    #[test]
+    fn участник_видит_только_треки_активного_джема() {
+        let registry = Registry::default();
+        let (tx, _rx) = broadcast::channel(BUFFER);
+        registry.0.lock().unwrap().insert(
+            "ABC234".into(),
+            Session {
+                host_ident: 1,
+                queue: vec![8],
+                current_track: Some(7),
+                position_ms: 0,
+                at: 0,
+                tx,
+            },
+        );
+        let ident = Ident { user_id: Some(2), device_id: None };
+        registry.register(&ident, "ABC234");
+
+        assert!(registry.can_access_track(&ident, 7));
+        assert!(registry.can_access_track(&ident, 8));
+        assert!(!registry.can_access_track(&ident, 9));
+        registry.unregister(&ident);
+        assert!(!registry.can_access_track(&ident, 7));
     }
 }

@@ -59,6 +59,10 @@ impl AppState {
 
 pub type Shared = Arc<AppState>;
 
+fn can_access_track(st: &Shared, ident: &Ident, id: i64) -> bool {
+    users::can_see_track(&st.db.lock().unwrap(), ident, id) || st.jams.can_access_track(ident, id)
+}
+
 /// Ошибка API одной строкой - дерева причин наружу не отдаём.
 struct ApiError(StatusCode, String);
 
@@ -367,16 +371,13 @@ async fn track(
     Extension(ident): Extension<Ident>,
     Path(id): Path<i64>,
 ) -> ApiResult<Json<TrackDetail>> {
+    if !can_access_track(&st, &ident, id) {
+        return Err(ApiError(StatusCode::NOT_FOUND, "нет такого трека".into()));
+    }
     let db = st.db.lock().unwrap();
-    let (clause, mut params) = if ident.user_id.is_none() && ident.device_id.is_some() {
-        (String::new(), Vec::new())
-    } else {
-        users::visibility(&db, &ident)
-    };
-    params.insert(0, rusqlite::types::Value::Integer(id));
     db.query_row(
-        &format!("SELECT {TRACK_COLS}, fingerprint, analyzed_at FROM tracks WHERE id=?{clause}"),
-        rusqlite::params_from_iter(params),
+        &format!("SELECT {TRACK_COLS}, fingerprint, analyzed_at FROM tracks WHERE id=?1"),
+        [id],
         |r| {
             Ok(TrackDetail {
                 track: row_to_track(r)?,
@@ -407,7 +408,7 @@ async fn stream(
     Query(q): Query<StreamQuery>,
     req: Request,
 ) -> Response {
-    if !users::can_see_track(&st.db.lock().unwrap(), &ident, id) {
+    if !can_access_track(&st, &ident, id) {
         return ApiError(StatusCode::NOT_FOUND, "нет такого трека".into()).into_response();
     }
     serve_track(st, id, q.profile.as_deref(), req).await
@@ -430,7 +431,7 @@ async fn stream_auto(
     Query(q): Query<StreamAutoQuery>,
     req: Request,
 ) -> Response {
-    if !users::can_see_track(&st.db.lock().unwrap(), &ident, id) {
+    if !can_access_track(&st, &ident, id) {
         return ApiError(StatusCode::NOT_FOUND, "нет такого трека".into()).into_response();
     }
 
@@ -479,11 +480,11 @@ async fn artwork_handler(
 
 /// Общая отдача обложки: и для `/api/tracks/{id}/artwork`, и для Subsonic `getCoverArt`.
 pub async fn serve_artwork(st: Shared, id: i64, ident: &Ident) -> Response {
+    if !can_access_track(&st, ident, id) {
+        return ApiError(StatusCode::NOT_FOUND, "нет такого трека".into()).into_response();
+    }
     let path: Option<String> = {
         let db = st.db.lock().unwrap();
-        if !users::can_see_track(&db, ident, id) {
-            return ApiError(StatusCode::NOT_FOUND, "нет такого трека".into()).into_response();
-        }
         db.query_row("SELECT path FROM tracks WHERE id=?1", [id], |r| r.get(0)).ok()
     };
     let Some((bytes, mime)) = path.and_then(|p| crate::artwork::load(&p)) else {
@@ -663,10 +664,10 @@ async fn waveform_handler(
     Extension(ident): Extension<Ident>,
     Path(id): Path<i64>,
 ) -> Response {
-    let db = st.db.lock().unwrap();
-    if !users::can_see_track(&db, &ident, id) {
+    if !can_access_track(&st, &ident, id) {
         return ApiError(StatusCode::NOT_FOUND, "нет такого трека".into()).into_response();
     }
+    let db = st.db.lock().unwrap();
     let raw: Option<String> =
         db.query_row("SELECT waveform FROM tracks WHERE id=?1", [id], |r| r.get(0)).ok().flatten();
     match raw {
@@ -683,10 +684,10 @@ async fn waveform_handler(
 
 /// Путь, размер и mtime трека - если он видим запрашивающему.
 fn track_src(st: &Shared, ident: &Ident, id: i64) -> Option<(std::path::PathBuf, i64, i64)> {
-    let db = st.db.lock().unwrap();
-    if !users::can_see_track(&db, ident, id) {
+    if !can_access_track(st, ident, id) {
         return None;
     }
+    let db = st.db.lock().unwrap();
     db.query_row("SELECT path, size_bytes, mtime FROM tracks WHERE id=?1", [id], |r| {
         Ok((r.get::<_, String>(0)?, r.get(1)?, r.get(2)?))
     })
