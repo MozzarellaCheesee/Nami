@@ -65,6 +65,8 @@ jobs:
 
       - name: Build Release APK
         shell: bash
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs='-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+UseG1GC' -Dfile.encoding=UTF-8"
         run: |
           NDK_DIR="${ANDROID_HOME:-/usr/local/lib/android/sdk}/ndk"
           NDK_VER=$(ls -1 "$NDK_DIR" 2>/dev/null | sort -V | tail -n 1)
