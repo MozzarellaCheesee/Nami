@@ -1189,6 +1189,12 @@ async fn setup_page(
                     .into(),
             ));
         }
+        if users::count(&db) > 0 && ident.as_ref().is_some_and(|i| i.user_id.is_none()) {
+            return Err(ApiError(
+                StatusCode::FORBIDDEN,
+                "сначала привяжите это устройство к аккаунту владельца".into(),
+            ));
+        }
         // Новое устройство достаётся тому, кто печатает код: свои плейлисты, своя
         // видимость библиотеки. В одиночном режиме владельца нет - и привязки тоже.
         let owner = ident.as_ref().is_some_and(|i| need_owner(&db, i).is_ok());

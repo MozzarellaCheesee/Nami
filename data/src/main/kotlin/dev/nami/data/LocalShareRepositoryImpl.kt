@@ -22,6 +22,7 @@ import dev.nami.domain.LocalShareRepository
 import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerRepository
 import dev.nami.domain.PlaylistRepository
+import dev.nami.domain.SettingsRepository
 import dev.nami.domain.WifiDirectPeer
 import dev.nami.player.LocalHttpServer
 import dev.nami.player.localIpAddress
@@ -74,6 +75,7 @@ class LocalShareRepositoryImpl @Inject constructor(
     private val libraryRepository: LibraryRepository,
     private val playerRepository: PlayerRepository,
     private val playlistRepository: PlaylistRepository,
+    private val settingsRepository: SettingsRepository,
 ) : LocalShareRepository {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val nsdManager by lazy { context.getSystemService(Context.NSD_SERVICE) as NsdManager }
@@ -202,6 +204,10 @@ class LocalShareRepositoryImpl @Inject constructor(
         val playing = playerRepository.state.value as? PlaybackState.Playing ?: return null
         val queue = playerRepository.queue.value
         val nowPlaying = queue.nowPlaying ?: return null
+        // Серверный URI нельзя раздавать как локальный файл. Для него предназначен Jam.
+        if (nowPlaying.id.value.startsWith("server_") || nowPlaying.id.value.startsWith("jam_")) {
+            return null
+        }
         val upcoming = JSONArray()
         queue.upcoming.take(PREFETCH_COUNT).forEach { upcoming.put(it.track.id.value) }
         return JSONObject().apply {
@@ -501,7 +507,19 @@ class LocalShareRepositoryImpl @Inject constructor(
     // ------------------------------------------------------------------ слушать вместе
 
     override fun setListenTogetherHost(enabled: Boolean) {
-        _listenTogetherHostEnabled.value = enabled
+        if (!enabled) {
+            _listenTogetherHostEnabled.value = false
+            return
+        }
+        scope.launch {
+            if (configuredServerReachable()) {
+                _listenTogetherHostEnabled.value = false
+                _listenTogetherError.value = "Сервер NAMI доступен — используйте Джем"
+            } else {
+                _listenTogetherError.value = null
+                _listenTogetherHostEnabled.value = true
+            }
+        }
     }
 
     override fun joinListenTogether(device: DiscoveredDevice) {
@@ -509,6 +527,11 @@ class LocalShareRepositoryImpl @Inject constructor(
         _listenTogetherError.value = null
         guestHostDevice = device
         guestJob = scope.launch {
+            if (configuredServerReachable()) {
+                guestHostDevice = null
+                _listenTogetherError.value = "Сервер NAMI доступен — используйте Джем"
+                return@launch
+            }
             // Раньше /info звался через runBlocking прямо из обработчика нажатия, то есть в main-
             // потоке - Android такой запрос не выполняет вообще (NetworkOnMainThreadException),
             // имя хоста всегда молча откатывалось на адрес устройства.
@@ -596,6 +619,21 @@ class LocalShareRepositoryImpl @Inject constructor(
             if (wasPlayingFromCache) withContext(Dispatchers.Main) { playerRepository.stop() }
             listenTogetherCacheDir.deleteRecursively()
         }
+    }
+
+    private fun configuredServerReachable(): Boolean {
+        val token = settingsRepository.namiServerToken.value?.takeIf { it.isNotBlank() } ?: return false
+        val bases = settingsRepository.namiServerUrl.value.split('\n', ',')
+            .map { it.trim().trimEnd('/') }.filter { it.isNotEmpty() }
+        if (bases.isEmpty()) return false
+        return NamiServerClient.reachableBase(
+            NamiServerClient.Config(
+                baseUrl = bases.first(),
+                token = token,
+                certSha256 = settingsRepository.namiServerCertSha256.value,
+                bases = bases,
+            ),
+        ) != null
     }
 
     override suspend fun addCurrentListenTogetherTrackToLibrary(): Boolean = withContext(Dispatchers.IO) {
