@@ -29,6 +29,12 @@ interface JamRepository {
     /** Active host URL for this session (either configured server or guest server). */
     val activeHostUrl: StateFlow<String?>
 
+    /** All known host URLs for the configured server (local IP, external domain, Tailscale). */
+    val allHostUrls: StateFlow<List<String>>
+
+    /** Recently used Jam host addresses for guest fallback. */
+    val recentHosts: StateFlow<List<String>>
+
     /** Create a new Jam room. On success, [session] will emit with isHost=true. */
     fun createRoom()
 

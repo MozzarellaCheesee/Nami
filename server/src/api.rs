@@ -143,6 +143,9 @@ pub fn router(state: Shared) -> Router {
         .route("/setup", get(setup_page))
         // Гостевая авторизация в Jam без аккаунта
         .route("/api/jam/guest-auth", post(jam_guest_auth))
+        // Веб-страница приглашения в Jam для браузера и мессенджеров
+        .route("/jam", get(jam_web_page))
+        .route("/jam/{code}", get(jam_web_page_code))
         // Гостевые ссылки: без логина и без приложения, проверка - токен в пути.
         .route("/share/{token}", get(share_page))
         .route("/share/{token}/stream/{id}", get(share_stream))
@@ -2198,4 +2201,45 @@ async fn metrics_handler(State(st): State<Shared>) -> Response {
         st.metrics.export(),
     )
         .into_response()
+}
+
+#[derive(Deserialize)]
+struct JamWebQuery {
+    #[serde(default)]
+    code: String,
+}
+
+async fn jam_web_page(
+    State(st): State<Shared>,
+    Query(q): Query<JamWebQuery>,
+    req: Request,
+) -> Response {
+    render_jam_web_page(&st, &q.code, &req)
+}
+
+async fn jam_web_page_code(
+    State(st): State<Shared>,
+    Path(code): Path<String>,
+    req: Request,
+) -> Response {
+    render_jam_web_page(&st, &code, &req)
+}
+
+fn render_jam_web_page(st: &Shared, code: &str, req: &Request) -> Response {
+    let host_header = req
+        .headers()
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("localhost:4533");
+    let scheme = if req.uri().scheme_str() == Some("https") || host_header.contains("443") {
+        "https"
+    } else {
+        "http"
+    };
+    let server_base = if !st.cfg.external_url.is_empty() {
+        st.cfg.external_url.trim_end_matches('/').to_string()
+    } else {
+        format!("{scheme}://{host_header}")
+    };
+    Html(crate::jam::page(code, &server_base)).into_response()
 }

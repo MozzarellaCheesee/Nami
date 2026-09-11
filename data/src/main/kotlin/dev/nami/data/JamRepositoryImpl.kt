@@ -91,6 +91,29 @@ class JamRepositoryImpl @Inject constructor(
             !settingsRepository.namiServerToken.value.isNullOrBlank() && settingsRepository.namiServerUrl.value.isNotBlank(),
         )
 
+    override val allHostUrls: StateFlow<List<String>> =
+        combine(settingsRepository.namiServerUrl, settingsRepository.namiServerToken) { url, _ ->
+            url.split('\n', ',').map { it.trim().trimEnd('/') }.filter { it.isNotEmpty() }
+        }.stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    private val prefs = context.getSharedPreferences("nami_jam_prefs", Context.MODE_PRIVATE)
+    private val _recentHosts = MutableStateFlow<List<String>>(loadRecentHosts())
+    override val recentHosts: StateFlow<List<String>> = _recentHosts
+
+    private fun loadRecentHosts(): List<String> {
+        val raw = prefs.getString("recent_hosts", null) ?: return emptyList()
+        return raw.split(";").map { it.trim().trimEnd('/') }.filter { it.isNotEmpty() }
+    }
+
+    private fun saveRecentHost(host: String) {
+        val clean = host.trim().trimEnd('/')
+        if (clean.isBlank()) return
+        val current = _recentHosts.value.filter { !it.equals(clean, ignoreCase = true) }
+        val updated = (listOf(clean) + current).take(5)
+        _recentHosts.value = updated
+        prefs.edit().putString("recent_hosts", updated.joinToString(";")).apply()
+    }
+
     @Volatile private var webSocket: WebSocket? = null
     private var okHttpClient: OkHttpClient? = null
     @Volatile private var isConnecting = false
@@ -123,19 +146,42 @@ class JamRepositoryImpl @Inject constructor(
         intentionalClose = false
 
         var parsedCode = code.trim()
-        var parsedHost = hostUrl?.trim()?.trimEnd('/')
+        val candidateHosts = mutableListOf<String>()
+        if (!hostUrl.isNullOrBlank()) {
+            candidateHosts.addAll(hostUrl.split(',', '\n').map { it.trim().trimEnd('/') }.filter { it.isNotEmpty() })
+        }
 
-        // Распознаём глубокие ссылки вида nami://jam?code=ABC234&host=http://...
-        if (parsedCode.startsWith("nami://", ignoreCase = true) || parsedCode.contains("?code=")) {
+        // 1. Ссылки вида nami://jam?code=ABC234&host=...&hosts=host1,host2
+        if (parsedCode.startsWith("nami://", ignoreCase = true) || parsedCode.contains("?code=") || parsedCode.contains("&code=")) {
             val uri = runCatching { Uri.parse(parsedCode) }.getOrNull()
             if (uri != null) {
                 uri.getQueryParameter("code")?.let { parsedCode = it }
-                uri.getQueryParameter("host")?.let { parsedHost = it.trimEnd('/') }
+                uri.getQueryParameter("host")?.let { candidateHosts.add(it.trim().trimEnd('/')) }
+                uri.getQueryParameter("hosts")?.split(',')?.forEach { candidateHosts.add(it.trim().trimEnd('/')) }
+            }
+        } else if (parsedCode.startsWith("http://", ignoreCase = true) || parsedCode.startsWith("https://", ignoreCase = true)) {
+            // 2. Веб-ссылки вида http(s)://host:port/jam?code=ABC234 или /jam/ABC234
+            val uri = runCatching { Uri.parse(parsedCode) }.getOrNull()
+            if (uri != null) {
+                val qCode = uri.getQueryParameter("code")
+                if (!qCode.isNullOrBlank()) {
+                    parsedCode = qCode
+                } else {
+                    val last = uri.lastPathSegment
+                    if (!last.isNullOrBlank() && last != "jam") {
+                        parsedCode = last
+                    }
+                }
+                val base = "${uri.scheme}://${uri.authority}"
+                candidateHosts.add(base)
+                uri.getQueryParameter("host")?.let { candidateHosts.add(it.trim().trimEnd('/')) }
+                uri.getQueryParameter("hosts")?.split(',')?.forEach { candidateHosts.add(it.trim().trimEnd('/')) }
             }
         } else if (parsedCode.contains("@")) {
+            // 3. CODE@HOST
             val parts = parsedCode.split("@", limit = 2)
             parsedCode = parts[0].trim()
-            parsedHost = parts[1].trim().trimEnd('/')
+            candidateHosts.add(parts[1].trim().trimEnd('/'))
         }
 
         val trimmedCode = parsedCode.uppercase().filter { it in "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" }
@@ -145,11 +191,12 @@ class JamRepositoryImpl @Inject constructor(
             return
         }
 
+        val uniqueCandidates = candidateHosts.map { it.trim().trimEnd('/') }.filter { it.isNotEmpty() }.distinct()
+
         scope.launch {
-            val targetHost = parsedHost
-            if (targetHost != null) {
-                Log.d(TAG, "Connecting to Jam as guest to $targetHost with code $trimmedCode")
-                connectAsGuest(targetHost, trimmedCode)
+            if (uniqueCandidates.isNotEmpty()) {
+                Log.d(TAG, "Connecting to Jam as guest with code $trimmedCode and candidates $uniqueCandidates")
+                connectAsGuest(uniqueCandidates, trimmedCode)
             } else if (isServerConfigured.value) {
                 Log.d(TAG, "Connecting to Jam via configured server with code $trimmedCode")
                 connectWebSocket(onOpened = {
@@ -159,13 +206,21 @@ class JamRepositoryImpl @Inject constructor(
                     })
                 })
             } else {
-                Log.d(TAG, "Server not configured, searching for Jam $trimmedCode on Wi-Fi via NSD...")
+                Log.d(TAG, "Searching for Jam $trimmedCode on Wi-Fi via NSD...")
                 val discovered = discoverJamHostOnWifi(trimmedCode)
                 if (discovered != null) {
                     Log.d(TAG, "Discovered Jam host on Wi-Fi: $discovered")
-                    connectAsGuest(discovered, trimmedCode)
+                    connectAsGuest(listOf(discovered), trimmedCode)
                 } else {
-                    _error.value = "Сервер не найден в локальной сети. Отсканируйте QR-код или укажите адрес сервера."
+                    // Пробуем проверить недавние серверы хостов
+                    val recent = recentHosts.value
+                    val fromRecent = if (recent.isNotEmpty()) probeReachableHost(recent, trimmedCode) else null
+                    if (fromRecent != null) {
+                        Log.d(TAG, "Found Jam room on recent host: ${fromRecent.first}")
+                        connectAsGuestWithToken(fromRecent.first, fromRecent.second, trimmedCode)
+                    } else {
+                        _error.value = "Комната не найдена в локальной сети. Если организатор не в вашем Wi-Fi, вставьте ссылку на комнату или укажите адрес сервера."
+                    }
                 }
             }
         }
@@ -228,36 +283,59 @@ class JamRepositoryImpl @Inject constructor(
         return ws.send(text)
     }
 
-    private suspend fun connectAsGuest(hostUrl: String, code: String) = withContext(Dispatchers.IO) {
-        val cleanHost = hostUrl.trim().trimEnd('/')
+    private suspend fun probeReachableHost(hosts: List<String>, code: String): Pair<String, String>? = withContext(Dispatchers.IO) {
+        val client = okHttpClient ?: OkHttpClient.Builder()
+            .connectTimeout(3, TimeUnit.SECONDS)
+            .readTimeout(3, TimeUnit.SECONDS)
+            .build()
+
+        val jsonReq = JSONObject().apply { put("code", code) }
+        val mediaType = "application/json; charset=utf-8".toMediaType()
+
+        for (host in hosts) {
+            val cleanHost = host.trim().trimEnd('/')
+            val token = runCatching {
+                val reqBody = jsonReq.toString().toRequestBody(mediaType)
+                val authReq = Request.Builder()
+                    .url("$cleanHost/api/jam/guest-auth")
+                    .post(reqBody)
+                    .build()
+                client.newCall(authReq).execute().use { resp ->
+                    if (resp.isSuccessful) {
+                        val bodyStr = resp.body?.string().orEmpty()
+                        val json = JSONObject(bodyStr)
+                        json.optString("token").ifBlank { null }
+                    } else null
+                }
+            }.getOrNull()
+
+            if (token != null) {
+                return@withContext cleanHost to token
+            }
+        }
+        null
+    }
+
+    private suspend fun connectAsGuest(hostUrl: String, code: String) =
+        connectAsGuest(listOf(hostUrl), code)
+
+    private suspend fun connectAsGuest(hosts: List<String>, code: String) = withContext(Dispatchers.IO) {
+        if (hosts.isEmpty()) {
+            _error.value = "Не указан адрес сервера"
+            return@withContext
+        }
+
+        val probed = probeReachableHost(hosts, code)
+        val targetHost = probed?.first ?: hosts.first()
+        val targetToken = probed?.second
+
+        connectAsGuestWithToken(targetHost, targetToken, code)
+    }
+
+    private fun connectAsGuestWithToken(cleanHost: String, token: String?, code: String) {
+        saveRecentHost(cleanHost)
         guestServerUrl = cleanHost
         _activeHostUrl.value = cleanHost
-
-        val client = okHttpClient ?: OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(0, TimeUnit.MILLISECONDS)
-            .pingInterval(30, TimeUnit.SECONDS)
-            .build()
-        okHttpClient = client
-
-        // Запрашиваем гостевую авторизацию у сервера хоста
-        val token = runCatching {
-            val jsonReq = JSONObject().apply { put("code", code) }
-            val mediaType = "application/json; charset=utf-8".toMediaType()
-            val reqBody = jsonReq.toString().toRequestBody(mediaType)
-            val authReq = Request.Builder()
-                .url("$cleanHost/api/jam/guest-auth")
-                .post(reqBody)
-                .build()
-            client.newCall(authReq).execute().use { resp ->
-                if (resp.isSuccessful) {
-                    val bodyStr = resp.body?.string().orEmpty()
-                    val json = JSONObject(bodyStr)
-                    json.optString("token").ifBlank { null }
-                } else null
-            }
-        }.getOrNull()
-
         guestToken = token
 
         val wsBase = when {
