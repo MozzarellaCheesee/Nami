@@ -19,6 +19,7 @@ data class PlayableTrack(
      * cueEndMs, вместо естественного конца файла. */
     val cueStartMs: Long? = null,
     val cueEndMs: Long? = null,
+    val bpm: Float? = null,
 )
 
 enum class QueueOrigin { MANUAL, CONTEXT }

@@ -2,6 +2,7 @@ package dev.nami.player
 
 import android.content.Context
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -61,8 +62,18 @@ class DjRepositoryImpl @Inject constructor(@ApplicationContext context: Context)
     override fun loadDeck(deck: DjDeck, track: PlayableTrack) {
         val player = playerFor(deck)
         player.setMediaItem(MediaItem.fromUri(track.path))
+        player.playbackParameters = PlaybackParameters(1.0f)
         player.prepare()
-        val state = DjDeckState(track = track, positionMs = 0, durationMs = 0, isPlaying = false)
+        val baseBpm = track.bpm?.takeIf { it > 0 }
+        val state = DjDeckState(
+            track = track,
+            positionMs = 0,
+            durationMs = 0,
+            isPlaying = false,
+            speed = 1.0f,
+            baseBpm = baseBpm,
+            effectiveBpm = baseBpm,
+        )
         if (deck == DjDeck.A) _deckA.value = state else _deckB.value = state
     }
 
@@ -78,6 +89,34 @@ class DjRepositoryImpl @Inject constructor(@ApplicationContext context: Context)
     override fun setCrossfade(value: Float) {
         _crossfade.value = value.coerceIn(0f, 1f)
         applyVolumes()
+    }
+
+    override fun setDeckSpeed(deck: DjDeck, speed: Float) {
+        val clampedSpeed = speed.coerceIn(0.5f, 2.0f)
+        val player = playerFor(deck)
+        player.playbackParameters = PlaybackParameters(clampedSpeed)
+        val stateFlow = if (deck == DjDeck.A) _deckA else _deckB
+        val current = stateFlow.value
+        val effective = current.baseBpm?.let { it * clampedSpeed }
+        stateFlow.value = current.copy(speed = clampedSpeed, effectiveBpm = effective)
+    }
+
+    override fun syncBpm(targetDeck: DjDeck, sourceDeck: DjDeck) {
+        val sourceState = if (sourceDeck == DjDeck.A) _deckA.value else _deckB.value
+        val targetState = if (targetDeck == DjDeck.A) _deckA.value else _deckB.value
+
+        val sourceBpm = sourceState.effectiveBpm ?: sourceState.baseBpm
+        val targetBase = targetState.baseBpm
+        if (sourceBpm != null && targetBase != null && targetBase > 0) {
+            val desiredSpeed = (sourceBpm / targetBase).coerceIn(0.5f, 2.0f)
+            setDeckSpeed(targetDeck, desiredSpeed)
+        }
+    }
+
+    override fun nudge(deck: DjDeck, deltaMs: Long) {
+        val player = playerFor(deck)
+        val newPos = (player.currentPosition + deltaMs).coerceIn(0, player.duration.coerceAtLeast(0))
+        player.seekTo(newPos)
     }
 
     // Equal-power-ish linear crossfade - good enough for a manual mix, not claiming a true

@@ -48,4 +48,20 @@ interface ServerAudioRepository {
      * Вызывающий на такие позиции ставит локальный файл.
      */
     suspend fun serverStreamUrls(tracks: List<Triple<String?, String, Long>>): List<String?>
+
+    /**
+     * Возвращает список текущих прослушиваний друзей с сервера (`GET /api/now-playing`).
+     * Null - если сервер не подключен или произошла ошибка сети.
+     */
+    suspend fun fetchFriendsNowPlaying(): List<FriendNowPlaying>?
 }
+
+data class FriendNowPlaying(
+    val userId: Long,
+    val username: String,
+    val trackId: Long,
+    val title: String,
+    val artist: String?,
+    val positionMs: Long,
+    val updatedAt: Long,
+)

@@ -48,6 +48,10 @@ private const val KEY_UI_FONT_PATH = "ui_font_path"
 private const val KEY_UI_CJK_FONT_PATH = "ui_cjk_font_path"
 private const val KEY_LYRICS_CJK_FONT_PATH = "lyrics_cjk_font_path"
 private const val KEY_DOUBLE_TAP_ARTWORK_ACTION = "double_tap_artwork_action"
+private const val KEY_LONG_PRESS_ARTWORK_ACTION = "long_press_artwork_action"
+private const val KEY_SHAKE_TO_SHUFFLE_ENABLED = "shake_to_shuffle_enabled"
+private const val KEY_SHAKE_SENSITIVITY = "shake_sensitivity"
+private const val KEY_LOCKSCREEN_LYRICS_ENABLED = "lockscreen_lyrics_enabled"
 private const val KEY_EQ_ENABLED = "eq_enabled"
 private const val KEY_EQ_BAND_GAINS = "eq_band_gains" // CSV, 9 floats, BAND_FREQS_HZ order
 private const val EQ_BAND_COUNT = 9
@@ -237,6 +241,43 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
         prefs.edit { putString(KEY_DOUBLE_TAP_ARTWORK_ACTION, action.name) }
         _doubleTapArtworkAction.value = action
     }
+
+    private val _longPressArtworkAction = MutableStateFlow(
+        prefs.getString(KEY_LONG_PRESS_ARTWORK_ACTION, null)
+            ?.let { runCatching { dev.nami.domain.GestureAction.valueOf(it) }.getOrNull() }
+            ?: dev.nami.domain.GestureAction.SHOW_LYRICS,
+    )
+    override val longPressArtworkAction: StateFlow<dev.nami.domain.GestureAction> = _longPressArtworkAction
+
+    override fun setLongPressArtworkAction(action: dev.nami.domain.GestureAction) {
+        prefs.edit { putString(KEY_LONG_PRESS_ARTWORK_ACTION, action.name) }
+        _longPressArtworkAction.value = action
+    }
+
+    private val _shakeToShuffleEnabled = MutableStateFlow(prefs.getBoolean(KEY_SHAKE_TO_SHUFFLE_ENABLED, false))
+    override val shakeToShuffleEnabled: StateFlow<Boolean> = _shakeToShuffleEnabled
+
+    override fun setShakeToShuffleEnabled(enabled: Boolean) {
+        prefs.edit { putBoolean(KEY_SHAKE_TO_SHUFFLE_ENABLED, enabled) }
+        _shakeToShuffleEnabled.value = enabled
+    }
+
+    private val _shakeSensitivity = MutableStateFlow(prefs.getFloat(KEY_SHAKE_SENSITIVITY, 13.0f))
+    override val shakeSensitivity: StateFlow<Float> = _shakeSensitivity
+
+    override fun setShakeSensitivity(value: Float) {
+        prefs.edit { putFloat(KEY_SHAKE_SENSITIVITY, value) }
+        _shakeSensitivity.value = value
+    }
+
+    private val _lockscreenLyricsEnabled = MutableStateFlow(prefs.getBoolean(KEY_LOCKSCREEN_LYRICS_ENABLED, true))
+    override val lockscreenLyricsEnabled: StateFlow<Boolean> = _lockscreenLyricsEnabled
+
+    override fun setLockscreenLyricsEnabled(enabled: Boolean) {
+        prefs.edit { putBoolean(KEY_LOCKSCREEN_LYRICS_ENABLED, enabled) }
+        _lockscreenLyricsEnabled.value = enabled
+    }
+
 
     private val _eqEnabled = MutableStateFlow(prefs.getBoolean(KEY_EQ_ENABLED, false))
     override val eqEnabled: StateFlow<Boolean> = _eqEnabled

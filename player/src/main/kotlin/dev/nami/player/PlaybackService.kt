@@ -12,19 +12,26 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import dev.nami.player.net.pinnedOkHttpDataSourceFactory
+import androidx.media3.common.MediaMetadata
 import androidx.media3.session.CommandButton
 import androidx.media3.session.DefaultMediaNotificationProvider
+import androidx.media3.session.LibraryResult
+import androidx.media3.session.MediaLibraryService
+import androidx.media3.session.MediaLibraryService.MediaLibrarySession
+import androidx.media3.session.MediaNotification
 import androidx.media3.session.MediaSession
-import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionCommands
+import androidx.media3.session.SessionError
 import androidx.media3.session.SessionResult
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import dagger.hilt.android.AndroidEntryPoint
+import dev.nami.core.model.Lyrics
 import dev.nami.core.model.TrackId
 import dev.nami.domain.LibraryRepository
+import dev.nami.domain.LyricsRepository
 import dev.nami.domain.OutputProfile
 import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlaylistRepository
@@ -39,6 +46,7 @@ import dev.nami.player.replaygain.ReplayGainScanner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -70,9 +78,9 @@ private class DspChain {
 private const val ACTION_TOGGLE_LIKE = "dev.nami.ACTION_TOGGLE_LIKE"
 
 @AndroidEntryPoint
-class PlaybackService : MediaSessionService() {
+class PlaybackService : MediaLibraryService() {
     private lateinit var player: ExoPlayer
-    private lateinit var mediaSession: MediaSession
+    private lateinit var mediaSession: MediaLibrarySession
     // One chain per built player, never shared: a crossfade has two ExoPlayers (so two
     // DefaultAudioSinks, on two audio threads) live at once, and AudioProcessors are stateful --
     // BaseAudioProcessor's single output buffer, the EQ's per-channel biquad histories - so one
@@ -146,6 +154,11 @@ class PlaybackService : MediaSessionService() {
     @Inject lateinit var libraryRepository: LibraryRepository
     @Inject lateinit var playlistRepository: PlaylistRepository
     @Inject lateinit var serverAudioRepository: dev.nami.domain.ServerAudioRepository
+    @Inject lateinit var lyricsRepository: LyricsRepository
+
+    private var currentLyricLine: String? = null
+    private var cachedLyrics: Lyrics? = null
+    private var cachedLyricsTrackId: TrackId? = null
 
     /** Группа E "системный мини-плеер" - лайк-кнопка в уведомлении/на экране блокировки, не
      * только в своём собственном MiniPlayer. Media3's MediaSession.Callback is the extension
@@ -167,7 +180,7 @@ class PlaybackService : MediaSessionService() {
         mediaSession.setCustomLayout(ImmutableList.of(likeButton(liked)))
     }
 
-    private val sessionCallback = object : MediaSession.Callback {
+    private val sessionCallback = object : MediaLibrarySession.Callback {
         override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
             val connectionResult = MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailableSessionCommands(
@@ -198,7 +211,207 @@ class PlaybackService : MediaSessionService() {
             }
             return Futures.immediateFuture(SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED))
         }
+
+        override fun onGetLibraryRoot(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            params: MediaLibraryService.LibraryParams?,
+        ): ListenableFuture<LibraryResult<MediaItem>> {
+            val rootItem = MediaItem.Builder()
+                .setMediaId("root")
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setIsBrowsable(true)
+                        .setIsPlayable(false)
+                        .setTitle("Nami")
+                        .build(),
+                )
+                .build()
+            return Futures.immediateFuture(LibraryResult.ofItem(rootItem, params))
+        }
+
+        override fun onGetChildren(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            parentId: String,
+            page: Int,
+            pageSize: Int,
+            params: MediaLibraryService.LibraryParams?,
+        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
+            return Futures.immediateFuture(
+                runBlocking(Dispatchers.IO) {
+                    val items = buildLibraryChildren(parentId)
+                    LibraryResult.ofItemList(ImmutableList.copyOf(items), params)
+                },
+            )
+        }
+
+        override fun onGetItem(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            mediaId: String,
+        ): ListenableFuture<LibraryResult<MediaItem>> {
+            return Futures.immediateFuture(
+                runBlocking(Dispatchers.IO) {
+                    val item = buildMediaItem(mediaId)
+                    if (item != null) LibraryResult.ofItem(item, null)
+                    else LibraryResult.ofError(SessionError.ERROR_BAD_VALUE)
+                },
+            )
+        }
     }
+
+    private suspend fun buildLibraryChildren(parentId: String): List<MediaItem> {
+        return when (parentId) {
+            "root" -> listOf(
+                createFolderItem("tracks", "Все треки"),
+                createFolderItem("playlists", "Плейлисты"),
+                createFolderItem("favorites", "Любимые треки"),
+                createFolderItem("albums", "Альбомы"),
+            )
+            "tracks" -> {
+                libraryRepository.allTracksOrdered().map { trackToMediaItem(it) }
+            }
+            "favorites" -> {
+                val allTracks = libraryRepository.allTracksOrdered()
+                allTracks.filter { playlistRepository.isTrackLiked(it.id).first() }.map { trackToMediaItem(it) }
+            }
+            "playlists" -> {
+                playlistRepository.recentPlaylists(50).map { playlist ->
+                    MediaItem.Builder()
+                        .setMediaId("playlist:${playlist.id.value}")
+                        .setMediaMetadata(
+                            MediaMetadata.Builder()
+                                .setTitle(playlist.name)
+                                .setIsBrowsable(true)
+                                .setIsPlayable(false)
+                                .build(),
+                        )
+                        .build()
+                }
+            }
+            "albums" -> {
+                libraryRepository.recentAlbums(50).first().map { album ->
+                    MediaItem.Builder()
+                        .setMediaId("album:${album.id.value}")
+                        .setMediaMetadata(
+                            MediaMetadata.Builder()
+                                .setTitle(album.title)
+                                .setArtist(album.artistName)
+                                .setIsBrowsable(true)
+                                .setIsPlayable(false)
+                                .build(),
+                        )
+                        .build()
+                }
+            }
+            else -> {
+                when {
+                    parentId.startsWith("playlist:") -> {
+                        val playlistId = dev.nami.core.model.PlaylistId(parentId.removePrefix("playlist:"))
+                        playlistRepository.tracksInPlaylist(playlistId).first().map { trackToMediaItem(it) }
+                    }
+                    parentId.startsWith("album:") -> {
+                        val albumId = dev.nami.core.model.AlbumId(parentId.removePrefix("album:"))
+                        libraryRepository.tracksInAlbum(albumId).first().map { trackToMediaItem(it) }
+                    }
+                    else -> emptyList()
+                }
+            }
+        }
+    }
+
+    private fun createFolderItem(id: String, title: String): MediaItem {
+        return MediaItem.Builder()
+            .setMediaId(id)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(title)
+                    .setIsBrowsable(true)
+                    .setIsPlayable(false)
+                    .build(),
+            )
+            .build()
+    }
+
+    private fun trackToMediaItem(track: dev.nami.core.model.Track): MediaItem {
+        return MediaItem.Builder()
+            .setMediaId(track.id.value)
+            .setUri(track.path)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(track.title)
+                    .setArtist(track.artistName)
+                    .setIsPlayable(true)
+                    .setIsBrowsable(false)
+                    .build(),
+            )
+            .build()
+    }
+
+    private suspend fun buildMediaItem(mediaId: String): MediaItem? {
+        val track = libraryRepository.track(TrackId(mediaId)).first() ?: return null
+        return trackToMediaItem(track)
+    }
+
+    private fun startLockscreenLyricsTracker() {
+        scope.launch {
+            while (true) {
+                delay(700)
+                if (!settingsRepository.lockscreenLyricsEnabled.value) {
+                    if (currentLyricLine != null) {
+                        currentLyricLine = null
+                        applyLockscreenLyric(null)
+                    }
+                    continue
+                }
+
+                if (!player.isPlaying) continue
+
+                val item = player.currentMediaItem ?: continue
+                val trackId = item.mediaId.takeIf { it.isNotEmpty() }?.let(::TrackId) ?: continue
+
+                if (cachedLyricsTrackId != trackId) {
+                    cachedLyricsTrackId = trackId
+                    val track = libraryRepository.track(trackId).first()
+                    cachedLyrics = track?.let { lyricsRepository.lyricsForPath(it.path).first() }
+                }
+
+                val lyrics = cachedLyrics
+                if (lyrics == null || lyrics.lines.isEmpty()) {
+                    if (currentLyricLine != null) {
+                        currentLyricLine = null
+                        applyLockscreenLyric(null)
+                    }
+                    continue
+                }
+
+                val pos = player.currentPosition
+                val activeLine = lyrics.lines.findLast { it.timeMs <= pos }?.text?.trim()
+
+                if (activeLine != currentLyricLine) {
+                    currentLyricLine = activeLine
+                    applyLockscreenLyric(activeLine)
+                }
+            }
+        }
+    }
+
+    private fun applyLockscreenLyric(line: String?) {
+        val current = player.currentMediaItem ?: return
+        val title = current.mediaMetadata.title?.toString() ?: return
+        val artist = current.mediaMetadata.artist?.toString().orEmpty()
+
+        val updatedSubtitle = if (!line.isNullOrBlank()) line else artist
+        val updatedMetadata = current.mediaMetadata.buildUpon()
+            .setSubtitle(updatedSubtitle)
+            .setDisplayTitle(if (!line.isNullOrBlank()) "$title • $line" else title)
+            .build()
+
+        player.playlistMetadata = updatedMetadata
+        scope.launch { refreshLikeButton() }
+    }
+
 
     /** What the EQ chain and player volume should actually be right now - either the user's own
      * manual EQ, or (when Этап 4's per-device profiles are on) the profile matching the currently
@@ -242,16 +455,30 @@ class PlaybackService : MediaSessionService() {
             openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        mediaSession = MediaSession.Builder(this, player)
+        mediaSession = MediaLibrarySession.Builder(this, player, sessionCallback)
             .setSessionActivity(sessionActivity)
-            .setCallback(sessionCallback)
             .build()
 
         // Without this, Media3 falls back to its own bundled default (a generic circle-with-play
         // -triangle icon) for the small icon shown in the status bar and the media notification.
-        val notificationProvider = DefaultMediaNotificationProvider.Builder(this).build()
+        val notificationProvider = object : DefaultMediaNotificationProvider(this) {
+            override fun addNotificationActions(
+                mediaSession: MediaSession,
+                mediaButtons: ImmutableList<CommandButton>,
+                builder: androidx.core.app.NotificationCompat.Builder,
+                actionFactory: MediaNotification.ActionFactory,
+            ): IntArray {
+                val line = currentLyricLine
+                if (!line.isNullOrBlank() && settingsRepository.lockscreenLyricsEnabled.value) {
+                    builder.setSubText(line)
+                }
+                return super.addNotificationActions(mediaSession, mediaButtons, builder, actionFactory)
+            }
+        }
         notificationProvider.setSmallIcon(R.drawable.ic_notification)
         setMediaNotificationProvider(notificationProvider)
+
+        startLockscreenLyricsTracker()
 
         crossfade = CrossfadeController(
             player = { player },
@@ -625,7 +852,7 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession =
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession =
         mediaSession
 
     override fun onDestroy() {

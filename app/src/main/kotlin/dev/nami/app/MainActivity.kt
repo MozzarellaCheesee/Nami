@@ -45,6 +45,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import dev.nami.app.gesture.ShakeDetector
+import dev.nami.domain.PlayerRepository
+import kotlinx.coroutines.flow.combine
 import javax.inject.Inject
 
 @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
@@ -52,8 +55,12 @@ import javax.inject.Inject
 class MainActivity : ComponentActivity() {
 
     @Inject lateinit var appSettingsRepository: AppSettingsRepository
+    @Inject lateinit var playerRepository: PlayerRepository
+
+    private var shakeDetector: ShakeDetector? = null
 
     private val libraryViewModel: LibraryViewModel by viewModels()
+
     private val backupViewModel: BackupViewModel by viewModels()
     private val playlistActionsViewModel: PlaylistActionsViewModel by viewModels()
     private val metadataActionsViewModel: MetadataActionsViewModel by viewModels()
@@ -217,6 +224,28 @@ class MainActivity : ComponentActivity() {
         // Считаем до setContent, один раз за создание Activity - иначе флаг, погашенный
         // onBatteryHintShown, тут же перечитается при рекомпозиции.
         val batteryHintPending = !appSettingsRepository.batteryHintShown && !isIgnoringBatteryOptimizations()
+
+        shakeDetector = ShakeDetector(this) {
+            if (appSettingsRepository.shakeToShuffleEnabled.value) {
+                lifecycleScope.launch {
+                    playerRepository.setShuffleEnabled(true)
+                    playerRepository.skipNext()
+                    Toast.makeText(this@MainActivity, "Перемешано встряхиванием", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        lifecycleScope.launch {
+            combine(appSettingsRepository.shakeToShuffleEnabled, appSettingsRepository.shakeSensitivity) { enabled, sensitivity ->
+                enabled to sensitivity
+            }.collect { (enabled, sensitivity) ->
+                if (enabled) {
+                    shakeDetector?.start(sensitivity)
+                } else {
+                    shakeDetector?.stop()
+                }
+            }
+        }
+
         setContent {
             // Which pair of (Files, Gallery) launchers "Изменить обложку" should use once the
             // user picks a source in the chooser below - set by the onPickXxx callback that
@@ -381,5 +410,23 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (appSettingsRepository.shakeToShuffleEnabled.value) {
+            shakeDetector?.start(appSettingsRepository.shakeSensitivity.value)
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        shakeDetector?.stop()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        shakeDetector?.stop()
+    }
+
     private enum class ImagePickSource { PLAYLIST_COVER, ALBUM_COVER, ARTIST_PHOTO }
 }
+

@@ -749,6 +749,15 @@ private object NoOpSettingsRepository : dev.nami.domain.SettingsRepository {
     override fun setLyricsCjkFontPath(path: String?) {}
     override val doubleTapArtworkAction = MutableStateFlow(dev.nami.domain.GestureAction.NONE)
     override fun setDoubleTapArtworkAction(action: dev.nami.domain.GestureAction) {}
+    override val longPressArtworkAction = MutableStateFlow(dev.nami.domain.GestureAction.NONE)
+    override fun setLongPressArtworkAction(action: dev.nami.domain.GestureAction) {}
+    override val shakeToShuffleEnabled = MutableStateFlow(false)
+    override fun setShakeToShuffleEnabled(enabled: Boolean) {}
+    override val shakeSensitivity = MutableStateFlow(13.0f)
+    override fun setShakeSensitivity(value: Float) {}
+    override val lockscreenLyricsEnabled = MutableStateFlow(false)
+    override fun setLockscreenLyricsEnabled(enabled: Boolean) {}
+
     override val eqEnabled = MutableStateFlow(false)
     override fun setEqEnabled(value: Boolean) {}
     override val eqBandGains = MutableStateFlow(emptyList<Float>())
@@ -826,6 +835,24 @@ private object NoOpSettingsRepository : dev.nami.domain.SettingsRepository {
     override fun setListenBrainzToken(token: String?) {}
     override val spotifyClientId = MutableStateFlow<String?>(null)
     override fun setSpotifyClientId(value: String?) {}
+    override val spotifyClientSecret = MutableStateFlow<String?>(null)
+    override fun setSpotifyClientSecret(value: String?) {}
+    override val vkAccessToken = MutableStateFlow<String?>(null)
+    override fun setVkAccessToken(value: String?) {}
+    override val vkSearchEnabled = MutableStateFlow(false)
+    override fun setVkSearchEnabled(value: Boolean) {}
+    override val vkDownloadEnabled = MutableStateFlow(false)
+    override fun setVkDownloadEnabled(value: Boolean) {}
+    override val vkPreferredBitrate = MutableStateFlow(dev.nami.domain.VkBitrate.MAX)
+    override fun setVkPreferredBitrate(value: dev.nami.domain.VkBitrate) {}
+    override val vkTagSource = MutableStateFlow(dev.nami.domain.VkTagSource.SPOTIFY)
+    override fun setVkTagSource(value: dev.nami.domain.VkTagSource) {}
+    override val vkParallelDownloads = MutableStateFlow(3)
+    override fun setVkParallelDownloads(value: Int) {}
+    override val spotifyMetadataEnabled = MutableStateFlow(true)
+    override fun setSpotifyMetadataEnabled(value: Boolean) {}
+    override val spotifyCoversEnabled = MutableStateFlow(true)
+    override fun setSpotifyCoversEnabled(value: Boolean) {}
     override val homeBlocks = MutableStateFlow(dev.nami.domain.DEFAULT_HOME_BLOCKS)
     override fun setHomeBlocks(blocks: List<dev.nami.domain.HomeBlockConfig>) {}
     override val nowPlayingShowTechInfo = MutableStateFlow(true)
