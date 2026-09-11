@@ -23,6 +23,7 @@ import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
+import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.padding
 import androidx.glance.layout.size
 import androidx.glance.text.Text
@@ -49,17 +50,25 @@ class NamiWidgetCompact : GlanceAppWidget() {
 
         provideContent {
             val size = LocalSize.current
-            val tall = size.height >= 95.dp
+            val tall = size.height >= 85.dp
             val narrow = size.width < 180.dp
             val wide = size.width >= 260.dp
-            val artSize = if (tall) (if (size.height >= 140.dp) 80.dp else 60.dp) else (if (wide) 48.dp else 40.dp)
+            val isCompactHeight = size.height < 60.dp
+            val artSize = if (tall) {
+                if (size.height >= 140.dp) 80.dp else 56.dp
+            } else {
+                if (isCompactHeight) 36.dp else (if (wide) 46.dp else 40.dp)
+            }
 
             Box(
                 modifier = GlanceModifier
                     .fillMaxSize()
                     .background(WidgetBackground)
                     .then(widgetCorner())
-                    .padding(10.dp)
+                    .padding(
+                        horizontal = if (narrow) 8.dp else 12.dp,
+                        vertical = if (tall) 8.dp else (if (isCompactHeight) 4.dp else 6.dp),
+                    )
             ) {
                 if (tall) {
                     Column(
@@ -68,56 +77,81 @@ class NamiWidgetCompact : GlanceAppWidget() {
                         verticalAlignment = Alignment.Vertical.CenterVertically,
                     ) {
                         Art(art, artSize, modifier = GlanceModifier.clickable(openPlayerAction))
-                        Spacer(modifier = GlanceModifier.size(6.dp))
+                        Spacer(modifier = GlanceModifier.size(4.dp))
                         Column(
                             horizontalAlignment = Alignment.Horizontal.CenterHorizontally,
                             modifier = GlanceModifier.clickable(openPlayerAction),
                         ) {
                             TrackText(nowPlaying?.title, nowPlaying?.artistName)
                         }
-                        Spacer(modifier = GlanceModifier.size(8.dp))
+                        Spacer(modifier = GlanceModifier.size(6.dp))
                         TransportRow(
                             isPlaying = isPlaying,
-                            iconSize = 22.dp,
+                            iconSize = if (size.height < 120.dp) 18.dp else 22.dp,
+                            playTargetSize = if (size.height < 120.dp) 38.dp else 44.dp,
+                            secondaryTargetSize = if (size.height < 120.dp) 34.dp else 40.dp,
+                            spacerSize = 4.dp,
                             showLike = wide || size.height >= 140.dp,
                             isLiked = isLiked,
+                            modifier = GlanceModifier.fillMaxWidth(),
                         )
                     }
                 } else {
-                    Row(verticalAlignment = Alignment.Vertical.CenterVertically) {
+                    Row(
+                        modifier = GlanceModifier.fillMaxSize(),
+                        verticalAlignment = Alignment.Vertical.CenterVertically,
+                    ) {
                         Art(art, artSize, modifier = GlanceModifier.clickable(openPlayerAction))
-                        Spacer(modifier = GlanceModifier.size(8.dp))
+                        Spacer(modifier = GlanceModifier.size(if (narrow) 6.dp else 10.dp))
                         Column(
                             modifier = GlanceModifier
                                 .defaultWeight()
                                 .clickable(openPlayerAction),
+                            verticalAlignment = Alignment.Vertical.CenterVertically,
                         ) {
                             TrackText(nowPlaying?.title, nowPlaying?.artistName)
                         }
-                        Spacer(modifier = GlanceModifier.size(6.dp))
-                        if (wide && nowPlaying != null) {
+                        Spacer(modifier = GlanceModifier.size(4.dp))
+                        Row(verticalAlignment = Alignment.Vertical.CenterVertically) {
+                            if (wide && nowPlaying != null) {
+                                TransportButton(
+                                    if (isLiked) R.drawable.ic_widget_like_filled else R.drawable.ic_widget_like_outline,
+                                    if (isLiked) "Убрать из любимых" else "В любимые",
+                                    if (isCompactHeight) 16.dp else 18.dp,
+                                    actionRunCallback<ToggleLikeAction>(),
+                                    tint = if (isLiked) WidgetAccent else WidgetTextPrimary,
+                                    targetSize = if (isCompactHeight) 34.dp else 38.dp,
+                                )
+                                Spacer(modifier = GlanceModifier.size(2.dp))
+                            }
+                            if (!narrow) {
+                                TransportButton(
+                                    R.drawable.ic_widget_prev,
+                                    "Предыдущий",
+                                    if (isCompactHeight) 16.dp else 18.dp,
+                                    actionRunCallback<SkipPreviousAction>(),
+                                    targetSize = if (isCompactHeight) 34.dp else 38.dp,
+                                )
+                                Spacer(modifier = GlanceModifier.size(2.dp))
+                            }
                             TransportButton(
-                                if (isLiked) R.drawable.ic_widget_like_filled else R.drawable.ic_widget_like_outline,
-                                if (isLiked) "Убрать из любимых" else "В любимые",
-                                18.dp,
-                                actionRunCallback<ToggleLikeAction>(),
-                                tint = if (isLiked) WidgetAccent else WidgetTextPrimary,
+                                if (isPlaying) R.drawable.ic_widget_pause else R.drawable.ic_widget_play,
+                                if (isPlaying) "Пауза" else "Играть",
+                                if (isCompactHeight) 20.dp else 24.dp,
+                                actionRunCallback<TogglePlaybackAction>(),
+                                tint = WidgetAccent,
+                                targetSize = if (isCompactHeight) 38.dp else 44.dp,
                             )
-                            Spacer(modifier = GlanceModifier.size(4.dp))
-                        }
-                        if (!narrow) {
-                            TransportButton(R.drawable.ic_widget_prev, "Предыдущий", 18.dp, actionRunCallback<SkipPreviousAction>())
-                            Spacer(modifier = GlanceModifier.size(4.dp))
-                        }
-                        TransportButton(
-                            if (isPlaying) R.drawable.ic_widget_pause else R.drawable.ic_widget_play,
-                            if (isPlaying) "Пауза" else "Играть",
-                            22.dp,
-                            actionRunCallback<TogglePlaybackAction>(),
-                        )
-                        if (!narrow) {
-                            Spacer(modifier = GlanceModifier.size(4.dp))
-                            TransportButton(R.drawable.ic_widget_next, "Следующий", 18.dp, actionRunCallback<SkipNextAction>())
+                            if (!narrow) {
+                                Spacer(modifier = GlanceModifier.size(2.dp))
+                                TransportButton(
+                                    R.drawable.ic_widget_next,
+                                    "Следующий",
+                                    if (isCompactHeight) 16.dp else 18.dp,
+                                    actionRunCallback<SkipNextAction>(),
+                                    targetSize = if (isCompactHeight) 34.dp else 38.dp,
+                                )
+                            }
                         }
                     }
                 }
@@ -126,11 +160,11 @@ class NamiWidgetCompact : GlanceAppWidget() {
     }
 
     private companion object {
-        val MINI = DpSize(130.dp, 60.dp)
-        val COMPACT = DpSize(200.dp, 60.dp)
-        val WIDE = DpSize(280.dp, 60.dp)
-        val TALL_SMALL = DpSize(150.dp, 120.dp)
-        val TALL_LARGE = DpSize(260.dp, 130.dp)
+        val MINI = DpSize(120.dp, 40.dp)
+        val COMPACT = DpSize(180.dp, 40.dp)
+        val WIDE = DpSize(260.dp, 40.dp)
+        val TALL_SMALL = DpSize(140.dp, 90.dp)
+        val TALL_LARGE = DpSize(240.dp, 90.dp)
     }
 }
 

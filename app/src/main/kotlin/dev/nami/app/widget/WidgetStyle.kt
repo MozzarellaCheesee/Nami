@@ -24,6 +24,9 @@ import androidx.compose.ui.unit.dp
 import dev.nami.app.R
 import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 /** Группа E "виджеты" (макет 4.15, 8 конфигураций) - общие цвета/помощники, каждый отдельный
  * виджет ниже - свой GlanceAppWidget + Receiver, т.к. Android-виджет-пикер показывает несколько
@@ -65,51 +68,72 @@ fun loadArtBitmap(path: String?, targetPx: Int = 256): Bitmap? {
 
 class TogglePlaybackAction : ActionCallback {
     override suspend fun onAction(context: android.content.Context, glanceId: androidx.glance.GlanceId, parameters: androidx.glance.action.ActionParameters) {
-        val repo = widgetPlayerRepository(context)
-        repo.awaitReady()
-        repo.toggle()
-        kotlinx.coroutines.delay(100)
+        withContext(Dispatchers.Main) {
+            runCatching {
+                val repo = widgetPlayerRepository(context)
+                repo.awaitReady()
+                repo.toggle()
+            }
+        }
+        delay(120)
         updateAllNamiWidgets(context)
     }
 }
 
 class SkipNextAction : ActionCallback {
     override suspend fun onAction(context: android.content.Context, glanceId: androidx.glance.GlanceId, parameters: androidx.glance.action.ActionParameters) {
-        val repo = widgetPlayerRepository(context)
-        repo.awaitReady()
-        repo.skipNext()
-        kotlinx.coroutines.delay(120)
+        withContext(Dispatchers.Main) {
+            runCatching {
+                val repo = widgetPlayerRepository(context)
+                repo.awaitReady()
+                repo.skipNext()
+            }
+        }
+        delay(120)
         updateAllNamiWidgets(context)
     }
 }
 
 class SkipPreviousAction : ActionCallback {
     override suspend fun onAction(context: android.content.Context, glanceId: androidx.glance.GlanceId, parameters: androidx.glance.action.ActionParameters) {
-        val repo = widgetPlayerRepository(context)
-        repo.awaitReady()
-        repo.skipToPreviousTrack()
-        kotlinx.coroutines.delay(120)
+        withContext(Dispatchers.Main) {
+            runCatching {
+                val repo = widgetPlayerRepository(context)
+                repo.awaitReady()
+                repo.skipToPreviousTrack()
+            }
+        }
+        delay(120)
         updateAllNamiWidgets(context)
     }
 }
 
 class ToggleLikeAction : ActionCallback {
     override suspend fun onAction(context: android.content.Context, glanceId: androidx.glance.GlanceId, parameters: androidx.glance.action.ActionParameters) {
-        val playerRepo = widgetPlayerRepository(context)
-        playerRepo.awaitReady()
-        val trackId = playerRepo.queue.value.nowPlaying?.id ?: return
-        widgetPlaylistRepository(context).toggleLike(trackId)
+        withContext(Dispatchers.Main) {
+            runCatching {
+                val playerRepo = widgetPlayerRepository(context)
+                playerRepo.awaitReady()
+                val trackId = playerRepo.queue.value.nowPlaying?.id ?: return@runCatching
+                widgetPlaylistRepository(context).toggleLike(trackId)
+            }
+        }
+        delay(60)
         updateAllNamiWidgets(context)
     }
 }
 
 class ToggleShuffleAction : ActionCallback {
     override suspend fun onAction(context: android.content.Context, glanceId: androidx.glance.GlanceId, parameters: androidx.glance.action.ActionParameters) {
-        val playerRepo = widgetPlayerRepository(context)
-        playerRepo.awaitReady()
-        val current = playerRepo.shuffleEnabled.value
-        playerRepo.setShuffleEnabled(!current)
-        kotlinx.coroutines.delay(100)
+        withContext(Dispatchers.Main) {
+            runCatching {
+                val playerRepo = widgetPlayerRepository(context)
+                playerRepo.awaitReady()
+                val current = playerRepo.shuffleEnabled.value
+                playerRepo.setShuffleEnabled(!current)
+            }
+        }
+        delay(100)
         updateAllNamiWidgets(context)
     }
 }
@@ -123,9 +147,18 @@ suspend fun updateAllNamiWidgets(context: android.content.Context) {
 }
 
 @androidx.compose.runtime.Composable
-fun TransportButton(iconRes: Int, contentDescription: String, size: Dp, action: Action, tint: ColorProvider = WidgetTextPrimary) {
+fun TransportButton(
+    iconRes: Int,
+    contentDescription: String,
+    size: Dp,
+    action: Action,
+    tint: ColorProvider = WidgetTextPrimary,
+    targetSize: Dp = 44.dp,
+) {
     Box(
-        modifier = GlanceModifier.size(size + 6.dp).clickable(action),
+        modifier = GlanceModifier
+            .size(targetSize)
+            .clickable(action),
         contentAlignment = Alignment.Center,
     ) {
         Image(
@@ -140,13 +173,18 @@ fun TransportButton(iconRes: Int, contentDescription: String, size: Dp, action: 
 @androidx.compose.runtime.Composable
 fun TransportRow(
     isPlaying: Boolean,
-    iconSize: Dp = 26.dp,
+    iconSize: Dp = 24.dp,
+    playTargetSize: Dp = 46.dp,
+    secondaryTargetSize: Dp = 40.dp,
+    spacerSize: Dp = 6.dp,
     showShuffle: Boolean = false,
     isShuffle: Boolean = false,
     showLike: Boolean = false,
     isLiked: Boolean = false,
+    modifier: GlanceModifier = GlanceModifier,
 ) {
     Row(
+        modifier = modifier,
         verticalAlignment = Alignment.Vertical.CenterVertically,
         horizontalAlignment = Alignment.Horizontal.CenterHorizontally,
     ) {
@@ -154,30 +192,46 @@ fun TransportRow(
             TransportButton(
                 R.drawable.ic_widget_shuffle,
                 "Случайно",
-                (iconSize.value * 0.8f).dp.coerceAtLeast(18.dp),
+                (iconSize.value * 0.85f).dp.coerceAtLeast(16.dp),
                 actionRunCallback<ToggleShuffleAction>(),
                 tint = if (isShuffle) WidgetAccent else WidgetTextSecondary,
+                targetSize = secondaryTargetSize,
             )
-            androidx.glance.layout.Spacer(modifier = GlanceModifier.size(8.dp))
+            androidx.glance.layout.Spacer(modifier = GlanceModifier.size((spacerSize.value * 0.75f).dp))
         }
-        TransportButton(R.drawable.ic_widget_prev, "Предыдущий", iconSize, actionRunCallback<SkipPreviousAction>())
-        androidx.glance.layout.Spacer(modifier = GlanceModifier.size(10.dp))
+        TransportButton(
+            R.drawable.ic_widget_prev,
+            "Предыдущий",
+            iconSize,
+            actionRunCallback<SkipPreviousAction>(),
+            targetSize = secondaryTargetSize,
+        )
+        androidx.glance.layout.Spacer(modifier = GlanceModifier.size(spacerSize))
         TransportButton(
             if (isPlaying) R.drawable.ic_widget_pause else R.drawable.ic_widget_play,
             if (isPlaying) "Пауза" else "Играть",
-            (iconSize.value * 1.2f).dp,
+            (iconSize.value * 1.25f).dp,
             actionRunCallback<TogglePlaybackAction>(),
+            tint = WidgetAccent,
+            targetSize = playTargetSize,
         )
-        androidx.glance.layout.Spacer(modifier = GlanceModifier.size(10.dp))
-        TransportButton(R.drawable.ic_widget_next, "Следующий", iconSize, actionRunCallback<SkipNextAction>())
+        androidx.glance.layout.Spacer(modifier = GlanceModifier.size(spacerSize))
+        TransportButton(
+            R.drawable.ic_widget_next,
+            "Следующий",
+            iconSize,
+            actionRunCallback<SkipNextAction>(),
+            targetSize = secondaryTargetSize,
+        )
         if (showLike) {
-            androidx.glance.layout.Spacer(modifier = GlanceModifier.size(8.dp))
+            androidx.glance.layout.Spacer(modifier = GlanceModifier.size((spacerSize.value * 0.75f).dp))
             TransportButton(
                 if (isLiked) R.drawable.ic_widget_like_filled else R.drawable.ic_widget_like_outline,
                 if (isLiked) "Убрать из любимых" else "В любимые",
-                (iconSize.value * 0.8f).dp.coerceAtLeast(18.dp),
+                (iconSize.value * 0.85f).dp.coerceAtLeast(16.dp),
                 actionRunCallback<ToggleLikeAction>(),
                 tint = if (isLiked) WidgetAccent else WidgetTextSecondary,
+                targetSize = secondaryTargetSize,
             )
         }
     }

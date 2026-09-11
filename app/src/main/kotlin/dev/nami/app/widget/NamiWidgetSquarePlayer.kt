@@ -13,6 +13,7 @@ import androidx.glance.LocalSize
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
+import androidx.glance.appwidget.LinearProgressIndicator
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
@@ -24,10 +25,10 @@ import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
+import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.size
-import androidx.glance.layout.width
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
@@ -55,16 +56,14 @@ class NamiWidgetSquarePlayer : GlanceAppWidget() {
         provideContent {
             val size = LocalSize.current
             val isCompactHeight = size.height < 155.dp
-            val padding = if (isCompactHeight || size.width < MEDIUM.width) 10.dp else 14.dp
-            val gap = if (isCompactHeight) 4.dp else (if (size.height < MEDIUM.height) 6.dp else 10.dp)
+            val isSmallWidth = size.width < 180.dp
             val showShuffle = size.width >= 240.dp
 
             Box(
                 modifier = GlanceModifier
                     .fillMaxSize()
                     .then(widgetCorner())
-                    .background(WidgetBackground)
-                    .clickable(openPlayerAction),
+                    .background(WidgetBackground),
             ) {
                 if (art != null) {
                     Image(
@@ -77,19 +76,36 @@ class NamiWidgetSquarePlayer : GlanceAppWidget() {
                 Column(
                     modifier = GlanceModifier
                         .fillMaxSize()
-                        .padding(padding),
+                        .padding(
+                            horizontal = if (isSmallWidth) 10.dp else 14.dp,
+                            vertical = if (isCompactHeight) 8.dp else 12.dp,
+                        ),
                     verticalAlignment = Alignment.Vertical.Bottom,
                 ) {
+                    // Верхняя область обложки кликабельна для перехода в плеер
+                    Box(
+                        modifier = GlanceModifier
+                            .fillMaxWidth()
+                            .defaultWeight()
+                            .clickable(openPlayerAction),
+                    ) {}
+
+                    // Строка метаданных: Название, артист и кнопка лайка
                     Row(
+                        modifier = GlanceModifier.fillMaxWidth(),
                         verticalAlignment = Alignment.Vertical.CenterVertically,
-                        modifier = GlanceModifier.clickable(openPlayerAction),
                     ) {
-                        Column(modifier = GlanceModifier.defaultWeight()) {
+                        Column(
+                            modifier = GlanceModifier
+                                .defaultWeight()
+                                .clickable(openPlayerAction),
+                            verticalAlignment = Alignment.Vertical.CenterVertically,
+                        ) {
                             Text(
                                 nowPlaying?.title ?: "Ничего не играет",
                                 style = TextStyle(
                                     color = WidgetTextPrimary,
-                                    fontSize = if (isCompactHeight) 13.sp else 15.sp,
+                                    fontSize = if (isSmallWidth || isCompactHeight) 14.sp else 16.sp,
                                 ),
                                 maxLines = 1,
                             )
@@ -97,7 +113,7 @@ class NamiWidgetSquarePlayer : GlanceAppWidget() {
                             subtitle?.let {
                                 Text(
                                     it,
-                                    style = TextStyle(color = WidgetTextSecondary, fontSize = 11.sp),
+                                    style = TextStyle(color = WidgetTextSecondary, fontSize = 12.sp),
                                     maxLines = 1,
                                     modifier = GlanceModifier.padding(top = 2.dp),
                                 )
@@ -107,24 +123,36 @@ class NamiWidgetSquarePlayer : GlanceAppWidget() {
                             TransportButton(
                                 if (isLiked) R.drawable.ic_widget_like_filled else R.drawable.ic_widget_like_outline,
                                 if (isLiked) "Убрать из любимых" else "В любимые",
-                                if (isCompactHeight) 18.dp else 20.dp,
-                                actionRunCallback<ToggleLikeAction>(),
+                                size = 20.dp,
+                                action = actionRunCallback<ToggleLikeAction>(),
                                 tint = if (isLiked) WidgetAccent else WidgetTextPrimary,
+                                targetSize = if (isSmallWidth) 36.dp else 42.dp,
                             )
                         }
                     }
-                    Spacer(modifier = GlanceModifier.size(gap))
-                    val trackWidth = (size.width - padding * 2).coerceAtLeast(40.dp)
-                    Box(modifier = GlanceModifier.width(trackWidth).height(4.dp).then(widgetCorner(2)).background(WidgetTrackEmpty)) {
-                        Box(modifier = GlanceModifier.width(trackWidth * progress).height(4.dp).then(widgetCorner(2)).background(WidgetAccent)) {}
-                    }
-                    Spacer(modifier = GlanceModifier.size(gap))
-                    val transportIconSize = (size.width.value / 180f * 24f).dp.coerceIn(22.dp, 40.dp)
+
+                    Spacer(modifier = GlanceModifier.size(if (isCompactHeight) 6.dp else 8.dp))
+
+                    // Полноширинный прогресс-бар
+                    LinearProgressIndicator(
+                        progress = progress,
+                        modifier = GlanceModifier.fillMaxWidth().height(4.dp),
+                        color = WidgetAccent,
+                        backgroundColor = WidgetTrackEmpty,
+                    )
+
+                    Spacer(modifier = GlanceModifier.size(if (isCompactHeight) 6.dp else 10.dp))
+
+                    // Панель управления на всю ширину с центрированием кнопок
                     TransportRow(
                         isPlaying = isPlayingNow(repo),
-                        iconSize = if (isCompactHeight) 22.dp else transportIconSize,
+                        iconSize = if (isSmallWidth) 20.dp else (if (isCompactHeight) 24.dp else 28.dp),
+                        playTargetSize = if (isSmallWidth) 40.dp else 48.dp,
+                        secondaryTargetSize = if (isSmallWidth) 36.dp else 42.dp,
+                        spacerSize = if (isSmallWidth) 4.dp else 6.dp,
                         showShuffle = showShuffle,
                         isShuffle = isShuffle,
+                        modifier = GlanceModifier.fillMaxWidth(),
                     )
                 }
             }
@@ -132,11 +160,11 @@ class NamiWidgetSquarePlayer : GlanceAppWidget() {
     }
 
     private companion object {
-        val TINY = DpSize(140.dp, 140.dp)
-        val HORIZONTAL = DpSize(240.dp, 130.dp)
-        val SMALL = DpSize(180.dp, 180.dp)
-        val MEDIUM = DpSize(250.dp, 250.dp)
-        val LARGE = DpSize(320.dp, 320.dp)
+        val TINY = DpSize(120.dp, 120.dp)
+        val HORIZONTAL = DpSize(220.dp, 100.dp)
+        val SMALL = DpSize(160.dp, 160.dp)
+        val MEDIUM = DpSize(220.dp, 220.dp)
+        val LARGE = DpSize(300.dp, 300.dp)
     }
 }
 
