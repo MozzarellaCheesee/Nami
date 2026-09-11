@@ -47,7 +47,8 @@ async fn main() -> Res<()> {
         )
         .init();
 
-    let cfg = config::Config::load(std::path::Path::new("config.toml"))?;
+    let config_path = config::find_config_path();
+    let cfg = config::Config::load(&config_path)?;
 
     // Парсим CLI аргументы
     let cli = cli::Cli::parse();
@@ -63,7 +64,7 @@ async fn main() -> Res<()> {
 
     // Нет config.toml - первый запуск: поднимаем ТОЛЬКО мастер настройки по защищённому HTTPS.
     // Это гарантирует, что пароль администратора и настройки не передаются в открытом виде по сети.
-    if !std::path::Path::new("config.toml").exists() && std::env::var("NAMI_MUSIC_DIRS").is_err() {
+    if !config_path.exists() && std::env::var("NAMI_MUSIC_DIRS").is_err() {
         let addr = SocketAddr::from(([0, 0, 0, 0], cfg.port));
         let t = tls::load_or_create(&cfg.data_dir, vec!["localhost".into(), local_ip()])?;
         tracing::info!("🔒 TLS активен, отпечаток sha256:{}", t.fingerprint);

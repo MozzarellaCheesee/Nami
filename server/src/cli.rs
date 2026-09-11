@@ -805,8 +805,9 @@ fn domain_setup(cfg: &crate::config::Config, domain_arg: Option<&str>) -> Res<()
 
     println!("Запуск проверки и настройки для: {}\n", domain);
 
-    let report = crate::domain::setup_domain(&domain, cfg.port, std::path::Path::new("config.toml"))
-        .map_err(|e| format!("Ошибка настройки домена: {e}"))?;
+    let cfg_file = crate::config::find_config_path();
+    let report = crate::domain::setup_domain(&domain, cfg.port, &cfg_file)
+        .map_err(|e| format!("Ошибка настройки домена:\n{e}"))?;
 
     for step in &report.steps {
         println!("  {step}");
@@ -1137,12 +1138,12 @@ fn library_cmd(cfg: &crate::config::Config, action: Option<LibraryAction>) -> Re
             if !abs_path.exists() {
                 return Err(format!("Путь '{}' не существует на диске", abs_path.display()).into());
             }
-            let cfg_path = std::path::Path::new("config.toml");
-            let text = std::fs::read_to_string(cfg_path).unwrap_or_default();
+            let cfg_path = crate::config::find_config_path();
+            let text = std::fs::read_to_string(&cfg_path).unwrap_or_default();
             let path_str = abs_path.to_string_lossy().to_string();
             let updated = append_music_dir(&text, &path_str);
-            std::fs::write(cfg_path, updated)?;
-            println!("✓ Папка '{}' добавлена в config.toml", abs_path.display());
+            std::fs::write(&cfg_path, updated)?;
+            println!("✓ Папка '{}' добавлена в {}", abs_path.display(), cfg_path.display());
             println!("Для добавления треков запустите сканирование: nami scan");
         }
     }
@@ -1171,11 +1172,11 @@ fn config_cmd(cfg: &crate::config::Config, action: Option<ConfigAction>) -> Res<
             }
         }
         ConfigAction::Set { key, value } => {
-            let cfg_path = std::path::Path::new("config.toml");
-            let text = std::fs::read_to_string(cfg_path).unwrap_or_default();
+            let cfg_path = crate::config::find_config_path();
+            let text = std::fs::read_to_string(&cfg_path).unwrap_or_default();
             let updated = set_config_key(&text, &key, &value);
-            std::fs::write(cfg_path, updated)?;
-            println!("✓ Параметр '{}' успешно обновлён на '{}' в config.toml", key, value);
+            std::fs::write(&cfg_path, updated)?;
+            println!("✓ Параметр '{}' успешно обновлён на '{}' в {}", key, value, cfg_path.display());
             println!("Перезапустите сервер для применения настроек: sudo systemctl restart nami");
         }
     }
