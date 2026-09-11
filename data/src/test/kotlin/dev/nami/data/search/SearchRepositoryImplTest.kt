@@ -83,6 +83,8 @@ class SearchRepositoryImplTest {
         override suspend fun updateNote(id: String, note: String?) = error("unused")
         override suspend fun updateGenre(id: String, genre: String?) = error("unused")
         override suspend fun incrementSkipCount(id: String) = error("unused")
+        override suspend fun updatePlayCount(id: String, count: Int) = error("unused")
+        override suspend fun updateLastPlayed(id: String, timestamp: Long?) = error("unused")
         override suspend fun updateBpmKey(id: String, bpm: Float?, musicalKey: String?) = error("unused")
         override suspend fun setArtistId(id: String, artistId: String?) = error("unused")
         override fun trashedTracksFlow() = error("unused")

@@ -102,6 +102,8 @@ private const val KEY_VK_PARALLEL_DOWNLOADS = "vk_parallel_downloads"
 private const val KEY_SPOTIFY_METADATA_ENABLED = "spotify_metadata_enabled"
 private const val KEY_SPOTIFY_COVERS_ENABLED = "spotify_covers_enabled"
 private const val KEY_LISTENBRAINZ_TOKEN = "listenbrainz_token"
+private const val KEY_LASTFM_SCROBBLING_ENABLED = "lastfm_scrobbling_enabled"
+private const val KEY_LASTFM_SESSION_KEY = "lastfm_session_key"
 private const val KEY_NAMI_SERVER_URL = "nami_server_url"
 private const val KEY_NAMI_SERVER_CERT = "nami_server_cert_sha256"
 private const val KEY_NAMI_SERVER_TOKEN = "nami_server_token"
@@ -738,6 +740,21 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
         val trimmed = token?.trim()?.takeIf { it.isNotEmpty() }
         prefs.edit { putString(KEY_LISTENBRAINZ_TOKEN, trimmed) }
         _listenBrainzToken.value = trimmed
+    }
+
+    private val _lastFmScrobblingEnabled = MutableStateFlow(prefs.getBoolean(KEY_LASTFM_SCROBBLING_ENABLED, false))
+    override val lastFmScrobblingEnabled: StateFlow<Boolean> = _lastFmScrobblingEnabled
+    override fun setLastFmScrobblingEnabled(value: Boolean) {
+        prefs.edit { putBoolean(KEY_LASTFM_SCROBBLING_ENABLED, value) }
+        _lastFmScrobblingEnabled.value = value
+    }
+
+    private val _lastFmSessionKey = MutableStateFlow(prefs.getString(KEY_LASTFM_SESSION_KEY, null))
+    override val lastFmSessionKey: StateFlow<String?> = _lastFmSessionKey
+    override fun setLastFmSessionKey(sessionKey: String?) {
+        val trimmed = sessionKey?.trim()?.takeIf { it.isNotEmpty() }
+        prefs.edit { putString(KEY_LASTFM_SESSION_KEY, trimmed) }
+        _lastFmSessionKey.value = trimmed
     }
 
     private val _homeBlocks = MutableStateFlow(readHomeBlocks())

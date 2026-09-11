@@ -88,6 +88,8 @@ class SettingsViewModel @Inject constructor(
     val lockscreenLyricsEnabled: StateFlow<Boolean> = appSettingsRepository.lockscreenLyricsEnabled
     fun setLockscreenLyricsEnabled(enabled: Boolean) = appSettingsRepository.setLockscreenLyricsEnabled(enabled)
     val scrobblingEnabled: StateFlow<Boolean> = appSettingsRepository.scrobblingEnabled
+    val lastFmScrobblingEnabled: StateFlow<Boolean> = appSettingsRepository.lastFmScrobblingEnabled
+    val lastFmSessionKey: StateFlow<String?> = appSettingsRepository.lastFmSessionKey
     val airPlayEnabled: StateFlow<Boolean> = appSettingsRepository.airPlayEnabled
     fun setAirPlayEnabled(value: Boolean) = appSettingsRepository.setAirPlayEnabled(value)
     val yandexStationEnabled: StateFlow<Boolean> = appSettingsRepository.yandexStationEnabled
@@ -417,6 +419,14 @@ class SettingsViewModel @Inject constructor(
 
     fun setListenBrainzToken(token: String) {
         appSettingsRepository.setListenBrainzToken(token)
+    }
+
+    fun setLastFmScrobblingEnabled(value: Boolean) {
+        appSettingsRepository.setLastFmScrobblingEnabled(value)
+    }
+
+    fun setLastFmSessionKey(sessionKey: String) {
+        appSettingsRepository.setLastFmSessionKey(sessionKey)
     }
 
     fun setNowPlayingShowTechInfo(value: Boolean) {

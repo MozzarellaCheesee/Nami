@@ -345,6 +345,10 @@ fun SettingsScrobblingScreen(onBack: () -> Unit, viewModel: SettingsViewModel = 
     val token by viewModel.listenBrainzToken.collectAsState()
     var tokenText by remember(token) { mutableStateOf(token.orEmpty()) }
 
+    val lastFmEnabled by viewModel.lastFmScrobblingEnabled.collectAsState()
+    val lastFmKey by viewModel.lastFmSessionKey.collectAsState()
+    var lastFmKeyText by remember(lastFmKey) { mutableStateOf(lastFmKey.orEmpty()) }
+
     SettingsSubScreenScaffold(title = "Скробблинг", onBack = onBack) {
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
             SettingsRow(
@@ -353,14 +357,19 @@ fun SettingsScrobblingScreen(onBack: () -> Unit, viewModel: SettingsViewModel = 
                 trailing = { NamiSwitch(checked = enabled, onCheckedChange = viewModel::setScrobblingEnabled) },
                 onClick = { viewModel.setScrobblingEnabled(!enabled) },
             )
+            SettingsRow(
+                icon = Icons.Outlined.BarChart,
+                title = "Отправлять в Last.fm",
+                trailing = { NamiSwitch(checked = lastFmEnabled, onCheckedChange = viewModel::setLastFmScrobblingEnabled) },
+                onClick = { viewModel.setLastFmScrobblingEnabled(!lastFmEnabled) },
+            )
         }
         SettingsSectionLabel("ListenBrainz")
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                 Text(
-                    text = "Трек отправляется когда прослушано 30 секунд или половина - как и обычный " +
-                        "счётчик прослушиваний. Own Last.fm нет - он требует зарегистрированное " +
-                        "приложение с отдельными ключами, ListenBrainz работает по своему токену без этого.",
+                    text = "Трек отправляется, когда прослушано 30 секунд или половина трека. " +
+                        "ListenBrainz работает по вашему персональному токену пользователя.",
                     color = NamiColors.Paper40,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -376,6 +385,31 @@ fun SettingsScrobblingScreen(onBack: () -> Unit, viewModel: SettingsViewModel = 
                     text = "Сохранить токен",
                     modifier = Modifier.padding(top = 12.dp),
                     onClick = { viewModel.setListenBrainzToken(tokenText) },
+                )
+            }
+        }
+
+        SettingsSectionLabel("Last.fm")
+        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Text(
+                    text = "Для скробблинга в Last.fm укажите ключ веб-сессии (Session Key или токен). " +
+                        "Скробблинг выполняется напрямую через Last.fm 2.0 API с цифровой подписью параметров.",
+                    color = NamiColors.Paper40,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                androidx.compose.material3.OutlinedTextField(
+                    value = lastFmKeyText,
+                    onValueChange = { lastFmKeyText = it },
+                    label = { Text("Session Key / Токен") },
+                    singleLine = true,
+                    supportingText = { ApiKeyHint("Управление аккаунтом: last.fm/settings/applications", "https://www.last.fm/settings/applications") },
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                )
+                NamiPill(
+                    text = "Сохранить ключ Last.fm",
+                    modifier = Modifier.padding(top = 12.dp),
+                    onClick = { viewModel.setLastFmSessionKey(lastFmKeyText) },
                 )
             }
         }
