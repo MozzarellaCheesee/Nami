@@ -56,6 +56,7 @@ class MainActivity : ComponentActivity() {
 
     @Inject lateinit var appSettingsRepository: AppSettingsRepository
     @Inject lateinit var playerRepository: PlayerRepository
+    @Inject lateinit var jamRepository: dev.nami.domain.JamRepository
 
     private var shakeDetector: ShakeDetector? = null
 
@@ -68,6 +69,8 @@ class MainActivity : ComponentActivity() {
     // Bumped whenever an intent (fresh launch or onNewIntent, e.g. tapping the system media
     // notification/status-bar chip) asks to open the player directly.
     private val openPlayerSignal = MutableStateFlow(0)
+    // Bumped whenever a Jam intent (nami://jam) arrives to open the Jam screen directly.
+    private val openJamSignal = MutableStateFlow(0)
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -75,6 +78,7 @@ class MainActivity : ComponentActivity() {
         if (intent.getBooleanExtra(EXTRA_OPEN_PLAYER, false)) openPlayerSignal.value++
         handleShareIntent(intent)
         handlePairingIntent(intent)
+        handleJamIntent(intent)
     }
 
     // П.md §2 "Share-target на audio MIME type" - ACTION_SEND/SEND_MULTIPLE from another app
@@ -114,6 +118,16 @@ class MainActivity : ComponentActivity() {
                 ).show()
             }
         }
+    }
+
+    /** Присоединение к Jam сессии через deep link:
+     * `nami://jam?code=...&host=...` */
+    private fun handleJamIntent(intent: Intent) {
+        val data = intent.data ?: return
+        if (data.scheme != "nami" || data.host != "jam") return
+        val uriStr = data.toString()
+        jamRepository.joinRoom(uriStr)
+        openJamSignal.value++
     }
 
     private val pickFiles = registerForActivityResult(
@@ -215,6 +229,7 @@ class MainActivity : ComponentActivity() {
         if (intent.getBooleanExtra(EXTRA_OPEN_PLAYER, false)) openPlayerSignal.value++
         handleShareIntent(intent)
         handlePairingIntent(intent)
+        handleJamIntent(intent)
         // Watched folders (П.md §2) have no true background watch on Android - rescanned once
         // per cold start instead.
         libraryViewModel.rescanWatchedFolders()
@@ -462,6 +477,7 @@ class MainActivity : ComponentActivity() {
                         pendingImagePickSource = ImagePickSource.ARTIST_PHOTO
                     },
                     openPlayerSignal = openPlayerSignal,
+                    openJamSignal = openJamSignal,
                 )
                 pendingImagePickSource?.let { source ->
                     dev.nami.core.designsystem.ContextActionSheet(

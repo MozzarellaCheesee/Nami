@@ -23,6 +23,12 @@ pub enum Commands {
     },
     /// Обновить сервер (pull + restart)
     Update,
+    /// Мастер настройки сервера в терминале (CLI / TUI)
+    Setup {
+        /// Режим TUI
+        #[arg(long, default_value_t = false)]
+        tui: bool,
+    },
     /// Сканировать музыкальные файлы и обновить библиотеку
     Scan {
         /// Путь к директории (если не указан, сканируются все music_dirs из config)
@@ -63,6 +69,7 @@ impl Commands {
             Commands::Status => status(cfg),
             Commands::Logs { lines } => logs(*lines),
             Commands::Update => update(),
+            Commands::Setup { tui } => setup_interactive(*tui),
             Commands::Scan { path, deep } => scan(cfg, path, *deep),
             Commands::Uninstall { purge } => uninstall(cfg, *purge),
             Commands::Backup { output } => backup(cfg, output),
@@ -568,5 +575,57 @@ fn uninstall(cfg: &crate::config::Config, purge: bool) -> Res<()> {
     }
 
     println!("✓ Сервер Nami успешно удалён.");
+    Ok(())
+}
+
+/// Интерактивный мастер настройки сервера в терминале
+fn setup_interactive(_tui: bool) -> Res<()> {
+    println!("=== Мастер настройки Nami-сервера (CLI / TUI) ===\n");
+    use std::io::{self, Write};
+
+    print!("Порт сервера [по умолчанию 4533]: ");
+    io::stdout().flush()?;
+    let mut port_input = String::new();
+    io::stdin().read_line(&mut port_input)?;
+    let port: u16 = port_input.trim().parse().unwrap_or(4533);
+
+    print!("Путь к музыкальной папке [по умолчанию ./music]: ");
+    io::stdout().flush()?;
+    let mut music_input = String::new();
+    io::stdin().read_line(&mut music_input)?;
+    let music_dir = if music_input.trim().is_empty() {
+        "./music".to_string()
+    } else {
+        music_input.trim().to_string()
+    };
+    let _ = std::fs::create_dir_all(&music_dir);
+
+    print!("Логин владельца библиотеки: ");
+    io::stdout().flush()?;
+    let mut login = String::new();
+    io::stdin().read_line(&mut login)?;
+    let login = login.trim().to_string();
+
+    print!("Пароль владельца библиотеки: ");
+    io::stdout().flush()?;
+    let mut password = String::new();
+    io::stdin().read_line(&mut password)?;
+    let password = password.trim().to_string();
+
+    let config_content = format!(
+        "port = {}\nmusic_dirs = [\"{}\"]\ndb_path = \"nami.db\"\n",
+        port,
+        music_dir.replace('\\', "\\\\")
+    );
+    std::fs::write("config.toml", config_content)?;
+    println!("\n✓ Файл config.toml успешно создан");
+
+    if !login.is_empty() && !password.is_empty() {
+        let mut conn = crate::db::open(std::path::Path::new("nami.db"))?;
+        let _ = crate::users::create(&mut conn, &login, &password, "admin", 0);
+        println!("✓ Пользователь '{}' создан как владелец библиотеки", login);
+    }
+
+    println!("\nНастройка завершена! Сервер готов к запуску: nami-server");
     Ok(())
 }

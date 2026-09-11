@@ -43,6 +43,7 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.hilt.android)
     implementation(libs.hilt.navigation.compose)
+    implementation(libs.zxing.core)
     ksp(libs.hilt.compiler)
 
     testImplementation(libs.junit)

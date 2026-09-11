@@ -16,9 +16,10 @@ class JamViewModel @Inject constructor(
     val error: StateFlow<String?> = jamRepository.error
     val connected: StateFlow<Boolean> = jamRepository.connected
     val isServerConfigured: StateFlow<Boolean> = jamRepository.isServerConfigured
+    val activeHostUrl: StateFlow<String?> = jamRepository.activeHostUrl
 
     fun createRoom() = jamRepository.createRoom()
-    fun joinRoom(code: String) = jamRepository.joinRoom(code.trim().uppercase())
+    fun joinRoom(code: String, hostUrl: String? = null) = jamRepository.joinRoom(code, hostUrl)
     fun leave() = jamRepository.leave()
     fun play(serverTrackId: Long, positionMs: Long = 0) = jamRepository.play(serverTrackId, positionMs)
     fun seek(positionMs: Long) = jamRepository.seek(positionMs)
