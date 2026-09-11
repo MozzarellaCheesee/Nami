@@ -34,7 +34,8 @@ class ServerAudioRepositoryImpl @Inject constructor(
         val cert = settingsRepository.namiServerCertSha256.value
         val bases = settingsRepository.namiServerUrl.value.split('\n', ',')
             .map { it.trim() }.filter { it.isNotEmpty() }
-        val base = NamiServerClient.reachableBase(bases, cert) ?: return null
+        val initial = NamiServerClient.Config(bases.first(), token, cert, bases)
+        val base = NamiServerClient.reachableBase(initial) ?: return null
         if (base != bases.firstOrNull()) {
             settingsRepository.setNamiServerUrl((listOf(base) + bases.filter { it != base }).joinToString("\n"))
         }

@@ -14,4 +14,5 @@ data class LoopEntity(
     val endMs: Long,
     val name: String,
     val createdAt: Long,
+    val updatedAt: Long = 0,
 )

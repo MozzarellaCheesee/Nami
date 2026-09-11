@@ -48,6 +48,14 @@ object NamiServerClient {
         candidates.map { it.trim().trimEnd('/') }.filter { it.isNotEmpty() }
             .firstOrNull { health(it, certSha256) }
 
+    /** Выбирает адрес именно сопряжённого сервера, а не любой NAMI с публичным health. */
+    fun reachableBase(cfg: Config): String? = cfg.bases
+        .map { it.trim().trimEnd('/') }.filter { it.isNotEmpty() }
+        .firstOrNull { base ->
+            request("GET", "$base/api/tracks?limit=1&offset=0", null, cfg.token, cfg.certSha256)
+                ?.first == 200
+        }
+
     /**
      * POST /api/auth/qr/confirm - меняет challenge из QR на постоянный токен устройства.
      * Возвращает токен либо null.
@@ -89,7 +97,7 @@ object NamiServerClient {
         onProgress: ((done: Int, total: Int) -> Unit)? = null,
     ): List<Long?>? {
         if (tracks.isEmpty()) return emptyList()
-        val base = reachableBase(cfg.bases, cfg.certSha256) ?: cfg.baseUrl
+        val base = reachableBase(cfg) ?: return null
         val result = ArrayList<Long?>(tracks.size)
         val chunkSize = 500
         for (chunk in tracks.chunked(chunkSize)) {
@@ -241,7 +249,7 @@ object NamiServerClient {
             for (base in bases) {
                 val certForBase = if (hostIsIpLiteral(base)) fp else null
                 val token = pairWithCode(base, code, deviceName, certForBase) ?: continue
-                return Config(base, token, certForBase, listOf(base) + bases.filter { it != base })
+                return Config(base, token, fp, listOf(base) + bases.filter { it != base })
             }
             return null
         }
@@ -263,7 +271,7 @@ object NamiServerClient {
             if (!health(base, certForBase)) continue
             val token = confirmPairing(base, challenge, deviceName, certForBase) ?: continue
             // Рабочий адрес - первым, остальные (Tailscale, домен) - как запасные в дорогу.
-            return Config(base, token, certForBase, listOf(base) + bases.filter { it != base })
+            return Config(base, token, fp, listOf(base) + bases.filter { it != base })
         }
         return null
     }
@@ -333,7 +341,7 @@ object NamiServerClient {
      * Возвращает JSONArray треков.
      */
     fun tracks(cfg: Config, limit: Int = 200, offset: Int = 0): org.json.JSONArray? {
-        val base = reachableBase(cfg.bases, cfg.certSha256) ?: return null
+        val base = reachableBase(cfg) ?: return null
         val (code, body) = request("GET", "$base/api/tracks?limit=$limit&offset=$offset", null, cfg.token, cfg.certSha256) ?: return null
         return if (code == 200) runCatching { org.json.JSONArray(body) }.getOrNull() else null
     }
@@ -343,7 +351,7 @@ object NamiServerClient {
      * Возвращает true при успехе.
      */
     fun downloadTrack(cfg: Config, trackId: Long, destFile: java.io.File): Boolean {
-        val base = reachableBase(cfg.bases, cfg.certSha256) ?: return false
+        val base = reachableBase(cfg) ?: return false
         return runCatching {
             val url = "$base/api/tracks/$trackId/stream/auto?token=${cfg.token}"
             val conn = (URL(url).openConnection() as HttpURLConnection).apply {
@@ -371,7 +379,7 @@ object NamiServerClient {
      * Возвращает true при успехе.
      */
     fun downloadArtwork(cfg: Config, trackId: Long, destFile: java.io.File): Boolean {
-        val base = reachableBase(cfg.bases, cfg.certSha256) ?: return false
+        val base = reachableBase(cfg) ?: return false
         return runCatching {
             val url = "$base/api/tracks/$trackId/artwork?token=${cfg.token}"
             val conn = (URL(url).openConnection() as HttpURLConnection).apply {
@@ -398,9 +406,9 @@ object NamiServerClient {
      * GET /api/sync?since={timestamp} - pull изменений с сервера.
      * Возвращает JSON: { "changes": [...], "current_ts": Long }.
      */
-    fun syncPull(cfg: Config, since: Long): JSONObject? {
-        val base = reachableBase(cfg.bases, cfg.certSha256) ?: return null
-        val (code, body) = request("GET", "$base/api/sync?since=$since", null, cfg.token, cfg.certSha256) ?: return null
+    fun syncPull(cfg: Config, since: Long, cursor: Long = 0): JSONObject? {
+        val base = reachableBase(cfg) ?: return null
+        val (code, body) = request("GET", "$base/api/sync?since=$since&cursor=$cursor", null, cfg.token, cfg.certSha256) ?: return null
         return if (code == 200) runCatching { JSONObject(body) }.getOrNull() else null
     }
 
@@ -409,17 +417,35 @@ object NamiServerClient {
      * Body: { "changes": [...] }. Возвращает true при успехе.
      */
     fun syncPush(cfg: Config, changes: org.json.JSONArray): Boolean {
-        val base = reachableBase(cfg.bases, cfg.certSha256) ?: return false
+        val base = reachableBase(cfg) ?: return false
         val body = JSONObject().put("changes", changes).toString()
         val (code, _) = request("POST", "$base/api/sync", body, cfg.token, cfg.certSha256) ?: return false
         return code == 200
+    }
+
+    fun positionPost(cfg: Config, trackId: Long, positionMs: Long, updatedAt: Long): Boolean {
+        val base = reachableBase(cfg) ?: return false
+        val body = JSONObject()
+            .put("track_id", trackId)
+            .put("position_ms", positionMs)
+            .put("updated_at", updatedAt)
+            .toString()
+        return request("POST", "$base/api/position", body, cfg.token, cfg.certSha256)
+            ?.first == 200
+    }
+
+    fun positions(cfg: Config, since: Long): org.json.JSONArray? {
+        val base = reachableBase(cfg) ?: return null
+        val (code, body) = request("GET", "$base/api/position?since=$since", null, cfg.token, cfg.certSha256)
+            ?: return null
+        return if (code == 200) runCatching { org.json.JSONArray(body) }.getOrNull() else null
     }
 
     /**
      * POST /api/scan - принудительный запуск сканирования библиотеки на сервере.
      */
     fun scanLibrary(cfg: Config): JSONObject? {
-        val base = reachableBase(cfg.bases, cfg.certSha256) ?: return null
+        val base = reachableBase(cfg) ?: return null
         val (code, body) = request("POST", "$base/api/scan", "", cfg.token, cfg.certSha256) ?: return null
         return if (code in 200..299) runCatching { JSONObject(body) }.getOrNull() else null
     }
@@ -428,7 +454,7 @@ object NamiServerClient {
      * GET /api/library/health - отчёт о здоровье библиотеки сервера.
      */
     fun libraryHealth(cfg: Config): JSONObject? {
-        val base = reachableBase(cfg.bases, cfg.certSha256) ?: return null
+        val base = reachableBase(cfg) ?: return null
         val (code, body) = request("GET", "$base/api/library/health", null, cfg.token, cfg.certSha256) ?: return null
         return if (code in 200..299) runCatching { JSONObject(body) }.getOrNull() else null
     }
@@ -437,7 +463,7 @@ object NamiServerClient {
      * POST /api/scrobble - отправка прослушанного трека на сервер NAMI.
      */
     fun scrobble(cfg: Config, trackId: Long, playedAt: Long = System.currentTimeMillis() / 1000): Boolean {
-        val base = reachableBase(cfg.bases, cfg.certSha256) ?: return false
+        val base = reachableBase(cfg) ?: return false
         val body = JSONObject().apply {
             put("track_id", trackId)
             put("played_at", playedAt)
@@ -451,7 +477,7 @@ object NamiServerClient {
      * сервере. Возвращает `{track_id, duplicate_of}` либо null.
      */
     fun uploadTrack(cfg: Config, file: java.io.File): JSONObject? {
-        val base = reachableBase(cfg.bases, cfg.certSha256) ?: return null
+        val base = reachableBase(cfg) ?: return null
         val name = java.net.URLEncoder.encode(file.name, "UTF-8")
         val url = "$base/api/tracks/upload?filename=$name"
         return runCatching {
@@ -488,7 +514,7 @@ object NamiServerClient {
         ttlSecs: Long?,
         maxPlays: Int?,
     ): String? {
-        val base = reachableBase(cfg.bases, cfg.certSha256) ?: return null
+        val base = reachableBase(cfg) ?: return null
         val body = JSONObject().apply {
             put("title", title)
             put("track_ids", org.json.JSONArray(serverTrackIds))

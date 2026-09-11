@@ -18,4 +18,5 @@ data class MomentEntity(
      * navigation point (long track, lecture, mix), not a "best part" highlight. Reuses this table
      * instead of a separate one since the data shape (track + position + label) is identical. */
     val isChapter: Boolean = false,
+    val updatedAt: Long = 0,
 )

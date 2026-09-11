@@ -25,6 +25,7 @@ class MomentsRepositoryImpl @Inject constructor(
                 color = colorArgb,
                 createdAt = System.currentTimeMillis(),
                 isChapter = isChapter,
+                updatedAt = System.currentTimeMillis(),
             ),
         )
     }

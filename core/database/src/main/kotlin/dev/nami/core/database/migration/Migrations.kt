@@ -326,6 +326,24 @@ val MIGRATION_28_29 = object : Migration(28, 29) {
     }
 }
 
+/** Реальные LWW-метки локальных изменений для синхронизации с NAMI Server. */
+val MIGRATION_29_30 = object : Migration(29, 30) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE tracks ADD COLUMN ratingUpdatedAt INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE tracks ADD COLUMN noteUpdatedAt INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE playlists ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE playlist_tracks ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE tags ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE track_tags ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE moments ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE loops ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("UPDATE playlists SET updatedAt = createdAt")
+        db.execSQL("UPDATE playlist_tracks SET updatedAt = addedAt")
+        db.execSQL("UPDATE moments SET updatedAt = createdAt")
+        db.execSQL("UPDATE loops SET updatedAt = createdAt")
+    }
+}
+
 val MIGRATION_14_15 = object : Migration(14, 15) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL(

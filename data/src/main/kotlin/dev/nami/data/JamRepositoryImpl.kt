@@ -184,6 +184,12 @@ class JamRepositoryImpl @Inject constructor(
         }
     }
 
+    override fun connectServerEvents() {
+        if (!isServerConfigured.value || webSocket != null || isConnecting) return
+        intentionalClose = false
+        scope.launch { connectWebSocket() }
+    }
+
     override fun joinRoom(code: String, hostUrl: String?) {
         clearError()
         intentionalClose = false

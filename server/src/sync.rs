@@ -69,6 +69,9 @@ pub struct Pull {
     pub changes: Vec<Change>,
     /// true - изменений больше, чем влезло: повторить с `since` последнего изменения.
     pub truncated: bool,
+    /// rowid последней строки при постраничной выборке записей с одинаковым updated_at.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<i64>,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -90,26 +93,29 @@ pub const MAX_SKEW_SECS: i64 = 300;
 ///
 /// `user_id` - чьё состояние: у каждого пользователя своё (плейлисты, рейтинги,
 /// история). 0 - одиночный режим, когда пользователей на сервере ещё нет.
-pub fn pull(conn: &Connection, user_id: i64, since: i64) -> rusqlite::Result<Pull> {
+pub fn pull(conn: &Connection, user_id: i64, since: i64, cursor: i64) -> rusqlite::Result<Pull> {
     let mut stmt = conn.prepare(
-        "SELECT entity, id, field, value, updated_at FROM state
-         WHERE user_id = ?3 AND updated_at > ?1 ORDER BY updated_at LIMIT ?2",
+        "SELECT entity, id, field, value, updated_at, rowid FROM state
+         WHERE user_id = ?4 AND (updated_at > ?1 OR (?2 >= 0 AND updated_at = ?1 AND rowid > ?2))
+         ORDER BY updated_at, rowid LIMIT ?3",
     )?;
-    let mut changes = stmt
-        .query_map(rusqlite::params![since, MAX_CHANGES as i64 + 1, user_id], |r| {
+    let mut rows = stmt
+        .query_map(rusqlite::params![since, cursor, MAX_CHANGES as i64 + 1, user_id], |r| {
             let raw: String = r.get(3)?;
-            Ok(Change {
+            Ok((Change {
                 entity: r.get(0)?,
                 id: r.get(1)?,
                 field: r.get(2)?,
                 value: serde_json::from_str(&raw).unwrap_or(serde_json::Value::Null),
                 updated_at: r.get(4)?,
-            })
+            }, r.get::<_, i64>(5)?))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    let truncated = changes.len() > MAX_CHANGES;
-    changes.truncate(MAX_CHANGES);
-    Ok(Pull { now: now(), changes, truncated })
+    let truncated = rows.len() > MAX_CHANGES;
+    rows.truncate(MAX_CHANGES);
+    let next_cursor = truncated.then(|| rows.last().map(|(_, id)| *id)).flatten();
+    let changes = rows.into_iter().map(|(change, _)| change).collect();
+    Ok(Pull { now: now(), changes, truncated, next_cursor })
 }
 
 /// Применяет изменения клиента. LWW по полю: побеждает более поздняя метка,
@@ -310,7 +316,7 @@ mod tests {
         push(&mut c, 0, &[ch("p1", "name", "Утро", t)]).unwrap();
         push(&mut c, 0, &[ch("p1", "cover", "cover.jpg", t)]).unwrap();
 
-        let got = pull(&c, 0, 0).unwrap().changes;
+        let got = pull(&c, 0, 0, 0).unwrap().changes;
         assert_eq!(got.len(), 2, "оба изменения обязаны сохраниться: {got:?}");
         let name = got.iter().find(|x| x.field == "name").unwrap();
         assert_eq!(name.value, serde_json::json!("Утро"));
@@ -327,12 +333,12 @@ mod tests {
         let r = push(&mut c, 0, &[ch("p1", "name", "ранний", t - 10)]).unwrap();
         assert_eq!(r.stale, 1);
         assert_eq!(r.applied, 0);
-        assert_eq!(pull(&c, 0, 0).unwrap().changes[0].value, serde_json::json!("поздний"));
+        assert_eq!(pull(&c, 0, 0, 0).unwrap().changes[0].value, serde_json::json!("поздний"));
 
         // А более позднее - побеждает.
         let r = push(&mut c, 0, &[ch("p1", "name", "новейший", t + 5)]).unwrap();
         assert_eq!(r.applied, 1);
-        assert_eq!(pull(&c, 0, 0).unwrap().changes[0].value, serde_json::json!("новейший"));
+        assert_eq!(pull(&c, 0, 0, 0).unwrap().changes[0].value, serde_json::json!("новейший"));
     }
 
     #[test]
@@ -341,7 +347,7 @@ mod tests {
         let t = now();
         push(&mut c, 0, &[ch("p1", "name", "старое", t - 100)]).unwrap();
         push(&mut c, 0, &[ch("p2", "name", "новое", t)]).unwrap();
-        let got = pull(&c, 0, t - 1).unwrap().changes;
+        let got = pull(&c, 0, t - 1, 0).unwrap().changes;
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].id, "p2");
     }
@@ -363,7 +369,7 @@ mod tests {
             }],
         )
         .unwrap();
-        let got = pull(&c, 0, t).unwrap().changes;
+        let got = pull(&c, 0, t, 0).unwrap().changes;
         assert!(got.iter().any(|x| x.field == DELETED), "надгробие должно уехать клиенту");
 
         // Свежее надгробие не чистится, старое - чистится.
@@ -374,7 +380,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(purge_tombstones(&c, 30).unwrap(), 2, "уходит вся запись целиком");
-        assert!(pull(&c, 0, 0).unwrap().changes.is_empty());
+        assert!(pull(&c, 0, 0, 0).unwrap().changes.is_empty());
     }
 
     #[test]
@@ -385,7 +391,7 @@ mod tests {
         let future = ch("p2", "name", "x", now() + 10_000);
         let r = push(&mut c, 0, &[bad, future]).unwrap();
         assert_eq!(r.rejected, 2);
-        assert!(pull(&c, 0, 0).unwrap().changes.is_empty());
+        assert!(pull(&c, 0, 0, 0).unwrap().changes.is_empty());
     }
 
     #[test]
@@ -401,6 +407,27 @@ mod tests {
         // Устаревшая позиция не откатывает свежую.
         set_position(&c, 1, &Position { track_id: 7, position_ms: 10, updated_at: t }).unwrap();
         assert_eq!(positions(&c, None, 0).unwrap()[0].position_ms, 5000);
-        assert!(pull(&c, 0, 0).unwrap().changes.is_empty(), "позиции нет в sync-потоке");
+        assert!(pull(&c, 0, 0, 0).unwrap().changes.is_empty(), "позиции нет в sync-потоке");
+    }
+
+    #[test]
+    fn курсор_не_теряет_строки_с_одинаковой_меткой() {
+        let mut c = db();
+        let t = now();
+        let tx = c.transaction().unwrap();
+        for i in 0..=MAX_CHANGES {
+            tx.execute(
+                "INSERT INTO state(user_id,entity,id,field,value,updated_at) VALUES(0,'playlist',?1,'name','\"x\"',?2)",
+                rusqlite::params![format!("p{i}"), t],
+            )
+            .unwrap();
+        }
+        tx.commit().unwrap();
+
+        let first = pull(&c, 0, 0, 0).unwrap();
+        assert!(first.truncated);
+        assert_eq!(first.changes.len(), MAX_CHANGES);
+        let second = pull(&c, 0, t, first.next_cursor.unwrap()).unwrap();
+        assert_eq!(second.changes.len(), 1);
     }
 }

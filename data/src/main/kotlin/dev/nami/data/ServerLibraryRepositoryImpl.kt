@@ -231,6 +231,13 @@ class ServerLibraryRepositoryImpl @Inject constructor(
     override fun cachedArtwork(serverTrackId: Long): File? =
         artworkFileFor(serverTrackId).takeIf { it.exists() && it.length() > 0 }
 
+    override suspend fun downloadArtwork(serverTrackId: Long): File? = withContext(Dispatchers.IO) {
+        cachedArtwork(serverTrackId)?.let { return@withContext it }
+        val cfg = activeConfig() ?: return@withContext null
+        val dest = artworkFileFor(serverTrackId)
+        if (NamiServerClient.downloadArtwork(cfg, serverTrackId, dest)) dest else null
+    }
+
     override fun cachedTrackIds(): Set<Long> =
         cacheDir.listFiles { f -> f.isFile && f.name.endsWith(".audio") }
             ?.mapNotNull { it.nameWithoutExtension.toLongOrNull() }

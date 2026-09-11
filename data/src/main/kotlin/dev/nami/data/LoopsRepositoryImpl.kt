@@ -24,6 +24,7 @@ class LoopsRepositoryImpl @Inject constructor(
                 endMs = endMs,
                 name = name,
                 createdAt = System.currentTimeMillis(),
+                updatedAt = System.currentTimeMillis(),
             ),
         )
     }

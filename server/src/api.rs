@@ -1270,6 +1270,7 @@ async fn generate_pair_code(
 #[derive(Deserialize)]
 struct Since {
     since: Option<i64>,
+    cursor: Option<i64>,
 }
 
 async fn sync_pull(
@@ -1278,7 +1279,12 @@ async fn sync_pull(
     Query(q): Query<Since>,
 ) -> ApiResult<Json<sync::Pull>> {
     let db = st.db.lock().unwrap();
-    Ok(Json(sync::pull(&db, ident.state_key(), q.since.unwrap_or(0))?))
+    Ok(Json(sync::pull(
+        &db,
+        ident.state_key(),
+        q.since.unwrap_or(0),
+        q.cursor.unwrap_or(-1),
+    )?))
 }
 
 #[derive(Deserialize)]
@@ -2780,4 +2786,3 @@ async fn jam_active_rooms(State(st): State<Shared>) -> Response {
     let rooms = st.jams.active_codes();
     Json(JamActiveRoomsResp { rooms }).into_response()
 }
-

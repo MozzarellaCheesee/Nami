@@ -28,4 +28,5 @@ data class PlaylistTrackEntity(
     val trackId: String,
     val position: Int,
     val addedAt: Long,
+    val updatedAt: Long = 0,
 )

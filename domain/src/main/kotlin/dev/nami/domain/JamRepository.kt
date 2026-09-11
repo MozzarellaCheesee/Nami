@@ -59,6 +59,9 @@ interface JamRepository {
     /** Start/refresh scanning for active Jam rooms on Wi-Fi and recent servers. */
     fun startDiscovery()
 
+    /** Поддерживать серверный WebSocket для событий sync, даже вне активной Jam-комнаты. */
+    fun connectServerEvents() {}
+
     /** Stop active scanning. */
     fun stopDiscovery()
 
