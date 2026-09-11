@@ -27,19 +27,15 @@ class ServerAudioRepositoryImpl @Inject constructor(
         !settingsRepository.namiServerToken.value.isNullOrBlank() &&
             settingsRepository.namiServerUrl.value.isNotBlank()
 
-    /** Конфигурация с первым доступным адресом из списка; null - сервера нет/недоступен. */
+    /** Только снимок настроек: этот метод вызывается и из синхронных UI-путей URL. */
     private fun activeConfig(): NamiServerClient.Config? {
         if (!isServerActive()) return null
         val token = settingsRepository.namiServerToken.value ?: return null
         val cert = settingsRepository.namiServerCertSha256.value
         val bases = settingsRepository.namiServerUrl.value.split('\n', ',')
             .map { it.trim() }.filter { it.isNotEmpty() }
-        val initial = NamiServerClient.Config(bases.first(), token, cert, bases)
-        val base = NamiServerClient.reachableBase(initial) ?: return null
-        if (base != bases.firstOrNull()) {
-            settingsRepository.setNamiServerUrl((listOf(base) + bases.filter { it != base }).joinToString("\n"))
-        }
-        return NamiServerClient.Config(base, token, cert, listOf(base) + bases.filter { it != base })
+        val base = bases.firstOrNull() ?: return null
+        return NamiServerClient.Config(base, token, cert, bases)
     }
 
     private fun cacheKey(artist: String?, title: String, durationMs: Long) =

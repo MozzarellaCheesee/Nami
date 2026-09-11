@@ -53,7 +53,12 @@ fn run(state: Shared, dirs: Vec<PathBuf>) -> crate::Res<()> {
         let mut db = state.db.lock().unwrap();
         match crate::scanner::scan(&mut db, &dirs, 0) {
             Ok(rep) if rep.added + rep.updated + rep.removed > 0 => {
-                tracing::info!("библиотека обновлена по событию ФС: {rep:?}")
+                tracing::info!("библиотека обновлена по событию ФС: {rep:?}");
+                state.notify(serde_json::json!({
+                    "type": "changed",
+                    "entities": ["tracks"],
+                    "at": crate::db::now(),
+                }));
             }
             Ok(_) => {}
             Err(e) => tracing::warn!("пересканирование по событию ФС не удалось: {e}"),
