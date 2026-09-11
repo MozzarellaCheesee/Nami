@@ -1,0 +1,291 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  # ============================================================================
+  # 1. Android Client Build (app-release.apk)
+  # ============================================================================
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'gradle'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Prepare Signing Keystore
+        shell: bash
+        env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          mkdir -p secrets
+          if [ -n "$SIGNING_KEYSTORE_BASE64" ]; then
+            echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > secrets/nami.jks
+            echo "nami.keystore.storePassword=$KEYSTORE_PASSWORD" >> local.properties
+            echo "nami.keystore.keyAlias=$KEY_ALIAS" >> local.properties
+            echo "nami.keystore.keyPassword=$KEY_PASSWORD" >> local.properties
+          elif [ -f "secrets/nami.jks" ]; then
+            echo "Using repository bundled keystore"
+            echo "nami.keystore.storePassword=AstolfoServant13_" >> local.properties
+            echo "nami.keystore.keyAlias=namimusic" >> local.properties
+            echo "nami.keystore.keyPassword=AstolfoServant13_" >> local.properties
+          fi
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Release APK
+        run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
+
+      - name: Locate and rename APK
+        shell: bash
+        run: |
+          APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "Error: APK not found" >&2
+            exit 1
+          fi
+          cp "$APK_PATH" app-release.apk
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: app-release.apk
+          if-no-files-found: error
+
+  # ============================================================================
+  # 2. Linux Server Build (x86_64, aarch64)
+  # ============================================================================
+  build-server-linux:
+    name: Build Linux Server (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            archive_name: nami-server-linux-x86_64.tar.gz
+            cross_pkg: gcc-x86-64-linux-gnu libc6-dev-amd64-cross
+            linker: x86_64-linux-gnu-gcc
+          - target: aarch64-unknown-linux-gnu
+            archive_name: nami-server-linux-aarch64.tar.gz
+            cross_pkg: gcc-aarch64-linux-gnu libc6-dev-arm64-cross
+            linker: aarch64-linux-gnu-gcc
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross-compilation toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ${{ matrix.cross_pkg }}
+
+      - name: Build Release Binary
+        env:
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.linker }}
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.linker }}
+          CC_x86_64_unknown_linux_gnu: ${{ matrix.linker }}
+          CC_aarch64_unknown_linux_gnu: ${{ matrix.linker }}
+        run: |
+          cargo build --release --target ${{ matrix.target }} --manifest-path server/Cargo.toml
+
+      - name: Package Binary Archive
+        shell: bash
+        run: |
+          BIN="server/target/${{ matrix.target }}/release/nami-server"
+          chmod +x "$BIN"
+          tar -czf "${{ matrix.archive_name }}" -C "$(dirname "$BIN")" nami-server
+
+      - name: Upload Linux Binary Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.archive_name }}
+          path: ${{ matrix.archive_name }}
+          if-no-files-found: error
+
+  # ============================================================================
+  # 3. Windows Server Build (x86_64)
+  # ============================================================================
+  build-server-windows:
+    name: Build Windows Server (x86_64)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Build Release Binary
+        run: cargo build --release --manifest-path server/Cargo.toml
+
+      - name: Package Windows ZIP
+        shell: pwsh
+        run: |
+          $bin = "server\target\release\nami-server.exe"
+          Compress-Archive -Path $bin -DestinationPath "nami-server-windows-x86_64.zip" -Force
+
+      - name: Upload Windows Binary Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nami-server-windows-x86_64.zip
+          path: nami-server-windows-x86_64.zip
+          if-no-files-found: error
+
+  # ============================================================================
+  # 4. Docker Multi-Arch Image (ghcr.io)
+  # ============================================================================
+  build-docker:
+    name: Build & Push Docker Image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/nami-server
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=true
+
+      - name: Build and push multi-arch Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: server/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  # ============================================================================
+  # 5. Publish Unified GitHub Release
+  # ============================================================================
+  publish-release:
+    name: Publish GitHub Release
+    needs:
+      - build-android
+      - build-server-linux
+      - build-server-windows
+      - build-docker
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all workflow artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Consolidate Release Assets
+        shell: bash
+        run: |
+          mkdir -p dist
+          find release-artifacts -type f -name "app-release.apk" -exec cp {} dist/ \;
+          find release-artifacts -type f -name "nami-server-linux-x86_64.tar.gz" -exec cp {} dist/ \;
+          find release-artifacts -type f -name "nami-server-linux-aarch64.tar.gz" -exec cp {} dist/ \;
+          find release-artifacts -type f -name "nami-server-windows-x86_64.zip" -exec cp {} dist/ \;
+          cp deploy/install.sh dist/install.sh
+          cp deploy/install.ps1 dist/install.ps1
+          ls -la dist/
+
+      - name: Generate Release Notes Body
+        id: release_notes
+        shell: bash
+        run: |
+          TAG="${{ github.ref_name }}"
+          cat << EOF > release_body.md
+          ## 🌊 Nami Release ${TAG}
+
+          Полнофункциональный релиз единой музыкальной экосистемы Nami (Android-плеер + персональный сервер на Rust).
+
+          ### 📦 Артефакты релиза:
+          * **Android Приложение:**
+            * \`app-release.apk\` — Hi-Res / Bit-perfect аудиоплеер для Android (Compose, USB DAC, ReplayGain, Jam).
+          * **Сервер Nami (Self-Hosted):**
+            * \`nami-server-linux-x86_64.tar.gz\` — бинарник для Linux x86_64 (Ubuntu, Debian, Arch, Fedora).
+            * \`nami-server-linux-aarch64.tar.gz\` — бинарник для Linux ARM64 (Raspberry Pi 4/5, Oracle Cloud ARM, Apple Silicon VPS).
+            * \`nami-server-windows-x86_64.zip\` — бинарник для Windows 10/11 и Windows Server (x64).
+            * \`install.sh\` / \`install.ps1\` — скрипты мгновенной установки сервера в одну команду.
+          * **Docker Image:**
+            * \`ghcr.io/${{ github.repository_owner }}/nami-server:latest\`
+            * \`ghcr.io/${{ github.repository_owner }}/nami-server:${TAG}\`
+
+          ### 🚀 Быстрая установка сервера:
+          * **Linux (systemd):**
+            \`\`\`bash
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/deploy/install.sh | bash
+            \`\`\`
+          * **Windows (PowerShell от имени Администратора):**
+            \`\`\`powershell
+            irm https://raw.githubusercontent.com/${{ github.repository }}/main/deploy/install.ps1 | iex
+            \`\`\`
+          * **Docker:**
+            \`\`\`bash
+            docker run -d --name nami -p 4533:4533 -v /path/to/music:/music:ro -v nami-data:/data ghcr.io/${{ github.repository_owner }}/nami-server:latest
+            \`\`\`
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Nami ${{ github.ref_name }}"
+          body_path: release_body.md
+          files: |
+            dist/app-release.apk
+            dist/nami-server-linux-x86_64.tar.gz
+            dist/nami-server-linux-aarch64.tar.gz
+            dist/nami-server-windows-x86_64.zip
+            dist/install.sh
+            dist/install.ps1
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
