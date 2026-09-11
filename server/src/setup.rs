@@ -57,7 +57,7 @@ struct SetupDomainReq {
 
 async fn setup_domain_handler(Json(req): Json<SetupDomainReq>) -> Response {
     let port = req.port.unwrap_or(4533);
-    match crate::domain::setup_domain(&req.domain, port, Path::new("config.toml")) {
+    match crate::domain::setup_domain(&req.domain, port, Path::new("config.toml"), false) {
         Ok(rep) => Json(serde_json::to_value(rep).unwrap_or_default()).into_response(),
         Err(e) => (
             StatusCode::BAD_REQUEST,

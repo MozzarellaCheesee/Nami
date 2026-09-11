@@ -806,7 +806,7 @@ fn domain_setup(cfg: &crate::config::Config, domain_arg: Option<&str>) -> Res<()
     println!("Запуск проверки и настройки для: {}\n", domain);
 
     let cfg_file = crate::config::find_config_path();
-    let report = crate::domain::setup_domain(&domain, cfg.port, &cfg_file)
+    let report = crate::domain::setup_domain(&domain, cfg.port, &cfg_file, true)
         .map_err(|e| format!("Ошибка настройки домена:\n{e}"))?;
 
     for step in &report.steps {
