@@ -36,7 +36,10 @@ class JamViewModel @Inject constructor(
 
     fun createRoom() = jamRepository.createRoom()
     fun joinRoom(code: String, hostUrl: String? = null) = jamRepository.joinRoom(code, hostUrl)
-    fun leave() = jamRepository.leave()
+    fun leave() {
+        jamRepository.clearError()
+        jamRepository.leave()
+    }
     fun play(serverTrackId: Long, positionMs: Long = 0) = jamRepository.play(serverTrackId, positionMs)
     fun seek(positionMs: Long) = jamRepository.seek(positionMs)
     fun addToQueue(serverTrackId: Long) = jamRepository.addToQueue(serverTrackId)

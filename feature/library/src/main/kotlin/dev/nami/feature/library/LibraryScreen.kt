@@ -35,6 +35,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Done
 import androidx.compose.material.icons.outlined.Edit
@@ -188,13 +189,14 @@ fun LibraryScreen(
                     SelectionTopBar(
                         selectedCount = uiState.selectedTrackIds.size,
                         onCancel = viewModel::clearSelection,
-                        onSelectAll = {
-                            viewModel.setSelectedTracks(tracks.itemSnapshotList.items.mapNotNull { it?.id }.toSet())
-                        },
+                        onSelectAll = viewModel::selectAllTracks,
                         onDelete = viewModel::deleteSelectedTracks,
                         onAddToPlaylist = { showAddSelectedToPlaylist = true },
                         onLikeSelected = viewModel::likeSelectedTracks,
                         onEditTags = { showBatchEditDialog = true },
+                        onUploadToServer = if (viewModel.isServerActive()) {
+                            viewModel::uploadSelectedTracksToServer
+                        } else null,
                     )
                 } else if (albumSelectionMode) {
                     AlbumSelectionTopBar(
@@ -416,6 +418,7 @@ private fun SelectionTopBar(
     onAddToPlaylist: () -> Unit,
     onLikeSelected: () -> Unit,
     onEditTags: () -> Unit,
+    onUploadToServer: (() -> Unit)? = null,
 ) {
     var showMenu by remember { mutableStateOf(false) }
     Row(
@@ -439,14 +442,18 @@ private fun SelectionTopBar(
         }
     }
     if (showMenu) {
+        val actions = buildList {
+            add(ContextAction("В плейлист", Icons.Outlined.LibraryAdd, onClick = onAddToPlaylist))
+            add(ContextAction("Отметить любимым", Icons.Outlined.FavoriteBorder, onClick = onLikeSelected))
+            add(ContextAction("Редактировать теги", Icons.Outlined.Edit, onClick = onEditTags))
+            if (onUploadToServer != null) {
+                add(ContextAction("Отправить на сервер", Icons.Outlined.CloudUpload, onClick = onUploadToServer))
+            }
+            add(ContextAction("Удалить", Icons.Outlined.Delete, onClick = onDelete))
+        }
         ContextActionSheet(
             onDismiss = { showMenu = false },
-            actions = listOf(
-                ContextAction("В плейлист", Icons.Outlined.LibraryAdd, onClick = onAddToPlaylist),
-                ContextAction("Отметить любимым", Icons.Outlined.FavoriteBorder, onClick = onLikeSelected),
-                ContextAction("Редактировать теги", Icons.Outlined.Edit, onClick = onEditTags),
-                ContextAction("Удалить", Icons.Outlined.Delete, onClick = onDelete),
-            ),
+            actions = actions,
         )
     }
 }

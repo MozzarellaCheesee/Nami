@@ -867,12 +867,12 @@ private fun JamSheetActiveSession(
                 Spacer(modifier = Modifier.height(14.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     OutlinedButton(
                         onClick = {
                             val shareText = buildString {
-                                appendLine("Присоединяйся к совместному прослушиванию в Nami!")
+                                appendLine("Присоединяйся к совместному прослушиванию в Nami Jam!")
                                 appendLine("Код комнаты: ${session.code}")
                                 if (webInviteLink != null) {
                                     appendLine("Ссылка: $webInviteLink")
@@ -886,16 +886,23 @@ private fun JamSheetActiveSession(
                             context.startActivity(Intent.createChooser(sendIntent, "Пригласить в Jam"))
                         },
                         modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
                         shape = RoundedCornerShape(NamiRadius.Button),
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.Share,
                             contentDescription = null,
                             tint = NamiColors.Paper100,
-                            modifier = Modifier.size(18.dp),
+                            modifier = Modifier.size(16.dp),
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Поделиться", color = NamiColors.Paper100)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Поделиться",
+                            color = NamiColors.Paper100,
+                            style = MaterialTheme.typography.labelMedium,
+                            maxLines = 1,
+                            softWrap = false,
+                        )
                     }
 
                     OutlinedButton(
@@ -904,31 +911,45 @@ private fun JamSheetActiveSession(
                             Toast.makeText(context, "Ссылка скопирована", Toast.LENGTH_SHORT).show()
                         },
                         modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
                         shape = RoundedCornerShape(NamiRadius.Button),
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.Link,
                             contentDescription = null,
                             tint = NamiColors.Paper100,
-                            modifier = Modifier.size(18.dp),
+                            modifier = Modifier.size(16.dp),
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Ссылка", color = NamiColors.Paper100)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Ссылка",
+                            color = NamiColors.Paper100,
+                            style = MaterialTheme.typography.labelMedium,
+                            maxLines = 1,
+                            softWrap = false,
+                        )
                     }
 
                     OutlinedButton(
                         onClick = { showQrDialog = true },
                         modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
                         shape = RoundedCornerShape(NamiRadius.Button),
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.QrCode,
                             contentDescription = null,
                             tint = NamiColors.Paper100,
-                            modifier = Modifier.size(18.dp),
+                            modifier = Modifier.size(16.dp),
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("QR-код", color = NamiColors.Paper100)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "QR-код",
+                            color = NamiColors.Paper100,
+                            style = MaterialTheme.typography.labelMedium,
+                            maxLines = 1,
+                            softWrap = false,
+                        )
                     }
                 }
             }

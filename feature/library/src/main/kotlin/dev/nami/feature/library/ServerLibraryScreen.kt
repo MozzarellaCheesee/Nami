@@ -29,8 +29,15 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.itemsIndexed
 import dev.nami.core.designsystem.NamiColors
+import dev.nami.core.designsystem.NamiPill
 import dev.nami.core.designsystem.NamiScreenHeader
+import dev.nami.core.model.TrackId
+import dev.nami.domain.PlayableTrack
+import dev.nami.domain.PlayerRepository
+import dev.nami.domain.ServerAudioRepository
 import dev.nami.domain.ServerLibraryRepository
 import dev.nami.domain.ServerTrackMeta
 import kotlinx.coroutines.launch
@@ -39,6 +46,8 @@ import javax.inject.Inject
 @HiltViewModel
 class ServerLibraryViewModel @Inject constructor(
     private val serverLibraryRepository: ServerLibraryRepository,
+    private val serverAudioRepository: ServerAudioRepository,
+    private val playerRepository: PlayerRepository,
 ) : ViewModel() {
 
     var tracks by mutableStateOf<List<ServerTrackMeta>>(emptyList())
@@ -96,6 +105,42 @@ class ServerLibraryViewModel @Inject constructor(
             }
         }
     }
+
+    fun playTrack(track: ServerTrackMeta) {
+        viewModelScope.launch {
+            val cachedFile = serverLibraryRepository.cachedFile(track.id)
+            val streamUrl = cachedFile?.let { android.net.Uri.fromFile(it).toString() }
+                ?: serverAudioRepository.serverStreamUrl(track.id)
+                ?: return@launch
+            val playable = PlayableTrack(
+                id = TrackId("server_${track.id}"),
+                title = track.title,
+                artistName = track.artist.ifBlank { null },
+                path = streamUrl,
+                durationMs = track.durationMs,
+            )
+            playerRepository.play(listOf(playable), startIndex = 0, startMs = 0L)
+        }
+    }
+
+    fun playAll(startIndex: Int = 0) {
+        if (tracks.isEmpty()) return
+        viewModelScope.launch {
+            val playables = tracks.map { track ->
+                val cachedFile = serverLibraryRepository.cachedFile(track.id)
+                val streamUrl = cachedFile?.let { android.net.Uri.fromFile(it).toString() }
+                    ?: serverAudioRepository.serverStreamUrl(track.id).orEmpty()
+                PlayableTrack(
+                    id = TrackId("server_${track.id}"),
+                    title = track.title,
+                    artistName = track.artist.ifBlank { null },
+                    path = streamUrl,
+                    durationMs = track.durationMs,
+                )
+            }
+            playerRepository.play(playables, startIndex = startIndex, startMs = 0L)
+        }
+    }
 }
 
 @Composable
@@ -119,9 +164,29 @@ fun ServerLibraryScreen(
                 Text("Нет треков на сервере", color = NamiColors.Paper70)
             }
             else -> LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "Всего треков: ${viewModel.tracks.size}",
+                            color = NamiColors.Paper70,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f),
+                        )
+                        NamiPill(
+                            text = "Слушать всё",
+                            onClick = { viewModel.playAll(0) },
+                        )
+                    }
+                }
                 items(viewModel.tracks, key = { it.id }) { track ->
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.playTrack(track) }
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
