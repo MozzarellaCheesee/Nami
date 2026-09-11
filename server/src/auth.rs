@@ -112,6 +112,17 @@ pub fn pair(conn: &mut Connection, code: &str, device_name: &str) -> Result<Stri
     Ok(token)
 }
 
+/// Постоянный токен устройства, привязанный к вошедшему пользователю.
+pub fn create_device(conn: &Connection, user_id: i64, device_name: &str) -> crate::Res<String> {
+    let token = random_hex(32);
+    let name = device_name.trim();
+    conn.execute(
+        "INSERT INTO devices (name, token_hash, created_at, user_id) VALUES (?1, ?2, ?3, ?4)",
+        rusqlite::params![if name.is_empty() { "Android" } else { name }, hash_token(&token), now(), user_id],
+    )?;
+    Ok(token)
+}
+
 /// Проверяет Bearer-токен. Возвращает id устройства.
 ///
 /// Токен opaque, а не JWT: отзыв - это DELETE строки, без blacklist и без ротации ключей.
@@ -208,6 +219,23 @@ mod tests {
         let token = pair(&mut c, &code, "Pixel").unwrap();
         assert!(verify(&c, &token).is_some());
         assert!(verify(&c, "мусор").is_none());
+    }
+
+    #[test]
+    fn парольный_вход_привязывает_устройство_к_пользователю() {
+        let c = db();
+        c.execute(
+            "INSERT INTO users (username,password_hash,role,library_id,created_at) VALUES ('u','h','user',7,0)",
+            [],
+        )
+        .unwrap();
+        let user_id = c.last_insert_rowid();
+        let token = create_device(&c, user_id, "Телефон").unwrap();
+        let device_id = verify(&c, &token).unwrap();
+        let linked: i64 = c
+            .query_row("SELECT user_id FROM devices WHERE id=?1", [device_id], |r| r.get(0))
+            .unwrap();
+        assert_eq!(linked, user_id);
     }
 
     #[test]

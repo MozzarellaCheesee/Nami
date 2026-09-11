@@ -258,6 +258,37 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun loginNamiServer(rawUrls: String, username: String, password: String) {
+        val bases = rawUrls.split('\n', ',').map { normalizeBase(it) }.filter { it.isNotEmpty() }.distinct()
+        if (bases.isEmpty() || username.isBlank() || password.isBlank()) {
+            _serverConnectMsg.value = "Укажите адрес, логин и пароль"
+            return
+        }
+        viewModelScope.launch {
+            _serverConnectMsg.value = "Вход…"
+            val result = withContext(Dispatchers.IO) {
+                val cert = bases.filter { dev.nami.data.NamiServerClient.hostIsIpLiteral(it) }
+                    .firstNotNullOfOrNull { dev.nami.data.NamiServerClient.fetchCertSha256(it) }
+                bases.firstNotNullOfOrNull { base ->
+                    val baseCert = cert.takeIf { dev.nami.data.NamiServerClient.hostIsIpLiteral(base) }
+                    dev.nami.data.NamiServerClient.loginDevice(
+                        base, username.trim(), password, android.os.Build.MODEL ?: "Android", baseCert,
+                    )?.let { token -> Triple(base, token, cert) }
+                }
+            }
+            if (result == null) {
+                _serverConnectMsg.value = "Неверный логин/пароль или сервер недоступен"
+            } else {
+                val (working, token, cert) = result
+                appSettingsRepository.setNamiServerUrl((listOf(working) + bases.filter { it != working }).joinToString("\n"))
+                appSettingsRepository.setNamiServerCertSha256(cert)
+                appSettingsRepository.setNamiServerToken(token)
+                appSettingsRepository.setNamiServerPreferred(true)
+                _serverConnectMsg.value = "Устройство привязано к аккаунту"
+            }
+        }
+    }
+
     /** Подключение из отсканированного в приложении QR (`nami://auth?...`). */
     fun connectNamiServerFromScan(rawUri: String) {
         viewModelScope.launch {

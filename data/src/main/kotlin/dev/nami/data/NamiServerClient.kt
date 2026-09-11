@@ -73,6 +73,26 @@ object NamiServerClient {
         return runCatching { JSONObject(text).optString("token").ifBlank { null } }.getOrNull()
     }
 
+    /** Парольный вход Android: сервер возвращает постоянный токен устройства,
+     * привязанный к аккаунту и его библиотеке. */
+    fun loginDevice(
+        baseUrl: String,
+        username: String,
+        password: String,
+        deviceName: String,
+        certSha256: String?,
+    ): String? {
+        val body = JSONObject()
+            .put("username", username)
+            .put("password", password)
+            .put("device_name", deviceName)
+            .toString()
+        val (code, text) = request("POST", "$baseUrl/api/auth/login", body, null, certSha256)
+            ?: return null
+        if (code != 200) return null
+        return runCatching { JSONObject(text).optString("token").ifBlank { null } }.getOrNull()
+    }
+
     /**
      * POST /api/tracks/match - сопоставляет треки клиента с id библиотеки сервера по
      * (исполнитель, название, длительность ±2 с). Возвращает массив той же длины и

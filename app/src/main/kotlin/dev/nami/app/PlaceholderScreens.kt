@@ -436,6 +436,8 @@ fun SettingsServerScreen(
     val paired = token != null && url.isNotBlank()
     var addr by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
 
     SettingsSubScreenScaffold(title = "Сервер NAMI", onBack = onBack) {
         SettingsSectionLabel(if (paired) "Подключён" else "Не сопряжён")
@@ -522,6 +524,37 @@ fun SettingsServerScreen(
                             modifier = Modifier.padding(top = 8.dp),
                         )
                     }
+                }
+            }
+
+            SettingsSectionLabel("Войти в аккаунт")
+            SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Text(
+                        "Телефон станет устройством аккаунта и получит доступ к закреплённой за ним библиотеке.",
+                        color = NamiColors.Paper40,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    androidx.compose.material3.OutlinedTextField(
+                        value = username,
+                        onValueChange = { username = it; viewModel.clearServerConnectMsg() },
+                        label = { Text("Логин") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                    )
+                    androidx.compose.material3.OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it; viewModel.clearServerConnectMsg() },
+                        label = { Text("Пароль") },
+                        singleLine = true,
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                    )
+                    NamiPill(
+                        text = "Войти и привязать устройство",
+                        modifier = Modifier.padding(top = 12.dp),
+                        onClick = { viewModel.loginNamiServer(addr, username, password) },
+                    )
                 }
             }
         }
