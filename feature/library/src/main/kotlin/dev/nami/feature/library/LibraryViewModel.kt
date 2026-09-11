@@ -96,6 +96,43 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
+    fun selectAllTracks() {
+        viewModelScope.launch {
+            val allIds = libraryRepository.allTracksOrdered().map { it.id }.toSet()
+            _uiState.value = _uiState.value.copy(selectedTrackIds = allIds)
+        }
+    }
+
+    fun uploadSelectedTracksToServer() {
+        val ids = uiState.value.selectedTrackIds.toList()
+        if (ids.isEmpty()) return
+        clearSelection()
+        viewModelScope.launch(Dispatchers.IO) {
+            var uploaded = 0
+            var duplicates = 0
+            var failed = 0
+            _serverActionMsg.value = "Отправка на сервер: 0/${ids.size}…"
+            for ((index, id) in ids.withIndex()) {
+                val track = libraryRepository.track(id).first()
+                if (track == null) {
+                    failed++
+                    continue
+                }
+                val res = serverLibraryRepository.uploadLocalTrack(track.path)
+                if (res == "Уже есть на сервере") duplicates++
+                else if (res != null) uploaded++
+                else failed++
+                _serverActionMsg.value = "Отправка на сервер: ${index + 1}/${ids.size}…"
+            }
+            _serverActionMsg.value = buildString {
+                append("Выгрузка завершена: ")
+                if (uploaded > 0) append("загружено $uploaded ")
+                if (duplicates > 0) append("(дубликатов $duplicates) ")
+                if (failed > 0) append("ошибок $failed")
+            }.trim()
+        }
+    }
+
     fun likeTrack(trackId: TrackId) {
         viewModelScope.launch { playlistRepository.likeTrack(trackId) }
     }

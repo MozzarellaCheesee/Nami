@@ -595,10 +595,24 @@ fun SettingsServerScreen(
             }
             val serverScanMsg by viewModel.serverScanMsg.collectAsState()
             val libraryHealth by viewModel.libraryHealth.collectAsState()
+            val uploadAllMsg by viewModel.uploadAllMsg.collectAsState()
             SettingsSectionLabel("Управление сервером")
             SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                    NamiPill(text = "Пересканировать файлы на сервере", onClick = viewModel::triggerServerScan)
+                    NamiPill(text = "Отправить всю локальную музыку на сервер", onClick = viewModel::uploadAllTracksToServer)
+                    if (uploadAllMsg != null) {
+                        Text(
+                            uploadAllMsg!!,
+                            color = NamiColors.Paper40,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                    NamiPill(
+                        text = "Пересканировать файлы на сервере",
+                        modifier = Modifier.padding(top = 12.dp),
+                        onClick = viewModel::triggerServerScan,
+                    )
                     if (serverScanMsg != null) {
                         Text(
                             serverScanMsg!!,

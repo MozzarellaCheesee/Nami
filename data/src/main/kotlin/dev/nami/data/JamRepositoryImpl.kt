@@ -235,6 +235,7 @@ class JamRepositoryImpl @Inject constructor(
 
     override fun leave() {
         intentionalClose = true
+        _error.value = null
         reconnectJob?.cancel()
         reconnectJob = null
         previousSession = null
@@ -435,13 +436,18 @@ class JamRepositoryImpl @Inject constructor(
                 override fun onClosed(ws: WebSocket, code: Int, reason: String) {
                     Log.d(TAG, "Jam WebSocket closed: $code / $reason")
                     isConnecting = false
+                    if (intentionalClose) {
+                        _error.value = null
+                    }
                     handleDisconnect()
                 }
 
                 override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
                     Log.w(TAG, "Jam WebSocket failure: ${t.message}")
                     isConnecting = false
-                    _error.value = "Ошибка соединения: ${t.message ?: "сервер недоступен"}"
+                    if (!intentionalClose) {
+                        _error.value = "Ошибка соединения: ${t.message ?: "сервер недоступен"}"
+                    }
                     handleDisconnect()
                 }
             }
