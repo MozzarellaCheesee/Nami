@@ -24,6 +24,7 @@ import androidx.glance.layout.Box
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
+import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.padding
 import androidx.glance.layout.size
 import androidx.glance.text.Text
@@ -35,23 +36,25 @@ val SessionNameKey = androidx.glance.action.ActionParameters.Key<String>("sessio
 class ApplySessionAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val name = parameters[SessionNameKey] ?: return
-        val settings = widgetSettingsRepository(context)
-        val session = settings.sessions.value.firstOrNull { it.name == name } ?: return
-        settings.setEqBandGains(session.eqGainsDb)
-        settings.setEqEnabled(true)
-        settings.setCrossfadeEnabled(session.crossfadeEnabled)
-        val playerRepo = widgetPlayerRepository(context)
-        playerRepo.awaitReady()
-        playerRepo.setShuffleEnabled(session.shuffleEnabled)
-        playerRepo.setRepeatMode(session.repeatMode)
-        session.sleepTimerMinutes?.let { minutes ->
-            playerRepo.startSleepTimer(minutes * 60_000L)
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+            runCatching {
+                val settings = widgetSettingsRepository(context)
+                val session = settings.sessions.value.firstOrNull { it.name == name } ?: return@runCatching
+                settings.setEqBandGains(session.eqGainsDb)
+                settings.setEqEnabled(true)
+                settings.setCrossfadeEnabled(session.crossfadeEnabled)
+                val playerRepo = widgetPlayerRepository(context)
+                playerRepo.awaitReady()
+                playerRepo.setShuffleEnabled(session.shuffleEnabled)
+                playerRepo.setRepeatMode(session.repeatMode)
+                session.sleepTimerMinutes?.let { minutes ->
+                    playerRepo.startSleepTimer(minutes * 60_000L)
+                }
+                settings.setLastAppliedSessionName(name)
+            }
         }
-        // Session сама по себе не хранит "применена ли сейчас" - без этого нажатие пилюли не
-        // давало никакого видимого отклика (реально применялось, но выглядело как ничего не
-        // произошло).
-        settings.setLastAppliedSessionName(name)
-        NamiWidgetSessions().updateAll(context)
+        kotlinx.coroutines.delay(100)
+        updateAllNamiWidgets(context)
     }
 }
 
@@ -83,17 +86,17 @@ class NamiWidgetSessions : GlanceAppWidget() {
                     .fillMaxSize()
                     .then(widgetCorner())
                     .background(WidgetBackground)
-                    .clickable(openSettingsAction)
-                    .padding(8.dp),
+                    .padding(horizontal = 8.dp, vertical = 5.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 if (sessions.isEmpty()) {
                     Box(
                         modifier = GlanceModifier
-                            .then(widgetCorner(16))
+                            .fillMaxWidth()
+                            .then(widgetCorner(14))
                             .background(WidgetSurface)
                             .clickable(openSettingsAction)
-                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
@@ -103,10 +106,18 @@ class NamiWidgetSessions : GlanceAppWidget() {
                         )
                     }
                 } else {
-                    Row(verticalAlignment = Alignment.Vertical.CenterVertically) {
+                    Row(
+                        modifier = GlanceModifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Vertical.CenterVertically,
+                        horizontalAlignment = Alignment.Horizontal.CenterHorizontally,
+                    ) {
                         sessions.forEachIndexed { index, session ->
-                            if (index > 0) Spacer(modifier = GlanceModifier.size(8.dp))
-                            SessionPill(session, isActive = session.name == activeName)
+                            if (index > 0) Spacer(modifier = GlanceModifier.size(4.dp))
+                            SessionPill(
+                                session = session,
+                                isActive = session.name == activeName,
+                                modifier = GlanceModifier.defaultWeight(),
+                            )
                         }
                     }
                 }
@@ -115,24 +126,25 @@ class NamiWidgetSessions : GlanceAppWidget() {
     }
 
     private companion object {
-        val SMALL = DpSize(150.dp, 56.dp)
-        val MEDIUM = DpSize(230.dp, 56.dp)
-        val WIDE = DpSize(320.dp, 56.dp)
-        val EXTRA_WIDE = DpSize(400.dp, 56.dp)
+        val SMALL = DpSize(120.dp, 40.dp)
+        val MEDIUM = DpSize(200.dp, 40.dp)
+        val WIDE = DpSize(280.dp, 40.dp)
+        val EXTRA_WIDE = DpSize(360.dp, 40.dp)
     }
 }
 
 /** [isActive] - последняя применённая сессия подсвечивается акцентным фоном. */
 @androidx.compose.runtime.Composable
-private fun SessionPill(session: Session, isActive: Boolean) {
+private fun SessionPill(session: Session, isActive: Boolean, modifier: GlanceModifier = GlanceModifier) {
     Box(
-        modifier = GlanceModifier
-            .then(widgetCorner(16))
+        modifier = modifier
+            .then(widgetCorner(14))
             .background(if (isActive) WidgetAccent else WidgetSurface)
             .clickable(actionRunCallback<ApplySessionAction>(actionParametersOf(SessionNameKey to session.name)))
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 6.dp, vertical = 7.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Text(session.name, style = TextStyle(color = WidgetTextPrimary, fontSize = 13.sp), maxLines = 1)
+        Text(session.name, style = TextStyle(color = WidgetTextPrimary, fontSize = 12.sp), maxLines = 1)
     }
 }
 
