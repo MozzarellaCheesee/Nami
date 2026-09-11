@@ -217,6 +217,7 @@ private fun JamNoSessionContent(
     val recentHosts by viewModel.recentHosts.collectAsState()
     val discoveredRooms by viewModel.discoveredRooms.collectAsState()
     val context = LocalContext.current
+    var showCameraScanner by remember { mutableStateOf(false) }
 
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -229,6 +230,19 @@ private fun JamNoSessionContent(
                 Toast.makeText(context, "QR-код не найден на изображении", Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    if (showCameraScanner) {
+        JamCameraScannerDialog(
+            onDismiss = { showCameraScanner = false },
+            onQrScanned = { qrText ->
+                if (viewModel.joinFromQrText(qrText)) {
+                    Toast.makeText(context, "Подключение к комнате...", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "Некорректный QR-код Джема", Toast.LENGTH_SHORT).show()
+                }
+            },
+        )
     }
 
     Column(
@@ -486,19 +500,19 @@ private fun JamNoSessionContent(
                             cursorColor = NamiColors.Shu,
                         ),
                     )
-                    if (onScanRequested != null) {
-                        IconButton(
-                            onClick = onScanRequested,
-                            modifier = Modifier
-                                .size(50.dp)
-                                .background(NamiColors.Ink700, RoundedCornerShape(NamiRadius.Card)),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.QrCodeScanner,
-                                contentDescription = "Сканировать QR-код",
-                                tint = NamiColors.Paper100,
-                            )
-                        }
+                    IconButton(
+                        onClick = {
+                            if (onScanRequested != null) onScanRequested.invoke() else showCameraScanner = true
+                        },
+                        modifier = Modifier
+                            .size(50.dp)
+                            .background(NamiColors.Ink700, RoundedCornerShape(NamiRadius.Card)),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.QrCodeScanner,
+                            contentDescription = "Сканировать QR камерой",
+                            tint = NamiColors.Paper100,
+                        )
                     }
                     IconButton(
                         onClick = { galleryLauncher.launch("image/*") },
@@ -514,21 +528,46 @@ private fun JamNoSessionContent(
                     }
                 }
 
-                OutlinedButton(
-                    onClick = { galleryLauncher.launch("image/*") },
+                // Кнопки быстрого сканирования
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(NamiRadius.Button),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = NamiColors.Paper100),
-                    border = BorderStroke(1.dp, NamiColors.Ink600),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Image,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = NamiColors.Paper70,
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Выбрать QR-код из галереи (скриншот)", style = MaterialTheme.typography.bodyMedium)
+                    OutlinedButton(
+                        onClick = {
+                            if (onScanRequested != null) onScanRequested.invoke() else showCameraScanner = true
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(NamiRadius.Button),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = NamiColors.Paper100),
+                        border = BorderStroke(1.dp, NamiColors.Shu.copy(alpha = 0.5f)),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.QrCodeScanner,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = NamiColors.Shu,
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Камерой", style = MaterialTheme.typography.bodyMedium)
+                    }
+
+                    OutlinedButton(
+                        onClick = { galleryLauncher.launch("image/*") },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(NamiRadius.Button),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = NamiColors.Paper100),
+                        border = BorderStroke(1.dp, NamiColors.Ink600),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Image,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = NamiColors.Paper70,
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Из галереи", style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
 
                 // Недавние серверы хостов

@@ -44,6 +44,7 @@ dependencies {
     implementation(libs.hilt.android)
     implementation(libs.hilt.navigation.compose)
     implementation(libs.zxing.core)
+    implementation(libs.zxing.embedded)
     ksp(libs.hilt.compiler)
 
     testImplementation(libs.junit)
