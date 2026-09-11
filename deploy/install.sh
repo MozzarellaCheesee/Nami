@@ -86,7 +86,18 @@ fi
 
 # 5. Автоматическая установка всех необходимых системных компонентов
 echo
-log_info "Автоматическая установка системных компонентов (ffmpeg, Caddy, утилиты)..."
+HAS_NGINX=false
+if command -v nginx >/dev/null 2>&1 || [ -d /etc/nginx ] || (command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet nginx 2>/dev/null); then
+    HAS_NGINX=true
+    log_info "Обнаружен веб-сервер Nginx — будет использоваться существующий Nginx + Certbot для SSL."
+    # Если caddy был запущен ранее и конфликтует с nginx, остановим его
+    if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet caddy 2>/dev/null; then
+        $SUDO systemctl stop caddy >/dev/null 2>&1 || true
+        $SUDO systemctl disable caddy >/dev/null 2>&1 || true
+    fi
+else
+    log_info "Автоматическая установка системных компонентов (ffmpeg, Caddy, утилиты)..."
+fi
 
 PKG_MANAGER=""
 if command -v apt-get >/dev/null 2>&1; then
@@ -122,7 +133,10 @@ case "$PKG_MANAGER" in
             ffmpeg \
             libchromaprint-tools >/dev/null 2>&1 || true
         
-        if ! command -v caddy >/dev/null 2>&1; then
+        if [ "$HAS_NGINX" = true ]; then
+            log_info "Установка Certbot для Nginx..."
+            $SUDO apt-get install -y certbot python3-certbot-nginx >/dev/null 2>&1 || true
+        elif ! command -v caddy >/dev/null 2>&1; then
             log_info "Настройка репозитория и установка Caddy..."
             curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | $SUDO gpg --dearmor --yes -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg 2>/dev/null || true
             curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | $SUDO tee /etc/apt/sources.list.d/caddy-stable.list >/dev/null 2>&1 || true
@@ -134,7 +148,10 @@ case "$PKG_MANAGER" in
     dnf|yum)
         log_info "Установка пакетов через $PKG_MANAGER..."
         $SUDO $PKG_MANAGER install -y curl wget tar ca-certificates gnupg2 ffmpeg >/dev/null 2>&1 || true
-        if ! command -v caddy >/dev/null 2>&1; then
+        if [ "$HAS_NGINX" = true ]; then
+            log_info "Установка Certbot для Nginx..."
+            $SUDO $PKG_MANAGER install -y certbot python3-certbot-nginx >/dev/null 2>&1 || true
+        elif ! command -v caddy >/dev/null 2>&1; then
             log_info "Настройка репозитория Caddy..."
             $SUDO $PKG_MANAGER install -y 'dnf-command(copr)' >/dev/null 2>&1 || true
             $SUDO $PKG_MANAGER copr enable -y @caddy/caddy >/dev/null 2>&1 || true
@@ -144,19 +161,31 @@ case "$PKG_MANAGER" in
         
     pacman)
         log_info "Установка пакетов через pacman..."
-        $SUDO pacman -Sy --noconfirm curl wget tar ca-certificates ffmpeg caddy chromaprint >/dev/null 2>&1 || true
+        if [ "$HAS_NGINX" = true ]; then
+            $SUDO pacman -Sy --noconfirm curl wget tar ca-certificates ffmpeg chromaprint certbot certbot-nginx >/dev/null 2>&1 || true
+        else
+            $SUDO pacman -Sy --noconfirm curl wget tar ca-certificates ffmpeg caddy chromaprint >/dev/null 2>&1 || true
+        fi
         ;;
         
     apk)
         log_info "Установка пакетов через apk..."
         $SUDO apk update >/dev/null 2>&1 || true
-        $SUDO apk add --no-cache curl wget tar ca-certificates ffmpeg caddy >/dev/null 2>&1 || true
+        if [ "$HAS_NGINX" = true ]; then
+            $SUDO apk add --no-cache curl wget tar ca-certificates ffmpeg certbot certbot-nginx >/dev/null 2>&1 || true
+        else
+            $SUDO apk add --no-cache curl wget tar ca-certificates ffmpeg caddy >/dev/null 2>&1 || true
+        fi
         ;;
         
     zypper)
         log_info "Установка пакетов через zypper..."
         $SUDO zypper refresh >/dev/null 2>&1 || true
-        $SUDO zypper --non-interactive install curl wget tar ca-certificates ffmpeg caddy >/dev/null 2>&1 || true
+        if [ "$HAS_NGINX" = true ]; then
+            $SUDO zypper --non-interactive install curl wget tar ca-certificates ffmpeg certbot python3-certbot-nginx >/dev/null 2>&1 || true
+        else
+            $SUDO zypper --non-interactive install curl wget tar ca-certificates ffmpeg caddy >/dev/null 2>&1 || true
+        fi
         ;;
         
     *)
@@ -164,8 +193,8 @@ case "$PKG_MANAGER" in
         ;;
 esac
 
-# Универсальный fallback для Caddy (скачивание официального бинарника)
-if ! command -v caddy >/dev/null 2>&1; then
+# Универсальный fallback для Caddy (скачивание официального бинарника, только если нет Nginx)
+if [ "$HAS_NGINX" != true ] && ! command -v caddy >/dev/null 2>&1; then
     log_info "Загрузка официального исполняемого файла Caddy..."
     CADDY_ARCH="amd64"
     [ "$TARGET_ARCH" = "aarch64" ] && CADDY_ARCH="arm64"
@@ -203,7 +232,14 @@ else
     log_warn "ffmpeg:        не установлен (транскодинг будет недоступен)"
 fi
 
-if command -v caddy >/dev/null 2>&1; then
+if [ "$HAS_NGINX" = true ]; then
+    log_ok "Веб-сервер:    Nginx обнаружен ($(nginx -v 2>&1 | cut -d/ -f2 || echo 'готов к работе'))"
+    if command -v certbot >/dev/null 2>&1; then
+        log_ok "Certbot:       установлен"
+    else
+        log_warn "Certbot:       не найден (будет установлен автоматически при привязке домена)"
+    fi
+elif command -v caddy >/dev/null 2>&1; then
     log_ok "Caddy:         $(caddy version 2>/dev/null | head -n1 || echo 'готов к работе')"
 else
     log_warn "Caddy:         не установлен (потребуется ручная установка для авто-SSL)"
