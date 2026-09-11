@@ -570,9 +570,15 @@ fun NamiNavHost(
             composable(ROUTE_SERVER_LIBRARY) {
                 dev.nami.feature.library.ServerLibraryScreen(onBack = { navController.popBackStack() })
             }
-            composable(ROUTE_SETTINGS_SERVER_SCAN) {
-                val vm: dev.nami.app.SettingsViewModel =
+            composable(ROUTE_SETTINGS_SERVER_SCAN) { backStackEntry ->
+                val parentEntry = androidx.compose.runtime.remember(backStackEntry) {
+                    runCatching { navController.getBackStackEntry(ROUTE_SETTINGS_SERVER) }.getOrNull()
+                }
+                val vm: dev.nami.app.SettingsViewModel = if (parentEntry != null) {
+                    androidx.hilt.navigation.compose.hiltViewModel(parentEntry)
+                } else {
                     androidx.hilt.navigation.compose.hiltViewModel()
+                }
                 dev.nami.feature.library.LocalShareScanScreen(
                     onBack = { navController.popBackStack() },
                     onResult = { raw -> vm.connectNamiServerFromScan(raw) },
