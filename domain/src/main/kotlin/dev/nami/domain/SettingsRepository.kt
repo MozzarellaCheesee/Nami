@@ -236,6 +236,11 @@ interface SettingsRepository {
     val listenBrainzToken: StateFlow<String?>
     fun setListenBrainzToken(token: String?)
 
+    val lastFmScrobblingEnabled: StateFlow<Boolean>
+    fun setLastFmScrobblingEnabled(value: Boolean)
+    val lastFmSessionKey: StateFlow<String?>
+    fun setLastFmSessionKey(sessionKey: String?)
+
     /** Трансляция на устройства Apple (AirPlay). Off по умолчанию и отдельным тумблером, потому
      * что путь неофициальный: у Apple нет и не будет SDK AirPlay для сторонних Android-приложений.
      * Выключенный тумблер означает, что AirPlay физически не ищется в сети, а не просто скрыт. */

@@ -40,6 +40,14 @@
         android:icon="@drawable/ic_launcher_wave"
         android:roundIcon="@drawable/ic_launcher_wave"
         android:theme="@style/Theme.Nami">
+
+        <!-- Android Auto and Android Automotive media app descriptor -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+        <meta-data
+            android:name="androidx.car.app.minCarApiLevel"
+            android:value="1" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

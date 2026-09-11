@@ -242,6 +242,23 @@ class PlayerRepositoryImpl @Inject constructor(
                         }
                     }
                 }
+
+                val lastFmKey = settingsRepository.lastFmSessionKey.value
+                if (settingsRepository.lastFmScrobblingEnabled.value && !lastFmKey.isNullOrBlank()) {
+                    val metadata = player.currentMediaItem?.mediaMetadata
+                    val title = metadata?.title?.toString()
+                    if (title != null) {
+                        scope.launch(Dispatchers.IO) {
+                            LastFmScrobbler.submitScrobble(
+                                sessionKey = lastFmKey,
+                                title = title,
+                                artist = metadata.artist?.toString(),
+                                album = metadata.albumTitle?.toString(),
+                                listenedAtEpochSec = System.currentTimeMillis() / 1000,
+                            )
+                        }
+                    }
+                }
             }
         }
     }

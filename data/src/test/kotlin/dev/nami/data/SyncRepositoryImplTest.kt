@@ -49,6 +49,8 @@ class SyncRepositoryImplTest {
             loopDao = db.loopDao(),
             tagDao = db.tagDao(),
             playHistoryDao = db.playHistoryDao(),
+            pendingScrobbleDao = db.pendingScrobbleDao(),
+            artistDao = db.artistDao(),
         )
     }
 
