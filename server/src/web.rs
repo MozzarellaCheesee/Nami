@@ -43,3 +43,17 @@ fn serve(path: &str) -> Response {
         None => (StatusCode::NOT_FOUND, "404").into_response(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Assets;
+
+    #[test]
+    fn invite_link_opens_registration_flow() {
+        let html = Assets::get("index.html").expect("embedded web client");
+        let html = std::str::from_utf8(&html.data).expect("utf-8 html");
+        assert!(html.contains("id=\"inviteView\""));
+        assert!(html.contains("if (inviteToken()) showAuthView()"));
+        assert!(html.contains("'/accept'"));
+    }
+}
