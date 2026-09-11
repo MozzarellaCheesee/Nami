@@ -98,27 +98,32 @@ try {
     Write-Host "      Запрос последнего релиза из GitHub ($Repo)..." -ForegroundColor Gray
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     
-    $apiUrl = "https://api.github.com/repos/$Repo/releases/latest"
-    $headers = @{ "User-Agent" = "Nami-Windows-Installer" }
-    $release = Invoke-RestMethod -Uri $apiUrl -Headers $headers -ErrorAction SilentlyContinue
+    $apiUrl = "https://api.github.com/repos/$Repo/releases"
+    $headers = @{ "User-Agent" = "Nami-Windows-Installer"; "Accept" = "application/vnd.github+json" }
+    $releases = Invoke-RestMethod -Uri $apiUrl -Headers $headers -ErrorAction SilentlyContinue
     
     $downloadUrl = $null
-    if ($release -and $release.assets) {
-        $zipAsset = $release.assets | Where-Object { $_.name -like "*windows-x86_64*.zip" } | Select-Object -First 1
-        if ($zipAsset) {
-            $downloadUrl = $zipAsset.browser_download_url
-            $isZip = $true
-        } else {
-            $exeAsset = $release.assets | Where-Object { $_.name -like "*windows-x86_64*.exe" } | Select-Object -First 1
-            if ($exeAsset) {
-                $downloadUrl = $exeAsset.browser_download_url
-                $isZip = $false
+    if ($releases) {
+        foreach ($rel in $releases) {
+            if ($rel.assets) {
+                $zipAsset = $rel.assets | Where-Object { $_.name -like "*windows-x86_64*.zip" } | Select-Object -First 1
+                if ($zipAsset) {
+                    $downloadUrl = $zipAsset.browser_download_url
+                    $isZip = $true
+                    break
+                }
+                $exeAsset = $rel.assets | Where-Object { $_.name -like "*windows-x86_64*.exe" } | Select-Object -First 1
+                if ($exeAsset) {
+                    $downloadUrl = $exeAsset.browser_download_url
+                    $isZip = $false
+                    break
+                }
             }
         }
     }
     
     if (-not $downloadUrl) {
-        $downloadUrl = "https://github.com/$Repo/releases/latest/download/$assetZip"
+        $downloadUrl = "https://github.com/$Repo/releases/download/v0.1.1-beta.1/$assetZip"
         $isZip = $true
     }
     
