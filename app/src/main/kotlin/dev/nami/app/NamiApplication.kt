@@ -47,7 +47,7 @@ class NamiApplication : Application(), SingletonImageLoader.Factory {
             }
         }
         CoroutineScope(SupervisorJob() + Dispatchers.Main).launch {
-            settingsRepository.namiServerToken.distinctUntilChanged().collect { token ->
+            settingsRepository.namiServerToken.collect { token ->
                 if (token.isNullOrBlank()) {
                     serverLibraryRepository.clearMirroredTracks()
                     val id = playerRepository.queue.value.nowPlaying?.id?.value.orEmpty()
