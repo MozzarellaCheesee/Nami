@@ -540,10 +540,10 @@ class SyncRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun sync(): Boolean {
+    override suspend fun sync(): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         val pullOk = pullFromServer()
         val pushOk = pushToServer()
-        return pullOk && pushOk
+        pullOk && pushOk
     }
 
     private fun serverConfig(): NamiServerClient.Config? {
