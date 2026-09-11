@@ -5,7 +5,7 @@
 <h1 align="center">Nami</h1>
 
 <p align="center">
-  <strong>your music, locally.</strong>
+  <strong>your music, your day.</strong>
 </p>
 
 <p align="center">
