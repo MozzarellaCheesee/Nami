@@ -2,6 +2,7 @@ package dev.nami.data
 
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.nami.core.database.dao.AlbumDao
 import dev.nami.core.database.dao.TrackDao
 import dev.nami.core.database.entity.TrackEntity
 import dev.nami.core.model.AlbumId
@@ -30,6 +31,7 @@ class ServerLibraryRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val settingsRepository: SettingsRepository,
     private val trackDao: TrackDao,
+    private val albumDao: AlbumDao,
     private val metadataResolver: MetadataResolver,
     private val searchRepository: SearchRepository,
 ) : ServerLibraryRepository {
@@ -253,9 +255,14 @@ class ServerLibraryRepositoryImpl @Inject constructor(
                 id, track.title, artistId, albumId, track.trackNo, track.durationMs,
                 track.format ?: "server", track.sizeBytes, artworkPath,
             )
-            if (artworkPath == null) {
+            if (artworkPath != null) {
+                albumId?.let { albumDao.setArtworkPath(it, artworkPath) }
+            } else {
                 scope.launch {
-                    downloadArtwork(track.id)?.let { trackDao.setArtworkPath(id, it.absolutePath) }
+                    downloadArtwork(track.id)?.let { artwork ->
+                        trackDao.setArtworkPath(id, artwork.absolutePath)
+                        albumId?.let { albumDao.setArtworkPath(it, artwork.absolutePath) }
+                    }
                 }
             }
         }
