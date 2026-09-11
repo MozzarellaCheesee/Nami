@@ -407,6 +407,15 @@ fn install_certbot(sudo: &str) -> Result<(), String> {
 
 #[cfg(unix)]
 fn setup_nginx(domain: &str, nami_port: u16, steps: &mut Vec<String>, sudo: &str) -> Result<(), String> {
+    if !is_root() && !can_run_sudo() {
+        return Err(format!(
+            "Обнаружен Nginx, но сервер Nami запущен без прав root и sudo.\n\
+             Для настройки интеграции выполните в консоли сервера через sudo:\n\
+             \x20 sudo nami domain {domain}\n\
+             (команда автоматически создаст конфиг Nginx и выпустит SSL через Certbot)"
+        ));
+    }
+
     steps.push("✓ Обнаружен веб-сервер Nginx: интеграция через Nginx reverse proxy + Certbot".into());
 
     let nginx_conf = format!(

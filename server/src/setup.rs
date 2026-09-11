@@ -204,7 +204,17 @@ async fn save_config(Json(req): Json<SaveConfigRequest>) -> Response {
             .into_response();
     }
 
-    Json(msg("Готово. Перезапустите сервер - он подхватит config.toml и заведёт владельца."))
+    // Автоматический перезапуск сервиса для загрузки config.toml и создания владельца
+    tokio::spawn(async {
+        tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+        let _ = std::process::Command::new("sh")
+            .arg("-c")
+            .arg("systemctl restart nami")
+            .output();
+        std::process::exit(0);
+    });
+
+    Json(msg("Настройки успешно сохранены. Сервер перезапускается и применяет конфигурацию..."))
         .into_response()
 }
 

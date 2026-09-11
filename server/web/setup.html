@@ -209,12 +209,14 @@ input:focus { outline: none; border-color: #666; }
 <!-- Экран 6: Готово -->
 <div class="step" id="step6">
   <h1>Настройка завершена</h1>
-  <p class="subtitle">
-    Конфигурация сохранена в config.toml.
-    <br><br>
-    Перезапустите сервер для применения настроек.
+  <p class="subtitle" id="step6Subtitle">
+    Конфигурация сохранена в config.toml.<br>
+    Сервер перезапускается для применения настроек...
   </p>
   <div id="status6" class="status" style="display:none"></div>
+  <div id="step6Actions" style="margin-top:28px;display:none">
+    <a id="step6Link" href="/" class="btn" style="text-decoration:none;display:inline-block">Перейти к серверу</a>
+  </div>
 </div>
 
 </div>
@@ -343,7 +345,7 @@ async function autoSetupDomain() {
   const statusEl = document.getElementById('domainStatus')
   statusEl.className = 'status'
   statusEl.style.display = 'block'
-  statusEl.textContent = 'Настройка портов, Caddy и выпуск SSL Let\'s Encrypt...'
+  statusEl.textContent = 'Настройка веб-сервера (Nginx/Caddy) и выпуск SSL Let\'s Encrypt...'
 
   try {
     const res = await fetch('/setup/api/setup-domain', {
@@ -388,7 +390,13 @@ async function saveConfig() {
   showStep(6)
 
   if (res.ok) {
-    showStatus('status6', 'success', data.message)
+    showStatus('status6', 'success', data.message || 'Настройки сохранены!')
+    const targetUrl = payload.external_url || window.location.origin
+    document.getElementById('step6Link').href = targetUrl
+    document.getElementById('step6Actions').style.display = 'block'
+    setTimeout(() => {
+      window.location.href = targetUrl
+    }, 3500)
   } else {
     showStatus('status6', 'error', data.message || 'Ошибка сохранения')
   }
