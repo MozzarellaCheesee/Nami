@@ -224,6 +224,12 @@ interface TrackDao {
     @Query("UPDATE tracks SET playCount = playCount + 1 WHERE id = :id")
     suspend fun incrementPlayCount(id: String)
 
+    @Query("UPDATE tracks SET playCount = :count WHERE id = :id")
+    suspend fun updatePlayCount(id: String, count: Int)
+
+    @Query("UPDATE tracks SET lastPlayed = :timestamp WHERE id = :id")
+    suspend fun updateLastPlayed(id: String, timestamp: Long?)
+
     @Query("UPDATE tracks SET replayGainDb = :gainDb WHERE id = :id")
     suspend fun updateReplayGain(id: String, gainDb: Float)
 

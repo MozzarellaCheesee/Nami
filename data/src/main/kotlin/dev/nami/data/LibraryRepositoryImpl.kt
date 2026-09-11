@@ -48,6 +48,17 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import dev.nami.core.database.dao.PlaylistDao
+import dev.nami.core.database.dao.PlaylistTrackDao
+import dev.nami.core.database.dao.TagDao
+import dev.nami.core.database.entity.PlaylistEntity
+import dev.nami.core.database.entity.PlaylistTrackEntity
+import dev.nami.core.database.entity.TagEntity
+import dev.nami.core.database.entity.TrackTagEntity
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
 import java.io.File
 import java.util.UUID
 import javax.inject.Inject
@@ -66,6 +77,9 @@ class LibraryRepositoryImpl @Inject constructor(
     private val playHistoryDao: PlayHistoryDao,
     private val settingsRepository: SettingsRepository? = null,
     private val pendingScrobbleDao: dev.nami.core.database.dao.PendingScrobbleDao? = null,
+    private val playlistDao: PlaylistDao? = null,
+    private val playlistTrackDao: PlaylistTrackDao? = null,
+    private val tagDao: TagDao? = null,
 ) : LibraryRepository {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -532,54 +546,256 @@ class LibraryRepositoryImpl @Inject constructor(
 
     // П.md §2 "Импорт .zip-архивов с распаковкой на лету" - extracts each audio entry to a
     // scratch file in cacheDir (deleted right after), then feeds it through the exact same
-    // copyAndIndex path as a picked file (a file:// Uri resolves fine through ContentResolver for
-    // reading, no FileProvider needed). Non-audio entries (readme, cover art sitting loose in the
+    // copyAndIndex path as a picked file. Non-audio entries (readme, cover art sitting loose in the
     // zip) are skipped rather than rejecting the whole archive.
     private fun importZip(uriString: String): Flow<ImportProgress> = flow {
         val musicDir = File(context.filesDir, "music").apply { mkdirs() }
         val resolver = context.contentResolver
         val scratchDir = File(context.cacheDir, "zip_import").apply { mkdirs() }
 
-        // Раньше все аудиозаписи архива сначала целиком читались в память (List<ByteArray>) и
-        // только потом обрабатывались - на архиве заметного размера (альбом, тем более whole-
-        // library бэкап) это OutOfMemoryError раньше, чем хоть один трек успевал добавиться.
-        // ZipInputStream и так уже потоковый - каждая запись сразу льётся на диск и индексируется
-        // по одной, не накапливаясь.
-        var total = 0
-        resolver.openInputStream(uriString.toUri())?.use { input ->
-            java.util.zip.ZipInputStream(input).use { zip ->
-                var entry = zip.nextEntry
-                while (entry != null) {
-                    if (!entry.isDirectory && isAudioFileName(entry.name)) total++
-                    zip.closeEntry()
-                    entry = zip.nextEntry
+        // 1. Копируем входящий архив во временный локальный файл в кэше.
+        // Это гарантирует работу с одноразовыми потоками (Google Drive, Downloads, SAF)
+        // и позволяет использовать случайный доступ ZipFile вместо двойного чтения потока.
+        val tempZip = File(scratchDir, "archive_${UUID.randomUUID()}.zip")
+        try {
+            resolver.openInputStream(uriString.toUri())?.use { input ->
+                tempZip.outputStream().use { out -> input.copyTo(out) }
+            } ?: return@flow
+
+            // 2. Открываем ZipFile с автоопределением кодировки (UTF-8 -> CP866 -> windows-1251)
+            val zipFile = runCatching {
+                ZipFile(tempZip, java.nio.charset.StandardCharsets.UTF_8)
+            }.recoverCatching {
+                ZipFile(tempZip, java.nio.charset.Charset.forName("CP866"))
+            }.recoverCatching {
+                ZipFile(tempZip, java.nio.charset.Charset.forName("windows-1251"))
+            }.getOrNull() ?: return@flow
+
+            zipFile.use { zip ->
+                val entries = zip.entries().asSequence().toList()
+
+                // Проверяем, является ли архив полным бэкапом Nami (содержит manifest.json)
+                val manifestEntry = entries.firstOrNull {
+                    !it.isDirectory && (it.name == "manifest.json" || it.name.endsWith("/manifest.json"))
+                }
+
+                if (manifestEntry != null) {
+                    val manifestJson = zip.getInputStream(manifestEntry).bufferedReader(Charsets.UTF_8).use { it.readText() }
+                    val manifest = runCatching { JSONObject(manifestJson) }.getOrNull()
+                    if (manifest != null) {
+                        restoreFromManifest(zip, manifest, entries, musicDir, scratchDir) { done, total ->
+                            emit(ImportProgress(done = done, total = total))
+                        }
+                        return@flow
+                    }
+                }
+
+                // Обычный zip с аудиофайлами
+                val audioEntries = entries.filter { !it.isDirectory && isAudioFileName(it.name) }
+                val total = audioEntries.size
+                var done = 0
+
+                val sidecarsByBaseName = entries.filter { !it.isDirectory && (it.name.endsWith(".lrc", true) || it.name.endsWith(".cue", true)) }
+                    .associateBy { it.name.substringBeforeLast('.') }
+
+                for (entry in audioEntries) {
+                    val rawName = entry.name.substringAfterLast('/')
+                    val ext = rawName.substringAfterLast('.', "mp3")
+                    val scratchFile = File(scratchDir, "${UUID.randomUUID()}.$ext")
+
+                    val baseName = entry.name.substringBeforeLast('.')
+                    val lrcEntry = sidecarsByBaseName[baseName]?.takeIf { it.name.endsWith(".lrc", true) }
+                    val scratchLrc = if (lrcEntry != null) File(scratchDir, "${scratchFile.nameWithoutExtension}.lrc") else null
+
+                    try {
+                        zip.getInputStream(entry).use { inStream ->
+                            scratchFile.outputStream().use { outStream -> inStream.copyTo(outStream) }
+                        }
+
+                        if (lrcEntry != null && scratchLrc != null) {
+                            zip.getInputStream(lrcEntry).use { inStream ->
+                                scratchLrc.outputStream().use { outStream -> inStream.copyTo(outStream) }
+                            }
+                        }
+
+                        val result = copyAndIndex(
+                            resolver = resolver,
+                            uri = android.net.Uri.fromFile(scratchFile),
+                            musicDir = musicDir,
+                            originalFileName = rawName,
+                        )
+                        result?.albumId?.let { syncAlbumIsSingle(it) }
+                    } catch (e: Exception) {
+                        android.util.Log.e("LibraryRepo", "Failed to index entry ${entry.name}", e)
+                    } finally {
+                        scratchFile.delete()
+                        scratchLrc?.delete()
+                    }
+                    done++
+                    emit(ImportProgress(done = done, total = total))
+                }
+            }
+        } finally {
+            tempZip.delete()
+        }
+    }.flowOn(Dispatchers.IO)
+
+    private suspend fun restoreFromManifest(
+        zip: ZipFile,
+        manifest: JSONObject,
+        entries: List<ZipEntry>,
+        musicDir: File,
+        scratchDir: File,
+        onProgress: suspend (Int, Int) -> Unit,
+    ) {
+        val tracksArray = manifest.optJSONArray("tracks") ?: JSONArray()
+        val total = tracksArray.length()
+        val idMapping = HashMap<String, String>()
+
+        val entriesByFileName = entries.filter { !it.isDirectory }
+            .associateBy { it.name.substringAfterLast('/') }
+
+        for (i in 0 until tracksArray.length()) {
+            val trackObj = tracksArray.optJSONObject(i) ?: continue
+            val oldId = trackObj.optString("id")
+            val fileName = trackObj.optString("fileName").ifBlank { File(trackObj.optString("path")).name }
+            val zipEntry = entriesByFileName[fileName] ?: entries.firstOrNull { it.name.endsWith("/$fileName") || it.name == fileName }
+
+            if (zipEntry != null) {
+                val ext = fileName.substringAfterLast('.', "mp3")
+                val scratchFile = File(scratchDir, "${UUID.randomUUID()}.$ext")
+                val baseNoExt = fileName.substringBeforeLast('.')
+                val lrcEntry = entriesByFileName["$baseNoExt.lrc"]
+                val scratchLrc = if (lrcEntry != null) File(scratchDir, "${scratchFile.nameWithoutExtension}.lrc") else null
+
+                try {
+                    zip.getInputStream(zipEntry).use { inStream ->
+                        scratchFile.outputStream().use { outStream -> inStream.copyTo(outStream) }
+                    }
+                    if (lrcEntry != null && scratchLrc != null) {
+                        zip.getInputStream(lrcEntry).use { inStream ->
+                            scratchLrc.outputStream().use { outStream -> inStream.copyTo(outStream) }
+                        }
+                    }
+
+                    val res = copyAndIndex(
+                        resolver = context.contentResolver,
+                        uri = android.net.Uri.fromFile(scratchFile),
+                        musicDir = musicDir,
+                        originalFileName = fileName,
+                    )
+                    if (res != null) {
+                        val newId = res.trackId
+                        idMapping[oldId] = newId
+
+                        val rating = if (trackObj.has("rating") && !trackObj.isNull("rating")) trackObj.optInt("rating") else null
+                        if (rating != null && rating in 1..5) {
+                            trackDao.updateRating(newId, rating)
+                        }
+                        val note = if (trackObj.has("note") && !trackObj.isNull("note")) trackObj.optString("note") else null
+                        if (!note.isNullOrBlank()) {
+                            trackDao.updateNote(newId, note)
+                        }
+                        val genre = if (trackObj.has("genre") && !trackObj.isNull("genre")) trackObj.optString("genre") else null
+                        if (!genre.isNullOrBlank()) {
+                            trackDao.updateGenre(newId, genre)
+                        }
+                        val playCount = trackObj.optInt("playCount", 0)
+                        if (playCount > 0) {
+                            trackDao.updatePlayCount(newId, playCount)
+                        }
+                        val lastPlayed = if (trackObj.has("lastPlayed") && !trackObj.isNull("lastPlayed")) trackObj.optLong("lastPlayed") else null
+                        if (lastPlayed != null && lastPlayed > 0) {
+                            trackDao.updateLastPlayed(newId, lastPlayed)
+                        }
+                        res.albumId?.let { syncAlbumIsSingle(it) }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("LibraryRepo", "Failed to restore track $fileName", e)
+                } finally {
+                    scratchFile.delete()
+                    scratchLrc?.delete()
+                }
+            }
+            onProgress(i + 1, total)
+        }
+
+        playlistDao?.let { plDao ->
+            playlistTrackDao?.let { plTrackDao ->
+                val playlistsArray = manifest.optJSONArray("playlists") ?: JSONArray()
+                for (i in 0 until playlistsArray.length()) {
+                    val plObj = playlistsArray.optJSONObject(i) ?: continue
+                    val name = plObj.optString("name").ifBlank { "Плейлист" }
+                    val isLiked = plObj.optBoolean("isLiked", false)
+                    val isSmart = plObj.optBoolean("isSmart", false)
+                    val smartQueryJson = if (plObj.has("smartQueryJson") && !plObj.isNull("smartQueryJson")) plObj.optString("smartQueryJson") else null
+
+                    val newPlId = UUID.randomUUID().toString()
+                    val entity = PlaylistEntity(
+                        id = newPlId,
+                        name = name,
+                        coverPath = null,
+                        createdAt = System.currentTimeMillis(),
+                        isLiked = isLiked,
+                        isSmart = isSmart,
+                        smartQueryJson = smartQueryJson,
+                    )
+                    plDao.insert(entity)
+
+                    val trackIds = plObj.optJSONArray("trackIds") ?: JSONArray()
+                    var pos = 0
+                    for (t in 0 until trackIds.length()) {
+                        val oldTrackId = trackIds.optString(t)
+                        val newTrackId = idMapping[oldTrackId] ?: continue
+                        plTrackDao.insert(
+                            PlaylistTrackEntity(
+                                playlistId = newPlId,
+                                trackId = newTrackId,
+                                position = pos++,
+                                addedAt = System.currentTimeMillis(),
+                            )
+                        )
+                    }
                 }
             }
         }
 
-        var done = 0
-        resolver.openInputStream(uriString.toUri())?.use { input ->
-            java.util.zip.ZipInputStream(input).use { zip ->
-                var entry = zip.nextEntry
-                while (entry != null) {
-                    if (!entry.isDirectory && isAudioFileName(entry.name)) {
-                        val scratchFile = File(scratchDir, "${UUID.randomUUID()}_${entry.name.substringAfterLast('/')}")
-                        scratchFile.outputStream().use { out -> zip.copyTo(out) }
-                        try {
-                            val result = copyAndIndex(resolver, android.net.Uri.fromFile(scratchFile), musicDir)
-                            result?.albumId?.let { syncAlbumIsSingle(it) }
-                        } finally {
-                            scratchFile.delete()
-                        }
-                        done++
-                        emit(ImportProgress(done = done, total = total))
-                    }
-                    zip.closeEntry()
-                    entry = zip.nextEntry
+        tagDao?.let { tDao ->
+            val tagsArray = manifest.optJSONArray("tags") ?: JSONArray()
+            for (i in 0 until tagsArray.length()) {
+                val tagObj = tagsArray.optJSONObject(i) ?: continue
+                val name = tagObj.optString("name")
+                if (name.isBlank()) continue
+                val color = tagObj.optInt("colorArgb", 0)
+                val newTagId = UUID.randomUUID().toString()
+                tDao.insert(TagEntity(id = newTagId, name = name, colorArgb = color))
+
+                val trackIds = tagObj.optJSONArray("trackIds") ?: JSONArray()
+                for (t in 0 until trackIds.length()) {
+                    val oldTrackId = trackIds.optString(t)
+                    val newTrackId = idMapping[oldTrackId] ?: continue
+                    tDao.assign(TrackTagEntity(trackId = newTrackId, tagId = newTagId))
                 }
             }
         }
-    }.flowOn(Dispatchers.IO)
+
+        val settingsObj = manifest.optJSONObject("settings")
+        if (settingsObj != null) {
+            val prefs = context.getSharedPreferences("nami_settings", Context.MODE_PRIVATE).edit()
+            for (key in settingsObj.keys()) {
+                val value = settingsObj.get(key)
+                when (value) {
+                    is Boolean -> prefs.putBoolean(key, value)
+                    is Int -> prefs.putInt(key, value)
+                    is Long -> prefs.putLong(key, value)
+                    is Float -> prefs.putFloat(key, value)
+                    is Double -> prefs.putFloat(key, value.toFloat())
+                    is String -> prefs.putString(key, value)
+                }
+            }
+            prefs.apply()
+        }
+    }
 
     // Всё, что Media3 не умеет само (трекерные модули, чиптюны, APE/WavPack/TAK/Musepack),
     // конвертируется в .wav при импорте - см. copyAndIndex.
@@ -598,7 +814,9 @@ class LibraryRepositoryImpl @Inject constructor(
             var albumIdForGroup: String? = null
             for (doc in group.audioFiles) {
                 val result = copyAndIndex(
-                    resolver, doc.uri, musicDir,
+                    resolver,
+                    doc.uri,
+                    musicDir,
                     fallbackArtist = group.artistFolderName,
                     fallbackAlbum = group.albumFolderName,
                     lyricsDoc = folderImportScanner.findLyrics(doc),
@@ -631,7 +849,7 @@ class LibraryRepositoryImpl @Inject constructor(
                 }
             }
         }
-    }
+    }.flowOn(Dispatchers.IO)
 
     private data class CopyAndIndexResult(val trackId: String, val albumId: String?)
 
@@ -643,23 +861,26 @@ class LibraryRepositoryImpl @Inject constructor(
         fallbackAlbum: String? = null,
         lyricsDoc: DocumentFile? = null,
         cueDoc: DocumentFile? = null,
+        originalFileName: String? = null,
     ): CopyAndIndexResult? {
-        val displayName = queryDisplayName(resolver, uri) ?: uri.lastPathSegment
-        val extension = resolver.getType(uri)?.substringAfterLast('/') ?: "audio"
+        val displayName = originalFileName
+            ?: (if (uri.scheme == "file") uri.lastPathSegment else runCatching { queryDisplayName(resolver, uri) }.getOrNull() ?: uri.lastPathSegment)
+
+        val rawExt = displayName?.substringAfterLast('.', "")?.trim()?.lowercase()?.takeIf { it.isNotBlank() }
+        val mimeExt = runCatching { resolver.getType(uri) }.getOrNull()?.substringAfterLast('/')?.takeIf {
+            it != "octet-stream" && it != "audio" && it != "x-zip-compressed" && it != "zip"
+        }
+        val extension = rawExt ?: mimeExt ?: "mp3"
         var destination = File(musicDir, "${UUID.randomUUID()}.$extension")
 
         resolver.openInputStream(uri)?.use { input ->
             destination.outputStream().use { output -> input.copyTo(output) }
         } ?: return null
 
-        // Этап 10: DSD import via DoP, wired to a real container parser (see DsfToDopWav's own
-        // doc for why this converts at import time instead of a custom streaming Extractor).
-        // Falls through to indexing the raw .dsf as-is (native tag reader will likely find
-        // nothing useful in it, same as any other unrecognized format) if conversion fails --
-        // never crashes the import over one bad/unsupported DSD file.
-        if (displayName?.endsWith(".dsf", ignoreCase = true) == true) {
-            val dsfBytes = destination.readBytes()
-            val wavBytes = DsfToDopWav.convert(dsfBytes)
+        // Этап 10: DSD import via DoP (DSF и DFF)
+        if (displayName?.endsWith(".dsf", ignoreCase = true) == true || displayName?.endsWith(".dff", ignoreCase = true) == true) {
+            val dsdBytes = destination.readBytes()
+            val wavBytes = DsfToDopWav.convert(dsdBytes)
             if (wavBytes != null) {
                 val wavDestination = File(musicDir, "${destination.nameWithoutExtension}.wav")
                 wavDestination.writeBytes(wavBytes)

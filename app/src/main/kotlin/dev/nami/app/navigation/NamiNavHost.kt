@@ -530,6 +530,7 @@ fun NamiNavHost(
                     onStatsClick = { navController.navigate(ROUTE_STATS) },
                     onWatchedFoldersClick = { navController.navigate(ROUTE_WATCHED_FOLDERS) },
                     onExportClick = onExportRequested,
+                    onImportZipClick = onImportZipRequested,
                     onDjModeClick = { navController.navigate(ROUTE_DJ_MODE) },
                     onBlindListenClick = { navController.navigate(ROUTE_BLIND_LISTEN) },
                     onCardSortClick = { navController.navigate(ROUTE_CARD_SORT) },

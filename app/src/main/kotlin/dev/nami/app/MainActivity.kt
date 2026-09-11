@@ -352,7 +352,17 @@ class MainActivity : ComponentActivity() {
                     onBatteryHintShown = { appSettingsRepository.batteryHintShown = true },
                     onImportRequested = { pickFiles.launch(arrayOf("audio/*")) },
                     onImportFolderRequested = { pickFolder.launch(null) },
-                    onImportZipRequested = { pickZip.launch(arrayOf("application/zip")) },
+                    onImportZipRequested = {
+                        pickZip.launch(
+                            arrayOf(
+                                "application/zip",
+                                "application/x-zip",
+                                "application/x-zip-compressed",
+                                "application/octet-stream",
+                                "*/*",
+                            )
+                        )
+                    },
                     onAddWatchedFolderRequested = { pickWatchedFolder.launch(null) },
                     onExportRequested = {
                         val stamp = java.text.SimpleDateFormat("yyyy-MM-dd_HHmm", java.util.Locale.ROOT).format(java.util.Date())
