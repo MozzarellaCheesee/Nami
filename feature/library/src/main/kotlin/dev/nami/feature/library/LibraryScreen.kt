@@ -210,6 +210,23 @@ fun LibraryScreen(
                         onSort = viewModel::setSort,
                     )
                 }
+                activeImportProgress?.let { progress ->
+                    if (progress.total > 0) {
+                        val fraction = (progress.done.toFloat() / progress.total).coerceIn(0f, 1f)
+                        androidx.compose.material3.LinearProgressIndicator(
+                            progress = { fraction },
+                            modifier = Modifier.fillMaxWidth().height(2.dp),
+                            color = NamiColors.Shu,
+                            trackColor = NamiColors.Ink700,
+                        )
+                    } else {
+                        androidx.compose.material3.LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth().height(2.dp),
+                            color = NamiColors.Shu,
+                            trackColor = NamiColors.Ink700,
+                        )
+                    }
+                }
                 when (uiState.selectedTab) {
                     LibraryTab.TRACKS -> TrackListContent(
                         tracks = tracks,

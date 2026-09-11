@@ -122,4 +122,9 @@ interface LibraryRepository {
     suspend fun deleteTracks(ids: List<TrackId>)
 }
 
-data class ImportProgress(val done: Int, val total: Int)
+data class ImportProgress(
+    val done: Int,
+    val total: Int,
+    val currentFileName: String? = null,
+    val phase: String? = null,
+)
