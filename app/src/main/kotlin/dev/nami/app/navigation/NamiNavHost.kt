@@ -364,6 +364,7 @@ fun NamiNavHost(
                     onPlaylistClick = { playlistId -> navController.navigate("playlist/${playlistId.value}") },
                     onConstructorClick = { navController.navigate(ROUTE_HOME_CONSTRUCTOR) },
                     onOpenLocalShare = { navController.navigate(ROUTE_LOCAL_SHARE) },
+                    onOpenJam = { navController.navigate(ROUTE_JAM) },
                     onShuffleAllClick = { tracks ->
                         nowPlayingViewModel.playAllShuffled(tracks)
                         if (autoOpenPlayer) showNowPlaying = true

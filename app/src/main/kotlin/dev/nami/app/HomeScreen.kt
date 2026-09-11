@@ -22,7 +22,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.DragHandle
+import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Shuffle
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.Icon
@@ -78,6 +80,7 @@ fun HomeScreen(
     onPlaylistClick: (PlaylistId) -> Unit,
     onConstructorClick: () -> Unit,
     onOpenLocalShare: () -> Unit,
+    onOpenJam: () -> Unit = {},
     onShuffleAllClick: (List<dev.nami.core.model.Track>) -> Unit,
     // Играет прямо сейчас очередь, запущенная этой же кнопкой (не любая другая) - тогда кнопка
     // на карточке меняется на паузу вместо Play, повторный тап переключает паузу/продолжение,
@@ -102,15 +105,70 @@ fun HomeScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
+        val jamSession by viewModel.jamSession.collectAsState()
         dev.nami.core.designsystem.NamiScreenHeader(
             title = "Главная",
             actions = {
+                IconButton(onClick = onOpenJam) {
+                    Icon(
+                        imageVector = Icons.Outlined.Groups,
+                        contentDescription = "Джем",
+                        tint = if (jamSession != null) NamiColors.Wakaba else NamiColors.Paper70,
+                    )
+                }
                 IconButton(onClick = onConstructorClick) {
                     Icon(Icons.Outlined.Tune, contentDescription = "Настроить блоки", tint = NamiColors.Paper70)
                 }
             },
         )
         LazyColumn(modifier = Modifier.fillMaxSize()) {
+            if (jamSession != null) {
+                item {
+                    androidx.compose.material3.Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 8.dp)
+                            .clickable(onClick = onOpenJam),
+                        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = NamiColors.Ink800),
+                        shape = RoundedCornerShape(NamiRadius.Card),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, NamiColors.Wakaba.copy(alpha = 0.5f)),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Groups,
+                                    contentDescription = null,
+                                    tint = NamiColors.Wakaba,
+                                    modifier = Modifier.size(24.dp),
+                                )
+                                androidx.compose.foundation.layout.Spacer(Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = "Активный Джем • Комната ${jamSession!!.code}",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                        color = NamiColors.Paper100,
+                                    )
+                                    Text(
+                                        text = if (jamSession!!.isHost) "Вы организатор • Нажмите для управления" else "Вы подключены к комнате",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = NamiColors.Wakaba,
+                                    )
+                                }
+                            }
+                            Icon(
+                                imageVector = Icons.Outlined.ChevronRight,
+                                contentDescription = null,
+                                tint = NamiColors.Paper40,
+                            )
+                        }
+                    }
+                }
+            }
             state.blocks.filter { it.enabled }.forEach { block ->
                 when (block.type) {
                     HomeBlockType.CONTINUE_LISTENING -> state.continueListening?.let { track ->

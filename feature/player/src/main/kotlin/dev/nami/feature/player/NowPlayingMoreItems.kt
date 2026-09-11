@@ -57,7 +57,7 @@ fun nowPlayingMoreIcon(item: NowPlayingMoreItem): ImageVector = when (item) {
     NowPlayingMoreItem.SLEEP_TIMER -> Icons.Outlined.DarkMode
     NowPlayingMoreItem.SHARE_OVER_NETWORK -> Icons.Outlined.Send
     NowPlayingMoreItem.LISTEN_TOGETHER -> Icons.Outlined.Groups
-    NowPlayingMoreItem.JAM -> Icons.Outlined.QueueMusic
+    NowPlayingMoreItem.JAM -> Icons.Outlined.Groups
     NowPlayingMoreItem.SHARE -> Icons.Outlined.Share
     NowPlayingMoreItem.MOMENTS -> Icons.Outlined.Repeat
     NowPlayingMoreItem.TRACK_INFO -> Icons.Outlined.Info

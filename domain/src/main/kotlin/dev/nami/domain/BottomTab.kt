@@ -18,6 +18,7 @@ enum class BottomTab(val route: String) {
     STATS("stats"),
     VOCABULARY("vocabulary"),
     FOLDERS("watched_folders"),
+    JAM("jam"),
 }
 
 data class BottomTabConfig(val tab: BottomTab, val enabled: Boolean)
@@ -36,4 +37,5 @@ val DEFAULT_BOTTOM_TABS = listOf(
     BottomTabConfig(BottomTab.STATS, false),
     BottomTabConfig(BottomTab.VOCABULARY, false),
     BottomTabConfig(BottomTab.FOLDERS, false),
+    BottomTabConfig(BottomTab.JAM, false),
 )
