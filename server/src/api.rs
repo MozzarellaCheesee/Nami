@@ -1510,6 +1510,8 @@ impl From<users::UserError> for ApiError {
 struct Credentials {
     username: String,
     password: String,
+    /// Если задано, парольный вход регистрирует постоянное устройство вместо web-сессии.
+    device_name: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -1551,7 +1553,15 @@ async fn login(
         return Err(ApiError(StatusCode::TOO_MANY_REQUESTS, "слишком много попыток".into()));
     }
     let db = st.db.lock().unwrap();
-    let (id, token) = users::login(&db, &c.username, &c.password)?;
+    let (id, session_token) = users::login(&db, &c.username, &c.password)?;
+    let token = if let Some(name) = c.device_name.as_deref() {
+        let token = auth::create_device(&db, id, name)
+            .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        let _ = users::logout(&db, &session_token);
+        token
+    } else {
+        session_token
+    };
     let role = users::get(&db, id).map(|u| u.role).unwrap_or_default();
     Ok(Json(Session { user_id: id, token, role }))
 }
