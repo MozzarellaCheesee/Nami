@@ -275,6 +275,124 @@ fn broadcast_to(st: &Shared, code: &str, ev: serde_json::Value) {
     }
 }
 
+/// Генерирует адаптивную HTML-страницу для перехода в Jam-сессию из браузера или мессенджера
+pub fn page(code: &str, server_base: &str) -> String {
+    let clean_code = code.trim().to_uppercase();
+    let clean_base = server_base.trim_end_matches('/');
+    let deep_link = format!("nami://jam?code={clean_code}&host={clean_base}");
+    format!(
+        r#"<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NAMI Jam — {clean_code}</title>
+<style>
+body {{
+  margin: 0;
+  padding: 20px;
+  background: #121216;
+  color: #f5f5f7;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  box-sizing: border-box;
+}}
+.card {{
+  background: #1c1c22;
+  border-radius: 24px;
+  padding: 36px 28px;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 16px 40px rgba(0,0,0,0.6);
+  border: 1px solid rgba(255,255,255,0.06);
+}}
+.badge {{
+  display: inline-block;
+  background: rgba(229, 83, 61, 0.15);
+  color: #e5533d;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 1px;
+  padding: 6px 16px;
+  border-radius: 100px;
+  margin-bottom: 18px;
+}}
+h1 {{
+  margin: 0 0 10px;
+  font-size: 24px;
+  font-weight: 700;
+}}
+.code {{
+  font-size: 38px;
+  font-weight: 800;
+  letter-spacing: 8px;
+  color: #ffffff;
+  margin: 24px 0;
+  font-family: monospace;
+}}
+p {{
+  color: rgba(245,245,247,0.7);
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 0 0 28px;
+}}
+.btn {{
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  background: #e5533d;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 600;
+  padding: 15px;
+  border-radius: 14px;
+  text-decoration: none;
+  margin-bottom: 12px;
+  transition: transform 0.1s, opacity 0.1s;
+}}
+.btn:active {{
+  opacity: 0.85;
+  transform: scale(0.98);
+}}
+.btn-sub {{
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(255,255,255,0.06);
+  color: rgba(245,245,247,0.8);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 13px;
+  border-radius: 14px;
+  text-decoration: none;
+}}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="badge">NAMI JAM</div>
+  <h1>Совместное прослушивание</h1>
+  <div class="code">{clean_code}</div>
+  <p>Вас пригласили слушать музыку вместе. Нажмите кнопку ниже, чтобы присоединиться к комнате в приложении Nami.</p>
+  <a class="btn" href="{deep_link}">Войти в Джем в приложении Nami</a>
+  <a class="btn-sub" href="https://github.com/MozzarellaCheesee/Nami/releases/latest">Установить Nami (APK)</a>
+</div>
+<script>
+if (navigator.userAgent.match(/Android/i)) {{
+  setTimeout(function() {{
+    window.location.href = "{deep_link}";
+  }}, 300);
+}}
+</script>
+</body>
+</html>"#
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

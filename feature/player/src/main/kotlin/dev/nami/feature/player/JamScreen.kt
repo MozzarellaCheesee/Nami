@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,6 +24,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.QrCode
 import androidx.compose.material.icons.outlined.QrCodeScanner
@@ -165,6 +168,7 @@ fun JamScreen(
             val currentSession = session
             if (currentSession == null) {
                 JamNoSessionContent(
+                    viewModel = viewModel,
                     isServerConfigured = isServerConfigured,
                     onCreateRoom = { viewModel.createRoom() },
                     onJoinRoom = { code, host -> viewModel.joinRoom(code, host) },
@@ -172,6 +176,7 @@ fun JamScreen(
                 )
             } else {
                 JamSessionContent(
+                    viewModel = viewModel,
                     session = currentSession,
                     connected = connected,
                     activeHostUrl = activeHostUrl,
@@ -184,6 +189,7 @@ fun JamScreen(
 
 @Composable
 private fun JamNoSessionContent(
+    viewModel: JamViewModel,
     isServerConfigured: Boolean,
     onCreateRoom: () -> Unit,
     onJoinRoom: (String, String?) -> Unit,
@@ -193,6 +199,11 @@ private fun JamNoSessionContent(
     var joinCode by remember { mutableStateOf("") }
     var hostAddress by remember { mutableStateOf("") }
 
+    val clipboardManager = LocalClipboardManager.current
+    val clipboardText = remember { clipboardManager.getText()?.text }
+    val detectedInvite = remember(clipboardText) { viewModel.parseJamInvite(clipboardText) }
+    val recentHosts by viewModel.recentHosts.collectAsState()
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -200,6 +211,56 @@ private fun JamNoSessionContent(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        // Карточка быстрого входа из буфера обмена
+        if (detectedInvite != null) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = NamiColors.Ink800),
+                shape = RoundedCornerShape(NamiRadius.Card),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Ссылка из буфера обмена",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = NamiColors.Wakaba,
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Комната ${detectedInvite.first}",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = NamiColors.Paper100,
+                        )
+                        detectedInvite.second?.let { host ->
+                            Text(
+                                text = host,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = NamiColors.Paper40,
+                                maxLines = 1,
+                            )
+                        }
+                    }
+                    Button(
+                        onClick = { onJoinRoom(detectedInvite.first, detectedInvite.second) },
+                        shape = RoundedCornerShape(NamiRadius.Button),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = NamiColors.Wakaba,
+                            contentColor = NamiColors.Ink900,
+                        ),
+                    ) {
+                        Text("Войти", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = NamiColors.Ink800),
@@ -216,7 +277,7 @@ private fun JamNoSessionContent(
                 )
                 Text(
                     text = if (isServerConfigured) {
-                        "Начните совместное прослушивание. Другие участники смогут подключиться по коду комнаты или QR-коду."
+                        "Начните совместное прослушивание. Другие участники смогут подключиться по коду комнаты, ссылке или QR-коду."
                     } else {
                         "Для создания комнаты необходимо подключить сервер NAMI в Настройках."
                     },
@@ -305,12 +366,45 @@ private fun JamNoSessionContent(
                     }
                 }
 
+                // Недавние серверы хостов
+                if (recentHosts.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "Недавние серверы хостов:",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = NamiColors.Paper40,
+                        )
+                        Row(
+                            modifier = Modifier.horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            recentHosts.forEach { rh ->
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (hostAddress == rh) NamiColors.Shu.copy(alpha = 0.25f) else NamiColors.Ink700)
+                                        .clickable {
+                                            hostAddress = rh
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                ) {
+                                    Text(
+                                        text = rh,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (hostAddress == rh) NamiColors.Paper100 else NamiColors.Paper70,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 if (!isServerConfigured) {
                     OutlinedTextField(
                         value = hostAddress,
                         onValueChange = { hostAddress = it },
                         label = { Text("Адрес сервера хоста (если не в одном Wi-Fi)") },
-                        placeholder = { Text("http://192.168.1.50:4533") },
+                        placeholder = { Text("https://my-nami.ts.net или http://192.168.1.50:4533") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(NamiRadius.Card),
@@ -357,6 +451,7 @@ private fun JamNoSessionContent(
 
 @Composable
 private fun JamSessionContent(
+    viewModel: JamViewModel,
     session: JamSession,
     connected: Boolean,
     activeHostUrl: String?,
@@ -367,10 +462,14 @@ private fun JamSessionContent(
     val clipboardManager = LocalClipboardManager.current
     var showQrDialog by remember { mutableStateOf(false) }
 
-    val inviteLink = remember(session.code, activeHostUrl) {
-        val hostPart = if (!activeHostUrl.isNullOrBlank()) "&host=${activeHostUrl}" else ""
-        "nami://jam?code=${session.code}$hostPart"
-    }
+    val allHosts by viewModel.allHostUrls.collectAsState()
+    val externalHost = allHosts.firstOrNull { !viewModel.isLocalHost(it) }
+    val preferredHost = externalHost ?: activeHostUrl
+    val hostsList = (listOfNotNull(externalHost) + allHosts + listOfNotNull(activeHostUrl)).distinct()
+    val hostsParam = if (hostsList.isNotEmpty()) "&hosts=${java.net.URLEncoder.encode(hostsList.joinToString(","), "UTF-8")}" else ""
+    val hostParam = preferredHost?.let { "&host=${java.net.URLEncoder.encode(it, "UTF-8")}" } ?: ""
+    val inviteLink = "nami://jam?code=${session.code}$hostParam$hostsParam"
+    val webInviteLink = preferredHost?.let { "$it/jam?code=${session.code}" }
 
     if (showQrDialog) {
         AlertDialog(
@@ -432,6 +531,41 @@ private fun JamSessionContent(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        // Подсказка, если сервер доступен только в локальной сети
+        if (session.isHost && viewModel.isLocalHost(preferredHost)) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = NamiColors.Ink800),
+                shape = RoundedCornerShape(NamiRadius.Card),
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Info,
+                        contentDescription = null,
+                        tint = NamiColors.Shu,
+                        modifier = Modifier.size(22.dp),
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "Подключение вне домашнего Wi-Fi",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = NamiColors.Paper100,
+                        )
+                        Text(
+                            text = "Сейчас сервер подключён по локальному адресу. Чтобы друзья могли подключаться через 4G или удалённо, настройте внешний адрес (Tailscale / Cloudflare Tunnel / домен) в Настройки → Сервер NAMI.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = NamiColors.Paper70,
+                        )
+                    }
+                }
+            }
+        }
+
         // Room Code & Status Card
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -513,11 +647,16 @@ private fun JamSessionContent(
                 ) {
                     OutlinedButton(
                         onClick = {
+                            val shareText = buildString {
+                                appendLine("Присоединяйся к совместному прослушиванию в Nami!")
+                                appendLine("Код комнаты: ${session.code}")
+                                if (webInviteLink != null) {
+                                    appendLine("Ссылка: $webInviteLink")
+                                }
+                                appendLine("В приложении Nami: $inviteLink")
+                            }
                             val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                                putExtra(
-                                    Intent.EXTRA_TEXT,
-                                    "Присоединяйся к совместному прослушиванию в Nami!\nКод комнаты: ${session.code}\nСсылка: $inviteLink",
-                                )
+                                putExtra(Intent.EXTRA_TEXT, shareText)
                                 type = "text/plain"
                             }
                             context.startActivity(Intent.createChooser(sendIntent, "Пригласить в Jam"))
@@ -533,6 +672,24 @@ private fun JamSessionContent(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Поделиться", color = NamiColors.Paper100)
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(webInviteLink ?: inviteLink))
+                            Toast.makeText(context, "Ссылка скопирована", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(NamiRadius.Button),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Link,
+                            contentDescription = null,
+                            tint = NamiColors.Paper100,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Ссылка", color = NamiColors.Paper100)
                     }
 
                     OutlinedButton(
