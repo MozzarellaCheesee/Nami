@@ -78,10 +78,20 @@ class LibraryViewModel @Inject constructor(
     private val serverLibraryRepository: dev.nami.domain.ServerLibraryRepository,
 ) : ViewModel() {
 
-    private val _serverActionMsg = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+    private val _serverActionMsg = MutableStateFlow<String?>(null)
     /** Итог последнего действия «Отправить на сервер» - экран показывает Snackbar. */
-    val serverActionMsg: kotlinx.coroutines.flow.StateFlow<String?> = _serverActionMsg
+    val serverActionMsg: StateFlow<String?> = _serverActionMsg
     fun clearServerActionMsg() { _serverActionMsg.value = null }
+
+    init {
+        viewModelScope.launch {
+            serverLibraryRepository.uploadProgress.collect { msg ->
+                if (msg != null && msg.startsWith("Выгрузка завершена")) {
+                    _serverActionMsg.value = msg
+                }
+            }
+        }
+    }
 
     private val _importResult = MutableStateFlow<String?>(null)
     val importResult: StateFlow<String?> = _importResult
@@ -91,10 +101,8 @@ class LibraryViewModel @Inject constructor(
     fun isServerActive(): Boolean = serverLibraryRepository.isServerActive()
 
     fun uploadTrackToServer(track: Track) {
-        viewModelScope.launch {
-            _serverActionMsg.value = serverLibraryRepository.uploadLocalTrack(track.path)
-                ?: "Не удалось отправить на сервер"
-        }
+        serverLibraryRepository.uploadTracksBackground(listOf(track.path))
+        _serverActionMsg.value = "Отправка трека на сервер…"
     }
 
     fun selectAllTracks() {
@@ -109,28 +117,11 @@ class LibraryViewModel @Inject constructor(
         if (ids.isEmpty()) return
         clearSelection()
         viewModelScope.launch(Dispatchers.IO) {
-            var uploaded = 0
-            var duplicates = 0
-            var failed = 0
-            _serverActionMsg.value = "Отправка на сервер: 0/${ids.size}…"
-            for ((index, id) in ids.withIndex()) {
-                val track = libraryRepository.track(id).first()
-                if (track == null) {
-                    failed++
-                    continue
-                }
-                val res = serverLibraryRepository.uploadLocalTrack(track.path)
-                if (res == "Уже есть на сервере") duplicates++
-                else if (res != null) uploaded++
-                else failed++
-                _serverActionMsg.value = "Отправка на сервер: ${index + 1}/${ids.size}…"
+            val paths = ids.mapNotNull { id -> libraryRepository.track(id).first()?.path }
+            if (paths.isNotEmpty()) {
+                serverLibraryRepository.uploadTracksBackground(paths)
+                _serverActionMsg.value = "Отправка ${paths.size} треков на сервер…"
             }
-            _serverActionMsg.value = buildString {
-                append("Выгрузка завершена: ")
-                if (uploaded > 0) append("загружено $uploaded ")
-                if (duplicates > 0) append("(дубликатов $duplicates) ")
-                if (failed > 0) append("ошибок $failed")
-            }.trim()
         }
     }
 

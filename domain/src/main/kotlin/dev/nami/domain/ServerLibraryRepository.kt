@@ -39,6 +39,15 @@ interface ServerLibraryRepository {
      * человекочитаемый итог («Загружен» / «Уже есть на сервере» / null при ошибке). */
     suspend fun uploadLocalTrack(path: String): String?
 
+    /** Текущий статус фоновой пакетной выгрузки треков на сервер (не сбрасывается при выходе с экрана). */
+    val uploadProgress: kotlinx.coroutines.flow.StateFlow<String?>
+
+    /** Запустить фоновую выгрузку путей к файлам в синглтоне репозитория. */
+    fun uploadTracksBackground(paths: List<String>)
+
+    /** Сбросить статус выгрузки. */
+    fun clearUploadProgress()
+
     /**
      * Создать гостевую ссылку на набор треков. `tracks` - метаданные локальных треков
      * (`artist`, `title`, `durationMs`); те, что нашлись на сервере, попадают в ссылку.

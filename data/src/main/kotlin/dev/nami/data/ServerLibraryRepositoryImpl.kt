@@ -5,7 +5,13 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.nami.domain.ServerLibraryRepository
 import dev.nami.domain.ServerTrackMeta
 import dev.nami.domain.SettingsRepository
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
@@ -16,6 +22,40 @@ class ServerLibraryRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val settingsRepository: SettingsRepository,
 ) : ServerLibraryRepository {
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var uploadJob: Job? = null
+    private val _uploadProgress = MutableStateFlow<String?>(null)
+    override val uploadProgress: StateFlow<String?> = _uploadProgress
+
+    override fun clearUploadProgress() {
+        _uploadProgress.value = null
+    }
+
+    override fun uploadTracksBackground(paths: List<String>) {
+        if (paths.isEmpty()) return
+        uploadJob?.cancel()
+        uploadJob = scope.launch {
+            var uploaded = 0
+            var duplicates = 0
+            var failed = 0
+            val total = paths.size
+            _uploadProgress.value = "Отправка на сервер: 0/$total…"
+            for ((index, path) in paths.withIndex()) {
+                val res = uploadLocalTrack(path)
+                if (res == "Уже есть на сервере") duplicates++
+                else if (res != null) uploaded++
+                else failed++
+                _uploadProgress.value = "Отправка на сервер: ${index + 1}/$total…"
+            }
+            _uploadProgress.value = buildString {
+                append("Выгрузка завершена: ")
+                if (uploaded > 0) append("загружено $uploaded ")
+                if (duplicates > 0) append("(уже было $duplicates) ")
+                if (failed > 0) append("ошибок $failed")
+            }.trim()
+        }
+    }
 
     /** Офлайн-кеш серверных треков - в приватном хранилище приложения. */
     private val cacheDir: File by lazy {

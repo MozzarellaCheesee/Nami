@@ -29,34 +29,14 @@ class SettingsViewModel @Inject constructor(
     private val serverLibraryRepository: dev.nami.domain.ServerLibraryRepository,
 ) : ViewModel() {
 
-    private val _uploadAllMsg = MutableStateFlow<String?>(null)
-    val uploadAllMsg: StateFlow<String?> = _uploadAllMsg
-    fun clearUploadAllMsg() { _uploadAllMsg.value = null }
+    val uploadAllMsg: StateFlow<String?> = serverLibraryRepository.uploadProgress
+    fun clearUploadAllMsg() { serverLibraryRepository.clearUploadProgress() }
 
     fun uploadAllTracksToServer() {
         viewModelScope.launch(Dispatchers.IO) {
             val all = libraryRepository.allTracksOrdered()
-            if (all.isEmpty()) {
-                _uploadAllMsg.value = "Локальных треков не найдено"
-                return@launch
-            }
-            var uploaded = 0
-            var duplicates = 0
-            var failed = 0
-            _uploadAllMsg.value = "Отправка на сервер: 0/${all.size}…"
-            for ((index, track) in all.withIndex()) {
-                val res = serverLibraryRepository.uploadLocalTrack(track.path)
-                if (res == "Уже есть на сервере") duplicates++
-                else if (res != null) uploaded++
-                else failed++
-                _uploadAllMsg.value = "Отправка на сервер: ${index + 1}/${all.size}…"
-            }
-            _uploadAllMsg.value = buildString {
-                append("Выгрузка завершена: ")
-                if (uploaded > 0) append("загружено $uploaded ")
-                if (duplicates > 0) append("(уже было $duplicates) ")
-                if (failed > 0) append("ошибок $failed")
-            }.trim()
+            if (all.isEmpty()) return@launch
+            serverLibraryRepository.uploadTracksBackground(all.map { it.path })
         }
     }
 
