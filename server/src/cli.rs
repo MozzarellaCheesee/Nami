@@ -58,6 +58,12 @@ pub enum Commands {
     },
     /// Диагностика: порты, ffmpeg, место на диске, права
     Doctor,
+    /// Автоматическая настройка домена (DNS, Caddy Reverse Proxy, Let's Encrypt SSL)
+    Domain {
+        /// Доменное имя (например: music.example.com)
+        #[arg(index = 1)]
+        domain: Option<String>,
+    },
 }
 
 /// Результат выполнения CLI команды
@@ -75,6 +81,7 @@ impl Commands {
             Commands::Backup { output } => backup(cfg, output),
             Commands::Restore { input } => restore(cfg, input),
             Commands::Doctor => doctor(cfg),
+            Commands::Domain { domain } => domain_setup(cfg, domain.as_deref()),
         }
     }
 }
@@ -629,3 +636,43 @@ fn setup_interactive(_tui: bool) -> Res<()> {
     println!("\nНастройка завершена! Сервер готов к запуску: nami-server");
     Ok(())
 }
+
+/// Автоматическая настройка доменного имени, Caddy reverse proxy и SSL
+fn domain_setup(cfg: &crate::config::Config, domain_arg: Option<&str>) -> Res<()> {
+    println!("=== 🌐 Автоматическая настройка домена для Nami ===\n");
+    use std::io::{self, Write};
+
+    let domain = match domain_arg {
+        Some(d) if !d.trim().is_empty() => d.trim().to_string(),
+        _ => {
+            print!("Введите ваш домен (например, music.example.com): ");
+            io::stdout().flush()?;
+            let mut input = String::new();
+            io::stdin().read_line(&mut input)?;
+            input.trim().to_string()
+        }
+    };
+
+    if domain.is_empty() {
+        return Err("Доменное имя не указано".into());
+    }
+
+    println!("Запуск проверки и настройки для: {}\n", domain);
+
+    let report = crate::domain::setup_domain(&domain, cfg.port, std::path::Path::new("config.toml"))
+        .map_err(|e| format!("Ошибка настройки домена: {e}"))?;
+
+    for step in &report.steps {
+        println!("  {step}");
+    }
+
+    println!("\n{}", "=".repeat(60));
+    println!("{}", report.message);
+    println!("  URL для подключения: {}", report.url);
+    println!("  Порт: 443 (стандартный защищённый HTTPS)");
+    println!("  Мастер сопряжения: {}/setup", report.url);
+    println!("{}", "=".repeat(60));
+
+    Ok(())
+}
+

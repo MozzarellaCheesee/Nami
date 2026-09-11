@@ -192,7 +192,10 @@ object NamiServerClient {
 
             if (filteredHosts.isEmpty()) return null
 
-            val bases = filteredHosts.map { "$scheme://$it:$port" }
+            val ext = uri.getQueryParameter("ext")?.trim()?.trimEnd('/')?.takeIf { it.isNotEmpty() }
+                ?.let { if (it.startsWith("http")) it else "https://$it" }
+
+            val bases = filteredHosts.map { "$scheme://$it:$port" } + listOfNotNull(ext)
             for (base in bases) {
                 val token = pairWithCode(base, code, deviceName, fp) ?: continue
                 return Config(base, token, fp, listOf(base) + bases.filter { it != base })
