@@ -47,6 +47,7 @@ private fun sourceLabel(source: NetworkImportSource) = when (source) {
     NetworkImportSource.JAMENDO -> "Creative Commons"
     NetworkImportSource.BANDCAMP -> "Bandcamp"
     NetworkImportSource.SOUNDCLOUD -> "SoundCloud"
+    NetworkImportSource.VK -> "VK Музыка"
 }
 
 private fun sourceHint(source: NetworkImportSource) = when (source) {
@@ -56,6 +57,7 @@ private fun sourceHint(source: NetworkImportSource) = when (source) {
     NetworkImportSource.JAMENDO -> "Jamendo - каталог под Creative Commons. Нужен свой client_id в настройках."
     NetworkImportSource.BANDCAMP -> "Bandcamp - только то, что артист отдаёт бесплатно. Разбор страницы, может сломаться."
     NetworkImportSource.SOUNDCLOUD -> "SoundCloud - скачивается лишь то, что автор разрешил скачивать. Нужен client_id в настройках."
+    NetworkImportSource.VK -> "VK Музыка - аудиозаписи ВКонтакте. Нужен токен доступа (Kate Mobile / VK Admin) в настройках."
 }
 
 /** Вкладка "В сети" - поиск и скачивание из открытых источников. Поле ввода общее с локальным

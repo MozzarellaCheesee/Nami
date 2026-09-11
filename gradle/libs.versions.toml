@@ -45,6 +45,10 @@ play-services-cast-framework = { module = "com.google.android.gms:play-services-
 # наследуется от Theme.AppCompat ради стандартных диалогов выбора Cast-устройства.
 androidx-appcompat = { module = "androidx.appcompat:appcompat", version = "1.7.0" }
 media3-common = { module = "androidx.media3:media3-common", version.ref = "media3" }
+# HttpDataSource поверх OkHttp - нужен только чтобы ExoPlayer доверял самоподписанному
+# сертификату сервера в локальной сети по пиннингу отпечатка (как NamiServerClient).
+media3-datasource-okhttp = { module = "androidx.media3:media3-datasource-okhttp", version.ref = "media3" }
+okhttp = { module = "com.squareup.okhttp3:okhttp", version = "4.12.0" }
 # DLNA/UPnP - живая Kotlin-замена заброшенному Cling (SSDP-поиск + AVTransport/RenderingControl).
 # Публикуется только через JitPack, Maven Central у неё нет.
 upnpcast = { module = "com.github.yinnho:UPnPCast", version = "v1.3.0" }

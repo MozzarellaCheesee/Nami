@@ -53,6 +53,7 @@ fun PlaylistsScreen(
     onPlaylistClick: (PlaylistId) -> Unit,
     onImportRequested: (playlistName: String) -> Unit,
     onCreateSmartPlaylist: () -> Unit,
+    onSpotifyImportClick: () -> Unit = {},
     lastImportResult: StateFlow<ImportM3u8Result?>,
     onImportResultShown: () -> Unit,
     viewModel: PlaylistsViewModel = hiltViewModel(),
@@ -112,6 +113,7 @@ fun PlaylistsScreen(
                     Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
                         NamiPill("Обычный", NamiColors.Shu) { showCreateDialog = true }
                         NamiPill("Умный", NamiColors.Ai, onClick = onCreateSmartPlaylist)
+                        NamiPill("Spotify", NamiColors.Wakaba, onClick = onSpotifyImportClick)
                     }
                 }
             } else {
@@ -150,6 +152,7 @@ fun PlaylistsScreen(
             actions = listOf(
                 dev.nami.core.designsystem.ContextAction("Обычный плейлист", Icons.Outlined.Add) { showCreateDialog = true },
                 dev.nami.core.designsystem.ContextAction("Умный плейлист", Icons.Outlined.Add, onClick = onCreateSmartPlaylist),
+                dev.nami.core.designsystem.ContextAction("Импорт из Spotify", Icons.Outlined.FileUpload, onClick = onSpotifyImportClick),
             ),
         )
     }

@@ -52,6 +52,7 @@ class NetworkImportRepositoryImpl @Inject constructor(
                     NetworkImportSource.JAMENDO -> searchJamendo(trimmed)
                     NetworkImportSource.BANDCAMP -> searchBandcamp(trimmed)
                     NetworkImportSource.SOUNDCLOUD -> searchSoundCloud(trimmed)
+                    NetworkImportSource.VK -> searchVk(trimmed)
                 }
             }.getOrElse {
                 Log.w(TAG, "поиск в $source не удался", it)
@@ -79,6 +80,9 @@ class NetworkImportRepositoryImpl @Inject constructor(
                     "Автор не разрешил скачивать этот трек - слушать его можно только на SoundCloud"
                 else -> "Не удалось получить ссылку на файл"
             }
+        }
+        if (track.source == NetworkImportSource.VK && !settingsRepository.vkDownloadEnabled.value) {
+            return@withContext "Скачивание из ВК отключено в настройках приватности"
         }
         val url = track.downloadUrl ?: return@withContext "Не удалось получить ссылку на файл"
         // Уникальность даёт ПАПКА, а не префикс в имени: иначе uuid попадает в название трека у
@@ -572,6 +576,31 @@ class NetworkImportRepositoryImpl @Inject constructor(
     } catch (e: Exception) {
         Log.w(TAG, "не открылось соединение с $url: ${e.message}")
         null
+    }
+
+    // ------------------------------------------------------------------ VK Музыка
+
+    private fun searchVk(query: String): List<NetworkTrack> {
+        val token = settingsRepository.vkAccessToken.value?.takeIf { it.isNotBlank() } ?: return emptyList()
+        if (!settingsRepository.vkSearchEnabled.value) return emptyList()
+        val items = dev.nami.data.vk.VkMusicClient.searchAudio(query, token)
+        return items.map { vk ->
+            val minutes = vk.durationSec / 60
+            val seconds = (vk.durationSec % 60).toString().padStart(2, '0')
+            val durationText = "$minutes:$seconds"
+            val detail = vk.approxBitrateKbps?.let { "$it kbps · $durationText" } ?: durationText
+            NetworkTrack(
+                source = NetworkImportSource.VK,
+                id = "${vk.ownerId}_${vk.id}",
+                title = vk.title,
+                artistName = vk.artist,
+                durationSec = vk.durationSec,
+                artworkUrl = vk.albumCoverUrl,
+                detail = detail,
+                downloadUrl = vk.url,
+                fileName = "${vk.artist} - ${vk.title}.mp3",
+            )
+        }
     }
 
     private companion object {

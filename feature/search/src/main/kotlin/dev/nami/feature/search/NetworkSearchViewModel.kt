@@ -83,6 +83,7 @@ class NetworkSearchViewModel @Inject constructor(
     private fun clientIdMissing(source: NetworkImportSource): Boolean = when (source) {
         NetworkImportSource.JAMENDO -> settingsRepository.jamendoClientId.value.isNullOrBlank()
         NetworkImportSource.SOUNDCLOUD -> settingsRepository.soundCloudClientId.value.isNullOrBlank()
+        NetworkImportSource.VK -> settingsRepository.vkAccessToken.value.isNullOrBlank()
         else -> false
     }
 

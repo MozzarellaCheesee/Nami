@@ -824,6 +824,8 @@ private object NoOpSettingsRepository : dev.nami.domain.SettingsRepository {
     override fun setSoundCloudClientId(value: String?) {}
     override val listenBrainzToken = MutableStateFlow<String?>(null)
     override fun setListenBrainzToken(token: String?) {}
+    override val spotifyClientId = MutableStateFlow<String?>(null)
+    override fun setSpotifyClientId(value: String?) {}
     override val homeBlocks = MutableStateFlow(dev.nami.domain.DEFAULT_HOME_BLOCKS)
     override fun setHomeBlocks(blocks: List<dev.nami.domain.HomeBlockConfig>) {}
     override val nowPlayingShowTechInfo = MutableStateFlow(true)
