@@ -51,6 +51,12 @@ jobs:
             echo "nami.keystore.storePassword=AstolfoServant13_" >> local.properties
             echo "nami.keystore.keyAlias=namimusic" >> local.properties
             echo "nami.keystore.keyPassword=AstolfoServant13_" >> local.properties
+          else
+            echo "No keystore configured in secrets, generating self-signed keystore for CI"
+            keytool -genkeypair -v -keystore secrets/nami.jks -alias namimusic -keyalg RSA -keysize 2048 -validity 10000 -storepass AstolfoServant13_ -keypass AstolfoServant13_ -dname "CN=Nami, OU=Nami Music, O=Nami, L=Tokyo, S=Tokyo, C=JP"
+            echo "nami.keystore.storePassword=AstolfoServant13_" >> local.properties
+            echo "nami.keystore.keyAlias=namimusic" >> local.properties
+            echo "nami.keystore.keyPassword=AstolfoServant13_" >> local.properties
           fi
 
       - name: Grant execute permission for gradlew
