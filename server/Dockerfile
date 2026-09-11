@@ -16,8 +16,10 @@ RUN dpkg --add-architecture arm64 && dpkg --add-architecture amd64 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
-COPY Cargo.toml Cargo.lock ./
-COPY src ./src
+COPY server/Cargo.toml server/Cargo.lock ./
+COPY server/src ./src
+COPY server/web ./web
+COPY web/app /web/app
 # Триплет и линкер выбираются по TARGETARCH, который buildx подставляет сам.
 RUN set -eu; \
     case "$TARGETARCH" in \

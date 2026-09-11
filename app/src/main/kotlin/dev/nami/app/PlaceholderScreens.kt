@@ -405,6 +405,35 @@ fun SettingsServerScreen(
                     }
                 }
             }
+            val serverScanMsg by viewModel.serverScanMsg.collectAsState()
+            val libraryHealth by viewModel.libraryHealth.collectAsState()
+            SettingsSectionLabel("Управление сервером")
+            SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    NamiPill(text = "Пересканировать файлы на сервере", onClick = viewModel::triggerServerScan)
+                    if (serverScanMsg != null) {
+                        Text(
+                            serverScanMsg!!,
+                            color = NamiColors.Paper40,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                    NamiPill(
+                        text = "Проверить здоровье библиотеки",
+                        modifier = Modifier.padding(top = 12.dp),
+                        onClick = viewModel::loadLibraryHealth,
+                    )
+                    if (libraryHealth != null) {
+                        Text(
+                            libraryHealth!!,
+                            color = NamiColors.Paper40,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                }
+            }
             SettingsCard(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                     NamiPill(text = "Отвязать сервер", onClick = viewModel::unpairNamiServer)
@@ -424,7 +453,188 @@ fun SettingsNetworkSourcesScreen(onBack: () -> Unit, viewModel: SettingsViewMode
     var jamendoText by remember(jamendo) { mutableStateOf(jamendo.orEmpty()) }
     var soundCloudText by remember(soundCloud) { mutableStateOf(soundCloud.orEmpty()) }
 
+    val spotifyClientId by viewModel.spotifyClientId.collectAsState()
+    val spotifyClientSecret by viewModel.spotifyClientSecret.collectAsState()
+    val spotifyMetadataEnabled by viewModel.spotifyMetadataEnabled.collectAsState()
+    val spotifyCoversEnabled by viewModel.spotifyCoversEnabled.collectAsState()
+    var spotifyClientIdText by remember(spotifyClientId) { mutableStateOf(spotifyClientId.orEmpty()) }
+    var spotifyClientSecretText by remember(spotifyClientSecret) { mutableStateOf(spotifyClientSecret.orEmpty()) }
+
+    val vkAccessToken by viewModel.vkAccessToken.collectAsState()
+    val vkSearchEnabled by viewModel.vkSearchEnabled.collectAsState()
+    val vkDownloadEnabled by viewModel.vkDownloadEnabled.collectAsState()
+    val vkBitrate by viewModel.vkPreferredBitrate.collectAsState()
+    val vkTagSource by viewModel.vkTagSource.collectAsState()
+    val vkParallelDownloads by viewModel.vkParallelDownloads.collectAsState()
+    var vkAccessTokenText by remember(vkAccessToken) { mutableStateOf(vkAccessToken.orEmpty()) }
+
     SettingsSubScreenScaffold(title = "Источники в сети", onBack = onBack) {
+        SettingsSectionLabel("Spotify")
+        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Text(
+                    text = "Используется для загрузки метаданных и обложек высокого разрешения при анализе и импорте плейлистов. " +
+                        "Публичные плейлисты анализируются и без ключей через веб-разбор, но API обеспечивает максимальную стабильность.",
+                    color = NamiColors.Paper40,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                androidx.compose.material3.OutlinedTextField(
+                    value = spotifyClientIdText,
+                    onValueChange = { spotifyClientIdText = it },
+                    label = { Text("Spotify Client ID") },
+                    singleLine = true,
+                    trailingIcon = {
+                        if (spotifyClientIdText.isNotEmpty()) {
+                            IconButton(onClick = { spotifyClientIdText = "" }) {
+                                Icon(Icons.Outlined.Close, contentDescription = "Очистить", tint = NamiColors.Paper40)
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                )
+                androidx.compose.material3.OutlinedTextField(
+                    value = spotifyClientSecretText,
+                    onValueChange = { spotifyClientSecretText = it },
+                    label = { Text("Spotify Client Secret") },
+                    singleLine = true,
+                    trailingIcon = {
+                        if (spotifyClientSecretText.isNotEmpty()) {
+                            IconButton(onClick = { spotifyClientSecretText = "" }) {
+                                Icon(Icons.Outlined.Close, contentDescription = "Очистить", tint = NamiColors.Paper40)
+                            }
+                        }
+                    },
+                    supportingText = { ApiKeyHint("Панель разработчика Spotify", "https://developer.spotify.com/dashboard") },
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+                NamiPill(
+                    text = "Сохранить",
+                    modifier = Modifier.padding(top = 12.dp),
+                    onClick = {
+                        viewModel.setSpotifyClientId(spotifyClientIdText)
+                        viewModel.setSpotifyClientSecret(spotifyClientSecretText)
+                    },
+                )
+            }
+            SettingsRow(
+                icon = Icons.Outlined.Album,
+                title = "Метаданные из Spotify",
+                subtitle = "Заполнять названия и артистов по Spotify при импорте",
+                trailing = { NamiSwitch(checked = spotifyMetadataEnabled, onCheckedChange = viewModel::setSpotifyMetadataEnabled) },
+                onClick = { viewModel.setSpotifyMetadataEnabled(!spotifyMetadataEnabled) },
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Palette,
+                title = "Обложки из Spotify",
+                subtitle = "Встраивать оригинальные обложки в аудио",
+                trailing = { NamiSwitch(checked = spotifyCoversEnabled, onCheckedChange = viewModel::setSpotifyCoversEnabled) },
+                onClick = { viewModel.setSpotifyCoversEnabled(!spotifyCoversEnabled) },
+            )
+        }
+
+        SettingsSectionLabel("VK Музыка")
+        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Text(
+                    text = "Позволяет искать и скачивать аудиозаписи из ВКонтакте, а также скачивать треки для плейлистов Spotify. " +
+                        "Необходим токен Kate Mobile или VK Admin.",
+                    color = NamiColors.Paper40,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                androidx.compose.material3.OutlinedTextField(
+                    value = vkAccessTokenText,
+                    onValueChange = { vkAccessTokenText = it },
+                    label = { Text("VK Access Token") },
+                    singleLine = true,
+                    trailingIcon = {
+                        if (vkAccessTokenText.isNotEmpty()) {
+                            IconButton(onClick = { vkAccessTokenText = "" }) {
+                                Icon(Icons.Outlined.Close, contentDescription = "Очистить", tint = NamiColors.Paper40)
+                            }
+                        }
+                    },
+                    supportingText = { ApiKeyHint("Получить токен Kate Mobile", "https://vkhost.github.io/") },
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                )
+                NamiPill(
+                    text = "Сохранить",
+                    modifier = Modifier.padding(top = 12.dp),
+                    onClick = { viewModel.setVkAccessToken(vkAccessTokenText) },
+                )
+            }
+            SettingsRow(
+                icon = Icons.Outlined.CloudDownload,
+                title = "Поиск во вкладке «В сети»",
+                subtitle = "Показывать VK в списке источников поиска",
+                trailing = { NamiSwitch(checked = vkSearchEnabled, onCheckedChange = viewModel::setVkSearchEnabled) },
+                onClick = { viewModel.setVkSearchEnabled(!vkSearchEnabled) },
+            )
+            SettingsRow(
+                icon = Icons.Outlined.CloudDownload,
+                title = "Скачивание аудиозаписей",
+                subtitle = "Разрешить сохранение аудиозаписей на устройство",
+                trailing = { NamiSwitch(checked = vkDownloadEnabled, onCheckedChange = viewModel::setVkDownloadEnabled) },
+                onClick = { viewModel.setVkDownloadEnabled(!vkDownloadEnabled) },
+            )
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Text("Качество скачивания", color = NamiColors.Paper100, style = MaterialTheme.typography.bodyMedium)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(top = 8.dp),
+                ) {
+                    dev.nami.domain.VkBitrate.entries.forEach { bitrate ->
+                        val label = when (bitrate) {
+                            dev.nami.domain.VkBitrate.MAX -> "320 kbps (Max)"
+                            dev.nami.domain.VkBitrate.ECONOMY -> "128 kbps (Эконом)"
+                        }
+                        NamiPill(
+                            text = label,
+                            selected = vkBitrate == bitrate,
+                            onClick = { viewModel.setVkPreferredBitrate(bitrate) },
+                        )
+                    }
+                }
+            }
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Text("Источник тегов MP3", color = NamiColors.Paper100, style = MaterialTheme.typography.bodyMedium)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(top = 8.dp),
+                ) {
+                    NamiPill(
+                        text = "Spotify",
+                        selected = vkTagSource == dev.nami.domain.VkTagSource.SPOTIFY,
+                        onClick = { viewModel.setVkTagSource(dev.nami.domain.VkTagSource.SPOTIFY) },
+                    )
+                    NamiPill(
+                        text = "VK",
+                        selected = vkTagSource == dev.nami.domain.VkTagSource.VK,
+                        onClick = { viewModel.setVkTagSource(dev.nami.domain.VkTagSource.VK) },
+                    )
+                    NamiPill(
+                        text = "Спрашивать",
+                        selected = vkTagSource == dev.nami.domain.VkTagSource.ASK,
+                        onClick = { viewModel.setVkTagSource(dev.nami.domain.VkTagSource.ASK) },
+                    )
+                }
+            }
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Text("Параллельные загрузки", color = NamiColors.Paper100, style = MaterialTheme.typography.bodyMedium)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(top = 8.dp),
+                ) {
+                    listOf(1, 2, 3).forEach { count ->
+                        NamiPill(
+                            text = "$count поток${if (count == 1) "" else "а"}",
+                            selected = vkParallelDownloads == count,
+                            onClick = { viewModel.setVkParallelDownloads(count) },
+                        )
+                    }
+                }
+            }
+        }
+
         SettingsSectionLabel("Jamendo")
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {

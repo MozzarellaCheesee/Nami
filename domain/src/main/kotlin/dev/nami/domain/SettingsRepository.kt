@@ -15,6 +15,12 @@ enum class OutputDeviceType { WIRED, BLUETOOTH, USB_DAC, SPEAKER }
  * Rating-weighted isn't here yet - Track has no rating field in this codebase. */
 enum class ShuffleMode { TRUE_RANDOM, WEIGHTED_BY_STALENESS }
 
+/** Битрейт при скачивании из ВК Музыки: максимальный (320 kbps) или экономный (128 kbps). */
+enum class VkBitrate { MAX, ECONOMY }
+
+/** Источник метаданных для тегирования скачанных треков из ВК. */
+enum class VkTagSource { VK, SPOTIFY, ASK }
+
 /** Per-device profile from План.md §16/§20: its own EQ and a volume ceiling, applied automatically
  * when the routed output changes. Crossfeed/ReplayGain-mode aren't per-profile here - crossfeed
  * doesn't exist as a processor in this codebase yet, and ReplayGain mode is a single global
@@ -283,6 +289,34 @@ interface SettingsRepository {
      * его без нового APK. Пусто - источник SoundCloud выключен. */
     val soundCloudClientId: StateFlow<String?>
     fun setSoundCloudClientId(value: String?)
+
+    /** Spotify Web API credentials (Client Credentials flow) для чтения публичных
+     * плейлистов и поиска метаданных. Каждый пользователь регистрирует своё приложение
+     * на developer.spotify.com - тот же подход, что у Jamendo/SoundCloud. */
+    val spotifyClientId: StateFlow<String?>
+    fun setSpotifyClientId(value: String?)
+    val spotifyClientSecret: StateFlow<String?>
+    fun setSpotifyClientSecret(value: String?)
+
+    /** ВК-токен для доступа к аудиозаписям. Пользователь вводит вручную. */
+    val vkAccessToken: StateFlow<String?>
+    fun setVkAccessToken(value: String?)
+
+    /** Тумблеры сетевой активности для ВК и Spotify. */
+    val vkSearchEnabled: StateFlow<Boolean>
+    fun setVkSearchEnabled(value: Boolean)
+    val vkDownloadEnabled: StateFlow<Boolean>
+    fun setVkDownloadEnabled(value: Boolean)
+    val vkPreferredBitrate: StateFlow<VkBitrate>
+    fun setVkPreferredBitrate(value: VkBitrate)
+    val vkTagSource: StateFlow<VkTagSource>
+    fun setVkTagSource(value: VkTagSource)
+    val vkParallelDownloads: StateFlow<Int>
+    fun setVkParallelDownloads(value: Int)
+    val spotifyMetadataEnabled: StateFlow<Boolean>
+    fun setSpotifyMetadataEnabled(value: Boolean)
+    val spotifyCoversEnabled: StateFlow<Boolean>
+    fun setSpotifyCoversEnabled(value: Boolean)
 
     /** П.md §14 "Главный экран - конструктор" - см. HomeBlock.kt. Порядок списка = порядок
      * отображения. */

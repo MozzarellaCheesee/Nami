@@ -100,6 +100,18 @@ class NowPlayingViewModel @Inject constructor(
         if (next) repo.startServer()
         repo.setListenTogetherHost(next)
     }
+
+    val listenTogetherGuestState: StateFlow<dev.nami.domain.ListenTogetherGuestState?> =
+        localShareRepository?.listenTogetherGuestState ?: MutableStateFlow(null)
+
+    fun addCurrentListenTogetherTrackToLibrary(onDone: (Boolean) -> Unit) {
+        val repo = localShareRepository ?: return
+        viewModelScope.launch {
+            val ok = repo.addCurrentListenTogetherTrackToLibrary()
+            onDone(ok)
+        }
+    }
+
     val blindModeActive: StateFlow<Boolean> = blindListenState?.active ?: MutableStateFlow(false)
 
     private val waveformDiskCache = WaveformCache(context)

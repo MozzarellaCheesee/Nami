@@ -11,7 +11,7 @@ interface MomentDao {
     @Query("SELECT * FROM moments WHERE trackId = :trackId ORDER BY positionMs ASC")
     fun observeForTrack(trackId: String): Flow<List<MomentEntity>>
 
-    @Insert
+    @Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
     suspend fun insert(moment: MomentEntity)
 
     @Query("DELETE FROM moments WHERE id = :id")

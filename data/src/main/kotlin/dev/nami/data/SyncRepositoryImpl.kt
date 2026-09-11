@@ -1,6 +1,22 @@
 package dev.nami.data
 
+import android.content.Context
 import android.util.Log
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.nami.core.database.dao.LoopDao
+import dev.nami.core.database.dao.MomentDao
+import dev.nami.core.database.dao.PlayHistoryDao
+import dev.nami.core.database.dao.PlaylistDao
+import dev.nami.core.database.dao.PlaylistTrackDao
+import dev.nami.core.database.dao.TagDao
+import dev.nami.core.database.dao.TrackDao
+import dev.nami.core.database.entity.LoopEntity
+import dev.nami.core.database.entity.MomentEntity
+import dev.nami.core.database.entity.PlayHistoryEntity
+import dev.nami.core.database.entity.PlaylistEntity
+import dev.nami.core.database.entity.PlaylistTrackEntity
+import dev.nami.core.database.entity.TagEntity
+import dev.nami.core.database.entity.TrackTagEntity
 import dev.nami.domain.SettingsRepository
 import dev.nami.domain.SyncRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,53 +28,471 @@ import javax.inject.Singleton
 
 private const val TAG = "SyncRepositoryImpl"
 
-/**
- * ponytail: минимальная реализация sync для этапа 6. Пока только pull/push ручками,
- * без автоматической синхронизации при локальных изменениях. WebSocket добавится позже.
- */
 @Singleton
 class SyncRepositoryImpl @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val settingsRepository: SettingsRepository,
+    private val playlistDao: PlaylistDao,
+    private val playlistTrackDao: PlaylistTrackDao,
+    private val trackDao: TrackDao,
+    private val momentDao: MomentDao,
+    private val loopDao: LoopDao,
+    private val tagDao: TagDao,
+    private val playHistoryDao: PlayHistoryDao,
 ) : SyncRepository {
 
-    private val _lastSyncTimestamp = MutableStateFlow(0L)
+    private val prefs = context.getSharedPreferences("nami_sync_prefs", Context.MODE_PRIVATE)
+    private val _lastSyncTimestamp = MutableStateFlow(prefs.getLong("last_sync_ts", 0L))
     override val lastSyncTimestamp: StateFlow<Long> = _lastSyncTimestamp
 
     override suspend fun pullFromServer(): Boolean {
         val cfg = serverConfig() ?: return false
-        val since = _lastSyncTimestamp.value
-        val result = NamiServerClient.syncPull(cfg, since) ?: return false
-        
-        // Сервер отдаёт { now, changes, truncated } - см. sync.rs::Pull.
-        val changes = result.optJSONArray("changes") ?: JSONArray()
-        val now = result.optLong("now", System.currentTimeMillis() / 1000)
+        var currentSince = _lastSyncTimestamp.value
+        var maxNow = currentSince
+        var totalApplied = 0
 
-        Log.d(TAG, "pullFromServer: got ${changes.length()} changes since=$since now=$now")
+        var iterations = 0
+        while (iterations < 100) {
+            iterations++
+            val result = NamiServerClient.syncPull(cfg, currentSince) ?: return false
+            val changes = result.optJSONArray("changes") ?: JSONArray()
+            val now = result.optLong("now", System.currentTimeMillis() / 1000)
+            val truncated = result.optBoolean("truncated", false)
+            if (now > maxNow) maxNow = now
 
-        // ponytail: применение изменений к Room (rating, moment, loop, listening_history)
-        // требует миграции сущностей под updated_at/deleted_at по полям - отдельная задача.
-        // Пока pull только двигает метку, чтобы push-сторона не слала уже применённое.
+            var maxUpdatedAtInBatch = currentSince
+            for (i in 0 until changes.length()) {
+                val change = changes.optJSONObject(i) ?: continue
+                val entity = change.optString("entity")
+                val id = change.optString("id")
+                val field = change.optString("field")
+                val updatedAt = change.optLong("updated_at", currentSince)
+                if (updatedAt > maxUpdatedAtInBatch) {
+                    maxUpdatedAtInBatch = updatedAt
+                }
+                applyChange(entity, id, field, change, updatedAt)
+                totalApplied++
+            }
 
-        _lastSyncTimestamp.value = now
+            if (truncated && changes.length() > 0 && maxUpdatedAtInBatch > currentSince) {
+                currentSince = maxUpdatedAtInBatch
+            } else {
+                break
+            }
+        }
+
+        val finalTs = if (maxNow > 0) maxNow else (System.currentTimeMillis() / 1000)
+        _lastSyncTimestamp.value = finalTs
+        prefs.edit().putLong("last_sync_ts", finalTs).apply()
+        Log.d(TAG, "pullFromServer: applied $totalApplied changes, new lastSync=$finalTs")
         return true
+    }
+
+    internal suspend fun applyChange(
+        entity: String,
+        id: String,
+        field: String,
+        change: JSONObject,
+        updatedAt: Long,
+    ) {
+        val isDeleted = field == "__deleted" || (change.has("value") && change.optBoolean("value", false) && field == "__deleted")
+        when (entity) {
+            "playlist" -> {
+                if (isDeleted) {
+                    playlistDao.softDelete(id, updatedAt * 1000L)
+                } else if (field == "name") {
+                    val name = change.optString("value")
+                    val existing = playlistDao.findById(id)
+                    if (existing != null) {
+                        playlistDao.rename(id, name)
+                        val delAt = existing.deletedAt
+                        if (delAt != null && updatedAt * 1000L > delAt) {
+                            playlistDao.restore(id)
+                        }
+                    } else {
+                        playlistDao.insert(
+                            PlaylistEntity(
+                                id = id,
+                                name = name.ifBlank { "Плейлист" },
+                                coverPath = null,
+                                createdAt = updatedAt * 1000L,
+                            ),
+                        )
+                    }
+                }
+            }
+            "playlist_track" -> {
+                val (playlistId, trackId) = if (id.contains(":")) {
+                    val parts = id.split(":", limit = 2)
+                    parts[0] to parts[1]
+                } else {
+                    val obj = change.optJSONObject("value")
+                    val pId = obj?.optString("playlist_id") ?: ""
+                    val tId = obj?.optString("track_id") ?: ""
+                    pId to tId
+                }
+                if (playlistId.isNotBlank() && trackId.isNotBlank()) {
+                    if (isDeleted) {
+                        playlistTrackDao.remove(playlistId, trackId)
+                    } else {
+                        val targetTrackId = when {
+                            trackDao.findById(trackId) != null -> trackId
+                            trackDao.findById("server_$trackId") != null -> "server_$trackId"
+                            else -> trackId
+                        }
+                        if (trackDao.findById(targetTrackId) != null) {
+                            if (playlistDao.findById(playlistId) == null) {
+                                playlistDao.insert(
+                                    PlaylistEntity(
+                                        id = playlistId,
+                                        name = "Плейлист",
+                                        coverPath = null,
+                                        createdAt = updatedAt * 1000L,
+                                    ),
+                                )
+                            }
+                            val pos = if (field == "position") {
+                                change.optInt("value", 0)
+                            } else {
+                                change.optJSONObject("value")?.optInt("position", 0) ?: 0
+                            }
+                            playlistTrackDao.insert(
+                                PlaylistTrackEntity(
+                                    playlistId = playlistId,
+                                    trackId = targetTrackId,
+                                    position = pos,
+                                    addedAt = updatedAt * 1000L,
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
+            "rating" -> {
+                val targetTrackId = when {
+                    trackDao.findById(id) != null -> id
+                    trackDao.findById("server_$id") != null -> "server_$id"
+                    else -> id
+                }
+                if (isDeleted || change.isNull("value")) {
+                    trackDao.updateRating(targetTrackId, null)
+                } else {
+                    val stars = change.optInt("value", 0)
+                    val rating = if (stars in 1..5) stars else null
+                    trackDao.updateRating(targetTrackId, rating)
+                }
+            }
+            "track_note" -> {
+                val targetTrackId = when {
+                    trackDao.findById(id) != null -> id
+                    trackDao.findById("server_$id") != null -> "server_$id"
+                    else -> id
+                }
+                if (isDeleted || change.isNull("value")) {
+                    trackDao.updateNote(targetTrackId, null)
+                } else {
+                    val note = change.optString("value").ifBlank { null }
+                    trackDao.updateNote(targetTrackId, note)
+                }
+            }
+            "moment" -> {
+                val momentId = id.toLongOrNull()
+                if (isDeleted) {
+                    if (momentId != null) momentDao.delete(momentId)
+                } else {
+                    val obj = when (val v = change.opt("value")) {
+                        is JSONObject -> v
+                        is String -> runCatching { JSONObject(v) }.getOrNull()
+                        else -> null
+                    }
+                    if (obj != null) {
+                        val rawTrackId = obj.optString("track_id").ifEmpty { obj.optString("trackId") }
+                        val targetTrackId = when {
+                            trackDao.findById(rawTrackId) != null -> rawTrackId
+                            trackDao.findById("server_$rawTrackId") != null -> "server_$rawTrackId"
+                            else -> rawTrackId
+                        }
+                        val positionMs = if (obj.has("position_ms")) obj.optLong("position_ms") else obj.optLong("positionMs", 0L)
+                        val label = obj.optString("label", "")
+                        val color = obj.optInt("color", 0)
+                        val createdAt = if (obj.has("created_at")) obj.optLong("created_at") else obj.optLong("createdAt", updatedAt * 1000L)
+                        val isChapter = if (obj.has("is_chapter")) obj.optBoolean("is_chapter") else obj.optBoolean("isChapter", false)
+                        momentDao.insert(
+                            MomentEntity(
+                                id = momentId ?: 0L,
+                                trackId = targetTrackId,
+                                positionMs = positionMs,
+                                label = label,
+                                color = color,
+                                createdAt = createdAt,
+                                isChapter = isChapter,
+                            ),
+                        )
+                    }
+                }
+            }
+            "loop" -> {
+                val loopId = id.toLongOrNull()
+                if (isDeleted) {
+                    if (loopId != null) loopDao.delete(loopId)
+                } else {
+                    val obj = when (val v = change.opt("value")) {
+                        is JSONObject -> v
+                        is String -> runCatching { JSONObject(v) }.getOrNull()
+                        else -> null
+                    }
+                    if (obj != null) {
+                        val rawTrackId = obj.optString("track_id").ifEmpty { obj.optString("trackId") }
+                        val targetTrackId = when {
+                            trackDao.findById(rawTrackId) != null -> rawTrackId
+                            trackDao.findById("server_$rawTrackId") != null -> "server_$rawTrackId"
+                            else -> rawTrackId
+                        }
+                        val startMs = if (obj.has("start_ms")) obj.optLong("start_ms") else obj.optLong("startMs", 0L)
+                        val endMs = if (obj.has("end_ms")) obj.optLong("end_ms") else obj.optLong("endMs", 0L)
+                        val name = obj.optString("name", "")
+                        val createdAt = if (obj.has("created_at")) obj.optLong("created_at") else obj.optLong("createdAt", updatedAt * 1000L)
+                        loopDao.insert(
+                            LoopEntity(
+                                id = loopId ?: 0L,
+                                trackId = targetTrackId,
+                                startMs = startMs,
+                                endMs = endMs,
+                                name = name,
+                                createdAt = createdAt,
+                            ),
+                        )
+                    }
+                }
+            }
+            "tag" -> {
+                if (isDeleted) {
+                    tagDao.delete(id)
+                } else {
+                    val obj = when (val v = change.opt("value")) {
+                        is JSONObject -> v
+                        is String -> runCatching { JSONObject(v) }.getOrNull()
+                        else -> null
+                    }
+                    val name = obj?.optString("name") ?: (if (field == "name") change.optString("value") else "")
+                    val colorArgb = obj?.optInt("color_argb") ?: obj?.optInt("colorArgb") ?: 0
+                    if (name.isNotBlank()) {
+                        tagDao.insert(TagEntity(id = id, name = name, colorArgb = colorArgb))
+                    }
+                }
+            }
+            "tag_assignment" -> {
+                val (rawTrackId, tagId) = if (id.contains(":")) {
+                    val parts = id.split(":", limit = 2)
+                    parts[0] to parts[1]
+                } else {
+                    val obj = change.optJSONObject("value")
+                    val tId = obj?.optString("track_id") ?: ""
+                    val tgId = obj?.optString("tag_id") ?: ""
+                    tId to tgId
+                }
+                if (rawTrackId.isNotBlank() && tagId.isNotBlank()) {
+                    if (isDeleted) {
+                        tagDao.unassign(rawTrackId, tagId)
+                        tagDao.unassign("server_$rawTrackId", tagId)
+                    } else {
+                        val targetTrackId = when {
+                            trackDao.findById(rawTrackId) != null -> rawTrackId
+                            trackDao.findById("server_$rawTrackId") != null -> "server_$rawTrackId"
+                            else -> rawTrackId
+                        }
+                        if (trackDao.findById(targetTrackId) != null && tagDao.allRaw().any { it.id == tagId }) {
+                            tagDao.assign(TrackTagEntity(trackId = targetTrackId, tagId = tagId))
+                        }
+                    }
+                }
+            }
+            "listening_history" -> {
+                if (!isDeleted) {
+                    val obj = when (val v = change.opt("value")) {
+                        is JSONObject -> v
+                        is String -> runCatching { JSONObject(v) }.getOrNull()
+                        else -> null
+                    }
+                    val rawTrackId = obj?.optString("track_id") ?: if (id.contains(":")) id.substringBefore(":") else id
+                    val targetTrackId = when {
+                        trackDao.findById(rawTrackId) != null -> rawTrackId
+                        trackDao.findById("server_$rawTrackId") != null -> "server_$rawTrackId"
+                        else -> rawTrackId
+                    }
+                    val playedAt = obj?.optLong("played_at")
+                        ?: (if (id.contains(":")) id.substringAfter(":").toLongOrNull() ?: (updatedAt * 1000L) else (updatedAt * 1000L))
+                    val durationMs = obj?.optLong("duration_ms", 0L) ?: 0L
+                    playHistoryDao.insert(
+                        PlayHistoryEntity(
+                            trackId = targetTrackId,
+                            playedAt = playedAt,
+                            durationMs = durationMs,
+                        ),
+                    )
+                }
+            }
+        }
     }
 
     override suspend fun pushToServer(): Boolean {
         val cfg = serverConfig() ?: return false
-        
-        // ponytail: собираем локальные изменения с момента последнего sync
+        val since = _lastSyncTimestamp.value
+        val nowSec = System.currentTimeMillis() / 1000L
+
         val changes = JSONArray()
-        // TODO: собрать TrackEntity.play_count > 0 OR last_played != null
-        // TODO: собрать MomentEntity where updated_at > lastSyncTimestamp
-        // TODO: собрать LoopEntity where updated_at > lastSyncTimestamp
-        
+
+        // 1. Плейлисты и треки в плейлистах
+        val playlists = playlistDao.allRaw()
+        for (p in playlists) {
+            val pUpdatedAt = (p.createdAt / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec)
+            changes.put(JSONObject().apply {
+                put("entity", "playlist")
+                put("id", p.id)
+                put("field", "name")
+                put("value", p.name)
+                put("updated_at", pUpdatedAt)
+            })
+
+            val tracks = playlistTrackDao.tracksInPlaylist(p.id)
+            tracks.forEachIndexed { index, track ->
+                changes.put(JSONObject().apply {
+                    put("entity", "playlist_track")
+                    put("id", "${p.id}:${track.id}")
+                    put("field", "position")
+                    put("value", index)
+                    put("updated_at", pUpdatedAt)
+                })
+            }
+        }
+
+        // 2. Треки с рейтингом или заметкой
+        val tracks = trackDao.allRaw()
+        for (track in tracks) {
+            val trackUpdatedAt = (track.dateAdded / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec)
+            if (track.rating != null) {
+                val ratingTrackId = track.id.removePrefix("server_")
+                changes.put(JSONObject().apply {
+                    put("entity", "rating")
+                    put("id", ratingTrackId)
+                    put("field", "stars")
+                    put("value", track.rating)
+                    put("updated_at", trackUpdatedAt)
+                })
+            }
+            if (!track.note.isNullOrBlank()) {
+                val noteTrackId = track.id.removePrefix("server_")
+                changes.put(JSONObject().apply {
+                    put("entity", "track_note")
+                    put("id", noteTrackId)
+                    put("field", "note")
+                    put("value", track.note)
+                    put("updated_at", trackUpdatedAt)
+                })
+            }
+        }
+
+        // 3. Моменты
+        val moments = momentDao.allSnapshot()
+        for (m in moments) {
+            val mUpdatedAt = (m.createdAt / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec)
+            changes.put(JSONObject().apply {
+                put("entity", "moment")
+                put("id", m.id.toString())
+                put("field", "data")
+                put("value", JSONObject().apply {
+                    put("track_id", m.trackId)
+                    put("position_ms", m.positionMs)
+                    put("label", m.label)
+                    put("color", m.color)
+                    put("created_at", m.createdAt)
+                    put("is_chapter", m.isChapter)
+                })
+                put("updated_at", mUpdatedAt)
+            })
+        }
+
+        // 4. Петли
+        val loops = loopDao.allSnapshot()
+        for (l in loops) {
+            val lUpdatedAt = (l.createdAt / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec)
+            changes.put(JSONObject().apply {
+                put("entity", "loop")
+                put("id", l.id.toString())
+                put("field", "data")
+                put("value", JSONObject().apply {
+                    put("track_id", l.trackId)
+                    put("start_ms", l.startMs)
+                    put("end_ms", l.endMs)
+                    put("name", l.name)
+                    put("created_at", l.createdAt)
+                })
+                put("updated_at", lUpdatedAt)
+            })
+        }
+
+        // 5. Теги и связи
+        val tags = tagDao.allRaw()
+        for (tag in tags) {
+            changes.put(JSONObject().apply {
+                put("entity", "tag")
+                put("id", tag.id)
+                put("field", "data")
+                put("value", JSONObject().apply {
+                    put("name", tag.name)
+                    put("color_argb", tag.colorArgb)
+                })
+                put("updated_at", 1L)
+            })
+        }
+        val assignments = tagDao.allAssignmentsRaw()
+        for (a in assignments) {
+            changes.put(JSONObject().apply {
+                put("entity", "tag_assignment")
+                put("id", "${a.trackId}:${a.tagId}")
+                put("field", "assigned")
+                put("value", true)
+                put("updated_at", 1L)
+            })
+        }
+
+        // 6. История прослушиваний
+        val historyList = playHistoryDao.since(since * 1000L)
+        for (h in historyList) {
+            val hUpdatedAt = (h.playedAt / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec)
+            changes.put(JSONObject().apply {
+                put("entity", "listening_history")
+                put("id", "${h.trackId}:${h.playedAt}")
+                put("field", "history")
+                put("value", JSONObject().apply {
+                    put("track_id", h.trackId)
+                    put("played_at", h.playedAt)
+                    put("duration_ms", h.durationMs)
+                })
+                put("updated_at", hUpdatedAt)
+            })
+        }
+
         if (changes.length() == 0) {
             Log.d(TAG, "pushToServer: no local changes")
             return true
         }
-        
+
         Log.d(TAG, "pushToServer: pushing ${changes.length()} changes")
-        return NamiServerClient.syncPush(cfg, changes)
+        val chunkSize = 5000
+        for (i in 0 until changes.length() step chunkSize) {
+            val batch = JSONArray()
+            val end = minOf(i + chunkSize, changes.length())
+            for (j in i until end) {
+                batch.put(changes.getJSONObject(j))
+            }
+            val ok = NamiServerClient.syncPush(cfg, batch)
+            if (!ok) {
+                Log.w(TAG, "pushToServer: push batch failed at offset $i")
+                return false
+            }
+        }
+        return true
     }
 
     override suspend fun sync(): Boolean {
@@ -67,11 +501,11 @@ class SyncRepositoryImpl @Inject constructor(
         return pullOk && pushOk
     }
 
-    // ponytail: DRY helper
     private fun serverConfig(): NamiServerClient.Config? {
-        if (!settingsRepository.namiServerPreferred.value) return null
-        val urls = settingsRepository.namiServerUrl.value?.split("\n")?.filter { it.isNotBlank() } ?: return null
-        val token = settingsRepository.namiServerToken.value ?: return null
+        val urls = settingsRepository.namiServerUrl.value
+            .split('\n', ',').map { it.trim().trimEnd('/') }.filter { it.isNotEmpty() }
+        if (urls.isEmpty()) return null
+        val token = settingsRepository.namiServerToken.value?.takeIf { it.isNotBlank() } ?: return null
         val cert = settingsRepository.namiServerCertSha256.value
         return NamiServerClient.Config(urls.first(), token, cert, urls)
     }

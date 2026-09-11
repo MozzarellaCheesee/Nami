@@ -81,14 +81,10 @@ class ServerAudioRepositoryImpl @Inject constructor(
         return streamUrlOn(cfg.baseUrl, cfg.token, serverTrackId)
     }
 
-    /** URL потока, но только если адрес пригоден для ExoPlayer: `http://` или реальный
-     * домен. Для `https://<IP>` (самоподписанный) - null, там нужен свой датасорс. */
-    private fun streamUrlOn(base: String, token: String, id: Long): String? {
-        val host = runCatching { java.net.URL(base).host }.getOrNull().orEmpty()
-        val isIp = host.matches(Regex("^\\d{1,3}(\\.\\d{1,3}){3}$")) || host.contains(':')
-        if (base.startsWith("https://") && isIp) return null
-        return "$base/api/tracks/$id/stream/auto?token=$token"
-    }
+    /** URL потока. `https://<IP>` с самоподписанным сертификатом ExoPlayer тянет через
+     * OkHttp-датасорс с пиннингом отпечатка (см. player/net/PinnedHttpDataSource.kt). */
+    private fun streamUrlOn(base: String, token: String, id: Long): String =
+        "$base/api/tracks/$id/stream/auto?token=$token"
 
     override suspend fun serverStreamUrls(tracks: List<Triple<String?, String, Long>>): List<String?> =
         withContext(Dispatchers.IO) {

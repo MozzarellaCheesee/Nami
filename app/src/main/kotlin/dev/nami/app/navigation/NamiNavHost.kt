@@ -60,6 +60,7 @@ import dev.nami.feature.player.NowPlayingViewModel
 import dev.nami.feature.player.QueueScreen
 import dev.nami.feature.playlists.PlaylistDetailScreen
 import dev.nami.feature.playlists.PlaylistsScreen
+import dev.nami.feature.playlists.SpotifyImportScreen
 import dev.nami.feature.search.SearchScreen
 import dev.nami.feature.trash.TrashScreen
 import kotlinx.coroutines.flow.StateFlow
@@ -69,6 +70,7 @@ private const val ROUTE_HOME_CONSTRUCTOR = "home_constructor"
 private const val ROUTE_LIBRARY = "library"
 private const val ROUTE_SEARCH = "search"
 private const val ROUTE_PLAYLISTS = "playlists"
+private const val ROUTE_SPOTIFY_IMPORT = "spotify_import"
 private const val ROUTE_SETTINGS = "settings"
 private const val ROUTE_SETTINGS_SERVER = "settings_server"
 private const val ROUTE_SETTINGS_SERVER_SCAN = "settings_server_scan"
@@ -96,6 +98,7 @@ private const val ROUTE_DJ_MODE = "dj_mode"
 private const val ROUTE_BLIND_LISTEN = "blind_listen"
 private const val ROUTE_CARD_SORT = "card_sort"
 private const val ROUTE_DRIVE_MODE = "drive_mode"
+private const val ROUTE_JAM = "jam"
 private const val ROUTE_LOCAL_SHARE = "local_share"
 private const val ROUTE_LOCAL_SHARE_SCAN = "local_share_scan"
 private const val ROUTE_SCROBBLING = "scrobbling"
@@ -467,6 +470,7 @@ fun NamiNavHost(
                                 },
                                 onImportRequested = onImportPlaylist,
                                 onCreateSmartPlaylist = { navController.navigate(ROUTE_SMART_PLAYLIST_EDITOR) },
+                                onSpotifyImportClick = { navController.navigate(ROUTE_SPOTIFY_IMPORT) },
                                 lastImportResult = lastImportResult,
                                 onImportResultShown = onImportResultShown,
                             )
@@ -501,6 +505,15 @@ fun NamiNavHost(
                 arguments = listOf(navArgument("playlistId") { type = NavType.StringType }),
             ) {
                 dev.nami.feature.playlists.SmartPlaylistEditorScreen(onBack = { navController.popBackStack() })
+            }
+            composable(ROUTE_SPOTIFY_IMPORT) {
+                SpotifyImportScreen(
+                    onBack = { navController.popBackStack() },
+                    onPlaylistCreated = { playlistId ->
+                        navController.popBackStack()
+                        navController.navigate("playlist/${playlistId.value}")
+                    },
+                )
             }
             composable(ROUTE_SETTINGS) {
                 Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
@@ -639,6 +652,11 @@ fun NamiNavHost(
             }
             composable(ROUTE_DRIVE_MODE) {
                 dev.nami.feature.player.DriveModeScreen(onBack = { navController.popBackStack() })
+            }
+            composable(ROUTE_JAM) {
+                dev.nami.feature.player.JamScreen(
+                    onBack = { navController.popBackStack() },
+                )
             }
             composable(ROUTE_LOCAL_SHARE) {
                 dev.nami.feature.library.LocalShareScreen(
@@ -850,6 +868,10 @@ fun NamiNavHost(
             onOpenDriveMode = {
                 showNowPlaying = false
                 navController.navigate(ROUTE_DRIVE_MODE)
+            },
+            onOpenJam = {
+                showNowPlaying = false
+                navController.navigate(ROUTE_JAM)
             },
             onOpenPlayerSettings = {
                 showNowPlaying = false

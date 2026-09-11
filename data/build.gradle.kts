@@ -35,6 +35,7 @@ dependencies {
     implementation(libs.mlkit.translate)
     implementation(libs.kuromoji.ipadic)
     implementation(libs.zxing.core)
+    implementation(libs.okhttp)
     ksp(libs.hilt.compiler)
     testImplementation(libs.junit)
     testImplementation(kotlin("test"))

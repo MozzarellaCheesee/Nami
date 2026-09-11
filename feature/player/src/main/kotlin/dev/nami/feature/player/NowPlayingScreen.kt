@@ -45,10 +45,12 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.QueueMusic
 import androidx.compose.material.icons.outlined.Repeat
@@ -127,6 +129,7 @@ fun NowPlayingScreen(
     onOpenPlayerSettings: () -> Unit = {},
     onOpenThemeEditor: () -> Unit = {},
     onOpenAllSettings: () -> Unit = {},
+    onOpenJam: () -> Unit = {},
     // "Поделиться треком по сети" и "Слушать со мной" сюда не приходят колбэками: они не ведут
     // никуда, а переключаются прямо в меню "Ещё" (viewModel.toggleDropCurrentTrack/
     // toggleListenTogetherHost) и там же показывают своё состояние. Полный экран "Локальная
@@ -146,6 +149,7 @@ fun NowPlayingScreen(
     var showOverflowMenu by remember { mutableStateOf(false) }
     var showAudioTractSheet by remember { mutableStateOf(false) }
     var showCastPicker by remember { mutableStateOf(false) }
+    var showJamSheet by remember { mutableStateOf(false) }
     var showEqualizerInSheet by remember { mutableStateOf(false) }
     var showSleepTimerSheet by remember { mutableStateOf(false) }
     var showLoopSheet by remember { mutableStateOf(false) }
@@ -268,12 +272,55 @@ fun NowPlayingScreen(
             )
             .padding(20.dp),
     ) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        val guestState by viewModel.listenTogetherGuestState.collectAsState()
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier.size(40.dp).fullBlockClickable(shape = CircleShape, onClick = ::collapseAnimated),
             ) {
                 Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = "Свернуть", tint = NamiColors.Paper100)
+            }
+            if (guestState != null) {
+                val currentGuest = guestState
+                val context = androidx.compose.ui.platform.LocalContext.current
+                var added by remember(currentGuest?.cachedPath) { mutableStateOf(false) }
+                val canAdd = !added && currentGuest != null && !currentGuest.downloading && currentGuest.cachedPath != null
+                androidx.compose.material3.Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = NamiColors.Ink800,
+                    modifier = Modifier.clickable(enabled = canAdd) {
+                        viewModel.addCurrentListenTogetherTrackToLibrary { ok ->
+                            if (ok) added = true
+                            android.widget.Toast.makeText(
+                                context,
+                                if (ok) "Трек добавлен в библиотеку" else "Не удалось сохранить трек",
+                                android.widget.Toast.LENGTH_SHORT,
+                            ).show()
+                        }
+                    },
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    ) {
+                        Icon(
+                            imageVector = if (added) Icons.Outlined.Check else Icons.Outlined.LibraryAdd,
+                            contentDescription = null,
+                            tint = if (added) NamiColors.Wakaba else NamiColors.Shu,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        androidx.compose.foundation.layout.Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = if (added) "В библиотеке" else if (currentGuest?.downloading == true) "Загрузка..." else "В библиотеку",
+                            style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                            color = if (added) NamiColors.Wakaba else NamiColors.Paper100,
+                        )
+                    }
+                }
             }
             Box(
                 contentAlignment = Alignment.Center,
@@ -310,6 +357,9 @@ fun NowPlayingScreen(
                 // Названо не "Джем": это не серверная синхронизация как у Spotify, а P2P-раздача
                 // байтов трека по LAN/Wi-Fi Direct. Настоящий Jam-аналог - отдельная задача.
                 put(dev.nami.domain.NowPlayingMoreItem.LISTEN_TOGETHER) { viewModel.toggleListenTogetherHost() }
+                put(dev.nami.domain.NowPlayingMoreItem.JAM) {
+                    showJamSheet = true
+                }
                 track?.let { t -> put(dev.nami.domain.NowPlayingMoreItem.SHARE) { shareTrackText(sheetContext, t) } }
                 put(dev.nami.domain.NowPlayingMoreItem.MOMENTS) { showLoopSheet = true }
                 track?.let { t -> put(dev.nami.domain.NowPlayingMoreItem.TRACK_INFO) { onShowTrackInfo(t.id) } }
@@ -366,12 +416,34 @@ fun NowPlayingScreen(
                         },
                     )
                 },
-                list = visible.filter { it.section == dev.nami.domain.NowPlayingMoreSection.LIST }.map { config ->
-                    ContextAction(
-                        label = labelOf(config.item),
-                        icon = nowPlayingMoreIcon(config.item),
-                        keepParentOpen = config.item !in closesSheet,
-                        onClick = moreActions.getValue(config.item),
+                list = buildList {
+                    if (guestState != null) {
+                        add(
+                            ContextAction(
+                                label = "Добавить в мою библиотеку",
+                                icon = Icons.Outlined.LibraryAdd,
+                                keepParentOpen = false,
+                                onClick = {
+                                    viewModel.addCurrentListenTogetherTrackToLibrary { ok ->
+                                        android.widget.Toast.makeText(
+                                            sheetContext,
+                                            if (ok) "Трек добавлен в библиотеку" else "Не удалось сохранить трек",
+                                            android.widget.Toast.LENGTH_SHORT,
+                                        ).show()
+                                    }
+                                },
+                            ),
+                        )
+                    }
+                    addAll(
+                        visible.filter { it.section == dev.nami.domain.NowPlayingMoreSection.LIST }.map { config ->
+                            ContextAction(
+                                label = labelOf(config.item),
+                                icon = nowPlayingMoreIcon(config.item),
+                                keepParentOpen = config.item !in closesSheet,
+                                onClick = moreActions.getValue(config.item),
+                            )
+                        },
                     )
                 },
             )
@@ -390,6 +462,9 @@ fun NowPlayingScreen(
         // which body the ONE sheet shows instead of stacking a second ModalBottomSheet on top.
         if (showCastPicker) {
             CastPickerSheet(onDismiss = { showCastPicker = false })
+        }
+        if (showJamSheet) {
+            JamSheet(onDismiss = { showJamSheet = false })
         }
         if (showAudioTractSheet) {
             ModalBottomSheet(onDismissRequest = { showAudioTractSheet = false; showEqualizerInSheet = false }) {

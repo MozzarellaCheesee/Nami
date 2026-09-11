@@ -36,6 +36,7 @@ fun nowPlayingMoreLabel(item: NowPlayingMoreItem): String = when (item) {
     NowPlayingMoreItem.SLEEP_TIMER -> "Таймер сна"
     NowPlayingMoreItem.SHARE_OVER_NETWORK -> "Поделиться треком по сети"
     NowPlayingMoreItem.LISTEN_TOGETHER -> "Слушать со мной"
+    NowPlayingMoreItem.JAM -> "Джем"
     NowPlayingMoreItem.SHARE -> "Поделиться"
     NowPlayingMoreItem.MOMENTS -> "Моменты и петли"
     NowPlayingMoreItem.TRACK_INFO -> "Информация о треке"
@@ -56,6 +57,7 @@ fun nowPlayingMoreIcon(item: NowPlayingMoreItem): ImageVector = when (item) {
     NowPlayingMoreItem.SLEEP_TIMER -> Icons.Outlined.DarkMode
     NowPlayingMoreItem.SHARE_OVER_NETWORK -> Icons.Outlined.Send
     NowPlayingMoreItem.LISTEN_TOGETHER -> Icons.Outlined.Groups
+    NowPlayingMoreItem.JAM -> Icons.Outlined.QueueMusic
     NowPlayingMoreItem.SHARE -> Icons.Outlined.Share
     NowPlayingMoreItem.MOMENTS -> Icons.Outlined.Repeat
     NowPlayingMoreItem.TRACK_INFO -> Icons.Outlined.Info

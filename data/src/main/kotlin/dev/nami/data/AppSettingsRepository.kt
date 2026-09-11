@@ -87,6 +87,16 @@ private const val KEY_YANDEX_OAUTH_TOKEN = "yandex_oauth_token"
 private const val KEY_YANDEX_CLIENT_ID = "yandex_client_id"
 private const val KEY_JAMENDO_CLIENT_ID = "jamendo_client_id"
 private const val KEY_SOUNDCLOUD_CLIENT_ID = "soundcloud_client_id"
+private const val KEY_SPOTIFY_CLIENT_ID = "spotify_client_id"
+private const val KEY_SPOTIFY_CLIENT_SECRET = "spotify_client_secret"
+private const val KEY_VK_ACCESS_TOKEN = "vk_access_token"
+private const val KEY_VK_SEARCH_ENABLED = "vk_search_enabled"
+private const val KEY_VK_DOWNLOAD_ENABLED = "vk_download_enabled"
+private const val KEY_VK_PREFERRED_BITRATE = "vk_preferred_bitrate"
+private const val KEY_VK_TAG_SOURCE = "vk_tag_source"
+private const val KEY_VK_PARALLEL_DOWNLOADS = "vk_parallel_downloads"
+private const val KEY_SPOTIFY_METADATA_ENABLED = "spotify_metadata_enabled"
+private const val KEY_SPOTIFY_COVERS_ENABLED = "spotify_covers_enabled"
 private const val KEY_LISTENBRAINZ_TOKEN = "listenbrainz_token"
 private const val KEY_NAMI_SERVER_URL = "nami_server_url"
 private const val KEY_NAMI_SERVER_CERT = "nami_server_cert_sha256"
@@ -601,6 +611,84 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
         val trimmed = value?.trim()?.takeIf { it.isNotEmpty() }
         prefs.edit { putString(KEY_SOUNDCLOUD_CLIENT_ID, trimmed) }
         _soundCloudClientId.value = trimmed
+    }
+
+    private val _spotifyClientId = MutableStateFlow(prefs.getString(KEY_SPOTIFY_CLIENT_ID, null))
+    override val spotifyClientId: StateFlow<String?> = _spotifyClientId
+    override fun setSpotifyClientId(value: String?) {
+        val trimmed = value?.trim()?.takeIf { it.isNotEmpty() }
+        prefs.edit { putString(KEY_SPOTIFY_CLIENT_ID, trimmed) }
+        _spotifyClientId.value = trimmed
+    }
+
+    private val _spotifyClientSecret = MutableStateFlow(prefs.getString(KEY_SPOTIFY_CLIENT_SECRET, null))
+    override val spotifyClientSecret: StateFlow<String?> = _spotifyClientSecret
+    override fun setSpotifyClientSecret(value: String?) {
+        val trimmed = value?.trim()?.takeIf { it.isNotEmpty() }
+        prefs.edit { putString(KEY_SPOTIFY_CLIENT_SECRET, trimmed) }
+        _spotifyClientSecret.value = trimmed
+    }
+
+    private val _vkAccessToken = MutableStateFlow(securePrefs.getString(KEY_VK_ACCESS_TOKEN, null))
+    override val vkAccessToken: StateFlow<String?> = _vkAccessToken
+    override fun setVkAccessToken(value: String?) {
+        val trimmed = value?.trim()?.takeIf { it.isNotEmpty() }
+        securePrefs.edit { putString(KEY_VK_ACCESS_TOKEN, trimmed) }
+        _vkAccessToken.value = trimmed
+    }
+
+    private val _vkSearchEnabled = MutableStateFlow(prefs.getBoolean(KEY_VK_SEARCH_ENABLED, true))
+    override val vkSearchEnabled: StateFlow<Boolean> = _vkSearchEnabled
+    override fun setVkSearchEnabled(value: Boolean) {
+        prefs.edit { putBoolean(KEY_VK_SEARCH_ENABLED, value) }
+        _vkSearchEnabled.value = value
+    }
+
+    private val _vkDownloadEnabled = MutableStateFlow(prefs.getBoolean(KEY_VK_DOWNLOAD_ENABLED, true))
+    override val vkDownloadEnabled: StateFlow<Boolean> = _vkDownloadEnabled
+    override fun setVkDownloadEnabled(value: Boolean) {
+        prefs.edit { putBoolean(KEY_VK_DOWNLOAD_ENABLED, value) }
+        _vkDownloadEnabled.value = value
+    }
+
+    private val _vkPreferredBitrate = MutableStateFlow(
+        prefs.getString(KEY_VK_PREFERRED_BITRATE, null)?.let { runCatching { dev.nami.domain.VkBitrate.valueOf(it) }.getOrNull() } ?: dev.nami.domain.VkBitrate.MAX
+    )
+    override val vkPreferredBitrate: StateFlow<dev.nami.domain.VkBitrate> = _vkPreferredBitrate
+    override fun setVkPreferredBitrate(value: dev.nami.domain.VkBitrate) {
+        prefs.edit { putString(KEY_VK_PREFERRED_BITRATE, value.name) }
+        _vkPreferredBitrate.value = value
+    }
+
+    private val _vkTagSource = MutableStateFlow(
+        prefs.getString(KEY_VK_TAG_SOURCE, null)?.let { runCatching { dev.nami.domain.VkTagSource.valueOf(it) }.getOrNull() } ?: dev.nami.domain.VkTagSource.SPOTIFY
+    )
+    override val vkTagSource: StateFlow<dev.nami.domain.VkTagSource> = _vkTagSource
+    override fun setVkTagSource(value: dev.nami.domain.VkTagSource) {
+        prefs.edit { putString(KEY_VK_TAG_SOURCE, value.name) }
+        _vkTagSource.value = value
+    }
+
+    private val _vkParallelDownloads = MutableStateFlow(prefs.getInt(KEY_VK_PARALLEL_DOWNLOADS, 2))
+    override val vkParallelDownloads: StateFlow<Int> = _vkParallelDownloads
+    override fun setVkParallelDownloads(value: Int) {
+        val coerced = value.coerceIn(1, 3)
+        prefs.edit { putInt(KEY_VK_PARALLEL_DOWNLOADS, coerced) }
+        _vkParallelDownloads.value = coerced
+    }
+
+    private val _spotifyMetadataEnabled = MutableStateFlow(prefs.getBoolean(KEY_SPOTIFY_METADATA_ENABLED, true))
+    override val spotifyMetadataEnabled: StateFlow<Boolean> = _spotifyMetadataEnabled
+    override fun setSpotifyMetadataEnabled(value: Boolean) {
+        prefs.edit { putBoolean(KEY_SPOTIFY_METADATA_ENABLED, value) }
+        _spotifyMetadataEnabled.value = value
+    }
+
+    private val _spotifyCoversEnabled = MutableStateFlow(prefs.getBoolean(KEY_SPOTIFY_COVERS_ENABLED, true))
+    override val spotifyCoversEnabled: StateFlow<Boolean> = _spotifyCoversEnabled
+    override fun setSpotifyCoversEnabled(value: Boolean) {
+        prefs.edit { putBoolean(KEY_SPOTIFY_COVERS_ENABLED, value) }
+        _spotifyCoversEnabled.value = value
     }
 
     private val _listenBrainzToken = MutableStateFlow(prefs.getString(KEY_LISTENBRAINZ_TOKEN, null))

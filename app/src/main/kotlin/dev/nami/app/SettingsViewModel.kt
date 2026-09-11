@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.nami.data.AppSettingsRepository
+import dev.nami.data.NamiServerClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -71,6 +72,26 @@ class SettingsViewModel @Inject constructor(
     fun setJamendoClientId(value: String?) = appSettingsRepository.setJamendoClientId(value)
     val soundCloudClientId: StateFlow<String?> = appSettingsRepository.soundCloudClientId
     fun setSoundCloudClientId(value: String?) = appSettingsRepository.setSoundCloudClientId(value)
+    val spotifyClientId: StateFlow<String?> = appSettingsRepository.spotifyClientId
+    fun setSpotifyClientId(value: String?) = appSettingsRepository.setSpotifyClientId(value)
+    val spotifyClientSecret: StateFlow<String?> = appSettingsRepository.spotifyClientSecret
+    fun setSpotifyClientSecret(value: String?) = appSettingsRepository.setSpotifyClientSecret(value)
+    val vkAccessToken: StateFlow<String?> = appSettingsRepository.vkAccessToken
+    fun setVkAccessToken(value: String?) = appSettingsRepository.setVkAccessToken(value)
+    val vkSearchEnabled: StateFlow<Boolean> = appSettingsRepository.vkSearchEnabled
+    fun setVkSearchEnabled(value: Boolean) = appSettingsRepository.setVkSearchEnabled(value)
+    val vkDownloadEnabled: StateFlow<Boolean> = appSettingsRepository.vkDownloadEnabled
+    fun setVkDownloadEnabled(value: Boolean) = appSettingsRepository.setVkDownloadEnabled(value)
+    val vkPreferredBitrate: StateFlow<dev.nami.domain.VkBitrate> = appSettingsRepository.vkPreferredBitrate
+    fun setVkPreferredBitrate(value: dev.nami.domain.VkBitrate) = appSettingsRepository.setVkPreferredBitrate(value)
+    val vkTagSource: StateFlow<dev.nami.domain.VkTagSource> = appSettingsRepository.vkTagSource
+    fun setVkTagSource(value: dev.nami.domain.VkTagSource) = appSettingsRepository.setVkTagSource(value)
+    val vkParallelDownloads: StateFlow<Int> = appSettingsRepository.vkParallelDownloads
+    fun setVkParallelDownloads(value: Int) = appSettingsRepository.setVkParallelDownloads(value)
+    val spotifyMetadataEnabled: StateFlow<Boolean> = appSettingsRepository.spotifyMetadataEnabled
+    fun setSpotifyMetadataEnabled(value: Boolean) = appSettingsRepository.setSpotifyMetadataEnabled(value)
+    val spotifyCoversEnabled: StateFlow<Boolean> = appSettingsRepository.spotifyCoversEnabled
+    fun setSpotifyCoversEnabled(value: Boolean) = appSettingsRepository.setSpotifyCoversEnabled(value)
     val listenBrainzToken: StateFlow<String?> = appSettingsRepository.listenBrainzToken
 
     val namiServerUrl: StateFlow<String> = appSettingsRepository.namiServerUrl
@@ -82,6 +103,55 @@ class SettingsViewModel @Inject constructor(
         appSettingsRepository.setNamiServerCertSha256(null)
         appSettingsRepository.setNamiServerUrl("")
         appSettingsRepository.setNamiServerPreferred(false)
+        _serverScanMsg.value = null
+        _libraryHealth.value = null
+    }
+
+    private val _serverScanMsg = MutableStateFlow<String?>(null)
+    val serverScanMsg: StateFlow<String?> = _serverScanMsg
+
+    private val _libraryHealth = MutableStateFlow<String?>(null)
+    val libraryHealth: StateFlow<String?> = _libraryHealth
+
+    private fun serverConfig(): NamiServerClient.Config? {
+        val token = appSettingsRepository.namiServerToken.value ?: return null
+        val bases = appSettingsRepository.namiServerUrl.value
+            .split('\n', ',').map { normalizeBase(it) }.filter { it.isNotEmpty() }
+        if (bases.isEmpty()) return null
+        val cert = appSettingsRepository.namiServerCertSha256.value
+        return NamiServerClient.Config(bases.first(), token, cert, bases)
+    }
+
+    fun triggerServerScan() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val cfg = serverConfig()
+            if (cfg == null) {
+                _serverScanMsg.value = "Сервер не подключён"
+                return@launch
+            }
+            val res = NamiServerClient.scanLibrary(cfg)
+            _serverScanMsg.value = if (res != null) {
+                "Сканирование запущено: добавлено ${res.optInt("added")}, обновлено ${res.optInt("updated")}"
+            } else {
+                "Не удалось запустить сканирование"
+            }
+        }
+    }
+
+    fun loadLibraryHealth() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val cfg = serverConfig()
+            if (cfg == null) {
+                _libraryHealth.value = "Сервер не подключён"
+                return@launch
+            }
+            val res = NamiServerClient.libraryHealth(cfg)
+            _libraryHealth.value = if (res != null) {
+                "Треков на сервере: ${res.optLong("tracks")}, проблемных: ${res.optJSONObject("broken")?.optLong("count") ?: 0}"
+            } else {
+                "Не удалось получить данные о здоровье библиотеки"
+            }
+        }
     }
 
     private val _serverConnectMsg = MutableStateFlow<String?>(null)

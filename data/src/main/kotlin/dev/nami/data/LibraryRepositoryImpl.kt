@@ -33,10 +33,14 @@ import dev.nami.domain.LibraryHealthReport
 import dev.nami.domain.LibraryRepository
 import dev.nami.domain.LyricsRepository
 import dev.nami.domain.NativeBridge
+import dev.nami.domain.SettingsRepository
 import dev.nami.core.tracker.FfmpegNative
 import dev.nami.core.tracker.TrackerNative
 import dev.nami.player.dsd.DsfToDopWav
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
@@ -60,7 +64,10 @@ class LibraryRepositoryImpl @Inject constructor(
     private val folderImportScanner: FolderImportScanner,
     private val lyricsRepository: LyricsRepository,
     private val playHistoryDao: PlayHistoryDao,
+    private val settingsRepository: SettingsRepository? = null,
 ) : LibraryRepository {
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override suspend fun libraryHealthReport(): LibraryHealthReport {
         val tracks = trackDao.allOrderedWithArtwork().map { it.toDomain() }
@@ -348,6 +355,43 @@ class LibraryRepositoryImpl @Inject constructor(
 
     override suspend fun recordPlayHistory(id: TrackId, playedAt: Long, durationMs: Long) {
         playHistoryDao.insert(PlayHistoryEntity(trackId = id.value, playedAt = playedAt, durationMs = durationMs))
+        val settings = settingsRepository
+        if (settings != null && settings.namiServerToken.value != null && settings.namiServerUrl.value.isNotBlank()) {
+            val cfg = serverConfig() ?: return
+            scope.launch(Dispatchers.IO) {
+                runCatching {
+                    var serverTrackId = if (id.value.startsWith("server_")) {
+                        id.value.removePrefix("server_").toLongOrNull()
+                    } else {
+                        id.value.toLongOrNull()
+                    }
+                    if (serverTrackId == null) {
+                        val track = trackDao.findById(id.value)
+                        if (track != null) {
+                            val artistName = track.artistId?.let { artistDao.findById(it)?.name }
+                            val matches = NamiServerClient.matchTrackIds(
+                                cfg,
+                                listOf(Triple(artistName, track.title, track.durationMs)),
+                            )
+                            serverTrackId = matches?.firstOrNull()
+                        }
+                    }
+                    if (serverTrackId != null) {
+                        NamiServerClient.scrobble(cfg, serverTrackId, playedAt / 1000)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun serverConfig(): NamiServerClient.Config? {
+        val settings = settingsRepository ?: return null
+        val token = settings.namiServerToken.value?.takeIf { it.isNotBlank() } ?: return null
+        val urls = settings.namiServerUrl.value
+            .split('\n', ',').map { it.trim().trimEnd('/') }.filter { it.isNotEmpty() }
+        if (urls.isEmpty()) return null
+        val cert = settings.namiServerCertSha256.value
+        return NamiServerClient.Config(urls.first(), token, cert, urls)
     }
 
     // Aggregated in Kotlin, not SQL - day boundaries use the device's local timezone via

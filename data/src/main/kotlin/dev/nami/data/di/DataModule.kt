@@ -110,4 +110,20 @@ abstract class DataModule {
     abstract fun bindServerLibraryRepository(
         impl: dev.nami.data.ServerLibraryRepositoryImpl,
     ): dev.nami.domain.ServerLibraryRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSpotifyPlaylistRepository(
+        impl: dev.nami.data.spotify.SpotifyPlaylistRepositoryImpl,
+    ): dev.nami.domain.SpotifyPlaylistRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindHybridImportRepository(
+        impl: dev.nami.data.vk.HybridImportRepositoryImpl,
+    ): dev.nami.domain.HybridImportRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindJamRepository(impl: dev.nami.data.JamRepositoryImpl): dev.nami.domain.JamRepository
 }

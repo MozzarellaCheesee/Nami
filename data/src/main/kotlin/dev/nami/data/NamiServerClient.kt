@@ -273,6 +273,37 @@ object NamiServerClient {
     }
 
     /**
+     * POST /api/scan - принудительный запуск сканирования библиотеки на сервере.
+     */
+    fun scanLibrary(cfg: Config): JSONObject? {
+        val base = reachableBase(cfg.bases, cfg.certSha256) ?: return null
+        val (code, body) = request("POST", "$base/api/scan", "", cfg.token, cfg.certSha256) ?: return null
+        return if (code in 200..299) runCatching { JSONObject(body) }.getOrNull() else null
+    }
+
+    /**
+     * GET /api/library/health - отчёт о здоровье библиотеки сервера.
+     */
+    fun libraryHealth(cfg: Config): JSONObject? {
+        val base = reachableBase(cfg.bases, cfg.certSha256) ?: return null
+        val (code, body) = request("GET", "$base/api/library/health", null, cfg.token, cfg.certSha256) ?: return null
+        return if (code in 200..299) runCatching { JSONObject(body) }.getOrNull() else null
+    }
+
+    /**
+     * POST /api/scrobble - отправка прослушанного трека на сервер NAMI.
+     */
+    fun scrobble(cfg: Config, trackId: Long, playedAt: Long = System.currentTimeMillis() / 1000): Boolean {
+        val base = reachableBase(cfg.bases, cfg.certSha256) ?: return false
+        val body = JSONObject().apply {
+            put("track_id", trackId)
+            put("played_at", playedAt)
+        }.toString()
+        val (code, _) = request("POST", "$base/api/scrobble", body, cfg.token, cfg.certSha256) ?: return false
+        return code in 200..299
+    }
+
+    /**
      * POST /api/tracks/upload?filename=<имя> - тело запроса = сам файл. Дедупликация на
      * сервере. Возвращает `{track_id, duplicate_of}` либо null.
      */

@@ -59,6 +59,10 @@ android {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
     // kuromoji-ipadic (furigana) and jakarta.inject both ship the same META-INF text files --
     // harmless license/notice duplicates, not a real conflict.
     packaging {
