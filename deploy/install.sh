@@ -291,7 +291,7 @@ fi
 
 # 3. Финальный fallback на текущую актуальную бета-версию
 if [ -z "$DOWNLOAD_URL" ]; then
-    DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/download/v0.1.1-beta.1/${ASSET_NAME}"
+    DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/download/v0.1.2-beta.1/${ASSET_NAME}"
 fi
 
 log_info "Попытка скачивания бинарного архива: ${ASSET_NAME}..."
