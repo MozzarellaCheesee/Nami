@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.InsertChart
 import androidx.compose.material.icons.outlined.LibraryMusic
@@ -41,6 +42,7 @@ fun bottomTabLabel(tab: BottomTab): String = when (tab) {
     BottomTab.STATS -> "Статистика"
     BottomTab.VOCABULARY -> "Словарь"
     BottomTab.FOLDERS -> "Папки"
+    BottomTab.JAM -> "Джем"
 }
 
 fun bottomTabIcon(tab: BottomTab): ImageVector = when (tab) {
@@ -52,6 +54,7 @@ fun bottomTabIcon(tab: BottomTab): ImageVector = when (tab) {
     BottomTab.STATS -> Icons.Outlined.InsertChart
     BottomTab.VOCABULARY -> Icons.Outlined.MenuBook
     BottomTab.FOLDERS -> Icons.Outlined.Folder
+    BottomTab.JAM -> Icons.Outlined.Groups
 }
 
 @Composable

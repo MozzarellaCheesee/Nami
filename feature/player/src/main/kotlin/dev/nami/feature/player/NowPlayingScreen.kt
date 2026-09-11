@@ -49,6 +49,7 @@ import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.MoreVert
@@ -334,11 +335,43 @@ fun NowPlayingScreen(
                     }
                 }
             }
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.size(40.dp).fullBlockClickable(shape = CircleShape) { showOverflowMenu = true },
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Icon(Icons.Outlined.MoreVert, contentDescription = "Ещё", tint = NamiColors.Paper100)
+                val jamSession by viewModel.jamSession.collectAsState()
+                val isJamActive = jamSession != null
+                androidx.compose.material3.Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = if (isJamActive) NamiColors.Wakaba.copy(alpha = 0.2f) else NamiColors.Ink800.copy(alpha = 0.7f),
+                    border = if (isJamActive) androidx.compose.foundation.BorderStroke(1.dp, NamiColors.Wakaba.copy(alpha = 0.7f)) else null,
+                    modifier = Modifier.clickable { showJamSheet = true },
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Groups,
+                            contentDescription = "Джем",
+                            tint = if (isJamActive) NamiColors.Wakaba else NamiColors.Paper100,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        androidx.compose.foundation.layout.Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = if (isJamActive) "Джем • ${jamSession!!.code}" else "Джем",
+                            style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                            fontWeight = if (isJamActive) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Medium,
+                            color = if (isJamActive) NamiColors.Wakaba else NamiColors.Paper100,
+                        )
+                    }
+                }
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.size(40.dp).fullBlockClickable(shape = CircleShape) { showOverflowMenu = true },
+                ) {
+                    Icon(Icons.Outlined.MoreVert, contentDescription = "Ещё", tint = NamiColors.Paper100)
+                }
             }
         }
         // Своя вёрстка (NowPlayingMoreSheet), не общий ContextActionSheet: шапка с треком и
@@ -352,9 +385,9 @@ fun NowPlayingScreen(
             // отсутствуют в этой карте и в меню не попадают, как и раньше через listOfNotNull.
             val moreActions: Map<dev.nami.domain.NowPlayingMoreItem, () -> Unit> = buildMap {
                 // keepParentOpen у половины пунктов: они открывают своё окно ПОВЕРХ Now Playing
-                // (диалог/лист/отдельный экран), а не заменяют его - лист "Ещё" остаётся под ними
-                // и всплывает обратно, когда их закрывают, вместо того чтобы пользователь
-                // оказывался на голом Now Playing и открывал "Ещё" заново.
+                // (эквалайзер, таймер сна, аудиотракт, добавление в плейлист) - закрывать меню
+                // "Ещё" под ними не нужно, оно закроется само по onDismiss листа поверх или
+                // останется видимым если то окно полупрозрачное.
                 put(dev.nami.domain.NowPlayingMoreItem.CAST) { showCastPicker = true }
                 track?.let { t -> put(dev.nami.domain.NowPlayingMoreItem.SHARE_CARD) { onShareCard(t) } }
                 track?.let { t -> put(dev.nami.domain.NowPlayingMoreItem.RADIO) { viewModel.startRadio(t.id) } }
@@ -394,16 +427,20 @@ fun NowPlayingScreen(
             // берутся из конфига как у остальных.
             val dropping by viewModel.droppingTrack.collectAsState()
             val hosting by viewModel.listenTogetherHosting.collectAsState()
+            val jamSession by viewModel.jamSession.collectAsState()
+            val isJamActive = jamSession != null
             val labelOf = { item: dev.nami.domain.NowPlayingMoreItem ->
                 when {
                     item == dev.nami.domain.NowPlayingMoreItem.SHARE_OVER_NETWORK && dropping -> "Раздаю трек"
                     item == dev.nami.domain.NowPlayingMoreItem.LISTEN_TOGETHER && hosting -> "Слушают со мной"
+                    item == dev.nami.domain.NowPlayingMoreItem.JAM && isJamActive -> "В Джеме (${jamSession!!.code})"
                     else -> nowPlayingMoreLabel(item)
                 }
             }
             val isOn = { item: dev.nami.domain.NowPlayingMoreItem ->
                 (item == dev.nami.domain.NowPlayingMoreItem.SHARE_OVER_NETWORK && dropping) ||
-                    (item == dev.nami.domain.NowPlayingMoreItem.LISTEN_TOGETHER && hosting)
+                    (item == dev.nami.domain.NowPlayingMoreItem.LISTEN_TOGETHER && hosting) ||
+                    (item == dev.nami.domain.NowPlayingMoreItem.JAM && isJamActive)
             }
             NowPlayingMoreSheet(
                 onDismiss = { showOverflowMenu = false },

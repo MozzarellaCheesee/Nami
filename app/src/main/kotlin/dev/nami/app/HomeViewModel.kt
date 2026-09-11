@@ -83,8 +83,11 @@ class HomeViewModel @Inject constructor(
     private val tagRepository: TagRepository,
     private val playlistRepository: PlaylistRepository,
     private val localShareRepository: LocalShareRepository,
+    private val jamRepository: dev.nami.domain.JamRepository,
 ) : ViewModel() {
     val blocks: StateFlow<List<HomeBlockConfig>> = settingsRepository.homeBlocks
+
+    val jamSession: StateFlow<dev.nami.domain.JamSession?> = jamRepository.session
 
     private val _state = MutableStateFlow(HomeState())
     val state: StateFlow<HomeState> = _state

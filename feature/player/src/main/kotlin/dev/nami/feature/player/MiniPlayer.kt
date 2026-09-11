@@ -19,16 +19,22 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import coil3.compose.AsyncImage
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -172,6 +178,34 @@ fun MiniPlayer(
             // BlindListenScreen специально прячет.
             val masked = if (blindMode && track != null) track.copy(title = "???", artistName = null, artworkPath = null) else track
             MiniPlayerTrackBlock(track = masked)
+        }
+        val jamSession by viewModel.jamSession.collectAsState()
+        if (jamSession != null) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .padding(end = 6.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(NamiColors.Wakaba.copy(alpha = 0.18f))
+                    .clickable(onClick = onExpand)
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Outlined.Groups,
+                        contentDescription = "Джем",
+                        tint = NamiColors.Wakaba,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = jamSession!!.code,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = NamiColors.Wakaba,
+                    )
+                }
+            }
         }
         val isFavorite by viewModel.isCurrentTrackLiked.collectAsState()
         Box(

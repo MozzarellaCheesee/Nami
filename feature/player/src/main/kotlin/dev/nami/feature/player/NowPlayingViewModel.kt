@@ -65,7 +65,13 @@ class NowPlayingViewModel @Inject constructor(
     private val localShareRepository: dev.nami.domain.LocalShareRepository? = null,
     // Same reasoning - форма волны с сервера, если он подключён (иначе локальный WaveformScanner).
     private val serverAudioRepository: dev.nami.domain.ServerAudioRepository? = null,
+    // Состояние Jam (совместного прослушивания) для отображения кнопки и активного статуса в плеере.
+    private val jamRepository: dev.nami.domain.JamRepository? = null,
 ) : ViewModel() {
+
+    /** Состояние активной Jam-сессии для индикации в плеере, мини-плеере и меню "Ещё". */
+    val jamSession: StateFlow<dev.nami.domain.JamSession?> =
+        jamRepository?.session ?: MutableStateFlow(null)
 
     /** Раздаётся ли сейчас трек по локальной сети (/drop) - меню "Ещё" показывает это подписью
      * и цветом прямо на ячейке, вместо перехода на отдельный экран. */
