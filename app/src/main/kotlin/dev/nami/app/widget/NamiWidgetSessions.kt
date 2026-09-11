@@ -5,22 +5,24 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
-import androidx.glance.LocalSize
 import androidx.glance.GlanceModifier
+import androidx.glance.LocalSize
 import androidx.glance.action.ActionParameters
-import androidx.glance.action.clickable
 import androidx.glance.action.actionParametersOf
+import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
+import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.provideContent
 import androidx.glance.appwidget.updateAll
 import androidx.glance.background
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
 import androidx.glance.layout.Row
+import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.padding
 import androidx.glance.layout.size
@@ -28,7 +30,6 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import dev.nami.domain.Session
 
-private const val MAX_SESSION_PILLS = 3
 val SessionNameKey = androidx.glance.action.ActionParameters.Key<String>("session_name")
 
 class ApplySessionAction : ActionCallback {
@@ -54,29 +55,57 @@ class ApplySessionAction : ActionCallback {
     }
 }
 
-/** Виджет 8/8 - до 3 пилюль с именами сохранённых Сессий (План.md §22.11), тап применяет
- * EQ/кроссфейд/таймер сна той сессии - те же самые Сессии, что в Настройки -> Плеер -> Сессии,
- * не отдельный виджетный список. Пусто, если пользователь ещё ни одной не сохранил. */
+/** Виджет быстрого переключения сессий (эквалайзер, кроссфейд, таймер сна).
+ * Адаптируется под ширину виджета (от 2 до 5 пилюль).
+ * При отсутствии сохранённых сессий клик ведёт в настройки для их создания. */
 class NamiWidgetSessions : GlanceAppWidget() {
 
-    // Виджет тянется только по горизонтали (widget_info_sessions.xml), поэтому две точки по
-    // ширине: на узкой три пилюли не влезали и третья обрезалась по краю.
-    override val sizeMode = SizeMode.Responsive(setOf(NARROW, WIDE))
+    override val sizeMode = SizeMode.Responsive(setOf(SMALL, MEDIUM, WIDE, EXTRA_WIDE))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val settings = widgetSettingsRepository(context)
         val allSessions = settings.sessions.value
         val activeName = settings.lastAppliedSessionName.value
+        val openSettingsAction = actionStartActivity(openSessionsIntent(context))
 
         provideContent {
-            val sessions = allSessions.take(if (LocalSize.current.width < WIDE.width) 2 else MAX_SESSION_PILLS)
-            Box(modifier = GlanceModifier.fillMaxSize().then(widgetCorner()).background(WidgetBackground).padding(8.dp), contentAlignment = Alignment.Center) {
+            val width = LocalSize.current.width
+            val maxPills = when {
+                width >= EXTRA_WIDE.width -> 5
+                width >= WIDE.width -> 4
+                width >= MEDIUM.width -> 3
+                else -> 2
+            }
+            val sessions = allSessions.take(maxPills)
+
+            Box(
+                modifier = GlanceModifier
+                    .fillMaxSize()
+                    .then(widgetCorner())
+                    .background(WidgetBackground)
+                    .clickable(openSettingsAction)
+                    .padding(8.dp),
+                contentAlignment = Alignment.Center,
+            ) {
                 if (sessions.isEmpty()) {
-                    Text("Нет сохранённых сессий", style = TextStyle(color = WidgetTextSecondary, fontSize = 12.sp))
+                    Box(
+                        modifier = GlanceModifier
+                            .then(widgetCorner(16))
+                            .background(WidgetSurface)
+                            .clickable(openSettingsAction)
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            "Нажмите для настройки сессий",
+                            style = TextStyle(color = WidgetTextSecondary, fontSize = 12.sp),
+                            maxLines = 1,
+                        )
+                    }
                 } else {
                     Row(verticalAlignment = Alignment.Vertical.CenterVertically) {
                         sessions.forEachIndexed { index, session ->
-                            if (index > 0) androidx.glance.layout.Spacer(modifier = GlanceModifier.size(8.dp))
+                            if (index > 0) Spacer(modifier = GlanceModifier.size(8.dp))
                             SessionPill(session, isActive = session.name == activeName)
                         }
                     }
@@ -86,14 +115,14 @@ class NamiWidgetSessions : GlanceAppWidget() {
     }
 
     private companion object {
-        val NARROW = DpSize(250.dp, 64.dp)
-        val WIDE = DpSize(360.dp, 64.dp)
+        val SMALL = DpSize(150.dp, 56.dp)
+        val MEDIUM = DpSize(230.dp, 56.dp)
+        val WIDE = DpSize(320.dp, 56.dp)
+        val EXTRA_WIDE = DpSize(400.dp, 56.dp)
     }
 }
 
-/** [isActive] - последняя применённая сессия (см. SettingsRepository.lastAppliedSessionName)
- * подсвечивается акцентным фоном, чтобы тап давал видимый результат - до этого пилюля выглядела
- * одинаково и до, и после нажатия, даже когда EQ/кроссфейд реально применились. */
+/** [isActive] - последняя применённая сессия подсвечивается акцентным фоном. */
 @androidx.compose.runtime.Composable
 private fun SessionPill(session: Session, isActive: Boolean) {
     Box(

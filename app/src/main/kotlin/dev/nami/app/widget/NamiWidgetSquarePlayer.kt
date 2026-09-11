@@ -5,16 +5,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.glance.ColorFilter
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.LocalSize
+import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.actionRunCallback
+import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.provideContent
 import androidx.glance.background
 import androidx.glance.layout.Alignment
@@ -23,7 +24,6 @@ import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
-import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.size
@@ -35,78 +35,105 @@ import dev.nami.app.R
 import dev.nami.domain.PlaybackState
 import kotlinx.coroutines.flow.first
 
-/** Квадратный плеер - обложка на весь фон, полоса прогресса, транспорт (prev/play/next) + лайк.
- * Прогресс - снимок на момент обновления виджета, не тикает сам по себе (Android жёстко
- * ограничивает частоту обновлений RemoteViews, у виджета нет своего таймера). */
+/** Квадратный виджет плеера: фоновая обложка, название, артист, прогресс и транспорт.
+ * Адаптируется под квадратные (2x2, 3x3, 4x4) и растянутые (3x2, 4x2) размеры. */
 class NamiWidgetSquarePlayer : GlanceAppWidget() {
 
-    // Без sizeMode (дефолт Single) LocalSize.current всегда возвращал минимальный размер из
-    // widget_info_square_player.xml - прогресс-бар и кнопки считались по 180dp и не менялись
-    // при растягивании виджета. Responsive: три точки, Glance сам выбирает ближайшую.
-    override val sizeMode = SizeMode.Responsive(setOf(SMALL, MEDIUM, LARGE))
+    override val sizeMode = SizeMode.Responsive(setOf(TINY, HORIZONTAL, SMALL, MEDIUM, LARGE))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val repo = widgetPlayerRepository(context)
-        // Холодный старт - без ожидания MediaController'а nowPlaying/state/isPlaying были бы
-        // пустыми даже когда реально что-то играет (Android часто убивает фоновый процесс,
-        // тап по виджету поднимает его заново).
         repo.awaitReady()
         val nowPlaying = repo.queue.value.nowPlaying
         val playing = repo.state.value as? PlaybackState.Playing
         val art = loadArtBitmap(nowPlaying?.artworkPath)
         val progress = if (playing != null && playing.durationMs > 0) (playing.positionMs.toFloat() / playing.durationMs).coerceIn(0f, 1f) else 0f
         val isLiked = nowPlaying?.let { widgetPlaylistRepository(context).isTrackLiked(it.id).first() } ?: false
+        val isShuffle = repo.shuffleEnabled.value
+        val openPlayerAction = actionStartActivity(openPlayerIntent(context))
 
         provideContent {
-            Box(modifier = GlanceModifier.fillMaxSize().then(widgetCorner()).background(WidgetBackground)) {
+            val size = LocalSize.current
+            val isCompactHeight = size.height < 155.dp
+            val padding = if (isCompactHeight || size.width < MEDIUM.width) 10.dp else 14.dp
+            val gap = if (isCompactHeight) 4.dp else (if (size.height < MEDIUM.height) 6.dp else 10.dp)
+            val showShuffle = size.width >= 240.dp
+
+            Box(
+                modifier = GlanceModifier
+                    .fillMaxSize()
+                    .then(widgetCorner())
+                    .background(WidgetBackground)
+                    .clickable(openPlayerAction),
+            ) {
                 if (art != null) {
-                    Image(provider = ImageProvider(art), contentDescription = null, modifier = GlanceModifier.fillMaxSize())
+                    Image(
+                        provider = ImageProvider(art),
+                        contentDescription = null,
+                        modifier = GlanceModifier.fillMaxSize(),
+                    )
                     Box(modifier = GlanceModifier.fillMaxSize().background(ColorProvider(Color(0xB3000000)))) {}
                 }
-                val size = LocalSize.current
-                val padding = if (size.width < MEDIUM.width) 10.dp else 14.dp
-                Column(modifier = GlanceModifier.fillMaxSize().padding(padding), verticalAlignment = Alignment.Vertical.Bottom) {
-                    Row(verticalAlignment = Alignment.Vertical.CenterVertically) {
+                Column(
+                    modifier = GlanceModifier
+                        .fillMaxSize()
+                        .padding(padding),
+                    verticalAlignment = Alignment.Vertical.Bottom,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.Vertical.CenterVertically,
+                        modifier = GlanceModifier.clickable(openPlayerAction),
+                    ) {
                         Column(modifier = GlanceModifier.defaultWeight()) {
                             Text(
                                 nowPlaying?.title ?: "Ничего не играет",
-                                style = TextStyle(color = WidgetTextPrimary, fontSize = 15.sp),
+                                style = TextStyle(
+                                    color = WidgetTextPrimary,
+                                    fontSize = if (isCompactHeight) 13.sp else 15.sp,
+                                ),
                                 maxLines = 1,
                             )
-                            nowPlaying?.artistName?.let {
-                                Text(it, style = TextStyle(color = WidgetTextSecondary, fontSize = 12.sp), maxLines = 1, modifier = GlanceModifier.padding(top = 2.dp))
+                            val subtitle = nowPlaying?.artistName ?: if (nowPlaying == null) "Нажмите, чтобы открыть Nami" else null
+                            subtitle?.let {
+                                Text(
+                                    it,
+                                    style = TextStyle(color = WidgetTextSecondary, fontSize = 11.sp),
+                                    maxLines = 1,
+                                    modifier = GlanceModifier.padding(top = 2.dp),
+                                )
                             }
                         }
                         if (nowPlaying != null) {
                             TransportButton(
                                 if (isLiked) R.drawable.ic_widget_like_filled else R.drawable.ic_widget_like_outline,
                                 if (isLiked) "Убрать из любимых" else "В любимые",
-                                20.dp,
+                                if (isCompactHeight) 18.dp else 20.dp,
                                 actionRunCallback<ToggleLikeAction>(),
                                 tint = if (isLiked) WidgetAccent else WidgetTextPrimary,
                             )
                         }
                     }
-                    val gap = if (size.height < MEDIUM.height) 6.dp else 10.dp
                     Spacer(modifier = GlanceModifier.size(gap))
-                    // Glance has no fillMaxWidth(fraction) - width is computed from LocalSize
-                    // (the widget's own placed size on the home screen), минус собственные поля.
-                    val trackWidth = size.width - padding * 2
+                    val trackWidth = (size.width - padding * 2).coerceAtLeast(40.dp)
                     Box(modifier = GlanceModifier.width(trackWidth).height(4.dp).then(widgetCorner(2)).background(WidgetTrackEmpty)) {
                         Box(modifier = GlanceModifier.width(trackWidth * progress).height(4.dp).then(widgetCorner(2)).background(WidgetAccent)) {}
                     }
                     Spacer(modifier = GlanceModifier.size(gap))
-                    // Растёт вместе с виджетом при растягивании вместо фиксированного размера -
-                    // 26dp при минимальной ширине (180dp, см. widget_info_square_player.xml),
-                    // дальше линейно, с потолком чтобы не разъезжались на планшетных размерах.
-                    val transportIconSize = (size.width.value / 180f * 26f).dp.coerceIn(26.dp, 48.dp)
-                    TransportRow(isPlayingNow(repo), iconSize = transportIconSize)
+                    val transportIconSize = (size.width.value / 180f * 24f).dp.coerceIn(22.dp, 40.dp)
+                    TransportRow(
+                        isPlaying = isPlayingNow(repo),
+                        iconSize = if (isCompactHeight) 22.dp else transportIconSize,
+                        showShuffle = showShuffle,
+                        isShuffle = isShuffle,
+                    )
                 }
             }
         }
     }
 
     private companion object {
+        val TINY = DpSize(140.dp, 140.dp)
+        val HORIZONTAL = DpSize(240.dp, 130.dp)
         val SMALL = DpSize(180.dp, 180.dp)
         val MEDIUM = DpSize(250.dp, 250.dp)
         val LARGE = DpSize(320.dp, 320.dp)

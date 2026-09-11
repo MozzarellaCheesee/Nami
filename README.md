@@ -1,238 +1,386 @@
-# 🌊 Nami
+<p align="center">
+  <img src="assets/icon-wave.svg" width="112" alt="Nami logo" />
+</p>
 
-> **Hi-Res & Bit-perfect audio player for Android with an ultra-lightweight self-hosted personal music server written in Rust.**
->
-> Бескомпромиссный Hi-Res / Bit-perfect аудиоплеер для Android и персональный self-hosted сервер на Rust. Ваша музыка принадлежит только вам — без подписок, рекламы и компромиссов в качестве звука.
+<h1 align="center">Nami</h1>
 
-[![Android](https://img.shields.io/badge/Android-8.0%2B-brightgreen?logo=android)](https://github.com/MozzarellaCheesee/Nami/releases)
-[![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange?logo=rust)](https://www.rust-lang.org)
-[![Axum](https://img.shields.io/badge/Server-Axum%20%7C%20SQLite-blue)](https://github.com/tokio-rs/axum)
-[![OpenSubsonic](https://img.shields.io/badge/API-OpenSubsonic%20v1.16.1-blueviolet)](https://opensubsonic.netlify.app/)
-[![License](https://img.shields.io/badge/License-Apache%202.0%20%2F%20MIT-blue.svg)](LICENSE)
+<p align="center">
+  <strong>your music, locally.</strong>
+</p>
+
+<p align="center">
+  Local-first music player for Android with an optional self-hosted Rust server.<br/>
+  Built around ownership, a transparent audio path, rich lyrics and a library that stays yours.
+</p>
+
+<p align="center">
+  <img alt="Android 8+" src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&logo=android&logoColor=white">
+  <img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-2.x-7F52FF?style=flat-square&logo=kotlin&logoColor=white">
+  <img alt="Jetpack Compose" src="https://img.shields.io/badge/Jetpack-Compose-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white">
+  <img alt="Rust" src="https://img.shields.io/badge/Rust-server%20%2B%20native-000000?style=flat-square&logo=rust&logoColor=white">
+  <img alt="Status" src="https://img.shields.io/badge/status-active%20development-C24A34?style=flat-square">
+  <img alt="GitHub stars" src="https://img.shields.io/github/stars/MozzarellaCheesee/Nami?style=flat-square&logo=github">
+</p>
+
+<p align="center">
+  <a href="#quick-start"><img src="https://img.shields.io/badge/Quick_Start-C24A34?style=for-the-badge&logo=android&logoColor=white" alt="Quick Start"></a>
+  <a href="server/README.md"><img src="https://img.shields.io/badge/Nami_Server-0C0D0F?style=for-the-badge&logo=rust&logoColor=white" alt="Nami Server"></a>
+  <a href="#architecture"><img src="https://img.shields.io/badge/Architecture-31343A?style=for-the-badge&logo=diagramsdotnet&logoColor=white" alt="Architecture"></a>
+  <a href="https://github.com/MozzarellaCheesee/Nami/issues"><img src="https://img.shields.io/badge/Issues-31343A?style=for-the-badge&logo=github&logoColor=white" alt="Issues"></a>
+</p>
 
 ---
 
-## 📖 О проекте
+> [!IMPORTANT]
+> **Nami is under active development.** The current Android and server codebases identify themselves as `0.1.0`, and APIs, storage formats and UI may still change. This README separates what is already represented in the repository from the longer-term product direction.
 
-**Nami** — это законченная персональная музыкальная экосистема, состоящая из двух компонентов:
-1. **Android-приложение**: аудиоплеер студийного уровня с аппаратным выводом Bit-perfect на внешние USB ЦАП, поддержкой всех lossless-форматов, точным ReplayGain, эквалайзером, умными A-B петлями и совместным прослушиванием.
-2. **Nami Server**: компактный и быстрый однобинарный сервер на Rust (Axum + SQLite), оптимизированный под работу даже на самом слабом «железе» (от 1 ядра CPU и 512 МБ RAM), с веб-мастером настройки, сопряжением по QR-коду и поддержкой OpenSubsonic.
+## What is Nami?
 
+**Nami (波 — “wave”)** is a personal music ecosystem for people who keep their own collection and want the player to serve the library — not the other way around.
+
+The Android app is designed as an **offline-first player without a mandatory account or cloud dependency**. The optional **Nami Server** turns the same collection into a private streaming service with device pairing, original-quality streaming, transcoding, sync, Jam sessions and an OpenSubsonic-compatible layer.
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### 🎧 Android player
+
+- Native Android app built with Kotlin + Jetpack Compose.
+- Media3-based playback architecture.
+- Modular library, player, search, playlists and trash features.
+- Room/SQLite data layer and FTS-backed search architecture.
+- Native Rust helpers for tag reading and Whisper alignment.
+- Lyrics, waveform and audio-analysis workstreams.
+- Baseline Profile module for startup/runtime performance work.
+
+</td>
+<td width="50%" valign="top">
+
+### 🦀 Nami Server
+
+- Rust + Axum + SQLite.
+- Original byte-for-byte streaming with HTTP Range support.
+- Opus/AAC transcoding and optional HLS.
+- QR/device pairing and token-based access.
+- Multi-user libraries, guest links and Jam sessions.
+- Delta-style state synchronization over HTTP + WebSocket.
+- Lyrics, library health, audio analysis and ListenBrainz scrobbling.
+- OpenSubsonic-compatible playback subset.
+
+</td>
+</tr>
+</table>
+
+## Why Nami?
+
+| Principle | What it means |
+|---|---|
+| **Local first** | Your library works without a server, cloud account or permanent internet connection. |
+| **Own your music** | Nami is built around files you control instead of a catalog you rent. |
+| **Audio path over marketing** | The project treats sample rate, output path, ReplayGain, DSP and device capabilities as explicit technical state. |
+| **Lyrics are first-class data** | Synced lyrics, translation and language-learning workflows are part of the product design, not an afterthought. |
+| **Self-hosting is optional** | The server extends the local player; it is not required to use the app. |
+| **Network features are explicit** | External services are intended to be opt-in and visible to the user. |
+
+## Project status
+
+The repository already contains a substantial Android application architecture and a functional Rust server. Workstreams are intentionally uneven: some server capabilities are further along than parts of the advanced Android audio roadmap.
+
+| Area | Repository today | Direction |
+|---|---|---|
+| Android shell & architecture | ✅ Present | Continue vertical feature integration |
+| Library / player / search / playlists / trash modules | ✅ Present | Expand UX, metadata tooling and customization |
+| Native tag reader | ✅ Present | Broaden format/metadata coverage |
+| Whisper alignment path | ✅ Present | Deepen lyrics synchronization workflows |
+| Nami Server | ✅ Functional server code | Harden UX, packaging and compatibility |
+| Server sync / Jam / sharing | ✅ Present | Client integration and resilience |
+| OpenSubsonic | 🟡 Playback-focused subset | Expand only where useful and maintainable |
+| Web client | 🟡 Minimal | Richer library/player/admin UI |
+| Advanced USB bit-perfect / custom UAC2 / native DSD | 🧭 Roadmap | Late-stage audio work after the core player is stable |
+
+> [!NOTE]
+> A feature appearing in the product roadmap does not automatically mean it is finished on every device or exposed in the current UI.
+
+## Highlights
+
+### 🎼 A library that behaves like a library
+
+Nami's product plan goes beyond “scan a folder and show a list”. The target library model includes albums, artists, genres, folders, tags, ratings, smart playlists, play history, moments, A–B loops, metadata health, duplicate detection and full-text search — while keeping local files usable without the server.
+
+### 🎛️ A transparent audio path
+
+The audio direction is built around a simple rule: **do not hide what happens to the signal**. The project design includes native-rate playback where the device allows it, ReplayGain/R128, parametric EQ, output-device profiles, crossfeed, resampling, dithering and an “audio path” view that explains what is actually happening between the file and the output device.
+
+Advanced USB-exclusive output, DoP and a custom UAC2 path are intentionally late-stage work because Android audio behavior depends heavily on the device HAL and connected DAC.
+
+### 📝 Lyrics as a learning surface
+
+A major part of the Nami identity is lyrics that can carry more than one representation of a line: original text, reading/romaji and translation. The wider plan also includes word-level interaction, Japanese reading support, a personal vocabulary and export-oriented study workflows.
+
+### 🌐 Your server, not somebody else's cloud
+
+Nami Server is optional and self-hosted. It is designed for home servers, small VPS instances, NAS devices and low-power machines. The current server implementation includes streaming, user/device authentication, sharing, synchronization, Jam sessions, metadata enrichment, audio analysis and a lightweight web interface.
+
+For complete server behavior, configuration, API groups, external access and known limitations, see **[server/README.md](server/README.md)**.
+
+## Privacy model
+
+The product direction is deliberately conservative about network access:
+
+- no mandatory Nami account for local playback;
+- no requirement to upload the local library to a third-party cloud;
+- external metadata/lyrics/scrobbling services are separate features;
+- the self-hosted server can stay LAN-only;
+- remote access can be placed behind Tailscale, Cloudflare Tunnel or your own HTTPS reverse proxy;
+- server-side passwords are hashed with Argon2id; device/session access uses tokens.
+
+> [!TIP]
+> For the smallest attack surface, keep Nami Server inside your home network or expose it through a private overlay network such as Tailscale instead of forwarding the application port directly to the internet.
+
+<a id="architecture"></a>
+## Architecture
+
+```mermaid
+flowchart LR
+    Files[(Local music files)] --> App[Nami Android]
+    App --> Player[Media3 player]
+    App --> DB[(Room / SQLite)]
+    App --> Native[Native Rust helpers]
+
+    Native --> Tags[tag-reader]
+    Native --> Whisper[whisper-align]
+
+    Files --> Server[Nami Server]
+    Server --> SDB[(SQLite)]
+    Server --> Stream[Original / Transcode / HLS]
+    Server --> Sync[Sync + WebSocket]
+    Server --> Subsonic[OpenSubsonic layer]
+
+    App <--> Server
+    Clients[Compatible clients] <--> Subsonic
 ```
-                   ┌────────────────────────────────────────────────────────┐
-                   │                     Nami Server                        │
-                   │               (Rust + Axum + SQLite)                   │
-                   │                                                        │
-                   │  • Быстрый мастер настройки: http://<ip>:4533/setup    │
-                   │  • Сопряжение устройств: QR-код / 8-значный код        │
-                   │  • OpenSubsonic v1.16.1 API + Встроенный веб-плеер     │
-                   │  • Транскодинг на лету (ffmpeg: Opus/AAC)              │
-                   └───────────┬────────────────────────────────┬───────────┘
-                               │                                │
-                 REST / WebSocket / Audio Stream          OpenSubsonic API
-                               │                                │
-                               ▼                                ▼
-                 ┌───────────────────────────┐    ┌───────────────────────────┐
-                 │     Nami Android App      │    │    Сторонние клиенты      │
-                 │ (Compose, Media3, Rust JNI│    │  (Symfonium, DSub, и др.) │
-                 │  Bit-perfect, ReplayGain) │    └───────────────────────────┘
-                 └─────────────┬─────────────┘
-                               │
-            ┌──────────────────┴──────────────────┐
-            ▼                                     ▼
-   🎧 USB DAC (Bit-perfect)              📻 Jam (Совместное прослушивание)
-   🔊 Bluetooth LDAC / aptX              🔁 A-B Loops & Моменты
-   📱 Встроенные динамики                🔄 Дельта-синхронизация
+
+### Android modules
+
+The current Gradle settings include:
+
+```text
+app
+├── core:model
+├── core:database
+├── core:designsystem
+├── core:native
+├── core:tracker
+├── core:whisper
+├── domain
+├── data
+├── player
+├── feature:library
+├── feature:player
+├── feature:search
+├── feature:playlists
+├── feature:trash
+└── baselineprofile
 ```
 
----
+### Repository map
 
-## 📱 Ключевые возможности Android-приложения
+```text
+Nami/
+├── app/                         Android application entry point
+├── assets/                      Project icons and visual assets
+├── baselineprofile/             Android Baseline Profile generation
+├── core/
+│   ├── database/                Room / persistence
+│   ├── designsystem/            Compose design system
+│   ├── model/                   Shared models
+│   ├── native/                  Android ↔ native integration
+│   ├── tracker/                 Tracking / statistics infrastructure
+│   └── whisper/                 Whisper-related integration
+├── data/                        Repository implementations / data layer
+├── domain/                      Domain contracts and use cases
+├── feature/
+│   ├── library/
+│   ├── player/
+│   ├── playlists/
+│   ├── search/
+│   └── trash/
+├── native/
+│   ├── tag-reader/              Rust tag-reading workspace member
+│   └── whisper-align/           Rust Whisper alignment workspace member
+├── player/                      Android playback module
+├── server/                      Self-hosted Rust server
+├── docs/superpowers/plans/      Implementation/design work notes
+├── build.gradle.kts
+└── settings.gradle.kts
+```
 
-### 🎼 Форматы и Hi-Res звук
-* **Все актуальные форматы**: FLAC (до 24 бит / 192 кГц), ALAC, WAV, AIFF, APE, Opus, Ogg Vorbis, MP3, AAC.
-* **Полноценная поддержка CUE-sheet**: покадровое разбиение альбомов на треки без предварительной ручной нарезки аудиофайлов.
+<a id="quick-start"></a>
+## Quick start
 
-### 🎛️ Аудиофильский звуковой тракт
-* **Bit-perfect direct USB DAC**: прямой монопольный вывод цифрового звукового потока на внешний USB-ЦАП в обход стандартного микшера Android (AudioFlinger), исключающий принудительную передискретизацию (resampling).
-* **Честная нормализация громкости ReplayGain**:
-  * Реализация по международному стандарту **ITU-R BS.1770-4 / EBU R128**;
-  * Режимы усиления трека (Track Gain) и альбома (Album Gain);
-  * Встроенный пиковый анти-клиппинг (True Peak Limiter).
-* **10-полосный эквалайзер**: точная ручная подстройка частот с набором готовых аудиофильских и жанровых пресетов.
-* **Кроссфейд и Gapless**: плавное бесшовное микширование при смене композиций и воспроизведение без пауз между треками.
-* **Профили под устройства вывода**: индивидуальные настройки звука (эквалайзер, громкость, кроссфейд), автоматически применяемые для USB ЦАП, Bluetooth-гарнитур (LDAC/aptX/AAC), проводных наушников и встроенного динамика.
+### Android
 
-### 📻 «Джем» (Jam) — совместное прослушивание
-* **Синхронное прослушивание**: создавайте комнаты с 6-значным кодом и слушайте музыку одновременно с друзьями через сервер Nami в реальном времени.
-* **Интерактивное управление**: удобная плашка воспроизведения и шторка Jam Sheet с отображением активных участников и общей очереди треков.
+**Requirements**
 
-### 🔁 Моменты и зацикливание (A-B Loops)
-* **Моменты (Moments)**: возможность сохранить конкретную секунду трека с текстовой заметкой (например, понравившийся переход или гитарный рифф).
-* **Бесшовные A-B петли**: установка точек начала и конца фрагмента для циклического воспроизведения (идеально для музыкантов, разучивающих партии).
-
-### 🔄 Двусторонняя дельта-синхронизация
-* **Синхронизация данных**: мгновенный обмен плейлистами, 5-звёздочными рейтингами, заметками и историей прослушивания между смартфоном и сервером.
-* **Экономия трафика**: передаются только дельты (изменившиеся поля), конфликты разрешаются автоматически (LWW), старые удалённые записи очищаются по tombstone TTL.
-* **Offline-first**: приложение полноценно работает без интернета, синхронизируя изменения при появлении связи.
-
-### 📡 Локальный P2P Wi-Fi шеринг
-* Прямая передача треков между смартфонами в одной Wi-Fi сети через встроенный HTTP-сервер и автообнаружение (NSD/mDNS) без подключения к интернету.
-
-### 📥 Гибридный импорт Spotify + VK
-* Умный перенос вашей медиатеки и плейлистов из Spotify и VK Музыки с интеллектуальным сопоставлением треков с вашей локальной и серверной коллекцией.
-
-### 📊 Скробблинг и OpenSubsonic
-* Встроенный скробблинг прослушиваний на сервер Nami и **ListenBrainz**.
-* Полная поддержка **OpenSubsonic API v1.16.1**: вы можете подключать к своей коллекции любые другие плееры (Symfonium, DSub, Feishin, Amperfy).
-
----
-
-## 🦀 Ключевые возможности Nami Server
-
-* **Лёгкий однобинарный сервер на Rust**: написан с использованием асинхронного фреймворка [Axum](https://github.com/tokio-rs/axum) и встраиваемой базы данных [SQLite](https://sqlite.org) (rusqlite).
-* **Минимальный бюджет ресурсов**: сервером комфортно управлять на слабых VPS или одноплатниках (Raspberry Pi, Orange Pi) с **1 ядром CPU и всего 512 МБ оперативной памяти** при коллекции до 50 000+ треков.
-* **Потоковое сканирование библиотеки**: метаданные считываются потоком (lofty) без буферизации всей фонотеки в RAM.
-* **Веб-мастер первичной настройки**: доступен при первом запуске на `http://<ip>:4533/setup` — проверка музыкальных директорий, выбор порта и создание учётной записи владельца без редактирования файлов вручную.
-* **Мгновенное сопряжение устройств**:
-  * Генерация QR-кода и 8-значного кода на странице `/setup`;
-  * Привязка по отпечатку TLS-сертификата (SHA-256 fingerprint pinning): безопасное шифрование домашнего трафика без необходимости покупать внешний домен и коммерческий SSL-сертификат.
-* **Встроенный веб-плеер (PWA)**: компактный vanilla JS веб-клиент вшит прямо в бинарник сервера — слушайте музыку из любого браузера.
-* **Адаптивный транскодинг на лету**: при наличии `ffmpeg` сервер перекодирует lossless-аудио в легковесный Opus или AAC при воспроизведении через мобильные сети с настраиваемым LRU-кешем на диске.
-
----
-
-## 🚀 Быстрый старт
-
-### Шаг 1: Развёртывание сервера
-
-#### Вариант A: Linux (Ubuntu, Debian, Arch, Fedora) — в одну команду
-Скрипт автоматически определит архитектуру (x86_64 или aarch64), скачает последний бинарник, создаст системного пользователя `nami`, директорию `/var/lib/nami` и зарегистрирует службу `systemd`:
+- JDK 21
+- Android SDK with API 35
+- Android device/emulator running Android 8.0 (API 26) or newer
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MozzarellaCheesee/Nami/main/deploy/install.sh | bash
+git clone https://github.com/MozzarellaCheesee/Nami.git
+cd Nami
+
+# Build a debug APK
+./gradlew :app:assembleDebug
 ```
 
-#### Вариант B: Windows 10/11 / Windows Server — в одну команду
-Запустите PowerShell от имени **Администратора**:
+The APK is produced under:
 
-```powershell
-irm https://raw.githubusercontent.com/MozzarellaCheesee/Nami/main/deploy/install.ps1 | iex
+```text
+app/build/outputs/apk/debug/
 ```
-Скрипт установит сервер в `$env:ProgramData\Nami`, настроит Брандмауэр Windows (порт 4533), создаст ярлык в меню «Пуск», зарегистрирует автозапуск в Планировщике задач и откроет браузер.
 
-#### Вариант C: Docker
+Install directly on a connected device:
+
 ```bash
+./gradlew :app:installDebug
+```
+
+Run JVM/unit tests:
+
+```bash
+./gradlew test
+```
+
+> [!NOTE]
+> Release signing is intentionally separate from the normal development build and uses local signing properties that are not committed to the repository.
+
+### Nami Server — native
+
+**Requirements**
+
+- Rust toolchain / Cargo
+- `ffmpeg` for transcoding and server-side audio analysis
+- `fpcalc` (Chromaprint) only if fingerprints are needed
+
+```bash
+git clone https://github.com/MozzarellaCheesee/Nami.git
+cd Nami/server
+cargo run --release
+```
+
+On first launch without `config.toml`, the server starts its setup flow at:
+
+```text
+http://<server-address>:4533/setup
+```
+
+### Nami Server — Docker
+
+```bash
+cd server
+
+docker build -t nami-server .
+
 docker run -d \
   --name nami-server \
   --restart unless-stopped \
   -p 4533:4533 \
   -v /path/to/music:/music:ro \
   -v nami-data:/data \
-  ghcr.io/mozzarellacheesee/nami-server:latest
+  nami-server
 ```
 
----
+For domain + automatic Let's Encrypt TLS, the repository also contains `server/docker-compose.yml` and a `Caddyfile`. See the **[server documentation](server/README.md#remote-access)** before exposing the service outside your LAN.
 
-### Шаг 2: Первичная настройка сервера
+## Server at a glance
 
-1. Откройте в браузере страницу мастера настройки:
-   ```
-   http://<IP_СЕРВЕРА>:4533/setup
-   ```
-2. Укажите пути к вашей музыкальной коллекции (например, `/music` или `D:\Music`).
-3. Задайте логин и пароль администратора (от 8 символов) и нажмите **«Сохранить конфигурацию»**.
-4. Перезапустите сервер:
-   * **Linux**: `sudo systemctl restart nami`
-   * **Windows**: перезапустите процесс `nami-server.exe` или перезагрузите ПК.
-   * **Docker**: `docker restart nami-server`
-
----
-
-### Шаг 3: Установка приложения Nami на Android
-
-1. Перейдите в раздел [GitHub Releases](https://github.com/MozzarellaCheesee/Nami/releases/latest).
-2. Скачайте файл **`app-release.apk`** на свой Android-смартфон (поддерживается Android 8.0 и выше).
-3. Разрешите установку из неизвестных источников и завершите установку.
-
----
-
-### Шаг 4: Сопряжение устройства
-
-1. В браузере снова откройте страницу:
-   ```
-   http://<IP_СЕРВЕРА>:4533/setup
-   ```
-   На экране появится одноразовый **QR-код** и 8-значный код сопряжения.
-2. В приложении Nami на смартфоне откройте:
-   **Настройки** → **Подключить сервер** → **Сканировать QR-код**.
-3. Наведите камеру на монитор — сопряжение, передача токена и валидация сертификата произойдут за несколько секунд!
-
----
-
-## 🛠️ Управление сервером (CLI)
-
-После установки на сервере доступна удобная встроенная утилита управления:
-
-```bash
-nami status          # Проверка статуса сервера и здоровья API
-nami logs            # Просмотр последних 50 строк журнала логов
-nami doctor          # Диагностика: открытость портов, наличие ffmpeg, доступность БД
-nami backup -o bk.tar # Создание резервной копии базы данных
-nami restore -i bk.tar# Восстановление из резервной копии
+```mermaid
+flowchart TB
+    A[Android / web / Subsonic client] -->|HTTPS / HTTP| N[Nami Server]
+    N --> Auth[Pairing + users + tokens]
+    N --> Library[Library index]
+    N --> Original[Original Range streaming]
+    N --> Transcode[Opus / AAC transcoding]
+    N --> HLS[Adaptive HLS]
+    N --> State[State sync + WebSocket]
+    N --> Jam[Jam sessions]
+    N --> Analyze[ReplayGain / BPM / key / waveform]
+    Library --> SQLite[(SQLite)]
+    Transcode --> FFmpeg[ffmpeg]
+    Analyze --> FFmpeg
 ```
 
----
+The server is intentionally designed around a small dependency footprint and a target class of roughly **1 CPU core / 512 MB RAM / tens of thousands of tracks**. Actual memory and CPU use naturally depend on collection size, active streams, transcoding and analysis work.
 
-## 🏗️ Сборка из исходников
+## Roadmap
 
-### Требования к окружению
-* **Android**: JDK 21 (Eclipse Temurin), Android SDK (API 35), Gradle 8.9+.
-* **Сервер**: Rust 1.80+ (cargo).
+The project plan is organized as progressive workstreams rather than one giant “finish everything” milestone:
 
-### Сборка Android-клиента
-```bash
-# Клонирование репозитория
-git clone https://github.com/MozzarellaCheesee/Nami.git
-cd Nami
+1. **Playing skeleton** — playback service, session, import, database, basic library and Now Playing.
+2. **Library** — metadata scanner, albums/artists, search, queue, playlists, trash/undo.
+3. **Lyrics** — synced LRC, enhanced timing, editor and multilayer lyrics.
+4. **Audio path A** — float pipeline, EQ, ReplayGain, crossfade, dithering and output profiles.
+5. **Language features** — Japanese morphology, furigana, dictionary and study workflows.
+6. **Nami character** — waveform, Moments, A–B loops, Wi-Fi Drop, stats, library health, themes and deeper customization.
+7. **Adaptive layouts** — landscape, tablets, foldables and large-screen navigation.
+8. **Server core** — Rust server, auth, original streaming, transcoding, Docker and pairing.
+9. **Server integration** — analysis, sync, offline-aware client behavior, web UI and OpenSubsonic compatibility.
+10. **Advanced audio B/C** — platform bit-perfect paths, DoP, custom UAC2 and native DSD work.
 
-# Сборка Release APK
-./gradlew :app:assembleRelease
-# Собранный APK: app/build/outputs/apk/release/app-release.apk
-```
+Several of these workstreams already overlap in the repository; the list is a product-development order, not a claim that only earlier numbers exist today.
 
-### Сборка Nami Server
-```bash
-cd Nami/server
-cargo build --release
-# Собранный бинарник: target/release/nami-server
-```
+## Design language
 
----
+Nami's base visual language is built around an ink/paper/cinnabar palette:
 
-## 🗂️ Архитектура репозитория
+| Role | Value | Name |
+|---|---:|---|
+| Background | `#0C0D0F` | Ink |
+| Primary text | `#EDEAE4` | Paper |
+| Accent | `#C24A34` | Cinnabar |
+| Secondary | `#9B9A97` | Neutral |
 
-```
-Nami/
-├── app/                  # Главный модуль Android приложения (Navigation, MainActivity, UI)
-├── core/                 # Базовые модули: база данных Room, дизайн-токены NamiDesignTokens
-├── data/                 # Реализация репозиториев (Player, Library, Jam, Sync, Spotify, VK)
-├── domain/               # Интерфейсы и бизнес-модели предметной области
-├── feature/              # Модули экранов (плеер, джем, библиотека, настройки, плейлисты)
-├── player/               # Звуковой движок: Media3, Bit-perfect USB DAC, ReplayGain, EQ
-├── server/               # Self-hosted сервер на Rust (Axum, SQLite, Web PWA, Subsonic)
-├── web/                  # Веб-клиент PWA и интерфейс первичной настройки setup.html
-├── deploy/               # Скрипты инсталляции (install.sh, install.ps1) и шаблоны для NAS
-└── .github/workflows/    # CI/CD автоматизация (сборка релизов и Docker-образов)
-```
+The repository already contains several wave/kanji icon variants under [`assets/`](assets/).
 
----
+## Contributing
 
-## 📄 Лицензия
+Nami is still evolving quickly, so focused changes are easier to review than broad rewrites.
 
-Проект распространяется под открытыми лицензиями **Apache 2.0** / **MIT**.
-Подробности доступны в файле [LICENSE](LICENSE).
+1. Search existing [issues](https://github.com/MozzarellaCheesee/Nami/issues) before starting a large change.
+2. Keep changes scoped to one vertical feature when possible.
+3. Add or update tests for behavior that can regress.
+4. Preserve local-first behavior and avoid introducing mandatory network dependencies.
+5. Document intentional deviations from the architecture instead of letting code and design drift silently.
+
+For large architectural changes, open an issue first and describe the user problem, the proposed boundary and what the change would make harder as well as easier.
+
+## A few deliberate non-goals
+
+Nami is not trying to become:
+
+- another subscription streaming catalog;
+- an app that silently sends a personal library to a hosted backend;
+- a marketing wrapper around “Hi-Res” badges without exposing the real output path;
+- a server that requires heavyweight infrastructure just to play files at home.
+
+## Support the project
+
+If Nami is useful to you, the simplest ways to help are to **star the repository**, report reproducible issues and test on hardware the project does not yet cover — especially unusual Android audio devices, external DACs, large libraries and low-power servers.
 
 <p align="center">
-  Сделано с любовью к чистому звуку и цифровой независимости 🎧
+  <a href="https://github.com/MozzarellaCheesee/Nami/stargazers"><img src="https://img.shields.io/badge/⭐_Star_Nami-C24A34?style=for-the-badge" alt="Star Nami"></a>
 </p>
+
+---
+
+<p align="center">
+  <strong>Nami — your music, locally.</strong><br/>
+  Built for clean sound, owned libraries and digital independence. 🌊
+</p>
+
+<!--
+Project plan currently specifies dual licensing under Apache-2.0 / MIT.
+Before presenting a license badge in the public README, add the actual license files to the repository.
+-->

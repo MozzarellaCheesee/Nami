@@ -9,10 +9,12 @@ import androidx.glance.GlanceModifier
 import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.LocalSize
+import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.actionRunCallback
+import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.provideContent
 import androidx.glance.background
 import androidx.glance.layout.Alignment
@@ -26,57 +28,83 @@ import androidx.glance.layout.size
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import dev.nami.app.R
+import kotlinx.coroutines.flow.first
 
-/** Компакт - маленький квадрат: обложка + название/исполнитель + prev/play/next.
+/** Компактный виджет плеера: обложка + название/исполнитель + управление.
  *
- * SizeMode.Responsive, а не дефолтный Single: с Single Glance рендерит одну вёрстку под
- * минимальный размер из widget_info_compact.xml и при растягивании просто её растягивает -
- * кнопки уезжали за край на узком размере и болтались в пустоте на широком. Три точки
- * (узкая / обычная / высокая) - минимум, который честно различает реальные раскладки. */
+ * SizeMode.Responsive с 5 ключевыми брейкпоинтами (узкий, обычный, широкий, высокий компакт,
+ * высокий большой). При клике по обложке или тексту открывается экран воспроизведения. */
 class NamiWidgetCompact : GlanceAppWidget() {
 
-    override val sizeMode = SizeMode.Responsive(setOf(NARROW, WIDE, TALL))
+    override val sizeMode = SizeMode.Responsive(setOf(MINI, COMPACT, WIDE, TALL_SMALL, TALL_LARGE))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val repo = widgetPlayerRepository(context)
-        // Холодный старт (Android часто убивает процесс приложения в фоне, тап по виджету
-        // поднимает его заново) - без ожидания MediaController'а nowPlaying/isPlaying были бы
-        // пустыми даже когда реально что-то играет.
         repo.awaitReady()
         val nowPlaying = repo.queue.value.nowPlaying
         val isPlaying = isPlayingNow(repo)
+        val isLiked = nowPlaying?.let { widgetPlaylistRepository(context).isTrackLiked(it.id).first() } ?: false
         val art = loadArtBitmap(nowPlaying?.artworkPath)
+        val openPlayerAction = actionStartActivity(openPlayerIntent(context))
 
         provideContent {
             val size = LocalSize.current
-            val tall = size.height >= TALL.height
-            val narrow = size.width < WIDE.width
-            // На высоком размере появившееся место уходит в обложку (она же самая полезная
-            // часть), поэтому там колонка, а не ряд.
-            val artSize = if (tall) 64.dp else 40.dp
-            Box(modifier = GlanceModifier.fillMaxSize().background(WidgetBackground).then(widgetCorner()).padding(10.dp)) {
+            val tall = size.height >= 95.dp
+            val narrow = size.width < 180.dp
+            val wide = size.width >= 260.dp
+            val artSize = if (tall) (if (size.height >= 140.dp) 80.dp else 60.dp) else (if (wide) 48.dp else 40.dp)
+
+            Box(
+                modifier = GlanceModifier
+                    .fillMaxSize()
+                    .background(WidgetBackground)
+                    .then(widgetCorner())
+                    .padding(10.dp)
+            ) {
                 if (tall) {
                     Column(
                         modifier = GlanceModifier.fillMaxSize(),
                         horizontalAlignment = Alignment.Horizontal.CenterHorizontally,
                         verticalAlignment = Alignment.Vertical.CenterVertically,
                     ) {
-                        Art(art, artSize)
+                        Art(art, artSize, modifier = GlanceModifier.clickable(openPlayerAction))
                         Spacer(modifier = GlanceModifier.size(6.dp))
-                        TrackText(nowPlaying?.title, nowPlaying?.artistName)
-                        Spacer(modifier = GlanceModifier.size(6.dp))
-                        TransportRow(isPlaying, iconSize = 22.dp)
+                        Column(
+                            horizontalAlignment = Alignment.Horizontal.CenterHorizontally,
+                            modifier = GlanceModifier.clickable(openPlayerAction),
+                        ) {
+                            TrackText(nowPlaying?.title, nowPlaying?.artistName)
+                        }
+                        Spacer(modifier = GlanceModifier.size(8.dp))
+                        TransportRow(
+                            isPlaying = isPlaying,
+                            iconSize = 22.dp,
+                            showLike = wide || size.height >= 140.dp,
+                            isLiked = isLiked,
+                        )
                     }
                 } else {
                     Row(verticalAlignment = Alignment.Vertical.CenterVertically) {
-                        Art(art, artSize)
+                        Art(art, artSize, modifier = GlanceModifier.clickable(openPlayerAction))
                         Spacer(modifier = GlanceModifier.size(8.dp))
-                        Column(modifier = GlanceModifier.defaultWeight()) {
+                        Column(
+                            modifier = GlanceModifier
+                                .defaultWeight()
+                                .clickable(openPlayerAction),
+                        ) {
                             TrackText(nowPlaying?.title, nowPlaying?.artistName)
                         }
                         Spacer(modifier = GlanceModifier.size(6.dp))
-                        // На узком размере prev/next не влезали вместе с текстом и обрезались -
-                        // оставляем только play/pause, самую нужную кнопку.
+                        if (wide && nowPlaying != null) {
+                            TransportButton(
+                                if (isLiked) R.drawable.ic_widget_like_filled else R.drawable.ic_widget_like_outline,
+                                if (isLiked) "Убрать из любимых" else "В любимые",
+                                18.dp,
+                                actionRunCallback<ToggleLikeAction>(),
+                                tint = if (isLiked) WidgetAccent else WidgetTextPrimary,
+                            )
+                            Spacer(modifier = GlanceModifier.size(4.dp))
+                        }
                         if (!narrow) {
                             TransportButton(R.drawable.ic_widget_prev, "Предыдущий", 18.dp, actionRunCallback<SkipPreviousAction>())
                             Spacer(modifier = GlanceModifier.size(4.dp))
@@ -84,7 +112,7 @@ class NamiWidgetCompact : GlanceAppWidget() {
                         TransportButton(
                             if (isPlaying) R.drawable.ic_widget_pause else R.drawable.ic_widget_play,
                             if (isPlaying) "Пауза" else "Играть",
-                            18.dp,
+                            22.dp,
                             actionRunCallback<TogglePlaybackAction>(),
                         )
                         if (!narrow) {
@@ -98,15 +126,17 @@ class NamiWidgetCompact : GlanceAppWidget() {
     }
 
     private companion object {
-        val NARROW = DpSize(140.dp, 64.dp)
-        val WIDE = DpSize(220.dp, 64.dp)
-        val TALL = DpSize(220.dp, 130.dp)
+        val MINI = DpSize(130.dp, 60.dp)
+        val COMPACT = DpSize(200.dp, 60.dp)
+        val WIDE = DpSize(280.dp, 60.dp)
+        val TALL_SMALL = DpSize(150.dp, 120.dp)
+        val TALL_LARGE = DpSize(260.dp, 130.dp)
     }
 }
 
 @androidx.compose.runtime.Composable
-private fun Art(art: android.graphics.Bitmap?, size: androidx.compose.ui.unit.Dp) {
-    Box(modifier = GlanceModifier.size(size).then(widgetCorner(10)).background(WidgetSurface)) {
+private fun Art(art: android.graphics.Bitmap?, size: androidx.compose.ui.unit.Dp, modifier: GlanceModifier = GlanceModifier) {
+    Box(modifier = GlanceModifier.size(size).then(widgetCorner(10)).background(WidgetSurface).then(modifier)) {
         if (art != null) {
             Image(provider = ImageProvider(art), contentDescription = null, modifier = GlanceModifier.fillMaxSize())
         } else {

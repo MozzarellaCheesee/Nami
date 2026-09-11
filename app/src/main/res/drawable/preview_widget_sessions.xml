@@ -1,15 +1,17 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="300dp"
-    android:height="90dp"
-    android:viewportWidth="300"
-    android:viewportHeight="90">
-    <!-- Фон -->
-    <path android:fillColor="#FF0C0D0F" android:pathData="M10,10 h280 a10,10 0 0 1 10,10 v50 a10,10 0 0 1 -10,10 h-280 a10,10 0 0 1 -10,-10 v-50 a10,10 0 0 1 10,-10 z" />
-    <!-- Три пилюли-сессии -->
-    <path android:fillColor="#FF1A1B1F" android:pathData="M24,25 h64 a10,10 0 0 1 10,10 v10 a10,10 0 0 1 -10,10 h-64 a10,10 0 0 1 -10,-10 v-10 a10,10 0 0 1 10,-10 z" />
-    <path android:fillColor="#FFEDEAE4" android:pathData="M38,38 h36 v9 h-36 z" />
-    <path android:fillColor="#FF1A1B1F" android:pathData="M118,25 h64 a10,10 0 0 1 10,10 v10 a10,10 0 0 1 -10,10 h-64 a10,10 0 0 1 -10,-10 v-10 a10,10 0 0 1 10,-10 z" />
-    <path android:fillColor="#FFEDEAE4" android:pathData="M132,38 h36 v9 h-36 z" />
-    <path android:fillColor="#FF1A1B1F" android:pathData="M212,25 h64 a10,10 0 0 1 10,10 v10 a10,10 0 0 1 -10,10 h-64 a10,10 0 0 1 -10,-10 v-10 a10,10 0 0 1 10,-10 z" />
-    <path android:fillColor="#FFEDEAE4" android:pathData="M226,38 h36 v9 h-36 z" />
+    android:width="280dp"
+    android:height="70dp"
+    android:viewportWidth="280"
+    android:viewportHeight="70">
+    <!-- Фон виджета -->
+    <path android:fillColor="#FF0C0D0F" android:pathData="M24,6 h232 a16,16 0 0 1 16,16 v26 a16,16 0 0 1 -16,16 h-232 a16,16 0 0 1 -16,-16 v-26 a16,16 0 0 1 16,-16 z" />
+    <!-- Пилюля 1 (активная, акцентная) -->
+    <path android:fillColor="#FFC24A34" android:pathData="M38,17 h40 a18,18 0 0 1 18,18 v0 a18,18 0 0 1 -18,18 h-40 a18,18 0 0 1 -18,-18 v0 a18,18 0 0 1 18,-18 z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M38,31 h40 a2,2 0 0 1 2,2 v4 a2,2 0 0 1 -2,2 h-40 a2,2 0 0 1 -2,-2 v-4 a2,2 0 0 1 2,-2 z" />
+    <!-- Пилюля 2 -->
+    <path android:fillColor="#FF1A1B1F" android:pathData="M120,17 h40 a18,18 0 0 1 18,18 v0 a18,18 0 0 1 -18,18 h-40 a18,18 0 0 1 -18,-18 v0 a18,18 0 0 1 18,-18 z" />
+    <path android:fillColor="#FFEDEAE4" android:pathData="M120,31 h40 a2,2 0 0 1 2,2 v4 a2,2 0 0 1 -2,2 h-40 a2,2 0 0 1 -2,-2 v-4 a2,2 0 0 1 2,-2 z" />
+    <!-- Пилюля 3 -->
+    <path android:fillColor="#FF1A1B1F" android:pathData="M202,17 h40 a18,18 0 0 1 18,18 v0 a18,18 0 0 1 -18,18 h-40 a18,18 0 0 1 -18,-18 v0 a18,18 0 0 1 18,-18 z" />
+    <path android:fillColor="#FFEDEAE4" android:pathData="M202,31 h40 a2,2 0 0 1 2,2 v4 a2,2 0 0 1 -2,2 h-40 a2,2 0 0 1 -2,-2 v-4 a2,2 0 0 1 2,-2 z" />
 </vector>

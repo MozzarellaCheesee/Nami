@@ -1,436 +1,522 @@
-# NAMI server
+<p align="center">
+  <img src="../assets/icon-wave.svg" width="96" alt="Nami logo" />
+</p>
 
-Self-hosted сервер: библиотека, отдача аудио (passthrough и транскодинг), сопряжение
-устройств по QR, синхронизация состояния между клиентами.
-Бюджет, под который написано: 1 ядро, 512 МБ RAM, 50 000 треков.
+<h1 align="center">Nami Server</h1>
 
-## Запуск
+<p align="center">
+  <strong>Your library. Your server. Your stream.</strong>
+</p>
 
-```sh
+<p align="center">
+  Lightweight self-hosted music backend for Nami, written in Rust with Axum and SQLite.
+</p>
+
+<p align="center">
+  <img alt="Rust" src="https://img.shields.io/badge/Rust-2021-000000?style=flat-square&logo=rust&logoColor=white">
+  <img alt="Axum" src="https://img.shields.io/badge/Axum-0.8-5B5B5B?style=flat-square">
+  <img alt="SQLite" src="https://img.shields.io/badge/SQLite-bundled-003B57?style=flat-square&logo=sqlite&logoColor=white">
+  <img alt="Port" src="https://img.shields.io/badge/default_port-4533-C24A34?style=flat-square">
+  <img alt="OpenSubsonic" src="https://img.shields.io/badge/OpenSubsonic-playback%20subset-6E56CF?style=flat-square">
+</p>
+
+<p align="center">
+  <a href="../README.md"><img src="https://img.shields.io/badge/←_Nami-31343A?style=for-the-badge" alt="Back to Nami"></a>
+  <a href="#quick-start"><img src="https://img.shields.io/badge/Quick_Start-C24A34?style=for-the-badge&logo=rust&logoColor=white" alt="Quick Start"></a>
+  <a href="#api-map"><img src="https://img.shields.io/badge/API_Map-31343A?style=for-the-badge&logo=swagger&logoColor=white" alt="API Map"></a>
+  <a href="#remote-access"><img src="https://img.shields.io/badge/Remote_Access-31343A?style=for-the-badge&logo=letsencrypt&logoColor=white" alt="Remote Access"></a>
+</p>
+
+---
+
+> [!IMPORTANT]
+> Nami Server is in active development (`0.1.0`). It is already a real, functional server, but its API and storage model should still be treated as pre-stable until the project declares otherwise.
+
+## Overview
+
+Nami Server extends the Android player with a private, self-hosted music backend. It indexes your files, streams originals byte-for-byte, can transcode when bandwidth is limited, synchronizes user state, pairs trusted devices and exposes a playback-oriented OpenSubsonic compatibility layer.
+
+The implementation is intentionally built around a small footprint: **Rust + Axum + bundled SQLite**, with `ffmpeg` kept as an external tool for jobs where linking a full media stack into the server would be wasteful.
+
+### Core capabilities
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+#### Library & streaming
+
+- Filesystem scanning and metadata extraction.
+- Original streaming with HTTP Range / `206 Partial Content`.
+- Opus and AAC transcode profiles.
+- Optional adaptive HLS variants.
+- Artwork and waveform endpoints.
+- Upload path with hash/metadata deduplication.
+
+</td>
+<td width="50%" valign="top">
+
+#### Identity & sync
+
+- QR / one-time-code device pairing.
+- Bearer session/device tokens.
+- Argon2id password hashes.
+- Shared or separate user libraries.
+- State synchronization with tombstones and LWW conflict handling.
+- WebSocket change notifications.
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+#### Social & compatibility
+
+- Jam sessions over the existing WebSocket channel.
+- Guest share links with expiration/play limits.
+- “Now playing” visibility controls.
+- Playback-focused OpenSubsonic subset.
+- ListenBrainz scrobbling queue.
+
+</td>
+<td width="50%" valign="top">
+
+#### Analysis & metadata
+
+- Library-health diagnostics.
+- MusicBrainz enrichment without rewriting source files.
+- ReplayGain / EBU R128 analysis.
+- BPM and musical-key estimation.
+- Chromaprint support through `fpcalc`.
+- 120-point RMS waveform generation.
+
+</td>
+</tr>
+</table>
+
+## Resource target
+
+The server is designed with a low-power target in mind: roughly **1 CPU core, 512 MB RAM and a library on the order of 50,000 tracks**. That is an architectural budget, not a guaranteed benchmark under every workload: concurrent transcoding and full-library analysis can obviously consume more CPU.
+
+<a id="quick-start"></a>
+## Quick start
+
+### Run from source
+
+**Required**
+
+- Rust toolchain / Cargo
+
+**Optional but strongly recommended**
+
+- `ffmpeg` — transcoding and server-side audio analysis
+- `fpcalc` / Chromaprint — audio fingerprints
+
+```bash
+git clone https://github.com/MozzarellaCheesee/Nami.git
+cd Nami/server
 cargo run --release
 ```
 
-**Первый запуск без `config.toml`** поднимает веб-мастер настройки по HTTP на
-`http://<адрес>:4533/setup`: спрашивает папки с музыкой, порт, TLS, логин/пароль владельца,
-лимит кеша. Мастер пишет `config.toml`, откладывает логин владельца в файл
-`.nami-setup-owner` рядом и просит перезапустить сервер. При следующем старте сервер
-подхватывает `config.toml`, заводит владельца из этого файла и удаляет его. Можно и без
-мастера: `cp config.example.toml config.toml`, прописать `music_dirs`, задать окружением
-`NAMI_MUSIC_DIRS` (тогда мастер тоже пропускается).
+If `config.toml` does not exist, the first launch exposes the setup wizard over HTTP:
 
-Когда сервер уже настроен, тот же путь `/setup` занят **мастером сопряжения** - показывает QR и восьмизначный код.
+```text
+http://<server-address>:4533/setup
+```
 
-QR содержит локальные адреса сервера, а при заданном `external_url` (домен, Tailscale
-MagicDNS) - ещё и его как `ext=`. Клиент запоминает все адреса и на каждом запросе
-выбирает первый доступный: дома работает локальный, вне дома - внешний. Без `external_url`
-и без Tailscale/домена/Cloudflare Tunnel подключиться вне домашней сети нельзя - это не
-ограничение клиента, а отсутствие маршрута к серверу (см. «Внешний доступ»).
-Пока не сопряжено ни одного устройства, страница открыта. После первого сопряжения новый
-код выдаётся только по ссылке `/setup?token=<токен доверенного устройства>` - иначе любой
-в той же Wi-Fi сети бессрочно печатал бы себе коды доступа.
+The wizard creates the initial configuration. After setup, the same `/setup` route becomes the device-pairing page.
 
-Для транскодинга нужен `ffmpeg` в PATH (библиотека не линкуется - слишком тяжело для
-целевого бюджета). Без ffmpeg сервер работает, но профили отвечают 503.
+### Manual configuration
 
-## Ручки
+```bash
+cd server
+cp config.example.toml config.toml
+$EDITOR config.toml
+cargo run --release
+```
 
-| Метод | Путь | Токен | Что делает |
-|---|---|---|---|
-| GET | `/api/health` | нет | живость, версия, число треков, TLS, наличие ffmpeg и fpcalc |
-| POST | `/api/auth/pair` | нет | `{code, device_name}` -> постоянный токен |
-| GET | `/setup` | см. выше | HTML с QR `nami://pair?...` |
-| GET | `/api/host-capabilities` | да | измеренные CPU/RAM и пороги тяжёлых фич |
-| GET | `/api/tracks?limit&offset` | да | список треков |
-| GET | `/api/tracks/{id}` | да | метаданные трека |
-| POST | `/api/tracks/match` | да | сопоставить треки клиента с id сервера (артист+название+длит.) |
-| GET | `/api/tracks/{id}/stream` | да | файл байт-в-байт, HTTP Range/206 |
-| GET | `/api/tracks/{id}/stream?profile=opus128` | да | транскод, см. профили |
-| GET | `/api/tracks/{id}/hls/master.m3u8` | да | HLS: мастер-плейлист (варианты 128/192) |
-| GET | `/api/tracks/{id}/hls/{profile}/index.m3u8` | да | HLS: медиа-плейлист варианта |
-| GET | `/api/tracks/{id}/hls/{profile}/{sNNNN.ts}` | да | HLS: сегмент |
-| GET | `/api/tracks/{id}/artwork` | да | обложка трека (встроенная или файл рядом) |
-| GET | `/api/tracks/{id}/waveform` | да | форма волны (120 значений RMS), после анализа |
-| GET | `/api/tracks/{id}/radio?limit=` | да | радио от трека: похожие по исполнителю/BPM/тональности |
-| GET | `/api/transcode/profiles` | да | список профилей |
-| POST | `/api/scan` | да | пересканировать библиотеку |
-| GET | `/api/sync?since=<unix>` | да | все изменения состояния после метки |
-| POST | `/api/sync` | да | применить изменения клиента (LWW по полям) |
-| GET | `/api/position` / POST | да | позиция воспроизведения (отдельный канал) |
-| GET | `/api/ws` | да (`?token=`) | WebSocket с событиями изменений |
-| GET | `/api/auth/devices` | да | активные устройства |
-| DELETE | `/api/auth/devices/{id}` | да | отозвать токен |
-| POST | `/api/auth/register` | нет | первый пользователь - владелец (работает один раз) |
-| POST | `/api/auth/login` | нет | `{username, password}` -> сессионный токен |
-| POST | `/api/auth/logout` | да | погасить сессию |
-| GET | `/api/me` / PATCH | да | кто я, режим библиотеки; PATCH - `now_playing_visible` |
-| GET | `/api/users` / POST | владелец | список / завести пользователя |
-| DELETE | `/api/users/{id}` | владелец | удалить пользователя вместе с его состоянием |
-| PUT | `/api/me/password` | да | сменить свой пароль (`{old, new}`), гасит все сессии |
-| PUT | `/api/users/{id}/password` | владелец | сбросить пароль пользователю (`{new}`) |
-| GET | `/api/users/{id}/folders` / PUT | владелец (свои - сам) | доступные папки (режим shared) |
-| POST | `/api/invites` | владелец | инвайт-ссылка `{role, library_id, ttl_secs}` |
-| POST | `/api/invites/{token}/accept` | нет | завести себя по инвайту |
-| GET | `/api/library-mode` / PUT | владелец | режим библиотеки (PUT чистит tracks) |
-| GET | `/api/now-playing` | да | кто что слушает прямо сейчас |
-| GET | `/api/jam/history?limit=` | да | журнал прошедших джем-сессий своей библиотеки |
-| POST | `/api/share` | да | гостевая ссылка `{title, track_ids, ttl_secs, max_plays}` |
-| DELETE | `/api/share/{token}` | да | отозвать гостевую ссылку |
-| GET | `/share/{token}` | нет | HTML-страница гостя с `<audio>` |
-| GET | `/share/{token}/stream/{id}` | нет | поток по гостевой ссылке |
-| POST | `/api/tracks/upload?filename=` | да | залить файл (тело = файл), дедупликация |
-| GET | `/api/tracks/{id}/lyrics` | да | лирика: кеш, при промахе - поиск в LRCLIB |
-| GET | `/api/library/health` | да | здоровье библиотеки (битые файлы - владельцу) |
-| POST | `/api/library/enrich?limit=` | владелец | дополнить метаданные из MusicBrainz |
-| POST | `/api/library/analyze?limit=` | владелец | ReplayGain/R128 и chromaprint порциями |
-| PUT | `/api/me/subsonic-password` | да | задать/снять отдельный Subsonic-пароль |
-| PUT | `/api/me/listenbrainz-token` | да | задать/снять токен ListenBrainz для скробблинга |
-| POST | `/api/scrobble` | да | «трек прослушан» (`{track_id, played_at?}`) в очередь |
-| GET/POST | `/rest/{действие}` | Subsonic | OpenSubsonic, своя аутентификация (см. ниже) |
-
-Токен передаётся как `Authorization: Bearer <токен>` (WebSocket и `/setup` - query-параметром
-`?token=`, потому что заголовок там задать нечем).
-
-## Многопользовательность
-
-Первый `POST /api/auth/register` создаёт владельца, дальше - только по инвайту
-(`POST /api/invites` -> `POST /api/invites/{token}/accept`). Пароли - argon2id, в БД
-лежит только хеш. Сессия и токен устройства взаимозаменяемы в `Authorization: Bearer`.
-
-Два режима библиотеки (`GET/PUT /api/library-mode`):
-
-- `shared` - одна библиотека на всех, доступ режется поддеревьями папок
-  (`PUT /api/users/{id}/folders`); список пуст - человек видит всё;
-- `separate` - у каждого своя `library_id`, у треков та же метка, сканер обходит папки
-  каждой библиотеки отдельно (таблица `libraries`, колонка `dirs` - JSON-массив путей).
-
-Смена режима ЧИСТИТ `tracks` и требует нового `POST /api/scan`: переносить данные между
-режимами нечем (в shared трек принадлежит всем, в separate - ровно одной библиотеке).
-
-У каждого пользователя своё состояние синхронизации, свои плейлисты и своя позиция
-воспроизведения. `GET /api/now-playing` показывает активность тех, кто её не скрыл
-(`PATCH /api/me {"now_playing_visible": false}`) и чьи треки запрашивающему видны -
-раздельные библиотеки поэтому автоматически видят только себя.
-
-## Гостевые ссылки
-
-`POST /api/share` отдаёт токен и путь `/share/{token}` - страницу без логина и без
-приложения, с `<audio>` на каждый трек. Срок (`ttl_secs`) и лимит прослушиваний
-(`max_plays`) проверяются на КАЖДЫЙ запрос, а не только при выдаче. Поделиться можно
-только тем, что видно самому.
-
-Состав ссылки фиксируется в момент создания (`track_ids`): плейлисты живут в таблице
-`state` непрозрачным JSON, сервер их семантику не понимает - и не должен.
-
-## Джем: совместное прослушивание через сервер
-
-По тому же `/api/ws`, второй сокет не заводится. Сервер дирижирует таймингом, файл
-каждый клиент качает сам обычным `/api/tracks/{id}/stream` - раздачи байтов между
-клиентами тут нет.
-
-Сообщения клиента: `jam_create`, `jam_join {code}`, `jam_leave`,
-`jam_play {track_id, position_ms, at}`, `jam_queue_add {track_id}`.
-Сервер шлёт: `jam_created`, `jam_joined {queue}`, `jam_play`, `jam_queue`, `jam_error`.
-
-Присоединиться можно только к сессии своей библиотеки. Живая сессия - broadcast-канал в
-памяти процесса: перезапуск она не переживает (клиенты всё равно рвут сокет, проще создать
-джем заново). А вот **журнал** сессий пишется в БД: `GET /api/jam/history?limit=` отдаёт
-прошедшие джемы своей библиотеки - код, когда начался и кончился, сколько треков
-прозвучало, сколько было участников в пике. При старте сервер закрывает в журнале записи,
-оставшиеся открытыми с прошлого запуска.
-
-## Загрузка треков с клиента
-
-`POST /api/tracks/upload?filename=<имя>`, тело запроса - сам файл. Теги читаются тем же
-кодом, что и при сканировании. Дедупликация: сначала sha256 файла, затем
-(исполнитель, название, длительность +-2 с) - как в Android-фингерпринте. Дубль не
-создаёт вторую запись, в ответе `duplicate_of: "hash" | "metadata"` и id существующего.
-
-Файлы ложатся в `upload_dir/<library_id>` (по умолчанию `<data_dir>/uploads`), и эта
-папка сканируется вместе со своей библиотекой - иначе пересканирование вычистило бы
-загруженное. "Приоритетного источника" и умного кеша на сервере нет намеренно: какая
-копия трека где лежит - вопрос клиента.
-
-Внутри папки загрузок файл раскладывается по шаблону `import_pattern` из конфигурации
-(по умолчанию `%albumartist%/%album%/%track% %title%`; плейсхолдеры `%artist%`,
-`%albumartist%`, `%album%`, `%title%`, `%track%`, `%year%`). Пустой шаблон - без подпапок.
-Каждый сегмент чистится от разделителей пути и `..`; при совпадении имён разных треков к
-имени добавляется короткий хеш.
-
-## Транскодинг
-
-Профили (`?profile=`): `opus96`, `opus128`, `opus192` (libopus), `aac128`, `aac192`
-(запасной вариант для клиентов без Opus). Без параметра - passthrough, байт-в-байт.
-
-Выбор профиля - решение КЛИЕНТА (домашний Wi-Fi - original, мобильная сеть - opus128,
-роуминг - opus96). Сервер только исполняет запрошенное.
-
-Результат кешируется на диске (`transcode_cache_dir`, по умолчанию `<data_dir>/transcode_cache`),
-ключ - id трека + размер + mtime исходника + профиль: правка файла инвалидирует кеш сама.
-При превышении `transcode_cache_mb` вытесняются самые старые файлы.
-
-## HLS с адаптивным битрейтом
-
-`GET /api/tracks/{id}/hls/master.m3u8` отдаёт мастер-плейлист с двумя AAC-вариантами
-(128 и 192 кбит/с). Плеер сам переключается между ними по ширине канала.
-
-Сегменты - MPEG-TS (совместимо со всем; Opus в TS не кладут, для него нужен fMP4 - на
-первую итерацию лишняя возня). Вариант нарезается ffmpeg один раз в кеш транскодов
-(`<cache>/hls/<id>-<size>-<mtime>-<profile>/`), дальше `index.m3u8` и сегменты отдаются
-статикой, Range/перемотку берёт на себя ServeFile.
-
-HLS - это дополнение поверх `?profile=`: явный выбор профиля уже закрывает «мобильная
-сеть», HLS сглаживает переключение качества посреди трека. ponytail: HLS-кеш пока не
-вытесняется по размеру (в отличие от кеша транскодов) - включают HLS редко, сторож
-добавится, когда каталог начнёт занимать место.
-
-## Синхронизация состояния
-
-`GET /api/sync?since=<unix-время>` отдаёт ОДНИМ ответом изменения всех сущностей
-(плейлисты, рейтинги, теги, моменты, петли, заметки, история прослушиваний) - включая
-tombstone-записи удалённого. Одна ручка, а не по ручке на сущность: клиенту нужен один
-round-trip и одна метка времени, иначе он обязан хранить курсор на каждую сущность.
-
-`POST /api/sync` принимает тот же формат. Конфликты решаются last-write-wins **на уровне
-поля**: у каждого поля своя метка `updated_at`, поэтому два клиента, поменявшие разные поля
-одной записи, оба сохранят своё изменение.
-
-Позиция воспроизведения вынесена в отдельные `GET/POST /api/position` и в общий sync-поток
-не попадает: она обновляется каждые несколько секунд и иначе забивала бы низкочастотный
-поток плейлистов и тегов.
-
-`GET /api/ws` - WebSocket, куда падает событие сразу после успешного `POST /api/sync`
-(`{"type":"changed","entities":[...],"at":<unix>}`). Клиент по нему дёргает
-`GET /api/sync?since=`. HTTP-поллинг остаётся полноценным fallback, если WebSocket
-недоступен или разорван.
+Every main configuration field can also be overridden with an environment variable, which is useful for Docker and service managers.
 
 ## Docker
 
-```sh
-docker buildx build --platform linux/amd64,linux/arm64 -t nami-server .
-docker run -d -p 4533:4533 -v /путь/к/музыке:/music:ro -v nami-data:/data nami-server
+### Local/LAN container
+
+From the `server/` directory:
+
+```bash
+docker build -t nami-server .
+
+docker run -d \
+  --name nami-server \
+  --restart unless-stopped \
+  -p 4533:4533 \
+  -v /path/to/music:/music:ro \
+  -v nami-data:/data \
+  nami-server
 ```
 
-Бинарник кросс-компилируется на архитектуре хоста сборки и не гоняется под QEMU - образ
-под обе платформы собирается за минуты, а не за часы. В образ входит `ffmpeg`.
+The image includes `ffmpeg`.
 
-Слежение за папками внутри контейнера зависит от того, как смонтирована библиотека:
-на Linux-хосте с обычным bind-mount inotify работает, на Docker Desktop (Windows/macOS,
-монтирование через виртуалку) и на сетевых ФС - нет. Сервер это переживает: пишет
-предупреждение в лог и остаётся с ручным `POST /api/scan`.
+> [!NOTE]
+> Filesystem watching depends on the mount implementation. Native Linux bind mounts generally support filesystem notifications; Docker Desktop and network filesystems may not. Manual `POST /api/scan` remains the fallback.
 
-## Лирика
+### Domain + Caddy + Let's Encrypt
 
-`GET /api/tracks/{id}/lyrics` ищет текст в [LRCLIB](https://lrclib.net) (тем же путём, что
-уже проверен в Android-клиенте: точный `/get` по названию, исполнителю, альбому и
-длительности, затем `/search`) и кеширует результат в таблице `lyrics`. Промах тоже
-кешируется - иначе каждый показ трека без лирики стоил бы двух запросов наружу.
+The repository includes `docker-compose.yml` and `Caddyfile` for a reverse-proxy deployment:
 
-| Параметр | Что делает |
+```bash
+cd server
+
+NAMI_DOMAIN=music.example.com \
+ACME_EMAIL=you@example.com \
+NAMI_MUSIC=/path/to/music \
+docker compose up -d
+```
+
+This mode expects DNS for the domain to point to the host and ports `80`/`443` to reach Caddy.
+
+## First-run setup & pairing
+
+### Initial setup
+
+Without `config.toml`, `/setup` is the bootstrap wizard. It collects the server basics such as music directories, port/TLS settings and the initial owner credentials, writes the configuration and completes owner creation on the configured startup path.
+
+### Device pairing
+
+After the server is configured, `/setup` is used for pairing:
+
+1. The server generates a QR code and one-time pairing code.
+2. The client exchanges the code through `POST /api/auth/pair`.
+3. The code is consumed and the device receives a persistent token.
+4. The QR can include local addresses plus `external_url` when one is configured.
+5. After the first trusted device exists, generating new pairing codes requires authorization from an already trusted session/device.
+
+This avoids leaving an indefinitely open pairing endpoint on the local network.
+
+## Configuration
+
+The canonical starting point is [`config.example.toml`](config.example.toml).
+
+| Setting | Environment | Purpose |
+|---|---|---|
+| `port` | `NAMI_PORT` | HTTP/HTTPS listen port; default `4533`. |
+| `music_dirs` | `NAMI_MUSIC_DIRS` | One or more library roots. |
+| `db_path` | `NAMI_DB_PATH` | SQLite database path. |
+| `data_dir` | `NAMI_DATA_DIR` | Server data directory, including local TLS material. |
+| `tls` | `NAMI_TLS` | Built-in self-signed TLS for direct/local use. |
+| `watch` | `NAMI_WATCH` | Watch library roots for filesystem changes. |
+| `transcode_cache_dir` | `NAMI_TRANSCODE_CACHE_DIR` | Cached transcodes. |
+| `transcode_cache_mb` | `NAMI_TRANSCODE_CACHE_MB` | Transcode cache size ceiling. |
+| `tombstone_ttl_days` | — | Retention of deleted sync records before physical cleanup. |
+| `upload_dir` | `NAMI_UPLOAD_DIR` | Destination for tracks uploaded by clients. |
+| `deepl_api_key` | `NAMI_DEEPL_API_KEY` | Optional DeepL key for lyric translation. |
+| `lyrics_target_lang` | `NAMI_LYRICS_TARGET_LANG` | Default lyric translation language. |
+| `external_url` | `NAMI_EXTERNAL_URL` | Public/private remote URL advertised to clients during pairing. |
+
+> [!WARNING]
+> Do not disable TLS on an internet-facing direct deployment. `NAMI_TLS=false` is appropriate when TLS is terminated by a trusted reverse proxy/tunnel or for strictly local development.
+
+<a id="api-map"></a>
+## API map
+
+Authentication for normal Nami API routes uses:
+
+```http
+Authorization: Bearer <token>
+```
+
+WebSocket and the protected pairing page may use a token in the query string where browser limitations make a custom authorization header impractical.
+
+### System & authentication
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/api/health` | Health, version, library size, TLS and tool availability. |
+| `GET` | `/api/host-capabilities` | Measured CPU/RAM and capability thresholds. |
+| `POST` | `/api/auth/pair` | One-time pairing code → device token. |
+| `POST` | `/api/auth/register` | Create the initial owner (one-time path). |
+| `POST` | `/api/auth/login` | Username/password → session token. |
+| `POST` | `/api/auth/logout` | Revoke the current session. |
+| `GET` | `/api/auth/devices` | List active devices. |
+| `DELETE` | `/api/auth/devices/{id}` | Revoke a device token. |
+| `GET/PATCH` | `/api/me` | Current user and visibility preferences. |
+| `PUT` | `/api/me/password` | Change own password and revoke sessions. |
+
+### Library & playback
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/api/tracks?limit&offset` | Paginated track list. |
+| `GET` | `/api/tracks/{id}` | Track metadata. |
+| `POST` | `/api/tracks/match` | Match client tracks against server tracks. |
+| `GET` | `/api/tracks/{id}/stream` | Original byte-for-byte stream with Range support. |
+| `GET` | `/api/tracks/{id}/stream?profile=...` | Transcoded stream. |
+| `GET` | `/api/tracks/{id}/hls/master.m3u8` | Adaptive HLS master playlist. |
+| `GET` | `/api/tracks/{id}/artwork` | Track artwork. |
+| `GET` | `/api/tracks/{id}/waveform` | Generated waveform data. |
+| `GET` | `/api/tracks/{id}/radio?limit=` | Track-based similarity radio. |
+| `GET` | `/api/transcode/profiles` | Available transcode profiles. |
+| `POST` | `/api/scan` | Rescan library. |
+| `POST` | `/api/tracks/upload?filename=` | Upload and deduplicate a track. |
+
+### State, users & collaboration
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET/POST` | `/api/sync` | Pull/push synchronized state. |
+| `GET/POST` | `/api/position` | High-frequency playback position channel. |
+| `GET` | `/api/ws` | Change notifications and Jam events. |
+| `GET/POST` | `/api/users` | Owner user management. |
+| `DELETE` | `/api/users/{id}` | Remove a user and associated state. |
+| `PUT` | `/api/users/{id}/password` | Owner password reset for a user. |
+| `GET/PUT` | `/api/users/{id}/folders` | Shared-library folder visibility. |
+| `POST` | `/api/invites` | Create an invite. |
+| `POST` | `/api/invites/{token}/accept` | Accept an invite. |
+| `GET/PUT` | `/api/library-mode` | Switch shared/separate library mode. |
+| `GET` | `/api/now-playing` | Visible current listening activity. |
+| `GET` | `/api/jam/history?limit=` | Completed Jam session history. |
+| `POST` | `/api/share` | Create an expiring guest share. |
+| `DELETE` | `/api/share/{token}` | Revoke a guest share. |
+
+### Lyrics, analysis & integrations
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/api/tracks/{id}/lyrics` | Cached/fetched lyrics and optional translation. |
+| `GET` | `/api/library/health` | Missing/broken/duplicate metadata diagnostics. |
+| `POST` | `/api/library/enrich?limit=` | MusicBrainz metadata enrichment. |
+| `POST` | `/api/library/analyze?limit=` | Loudness, fingerprint, BPM, key and waveform analysis. |
+| `PUT` | `/api/me/subsonic-password` | Set/revoke separate Subsonic password. |
+| `PUT` | `/api/me/listenbrainz-token` | Set/revoke ListenBrainz token. |
+| `POST` | `/api/scrobble` | Queue a completed listen. |
+| `GET/POST` | `/rest/{action}` | OpenSubsonic-compatible endpoint family. |
+
+## Streaming
+
+### Original
+
+Without a transcode profile, the server returns the source file **byte-for-byte** and supports HTTP Range requests for seeking.
+
+### Transcoding
+
+Available profiles currently include:
+
+```text
+opus96
+opus128
+opus192
+aac128
+aac192
+```
+
+The client chooses the profile. A typical policy is original on trusted Wi-Fi, a mid-rate Opus profile on mobile data and a lower profile while roaming.
+
+Transcodes are cached on disk. Cache keys include track identity plus source file size/mtime and profile, so changing the source invalidates the old cached result naturally.
+
+### HLS
+
+`/api/tracks/{id}/hls/master.m3u8` exposes AAC variants intended for adaptive switching during playback. HLS is additive: explicit single-profile transcoding remains available and simpler when adaptation is unnecessary.
+
+> [!NOTE]
+> HLS cache eviction is not yet as mature as the normal transcode-cache eviction path.
+
+## Synchronization model
+
+Nami uses one state-sync channel for low-frequency entities such as playlists, ratings, tags, moments, loops, notes and listening history.
+
+```mermaid
+sequenceDiagram
+    participant A as Client A
+    participant S as Nami Server
+    participant B as Client B
+
+    A->>S: POST /api/sync
+    S-->>B: WebSocket "changed"
+    B->>S: GET /api/sync?since=...
+    S-->>B: changes + tombstones
+```
+
+Conflicts are resolved with last-write-wins at field level, allowing different fields of the same record to be updated independently. Deleted records remain as tombstones for the configured TTL.
+
+Playback position is intentionally separate because it updates far more frequently than playlists, ratings or notes.
+
+## Multi-user libraries
+
+Two library modes are supported:
+
+- **`shared`** — one catalog, with optional per-user visible folder subtrees;
+- **`separate`** — each user has a distinct `library_id` and library roots.
+
+> [!CAUTION]
+> Switching the library mode clears the indexed `tracks` table and requires a new scan. Treat it as an administrative migration, not a casual toggle.
+
+Each user keeps separate synchronized state, playlists and playback position. “Now playing” visibility can be disabled by the user.
+
+## Jam sessions
+
+Jam uses the same `/api/ws` connection as normal server change events. The server coordinates timing and queue state, while each client streams the actual audio from the normal track endpoint.
+
+Supported Jam actions include creating/joining/leaving a room, synchronized play events and shared queue additions.
+
+Live Jam state is in memory and does **not** survive a server restart. Session history is persisted separately and remains queryable through `/api/jam/history`.
+
+## Guest shares
+
+`POST /api/share` creates a guest link that can be opened without a Nami account. A share can carry an expiration time and maximum play count, both checked on every request.
+
+The guest page is intentionally small and uses regular browser audio playback.
+
+## Lyrics
+
+`GET /api/tracks/{id}/lyrics` can search LRCLIB and cache the result. Misses are cached too, avoiding repeated external lookups for tracks with no result.
+
+Useful query parameters:
+
+| Parameter | Meaning |
 |---|---|
-| `?refresh=1` | искать заново, минуя кеш |
-| `?translate=1` | добавить перевод строк (нужен `deepl_api_key`, иначе 503) |
-| `?lang=EN` | язык перевода, код DeepL (по умолчанию `lyrics_target_lang`) |
+| `refresh=1` | Ignore cached result and search again. |
+| `translate=1` | Add translation when a server-side DeepL key is configured. |
+| `lang=EN` | Override the configured target language. |
 
-Ответ - готовый размеченный JSON (`lines[].time_ms`, `text`, `translation`): клиенту
-ничего разбирать не нужно, в этом и смысл переноса работы на сервер.
+Server-side furigana/romaji is intentionally **not** present yet. Keeping a full Japanese dictionary inside the lightweight server build would work against the project's footprint target; this is a candidate for an optional “thick” build later.
 
-Перевод - вариант (а) из плана: ключ DeepL берётся из конфигурации СЕРВЕРА. Своего ключа
-сервер не заводит и клиентский не спрашивает; не задан - ручка просто не переводит.
+## Library health & enrichment
 
-**Фуригана и романизация японского отложены.** `lindera` работает только со словарём:
-ipadic - около 50 МБ в собранном виде, unidic - больше 100 МБ, причём крейт скачивает
-архив словаря во время сборки и разворачивает его в бинарник. На бюджет "1 ядро / 512 МБ",
-ради которого весь сервер написан без единой тяжёлой зависимости, это несоразмерно: один
-словарь весит больше, чем всё остальное вместе. Место для этого - отдельный опциональный
-модуль под cargo-флагом и отдельный "толстый" образ. Поля `furigana`/`romaji` в ответе
-поэтому отсутствуют, а не отдаются пустыми: клиенту незачем гадать, "не нашлось" это или
-"сервер не умеет".
+`GET /api/library/health` reports issues from the indexed catalog, including scan failures, disappeared files, missing artist/album/year data and likely duplicates.
 
-## Здоровье библиотеки и метаданные
+`POST /api/library/enrich` fills missing metadata from MusicBrainz in controlled batches. It does **not** rewrite the user's source audio files and does not overwrite already-populated fields.
 
-`GET /api/library/health` - один SQL-проход по уже собранной библиотеке (файлы повторно не
-открываются, на 50 000 треков это были бы минуты дисковой работы на каждый запрос):
+## Audio analysis
 
-- **битые файлы** - те, что не открылись при последнем сканировании; сканер пишет свои
-  неудачи в таблицу `scan_failures` в момент прохода. Их не к чему привязать по папкам,
-  поэтому список видит только владелец;
-- **пропавшие файлы** - запись есть, файла по её пути нет (обычно таких нет: сканер
-  удаляет исчезнувшие сам, сюда попадает пропавшее между сканированиями);
-- **треки без исполнителя / без альбома / без года**;
-- **группы предполагаемых дублей** - та же эвристика, что при загрузке: исполнитель,
-  название и длительность с допуском в 2 секунды, но прогнанная по всей библиотеке.
+`POST /api/library/analyze` runs expensive analysis in explicit batches instead of blocking the library scanner.
 
-Каждый список обрезан до 200 записей, рядом с ним - полный счётчик. Всё, кроме битых
-файлов, считается в пределах видимости запрашивающего (папки или своя библиотека).
+Current analysis work includes:
 
-`POST /api/library/enrich?limit=20` (владелец) дополняет метаданные из MusicBrainz.
-Порциями: их политика позволяет не больше одного запроса в секунду, поэтому вызов честно
-длится около двадцати секунд, а `remaining` в ответе говорит, сколько треков осталось.
+- ReplayGain track gain and peak;
+- integrated EBU R128 loudness;
+- Chromaprint fingerprint when `fpcalc` is available;
+- BPM estimate;
+- musical key estimate;
+- normalized 120-column RMS waveform.
 
-**Файлы при этом не переписываются.** Дополняется только строка в БД сервера, теги внутри
-файла остаются как были - план требует не перезаписывать имеющееся без явной просьбы, и
-самый честный способ этого добиться - вообще не трогать чужие файлы. Уже заполненное поле
-не затирается и в БД: дописывается только пустое. Рассмотренный трек помечается
-(`enriched_at`) в любом случае - иначе тот, кого в MusicBrainz нет, вечно занимал бы
-очередь и стоил по запросу наружу каждый раз.
+BPM/key detection is an estimate, not a replacement for specialist DJ analysis software; tempo/key changes inside a track are a known limitation.
 
-## Анализ аудио
+## OpenSubsonic compatibility
 
-`POST /api/library/analyze?limit=20` (владелец) считает по трекам без пометки `analyzed_at`:
+Nami exposes a **playback-oriented subset**, not the entire protocol surface.
 
-- **ReplayGain track gain и пик**, **интегральную громкость EBU R128** - одним проходом
-  `ffmpeg -af ebur128`. Клиент получает готовые числа и не греет батарею анализом 5000
-  треков сам (§34);
-- **chromaprint-fingerprint** - через `fpcalc` (нужен в PATH; без него громкость считается,
-  а fingerprint - нет, см. `fpcalc` в `/api/health`);
-- **BPM и тональность** - порт того же DSP, что в Android-клиенте (`BpmKeyAnalyzer.kt`):
-  RMS-огибающая -> onset -> автокорреляция для темпа; хромаграмма из оконного FFT ->
-  профили Крумганьского-Шмуклера для тональности. Считаются по первым 90 с трека (декод
-  тем же ffmpeg в mono PCM). Это оценка, не точность DJ-софта; трек со сменой темпа или
-  тональности посреди - известное ограничение;
-- **форма волны** - 120 столбиков RMS-громкости по всему треку (порт `WaveformScanner.kt`),
-  нормировано к своему максимуму, сглажено. Отдаётся отдельной ручкой
-  `GET /api/tracks/{id}/waveform` - клиент рисует ей скраббер, не декодируя файл.
+Implemented areas include discovery/index browsing, artists/albums/songs, search, playlists for reading, streaming/download, cover art, starring/rating and scrobbling.
 
-Порциями и в `spawn_blocking`, потому что `ffmpeg` декодирует файл целиком - это секунды на
-трек, синхронно в сканер такое на 50 000 треков не поставить. Трек помечается `analyzed_at`
-в любом случае: битый файл иначе вечно занимал бы очередь. `remaining` в ответе говорит,
-сколько осталось. Значения отдаются в `GET /api/tracks` и `GET /api/tracks/{id}`
-(`replaygain_track_gain`, `replaygain_track_peak`, `r128_loudness`, `bpm`, `musical_key`);
-`fingerprint` - только в ручке одного трека, в списке он был бы лишними килобайтами на
-строку.
+Unsupported operations return an explicit unsupported response instead of pretending success.
 
-## OpenSubsonic
+### Why there is a separate Subsonic password
 
-Библиотеку можно слушать в любом Subsonic-совместимом клиенте (Symfonium, Feishin, DSub) -
-адрес сервера, имя пользователя и **отдельный Subsonic-пароль**.
+Subsonic authentication requires data derived from the user's password in a way that cannot be produced from an Argon2id hash. Nami therefore keeps the main account password one-way hashed and allows the user to set a **separate Subsonic password** only for `/rest/` compatibility.
 
-Реализовано подмножество, которого хватает, чтобы слушать: `ping`, `getLicense`,
-`getMusicFolders`, `getIndexes`, `getArtists`, `getArtist`, `getAlbum`, `getAlbumList`/
-`getAlbumList2`, `getSong`, `search2`/`search3`, `getPlaylists`, `getPlaylist`,
-`stream`, `download`, `getCoverArt` (обложка трека, альбома или исполнителя - отдаётся
-как есть, без ресайза), `star`/`unstar`/`setRating`/`getStarred`/`getStarred2` (звёзды и
-оценки - пишутся в общий `state`, см. ниже), `scrobble` (кладёт прослушивание в очередь
-скробблинга, см. раздел «Скробблинг»). Всё остальное отвечает «не поддерживается»: правдоподобная пустышка, на
-которой клиент построит своё UI, хуже честной ошибки. Редактирование плейлистов через
-Subsonic-протокол не предусмотрено - плейлисты отдаются на чтение.
+Until that separate password is explicitly set, Subsonic access for the user remains disabled.
 
-Оба формата ответа настоящие: `f=json`, `f=jsonp` и XML по умолчанию (на нём работают
-старые клиенты). `maxBitRate` отображается на профили транскодинга - клиент просит потолок,
-сервер отдаёт ближайший профиль не выше него; без `maxBitRate` идёт оригинал байт-в-байт
-тем же путём, что и `/api/tracks/{id}/stream`, вместе с Range/206.
+## Scrobbling
 
-Артисты и альбомы у нас не таблицы, а группировки по тегам, поэтому их id - это
-`ar-<hex имени>` и `al-<hex "исполнитель\x01альбом">`. Id трека - его номер в базе.
+Nami queues completed listens and can submit them to **ListenBrainz** using the token stored for the user. Failed submissions remain queued for retry up to the server's retry policy.
 
-### Отдельный Subsonic-пароль - почему
+The threshold for “this track counts as listened” is a client decision; the server accepts the completed listen event.
 
-Аутентификация Subsonic - это `t=md5(пароль + соль)`: сервер обязан знать пароль в открытом
-или обратимо зашифрованном виде. Наши пароли лежат argon2id-хешем, из которого пароль не
-достать, и это правильно. С этой же проблемой живут все современные реализации: Navidrome,
-например, хранит пароль обратимо зашифрованным именно ради Subsonic-протокола.
+Current server scrobbling integration is ListenBrainz-only. Last.fm and Maloja are not implemented yet.
 
-Наш размен другой: основной пароль остаётся необратимым, а для `/rest/` человек заводит
-второй, отдельный пароль (`PUT /api/me/subsonic-password {"password": "..."}`, пустая
-строка - отозвать). Он хранится как есть - иначе протокол не работает - но его утечка не
-даёт ни входа в основной аккаунт, ни прав владельца, а отзыв - это одна ручка, а не смена
-основного пароля. Пока Subsonic-пароль не задан, `/rest/` для этого пользователя не
-работает вовсе: незаданный секрет не должен молча становиться разрешающим.
+<a id="remote-access"></a>
+## Remote access
 
-### Форма плейлистов в состоянии
+There are three documented remote-access models. Pick one; do not stack them without a reason.
 
-Плейлисты живут в таблице `state` непрозрачным для сервера JSON (см. `sync.rs`), и
-OpenSubsonic - первое место, где серверу понадобилось их прочитать. Ожидаемая форма:
+### 1. Tailscale — simplest private option
 
-- `playlist`, id записи - id плейлиста, поле `name` (плюс необязательные `created`/
-  `changed` в unix-секундах; без них берётся метка последнего изменения записи);
-- `playlist_track` с полями `playlist_id`, `track_id`, `position`.
+Keep Nami on its local port and let Tailscale provide private reachability between your devices.
 
-Удалённые записи (надгробие `__deleted`) в выдачу не попадают. Android-клиент этими
-сущностями к серверу ещё не ходит - договориться о форме надо было именно здесь.
-
-### Форма оценок в состоянии
-
-Звёзды и оценки из Subsonic (`star`/`unstar`/`setRating`) сервер тоже пишет в `state`:
-
-- `rating`, id записи - **номер трека** десятичной строкой;
-- поле `stars` - целое 1..5 (`setRating`; `rating=0` сбрасывает в `null`);
-- поле `starred` - unix-секунды, когда трек отметили звездой (`star`); `unstar` пишет
-  `null`. `getStarred`/`getStarred2` возвращают треки, у которых `starred` не пустой.
-
-Изменение проходит обычным путём синхронизации (LWW по полю) и рассылается по WebSocket
-как `{"type":"changed","entities":["rating"]}`. Форму, как и для плейлистов, задаём здесь -
-Android-клиент к серверным оценкам ещё не ходит.
-
-## Скробблинг
-
-`POST /api/scrobble {track_id, played_at?}` (и Subsonic `/rest/scrobble`) кладут «трек
-прослушан» в очередь `scrobble_queue`. Фоновый поток раз в минуту отправляет накопившееся
-в **ListenBrainz** (`submit-listens`, Bearer-токен пользователя из
-`PUT /api/me/listenbrainz-token`). Офлайн сервера или ListenBrainz переживается очередью;
-после 5 неудачных попыток прослушивание бросается. Порог «прослушано» (30 с / 50 % / 90 %) -
-решение клиента, сервер принимает готовое событие.
-
-ponytail: только ListenBrainz - у него это один POST. Last.fm и Maloja требуют session-key
-и подпись MD5 (отдельный поток авторизации пользователя) - добавятся, когда понадобятся.
-
-## Внешний доступ
-
-Три рабочих пути, выбрать один.
-
-**1. Свой домен + Let's Encrypt (Caddy).** В комплекте `docker-compose.yml` и `Caddyfile`:
-Caddy получает и обновляет сертификат сам, NAMI за ним слушает по HTTP.
-Нужен домен с A/AAAA-записью на этот хост и открытые снаружи порты 80 и 443.
-
-```sh
-NAMI_DOMAIN=music.example.com [email protected] NAMI_MUSIC=/путь/к/музыке \
-  docker compose up -d
-```
-
-**2. Tailscale.** Ставится отдельно от NAMI и от сервера ничего не требует: сервер остаётся
-на своём порту в локальной сети, а Tailscale даёт устройствам частный адрес поверх WireGuard.
-Портов наружу открывать не нужно, домен не нужен.
-
-```sh
+```bash
 tailscale up
-tailscale serve --bg --https=443 http://localhost:4533   # опционально: сертификат MagicDNS
+
+# Optional HTTPS endpoint through Tailscale Serve
+tailscale serve --bg --https=443 http://localhost:4533
 ```
 
-**3. Cloudflare Tunnel.** Тоже без открытых портов: демон сам устанавливает исходящее
-соединение с Cloudflare, наружу отдаётся домен Cloudflare.
+No router port-forwarding or public DNS is required.
 
-```sh
+### 2. Your own domain + Caddy
+
+Use the included Compose/Caddy setup. Caddy terminates TLS and obtains/renews Let's Encrypt certificates automatically.
+
+```bash
+NAMI_DOMAIN=music.example.com \
+ACME_EMAIL=you@example.com \
+NAMI_MUSIC=/path/to/music \
+docker compose up -d
+```
+
+### 3. Cloudflare Tunnel
+
+A tunnel can publish the local server without directly opening the Nami port:
+
+```bash
 cloudflared tunnel create nami
 cloudflared tunnel route dns nami music.example.com
 cloudflared tunnel run --url http://localhost:4533 nami
 ```
 
-Во всех трёх случаях TLS терминирует внешний слой - NAMI имеет смысл запускать с
-`NAMI_TLS=false`, свой самоподписанный сертификат в этих сценариях лишний.
+When TLS is terminated by Tailscale Serve, Caddy or Cloudflare, running the Nami process itself with `NAMI_TLS=false` is expected.
 
-Мастер настройки (`/setup` при первом запуске) на экране «Доступ вне дома» предлагает
-выбрать один из вариантов (Только дома / Tailscale / Cloudflare Tunnel / Свой домен),
-показывает команды для выбранного и записывает введённый адрес в `external_url`. Сами
-Tailscale/`cloudflared`/прокси ставятся по этим командам вручную - мастер их не
-устанавливает.
+## Security notes
 
-## Чего ещё нет
+- Human passwords are stored as Argon2id hashes.
+- Device and session access uses revocable bearer tokens.
+- Pairing codes are one-time credentials, not long-lived passwords.
+- Pairing becomes protected after the first trusted device exists.
+- Built-in local TLS can use a self-signed certificate whose fingerprint is carried through pairing.
+- Source music directories should normally be mounted/read as **read-only** from the server process when possible.
+- Guest links are capability URLs; give them expirations and revoke them when they are no longer needed.
 
-- Фуригана и романизация японского в лирике - см. раздел «Лирика», отложены осознанно.
-- Веб-клиент - минимальный: вход, библиотека с поиском, плеер через `<audio>`, панель
-  владельца (режим библиотеки, скан, инвайты, список пользователей, свой пароль, токен
-  ListenBrainz). Живёт на `/` (одна страница из `web/app`, vanilla JS, без бандлера).
-  Не хватает: плейлисты, офлайн-кеш, попапки папок пользователю, лирика/waveform в UI.
-- OpenSubsonic реализован подмножеством (см. раздел выше): обложки отдаются как есть
-  (`getCoverArt`), но без ресайза; звёзды и оценки поддержаны
-  (`star`/`unstar`/`setRating`/`getStarred`); радио, подкасты и редактирование плейлистов
-  через `/rest/` не поддерживаются.
-- Веб-панель владельца - базовая (см. выше): список пользователей, инвайты, режим
-  библиотеки, скан. Раздача папок пользователю в режиме `shared` - пока только через API
-  (`PUT /api/users/{id}/folders`).
-- Веб-форма смены пароля - сами ручки готовы (`PUT /api/me/password`,
-  `PUT /api/users/{id}/password`), UI для них появится вместе с веб-панелью.
-- Живые джем-сессии не переживают перезапуск сервера (осознанно, см. раздел «Джем»);
-  журнал прошедших сессий теперь ведётся - `GET /api/jam/history`.
-- Скробблинг сделан для ListenBrainz (см. раздел «Скробблинг»); Last.fm и Maloja требуют
-  session-key/подпись MD5 и появятся отдельно.
+## Known limitations
+
+Current intentional or unfinished areas include:
+
+- server-side furigana and romaji generation;
+- a richer web client (the current one is intentionally minimal);
+- full OpenSubsonic coverage — radio, podcasts and playlist editing through `/rest/` are not implemented;
+- folder-permission management UI in the web owner panel;
+- web UI for every password-management endpoint;
+- live Jam recovery across server restarts;
+- Last.fm/Maloja server-side scrobbling;
+- full size-based eviction parity for the HLS cache.
+
+Keeping these in the README is intentional: compatibility clients and operators should be able to distinguish “unsupported” from “broken”.
+
+## Development
+
+```bash
+cd server
+
+# Development build
+cargo build
+
+# Release build
+cargo build --release
+
+# Tests
+cargo test
+```
+
+The server keeps blocking filesystem/media work out of Axum's async hot path where necessary. Expensive library analysis is batch-oriented by design.
+
+## Project links
+
+- **Main project:** [../README.md](../README.md)
+- **Configuration template:** [config.example.toml](config.example.toml)
+- **Dockerfile:** [Dockerfile](Dockerfile)
+- **Domain deployment:** [docker-compose.yml](docker-compose.yml) + [Caddyfile](Caddyfile)
+- **Issues:** https://github.com/MozzarellaCheesee/Nami/issues
+
+---
+
+<p align="center">
+  <strong>Nami Server</strong><br/>
+  Self-host your library without turning it into somebody else's cloud. 🌊
+</p>
