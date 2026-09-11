@@ -308,6 +308,24 @@ val MIGRATION_27_28 = object : Migration(27, 28) {
     }
 }
 
+val MIGRATION_28_29 = object : Migration(28, 29) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS pending_scrobbles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                trackId TEXT NOT NULL,
+                serverTrackId INTEGER,
+                playedAt INTEGER NOT NULL,
+                durationMs INTEGER NOT NULL,
+                retryCount INTEGER NOT NULL DEFAULT 0,
+                createdAt INTEGER NOT NULL
+            )
+            """,
+        )
+    }
+}
+
 val MIGRATION_14_15 = object : Migration(14, 15) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL(

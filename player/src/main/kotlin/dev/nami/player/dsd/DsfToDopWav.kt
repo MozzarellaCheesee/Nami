@@ -18,11 +18,11 @@ import java.nio.ByteOrder
  * fully streamed path would need the custom Extractor mentioned above. */
 object DsfToDopWav {
 
-    /** Returns the complete bytes of a playable .wav file, or null if [dsfBytes] isn't a DSF this
-     * app can parse (see [DsfParser.parse]) or has an odd per-channel DSD byte count ([DopEncoder]
-     * requires pairs of DSD bytes per PCM frame). */
-    fun convert(dsfBytes: ByteArray): ByteArray? {
-        val audio = DsfParser.parse(dsfBytes) ?: return null
+    /** Returns the complete bytes of a playable .wav file, or null if [dsdBytes] isn't a DSF or DFF
+     * this app can parse (see [DsfParser.parse], [DffParser.parse]) or has an odd per-channel DSD
+     * byte count ([DopEncoder] requires pairs of DSD bytes per PCM frame). */
+    fun convert(dsdBytes: ByteArray): ByteArray? {
+        val audio = DsfParser.parse(dsdBytes) ?: DffParser.parse(dsdBytes) ?: return null
         if (audio.dsdBytesPerChannel.any { it.size % 2 != 0 }) return null
 
         val dopPerChannel = audio.dsdBytesPerChannel.map { DopEncoder.encode(it) }

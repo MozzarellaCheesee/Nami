@@ -121,9 +121,12 @@ fun AudioTractBody(onOpenEqualizer: () -> Unit, viewModel: AudioTractViewModel =
         else -> "${trackSampleRateHz / 1000} → ${outputSampleRateHz / 1000} кГц (системный микшер)"
     }
 
+    val spatializerStatus = remember { AudioOutputInfo.spatializerStatus(context) }
+
     val outputDetail = buildString {
         append(if (uiState.bitPerfectUsbEnabled) "USB · bit-perfect (если поддерживается)" else "системный микшер")
         if (isBluetoothOutput) append(" · Bluetooth (кодек недоступен через public API)")
+        if (spatializerStatus != null) append(" · $spatializerStatus")
     }
 
     val nodes = buildList {

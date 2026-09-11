@@ -16,4 +16,21 @@ object AudioOutputInfo {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return null
         return audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toIntOrNull()
     }
+
+    /**
+     * Статус системного Spatializer (Android 12L+ / API 32+).
+     * Nami гарантирует setSpatializationBehavior(NEVER) для исключения пространственного ресемплинга.
+     */
+    fun spatializerStatus(context: Context): String? {
+        if (android.os.Build.VERSION.SDK_INT >= 32) {
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return null
+            val spatializer = audioManager.spatializer
+            return if (spatializer.isEnabled) {
+                "Spatializer: обойдён (NEVER)"
+            } else {
+                "Spatializer: отключен (NEVER)"
+            }
+        }
+        return null
+    }
 }

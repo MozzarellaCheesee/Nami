@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -104,6 +106,7 @@ fun SettingsScreen(
     onNetworkSourcesClick: () -> Unit,
     onServerClick: () -> Unit,
     onBatteryClick: () -> Unit,
+    viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     var showExtras by remember { mutableStateOf(false) }
     Column(
@@ -163,6 +166,143 @@ fun SettingsScreen(
                 NavRow(Icons.Outlined.PlayCircleOutline, "Слепое прослушивание", "Угадать трек без обложки и названия", onBlindListenClick)
                 NavRow(Icons.Outlined.Shuffle, "Карточный разбор", "Быстрая сортировка библиотеки свайпами", onCardSortClick)
                 NavRow(Icons.Outlined.BatteryChargingFull, "Фоновое воспроизведение", "Отключить оптимизацию батареи", onBatteryClick)
+            }
+        }
+
+        val updateStatus by viewModel.updateStatus.collectAsState()
+        val currentVersion = viewModel.currentAppVersion
+
+        NamiSectionLabel("О приложении")
+        SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column {
+                        Text(
+                            text = "Nami",
+                            color = NamiColors.Paper100,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            text = "Версия $currentVersion",
+                            color = NamiColors.Paper40,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    NamiPill(
+                        text = "Проверить",
+                        onClick = viewModel::checkForUpdates,
+                    )
+                }
+
+                when (val status = updateStatus) {
+                    is dev.nami.app.update.UpdateStatus.Checking -> {
+                        Row(
+                            modifier = Modifier.padding(top = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = NamiColors.Paper70,
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = "Проверка наличия обновлений...",
+                                color = NamiColors.Paper70,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+                    is dev.nami.app.update.UpdateStatus.UpToDate -> {
+                        Text(
+                            text = "У вас установлена актуальная версия",
+                            color = NamiColors.Paper70,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                    is dev.nami.app.update.UpdateStatus.Available -> {
+                        Column(modifier = Modifier.padding(top = 12.dp)) {
+                            Text(
+                                text = "Доступна новая версия: ${status.info.versionName}",
+                                color = NamiColors.Ai,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            if (status.info.apkSizeBytes > 0) {
+                                val mb = status.info.apkSizeBytes / (1024f * 1024f)
+                                Text(
+                                    text = String.format(java.util.Locale.US, "Размер: %.1f МБ", mb),
+                                    color = NamiColors.Paper40,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                            if (status.info.releaseNotes.isNotBlank()) {
+                                Text(
+                                    text = status.info.releaseNotes.take(300),
+                                    color = NamiColors.Paper70,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.padding(vertical = 6.dp),
+                                )
+                            }
+                            NamiPill(
+                                text = "Скачать и установить",
+                                onClick = { viewModel.downloadAndInstallUpdate(status.info) },
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                        }
+                    }
+                    is dev.nami.app.update.UpdateStatus.Downloading -> {
+                        Column(modifier = Modifier.padding(top = 12.dp)) {
+                            androidx.compose.material3.LinearProgressIndicator(
+                                progress = status.progressPercent / 100f,
+                                modifier = Modifier.fillMaxWidth().height(6.dp),
+                                color = NamiColors.Ai,
+                                trackColor = NamiColors.Ink600,
+                            )
+                            val downloadedMb = status.bytesDownloaded / (1024f * 1024f)
+                            val totalMb = status.totalBytes / (1024f * 1024f)
+                            Text(
+                                text = String.format(
+                                    java.util.Locale.US,
+                                    "Скачивание: %d%% (%.1f / %.1f МБ)",
+                                    status.progressPercent,
+                                    downloadedMb,
+                                    totalMb,
+                                ),
+                                color = NamiColors.Paper70,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                        }
+                    }
+                    is dev.nami.app.update.UpdateStatus.ReadyToInstall -> {
+                        Column(modifier = Modifier.padding(top = 12.dp)) {
+                            Text(
+                                text = "Обновление скачано и готово к установке",
+                                color = NamiColors.Ai,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            NamiPill(
+                                text = "Установить сейчас",
+                                onClick = { viewModel.downloadAndInstallUpdate(dev.nami.app.update.UpdateInfo("", "", "", "", 0, false)) },
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                        }
+                    }
+                    is dev.nami.app.update.UpdateStatus.Error -> {
+                        Text(
+                            text = status.message,
+                            color = NamiColors.Shu,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                    is dev.nami.app.update.UpdateStatus.Idle -> {}
+                }
             }
         }
     }

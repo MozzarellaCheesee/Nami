@@ -228,7 +228,13 @@ class NowPlayingViewModel @Inject constructor(
     private val _clipExportUri = kotlinx.coroutines.flow.MutableStateFlow<android.net.Uri?>(null)
     val clipExportUri: StateFlow<android.net.Uri?> = _clipExportUri
 
-    /** Group D "экспорт клипа (аудио)" - см. AudioClipExporter. Video is out of scope. */
+    private val _videoClipExportUri = kotlinx.coroutines.flow.MutableStateFlow<android.net.Uri?>(null)
+    val videoClipExportUri: StateFlow<android.net.Uri?> = _videoClipExportUri
+
+    private val _videoExportProgress = kotlinx.coroutines.flow.MutableStateFlow<Float?>(null)
+    val videoExportProgress: StateFlow<Float?> = _videoExportProgress
+
+    /** Group D "экспорт клипа (аудио)" - см. AudioClipExporter. */
     fun exportClip(startMs: Long, endMs: Long) {
         val ctx = context ?: return
         val trackId = (playerRepository.state.value as? PlaybackState.Playing)?.trackId ?: return
@@ -244,8 +250,41 @@ class NowPlayingViewModel @Inject constructor(
         }
     }
 
+    /** Экспорт видео-открытки MP4 (9:16) с обложкой, названием, динамической волной и лирикой. */
+    fun exportVideoClip(startMs: Long, endMs: Long, lyricLine: String? = null) {
+        val ctx = context ?: return
+        val trackId = (playerRepository.state.value as? PlaybackState.Playing)?.trackId ?: return
+        viewModelScope.launch {
+            val track = libraryRepository.track(trackId).first() ?: return@launch
+            _videoExportProgress.value = 0f
+            val uri = withContext(Dispatchers.IO) {
+                val dir = java.io.File(ctx.cacheDir, "shares").apply { mkdirs() }
+                val file = java.io.File(dir, "clip_${System.currentTimeMillis()}.mp4")
+                val ok = dev.nami.player.VideoClipExporter.exportVideo(
+                    audioPath = track.path,
+                    artworkPath = track.albumArtworkPath,
+                    trackTitle = track.title,
+                    artistName = track.artistName,
+                    lyricLine = lyricLine,
+                    startMs = startMs,
+                    endMs = endMs,
+                    outputFile = file,
+                    onProgress = { p -> _videoExportProgress.value = p },
+                )
+                _videoExportProgress.value = null
+                if (!ok) return@withContext null
+                androidx.core.content.FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
+            }
+            _videoClipExportUri.value = uri
+        }
+    }
+
     fun clipExportUriShown() {
         _clipExportUri.value = null
+    }
+
+    fun videoClipExportUriShown() {
+        _videoClipExportUri.value = null
     }
 
     val currentTrackSavedLoops: StateFlow<List<SavedLoop>> = playerRepository.state

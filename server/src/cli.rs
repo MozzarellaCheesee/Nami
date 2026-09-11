@@ -23,6 +23,21 @@ pub enum Commands {
     },
     /// Обновить сервер (pull + restart)
     Update,
+    /// Сканировать музыкальные файлы и обновить библиотеку
+    Scan {
+        /// Путь к директории (если не указан, сканируются все music_dirs из config)
+        #[arg(short, long)]
+        path: Option<PathBuf>,
+        /// Глубокое сканирование
+        #[arg(short, long, default_value_t = false)]
+        deep: bool,
+    },
+    /// Удалить сервер, остановить службы и опционально очистить данные
+    Uninstall {
+        /// Удалить также базу данных и конфигурационные файлы
+        #[arg(long, default_value_t = false)]
+        purge: bool,
+    },
     /// Создать резервную копию (БД + музыкальные папки)
     Backup {
         /// Путь для сохранения backup-файла
@@ -48,6 +63,8 @@ impl Commands {
             Commands::Status => status(cfg),
             Commands::Logs { lines } => logs(*lines),
             Commands::Update => update(),
+            Commands::Scan { path, deep } => scan(cfg, path, *deep),
+            Commands::Uninstall { purge } => uninstall(cfg, *purge),
             Commands::Backup { output } => backup(cfg, output),
             Commands::Restore { input } => restore(cfg, input),
             Commands::Doctor => doctor(cfg),
@@ -102,6 +119,7 @@ fn check_health(port: u16, tls: bool) -> Res<String> {
 
 // Заглушка для отключения проверки TLS сертификата
 #[derive(Debug)]
+#[allow(dead_code)]
 struct NoVerifier;
 
 impl rustls::client::danger::ServerCertVerifier for NoVerifier {
@@ -464,4 +482,91 @@ fn run_cmd(cmd: &str, args: &[&str]) -> Res<Output> {
     }
 
     Ok(output)
+}
+
+/// Сканирование папок с музыкой
+fn scan(cfg: &crate::config::Config, custom_path: &Option<PathBuf>, deep: bool) -> Res<()> {
+    println!("Запуск сканирования музыкальной библиотеки Nami...");
+    let dirs: Vec<PathBuf> = if let Some(p) = custom_path {
+        if !p.exists() {
+            return Err(format!("Указанный путь не существует: {}", p.display()).into());
+        }
+        vec![p.clone()]
+    } else {
+        if cfg.music_dirs.is_empty() {
+            println!("Предупреждение: в конфигурации не заданы music_dirs");
+        }
+        cfg.music_dirs.clone()
+    };
+
+    println!("Папки: {}", dirs.iter().map(|d| d.display().to_string()).collect::<Vec<_>>().join(", "));
+    if deep {
+        println!("Режим глубокого сканирования активен");
+    }
+
+    let mut conn = crate::db::open(&cfg.db_path)?;
+    let rep = crate::scanner::scan(&mut conn, &dirs, 0)?;
+
+    println!("\n{}", "=".repeat(40));
+    println!("Сканирование завершено успешно:");
+    println!("  Файлов проверено: {}", rep.scanned);
+    println!("  Добавлено новых:  {}", rep.added);
+    println!("  Обновлено тегов:  {}", rep.updated);
+    println!("  Удалено треков:   {}", rep.removed);
+    println!("  Ошибок:           {}", rep.failed);
+    println!("{}", "=".repeat(40));
+
+    Ok(())
+}
+
+/// Остановка и удаление Nami сервера
+fn uninstall(cfg: &crate::config::Config, purge: bool) -> Res<()> {
+    println!("Остановка и удаление Nami сервера...");
+
+    #[cfg(unix)]
+    {
+        println!("Остановка службы systemd nami...");
+        let _ = Command::new("systemctl").args(["stop", "nami"]).status();
+        let _ = Command::new("systemctl").args(["disable", "nami"]).status();
+
+        let service_file = PathBuf::from("/etc/systemd/system/nami.service");
+        if service_file.exists() {
+            if let Err(e) = std::fs::remove_file(&service_file) {
+                println!("Предупреждение: не удалось удалить {}: {}", service_file.display(), e);
+            } else {
+                println!("✓ Удалён {}", service_file.display());
+                let _ = Command::new("systemctl").args(["daemon-reload"]).status();
+            }
+        }
+
+        let _ = Command::new("docker").args(["stop", "nami"]).output();
+        let _ = Command::new("docker").args(["rm", "nami"]).output();
+    }
+
+    #[cfg(windows)]
+    {
+        println!("Остановка процессов nami-server...");
+        let _ = Command::new("taskkill").args(["/F", "/IM", "nami-server.exe"]).output();
+    }
+
+    if purge {
+        println!("Очистка данных (--purge)...");
+        if cfg.db_path.exists() {
+            if let Err(e) = std::fs::remove_file(&cfg.db_path) {
+                println!("Предупреждение: не удалось удалить БД {}: {}", cfg.db_path.display(), e);
+            } else {
+                println!("✓ Удалена БД: {}", cfg.db_path.display());
+            }
+        }
+        let cache = cfg.cache_dir();
+        if cache.exists() {
+            let _ = std::fs::remove_dir_all(&cache);
+            println!("✓ Очищен кэш: {}", cache.display());
+        }
+    } else {
+        println!("Данные сохранены. Передайте флаг --purge для полной очистки БД и кэша.");
+    }
+
+    println!("✓ Сервер Nami успешно удалён.");
+    Ok(())
 }

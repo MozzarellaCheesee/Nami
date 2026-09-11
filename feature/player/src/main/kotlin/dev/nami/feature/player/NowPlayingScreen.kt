@@ -170,6 +170,18 @@ fun NowPlayingScreen(
         clipShareContext.startActivity(android.content.Intent.createChooser(intent, "Поделиться клипом"))
         viewModel.clipExportUriShown()
     }
+    val videoClipExportUri by viewModel.videoClipExportUri.collectAsState()
+    val videoExportProgress by viewModel.videoExportProgress.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(videoClipExportUri) {
+        val uri = videoClipExportUri ?: return@LaunchedEffect
+        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+            type = "video/mp4"
+            putExtra(android.content.Intent.EXTRA_STREAM, uri)
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        clipShareContext.startActivity(android.content.Intent.createChooser(intent, "Поделиться видео-открыткой"))
+        viewModel.videoClipExportUriShown()
+    }
     // Local-only stub - no "favorites" concept exists in the domain layer yet, so this doesn't
     // persist across tracks/sessions. Resets whenever the playing track changes.
     // Real, not a stub: backed by the Любимые треки system playlist (PlaylistRepository.
@@ -514,6 +526,7 @@ fun NowPlayingScreen(
                 },
                 onClearLoop = { viewModel.clearLoop() },
                 onExportClip = { start, end -> viewModel.exportClip(start, end) },
+                onExportVideoClip = { start, end -> viewModel.exportVideoClip(start, end) },
                 onDismiss = { showLoopSheet = false },
             )
             sheetPendingMomentPosition?.let { positionMsAt ->
