@@ -65,6 +65,7 @@ class LibraryRepositoryImpl @Inject constructor(
     private val lyricsRepository: LyricsRepository,
     private val playHistoryDao: PlayHistoryDao,
     private val settingsRepository: SettingsRepository? = null,
+    private val pendingScrobbleDao: dev.nami.core.database.dao.PendingScrobbleDao? = null,
 ) : LibraryRepository {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -357,28 +358,39 @@ class LibraryRepositoryImpl @Inject constructor(
         playHistoryDao.insert(PlayHistoryEntity(trackId = id.value, playedAt = playedAt, durationMs = durationMs))
         val settings = settingsRepository
         if (settings != null && settings.namiServerToken.value != null && settings.namiServerUrl.value.isNotBlank()) {
-            val cfg = serverConfig() ?: return
+            val cfg = serverConfig()
             scope.launch(Dispatchers.IO) {
-                runCatching {
-                    var serverTrackId = if (id.value.startsWith("server_")) {
-                        id.value.removePrefix("server_").toLongOrNull()
-                    } else {
-                        id.value.toLongOrNull()
-                    }
-                    if (serverTrackId == null) {
-                        val track = trackDao.findById(id.value)
-                        if (track != null) {
-                            val artistName = track.artistId?.let { artistDao.findById(it)?.name }
-                            val matches = NamiServerClient.matchTrackIds(
+                var serverTrackId = if (id.value.startsWith("server_")) {
+                    id.value.removePrefix("server_").toLongOrNull()
+                } else {
+                    id.value.toLongOrNull()
+                }
+                if (serverTrackId == null && cfg != null) {
+                    val track = trackDao.findById(id.value)
+                    if (track != null) {
+                        val artistName = track.artistId?.let { artistDao.findById(it)?.name }
+                        val matches = runCatching {
+                            NamiServerClient.matchTrackIds(
                                 cfg,
                                 listOf(Triple(artistName, track.title, track.durationMs)),
                             )
-                            serverTrackId = matches?.firstOrNull()
-                        }
+                        }.getOrNull()
+                        serverTrackId = matches?.firstOrNull()
                     }
-                    if (serverTrackId != null) {
-                        NamiServerClient.scrobble(cfg, serverTrackId, playedAt / 1000)
-                    }
+                }
+                var sent = false
+                if (serverTrackId != null && cfg != null) {
+                    sent = runCatching { NamiServerClient.scrobble(cfg, serverTrackId, playedAt / 1000) }.getOrDefault(false)
+                }
+                if (!sent) {
+                    pendingScrobbleDao?.insert(
+                        dev.nami.core.database.entity.PendingScrobbleEntity(
+                            trackId = id.value,
+                            serverTrackId = serverTrackId,
+                            playedAt = playedAt,
+                            durationMs = durationMs,
+                        )
+                    )
                 }
             }
         }

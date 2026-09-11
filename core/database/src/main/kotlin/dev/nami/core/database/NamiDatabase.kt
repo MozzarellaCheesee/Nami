@@ -22,6 +22,8 @@ import dev.nami.core.database.entity.PlayHistoryEntity
 import dev.nami.core.database.entity.PlaylistEntity
 import dev.nami.core.database.entity.PlaylistTrackEntity
 import dev.nami.core.database.entity.TagEntity
+import dev.nami.core.database.dao.PendingScrobbleDao
+import dev.nami.core.database.entity.PendingScrobbleEntity
 import dev.nami.core.database.entity.TrackEntity
 import dev.nami.core.database.entity.TrackTagEntity
 import dev.nami.core.database.entity.VocabularyEntity
@@ -31,9 +33,9 @@ import dev.nami.core.database.entity.VocabularyEntity
         TrackEntity::class, ArtistEntity::class, AlbumEntity::class,
         PlaylistEntity::class, PlaylistTrackEntity::class, AlbumArtistCrossRef::class,
         VocabularyEntity::class, MomentEntity::class, LoopEntity::class, PlayHistoryEntity::class,
-        TagEntity::class, TrackTagEntity::class,
+        TagEntity::class, TrackTagEntity::class, PendingScrobbleEntity::class,
     ],
-    version = 28,
+    version = 29,
     exportSchema = true,
 )
 abstract class NamiDatabase : RoomDatabase() {
@@ -48,4 +50,5 @@ abstract class NamiDatabase : RoomDatabase() {
     abstract fun loopDao(): LoopDao
     abstract fun playHistoryDao(): PlayHistoryDao
     abstract fun tagDao(): TagDao
+    abstract fun pendingScrobbleDao(): PendingScrobbleDao
 }

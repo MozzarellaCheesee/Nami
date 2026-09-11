@@ -39,6 +39,8 @@ class SyncRepositoryImpl @Inject constructor(
     private val loopDao: LoopDao,
     private val tagDao: TagDao,
     private val playHistoryDao: PlayHistoryDao,
+    private val pendingScrobbleDao: dev.nami.core.database.dao.PendingScrobbleDao,
+    private val artistDao: dev.nami.core.database.dao.ArtistDao,
 ) : SyncRepository {
 
     private val prefs = context.getSharedPreferences("nami_sync_prefs", Context.MODE_PRIVATE)
@@ -85,6 +87,7 @@ class SyncRepositoryImpl @Inject constructor(
         _lastSyncTimestamp.value = finalTs
         prefs.edit().putLong("last_sync_ts", finalTs).apply()
         Log.d(TAG, "pullFromServer: applied $totalApplied changes, new lastSync=$finalTs")
+        flushPendingScrobbles(cfg)
         return true
     }
 
@@ -492,7 +495,49 @@ class SyncRepositoryImpl @Inject constructor(
                 return false
             }
         }
+        flushPendingScrobbles(cfg)
         return true
+    }
+
+    private suspend fun flushPendingScrobbles(cfg: NamiServerClient.Config) {
+        val pending = runCatching { pendingScrobbleDao.getAll() }.getOrNull() ?: return
+        if (pending.isEmpty()) return
+        for (item in pending) {
+            var serverId = item.serverTrackId
+            if (serverId == null) {
+                if (item.trackId.startsWith("server_")) {
+                    serverId = item.trackId.removePrefix("server_").toLongOrNull()
+                } else {
+                    val track = trackDao.findById(item.trackId)
+                    if (track != null) {
+                        val artistName = track.artistId?.let { artistDao.findById(it)?.name }
+                        val matches = runCatching {
+                            NamiServerClient.matchTrackIds(
+                                cfg,
+                                listOf(Triple(artistName, track.title, track.durationMs)),
+                            )
+                        }.getOrNull()
+                        serverId = matches?.firstOrNull()
+                    }
+                }
+            }
+            if (serverId != null) {
+                val ok = runCatching {
+                    NamiServerClient.scrobble(cfg, serverId, item.playedAt / 1000)
+                }.getOrDefault(false)
+                if (ok) {
+                    pendingScrobbleDao.deleteById(item.id)
+                } else {
+                    pendingScrobbleDao.incrementRetry(item.id)
+                }
+            } else {
+                if (item.retryCount > 10) {
+                    pendingScrobbleDao.deleteById(item.id)
+                } else {
+                    pendingScrobbleDao.incrementRetry(item.id)
+                }
+            }
+        }
     }
 
     override suspend fun sync(): Boolean {

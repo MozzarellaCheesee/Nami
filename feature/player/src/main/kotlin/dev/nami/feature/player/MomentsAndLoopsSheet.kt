@@ -55,6 +55,7 @@ fun MomentsAndLoopsSheet(
     onMarkLoopEnd: (startMs: Long) -> Unit,
     onClearLoop: () -> Unit,
     onExportClip: (startMs: Long, endMs: Long) -> Unit,
+    onExportVideoClip: (startMs: Long, endMs: Long) -> Unit = { _, _ -> },
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -98,10 +99,16 @@ fun MomentsAndLoopsSheet(
                         modifier = Modifier.padding(start = 8.dp).weight(1f),
                     )
                     Text(
-                        "Экспорт",
+                        "WAV",
                         color = NamiColors.Ai,
                         style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.clickable { onExportClip(activeLoop.startMs, activeLoop.endMs) }.padding(end = 12.dp),
+                        modifier = Modifier.clickable { onExportClip(activeLoop.startMs, activeLoop.endMs) }.padding(end = 10.dp),
+                    )
+                    Text(
+                        "Видео MP4",
+                        color = NamiColors.Ai,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.clickable { onExportVideoClip(activeLoop.startMs, activeLoop.endMs) }.padding(end = 12.dp),
                     )
                     Text(
                         "Убрать",

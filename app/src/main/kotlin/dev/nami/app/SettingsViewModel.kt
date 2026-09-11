@@ -24,7 +24,27 @@ class SettingsViewModel @Inject constructor(
     private val appSettingsRepository: AppSettingsRepository,
     playerRepository: dev.nami.domain.PlayerRepository,
     private val syncRepository: dev.nami.domain.SyncRepository,
+    private val appUpdateManager: dev.nami.app.update.AppUpdateManager,
 ) : ViewModel() {
+
+    val updateStatus: StateFlow<dev.nami.app.update.UpdateStatus> = appUpdateManager.status
+    val currentAppVersion: String = appUpdateManager.currentVersionName
+
+    fun checkForUpdates() {
+        viewModelScope.launch {
+            appUpdateManager.checkForUpdates()
+        }
+    }
+
+    fun downloadAndInstallUpdate(info: dev.nami.app.update.UpdateInfo) {
+        viewModelScope.launch {
+            appUpdateManager.downloadAndInstall(info)
+        }
+    }
+
+    fun dismissUpdate() {
+        appUpdateManager.dismiss()
+    }
 
     private val _syncMsg = MutableStateFlow<String?>(null)
     val syncMsg: StateFlow<String?> = _syncMsg

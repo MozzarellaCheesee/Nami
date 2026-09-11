@@ -24,6 +24,8 @@
     <!-- Только для сканирования QR-кода как запасного пути для группы G, когда автопоиск
          устройств (NSD) ничего не находит. -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Установка обновлений прямо из интерфейса приложения (In-App Updater) -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Группа G целиком (Wi-Fi Drop, синхронизация, "слушать вместе" по LAN) ходит по обычному
          http:// на соседний телефон в той же сети. С targetSdk 28+ Android блокирует cleartext по
