@@ -73,6 +73,9 @@ class ServerAudioRepositoryImpl @Inject constructor(
         }
 
     override fun serverStreamUrl(serverTrackId: Long): String? {
+        serverLibraryRepository.cachedFile(serverTrackId)?.let {
+            return android.net.Uri.fromFile(it).toString()
+        }
         val cfg = activeConfig() ?: return null
         return streamUrlOn(cfg.baseUrl, cfg.token, serverTrackId)
     }

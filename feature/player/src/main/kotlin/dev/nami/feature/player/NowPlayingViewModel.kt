@@ -96,7 +96,9 @@ class NowPlayingViewModel @Inject constructor(
         if (id.startsWith("server_") || id.startsWith("jam_")) {
             val serverId = id.substringAfter("_").toLongOrNull() ?: return
             viewModelScope.launch(Dispatchers.IO) {
-                serverLibraryRepository?.downloadTrack(serverId)
+                if (serverLibraryRepository?.downloadTrack(serverId) != null) {
+                    playerRepository.refreshCurrentSource()
+                }
                 downloadTrigger.value += 1
             }
         }
