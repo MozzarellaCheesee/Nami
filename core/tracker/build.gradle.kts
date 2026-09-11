@@ -52,8 +52,9 @@ fetch(
 android {
     namespace = "dev.nami.core.tracker"
     compileSdk = 35
-    // В SDK установлен только этот NDK - без явной версии AGP просит свою дефолтную и падает.
-    ndkVersion = "30.0.15729638"
+    // В локальном SDK установлен этот NDK; на CI (ubuntu-latest) можно переопределить через -Pnami.ndk.version.
+    val customNdk = (findProperty("nami.ndk.version") as String?) ?: System.getenv("ANDROID_NDK_VERSION")
+    ndkVersion = customNdk ?: "30.0.15729638"
     defaultConfig {
         minSdk = 26
         // Те же ABI, что собирает cargo-ndk для tag-reader (core/native) - смысла тащить x86

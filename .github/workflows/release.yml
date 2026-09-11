@@ -57,7 +57,16 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Release APK
-        run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
+        shell: bash
+        run: |
+          NDK_DIR="${ANDROID_HOME:-/usr/local/lib/android/sdk}/ndk"
+          NDK_VER=$(ls -1 "$NDK_DIR" 2>/dev/null | sort -V | tail -n 1)
+          if [ -n "$NDK_VER" ]; then
+            echo "Using installed Android NDK: $NDK_VER"
+            ./gradlew :app:assembleRelease -Pnami.ndk.version="$NDK_VER" --no-daemon --stacktrace
+          else
+            ./gradlew :app:assembleRelease --no-daemon --stacktrace
+          fi
 
       - name: Locate and rename APK
         shell: bash
