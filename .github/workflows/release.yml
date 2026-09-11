@@ -286,6 +286,6 @@ jobs:
             dist/install.sh
             dist/install.ps1
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
