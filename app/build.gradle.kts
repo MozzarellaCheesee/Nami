@@ -35,22 +35,36 @@ android {
         versionCode = gitCommitCount
         versionName = "0.1.0"
     }
-    // Пароли берутся из local.properties (не в git, см. secrets/) - сборка release без них
-    // просто не подписывается, а не падает, чтобы обычный debug-цикл не требовал ключ.
+    val keystoreFile = rootProject.file("secrets/nami.jks")
+    val storePass = System.getenv("NAMI_KEYSTORE_PASSWORD")
+        ?: localProps.getProperty("nami.keystore.storePassword")
+    val keyAlias = System.getenv("NAMI_KEYSTORE_ALIAS")
+        ?: localProps.getProperty("nami.keystore.keyAlias")
+    val keyPass = System.getenv("NAMI_KEY_PASSWORD")
+        ?: localProps.getProperty("nami.keystore.keyPassword")
+
+    val hasReleaseSigning = keystoreFile.exists() && !storePass.isNullOrBlank() && !keyAlias.isNullOrBlank() && !keyPass.isNullOrBlank()
+
+    // Пароли берутся из local.properties или env-переменных (см. secrets/nami.jks).
+    // Если ключа нет (CI без настроенных секретов или dev-сборка), автоматически
+    // переключаемся на debug-подпись, чтобы packageRelease не падал с ошибкой.
     signingConfigs {
-        create("release") {
-            val storePass = localProps.getProperty("nami.keystore.storePassword")
-            if (storePass != null) {
-                storeFile = rootProject.file("secrets/nami.jks")
-                storePassword = storePass
-                keyAlias = localProps.getProperty("nami.keystore.keyAlias")
-                keyPassword = localProps.getProperty("nami.keystore.keyPassword")
+        if (hasReleaseSigning) {
+            create("release") {
+                this.storeFile = keystoreFile
+                this.storePassword = storePass
+                this.keyAlias = keyAlias
+                this.keyPassword = keyPass
             }
         }
     }
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            } else {
+                signingConfig = signingConfigs.getByName("debug")
+            }
             isMinifyEnabled = false
         }
     }
