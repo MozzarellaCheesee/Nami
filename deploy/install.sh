@@ -287,9 +287,11 @@ echo -e "${BOLD}${GREEN}========================================================
 echo -e "${BOLD}${GREEN}  🎉 Nami Server успешно установлен и запущен!${NC}"
 echo -e "${BOLD}${GREEN}======================================================================${NC}"
 echo
-echo -e "  ${BOLD}ШАГ 1. Первичная настройка в браузере:${NC}"
-echo -e "         👉 ${BOLD}${CYAN}http://${PRIMARY_IP}:${PORT}/setup${NC}"
-echo -e "         (или локально: ${CYAN}http://localhost:${PORT}/setup${NC})"
+echo -e "  ${BOLD}ШАГ 1. Первичная защищённая настройка в браузере (HTTPS):${NC}"
+echo -e "         👉 ${BOLD}${CYAN}https://${PRIMARY_IP}:${PORT}/setup${NC}"
+echo -e "         (или локально: ${CYAN}https://localhost:${PORT}/setup${NC})"
+echo -e "         ${YELLOW}Примечание: Браузер предупредит о самоподписанном сертификате.${NC}"
+echo -e "         ${YELLOW}Нажмите «Дополнительно» → «Перейти на сайт» (все пароли шифруются TLS).${NC}"
 echo
 echo -e "  ${BOLD}ШАГ 2. В мастере укажите:${NC}"
 echo -e "         • Папку с вашей музыкальной коллекцией (например: /home/music);"
@@ -300,7 +302,7 @@ echo -e "  ${BOLD}ШАГ 3. Примените настройки (переза�
 echo -e "         ${BOLD}sudo systemctl restart nami${NC}"
 echo
 echo -e "  ${BOLD}ШАГ 4. Сопряжение с Android-клиентом:${NC}"
-echo -e "         • Снова откройте ${CYAN}http://${PRIMARY_IP}:${PORT}/setup${NC}"
+echo -e "         • Снова откройте ${CYAN}https://${PRIMARY_IP}:${PORT}/setup${NC}"
 echo -e "         • На странице отобразится ${BOLD}QR-код${NC} и 8-значный код."
 echo -e "         • В приложении Nami на смартфоне откройте:"
 echo -e "           ${BOLD}Настройки → Подключить сервер → Сканировать QR${NC}"

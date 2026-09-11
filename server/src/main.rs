@@ -56,12 +56,19 @@ async fn main() -> Res<()> {
         return command.execute(&cfg);
     }
 
-    // Нет config.toml - первый запуск: поднимаем ТОЛЬКО мастер настройки по HTTP.
-    // Он запишет config.toml и отложит логин владельца, дальше нужен перезапуск.
+    // Провайдер криптографии выбирается явно: собираем rustls без aws-lc-rs (см. Cargo.toml),
+    // а без установленного провайдера rustls отказывается создавать конфигурацию.
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
+    // Нет config.toml - первый запуск: поднимаем ТОЛЬКО мастер настройки по защищённому HTTPS.
+    // Это гарантирует, что пароль администратора и настройки не передаются в открытом виде по сети.
     if !std::path::Path::new("config.toml").exists() && std::env::var("NAMI_MUSIC_DIRS").is_err() {
         let addr = SocketAddr::from(([0, 0, 0, 0], cfg.port));
-        tracing::warn!("config.toml не найден - мастер настройки на http://{addr}/setup");
-        axum_server::bind(addr)
+        let t = tls::load_or_create(&cfg.data_dir, vec!["localhost".into(), local_ip()])?;
+        tracing::info!("🔒 TLS активен, отпечаток sha256:{}", t.fingerprint);
+        tracing::warn!("config.toml не найден - защищённый мастер настройки на https://{addr}/setup");
+        let rustls = axum_server::tls_rustls::RustlsConfig::from_pem(t.cert_pem, t.key_pem).await?;
+        axum_server::bind_rustls(addr, rustls)
             .serve(setup::routes().into_make_service())
             .await?;
         return Ok(());
