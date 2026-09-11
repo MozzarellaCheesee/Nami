@@ -87,12 +87,8 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             archive_name: nami-server-linux-x86_64.tar.gz
-            cross_pkg: gcc-x86-64-linux-gnu libc6-dev-amd64-cross
-            linker: x86_64-linux-gnu-gcc
           - target: aarch64-unknown-linux-gnu
             archive_name: nami-server-linux-aarch64.tar.gz
-            cross_pkg: gcc-aarch64-linux-gnu libc6-dev-arm64-cross
-            linker: aarch64-linux-gnu-gcc
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -103,16 +99,22 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Install cross-compilation toolchain
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ${{ matrix.cross_pkg }}
+          sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu libc6-dev-arm64-cross
 
-      - name: Build Release Binary
+      - name: Build Release Binary (x86_64)
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: |
+          cargo build --release --target ${{ matrix.target }} --manifest-path server/Cargo.toml
+
+      - name: Build Release Binary (aarch64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
         env:
-          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.linker }}
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.linker }}
-          CC_x86_64_unknown_linux_gnu: ${{ matrix.linker }}
-          CC_aarch64_unknown_linux_gnu: ${{ matrix.linker }}
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+          CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
+          AR_aarch64_unknown_linux_gnu: aarch64-linux-gnu-ar
         run: |
           cargo build --release --target ${{ matrix.target }} --manifest-path server/Cargo.toml
 
