@@ -75,6 +75,8 @@ interface PlayerRepository {
     val queue: StateFlow<PlayerQueue>
     /** Текущий источник воспроизведения трека (локальный / кеш / сервер / недоступен). */
     val playbackSource: StateFlow<TrackPlaybackSource>
+    /** Перечитать источник текущего серверного трека после скачивания в офлайн-кеш. */
+    suspend fun refreshCurrentSource() {}
     /** Виджеты (группа E) вызывают toggle/skipNext/etc. из свежего процесса (Android часто убивает
      * фоновый процесс приложения, тап по виджету поднимает его заново) - MediaController
      * подключается к сервису асинхронно, и сразу после холодного старта ещё не готов, из-за чего

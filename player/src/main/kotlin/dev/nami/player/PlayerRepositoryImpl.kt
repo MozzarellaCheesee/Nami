@@ -103,11 +103,41 @@ class PlayerRepositoryImpl @Inject constructor(
      * `replace=true` (новая очередь) очищает карту, `false` (добавление трека) - нет. */
     private suspend fun resolveServerUrls(tracks: List<PlayableTrack>, replace: Boolean = true) {
         if (replace) serverUrlByMediaId.clear()
-        if (tracks.isEmpty() || !serverAudioRepository.isServerActive()) return
+        if (tracks.isEmpty()) return
+        val unresolved = tracks.filter { track ->
+            val serverId = track.id.value.removePrefix("server_").removePrefix("jam_").toLongOrNull()
+                ?.takeIf { track.id.value.startsWith("server_") || track.id.value.startsWith("jam_") }
+            if (serverId != null) {
+                serverAudioRepository.serverStreamUrl(serverId)?.let { serverUrlByMediaId[track.id.value] = it }
+                false
+            } else {
+                true
+            }
+        }
+        if (unresolved.isEmpty() || !serverAudioRepository.isServerActive()) return
         val urls = serverAudioRepository.serverStreamUrls(
-            tracks.map { Triple(it.artistName, it.title, it.durationMs) },
+            unresolved.map { Triple(it.artistName, it.title, it.durationMs) },
         )
-        tracks.forEachIndexed { i, t -> urls.getOrNull(i)?.let { serverUrlByMediaId[t.id.value] = it } }
+        unresolved.forEachIndexed { i, t -> urls.getOrNull(i)?.let { serverUrlByMediaId[t.id.value] = it } }
+    }
+
+    override suspend fun refreshCurrentSource() = withContext(Dispatchers.Main) {
+        val player = controller ?: return@withContext
+        val item = player.currentMediaItem ?: return@withContext
+        val id = item.mediaId
+        if (!id.startsWith("server_") && !id.startsWith("jam_")) return@withContext
+        val serverId = id.substringAfter('_').toLongOrNull() ?: return@withContext
+        val uri = serverAudioRepository.serverStreamUrl(serverId) ?: return@withContext
+        if (!uri.startsWith("file://")) return@withContext
+        val index = player.currentMediaItemIndex
+        val position = player.currentPosition
+        val resume = player.playWhenReady
+        serverUrlByMediaId[id] = uri
+        player.replaceMediaItem(index, item.buildUpon().setUri(uri).build())
+        player.seekTo(index, position)
+        player.prepare()
+        if (resume) player.play()
+        updatePlaybackSource(player)
     }
     // MediaController's onEvents only fires on discrete state changes (buffering, play/pause,
     // track change, etc.) - during steady playback that can be many seconds apart, so the
