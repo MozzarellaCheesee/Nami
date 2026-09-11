@@ -5,7 +5,7 @@
 //! - Обновление external_url в config.toml
 
 use std::net::ToSocketAddrs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 #[cfg(unix)]
 use std::process::Command;
 use serde::{Deserialize, Serialize};
@@ -207,113 +207,19 @@ pub fn setup_domain(input: &str, nami_port: u16, config_path: &Path) -> Result<D
         }
     }
 
-    // 3. Проверка и установка Caddy
+    // 3. Настройка Reverse Proxy (Nginx + Certbot либо Caddy)
     #[cfg(unix)]
     {
-        if !is_command_available("caddy") {
-            if !is_sys_root && !can_run_sudo() {
-                return Err(format!(
-                    "Caddy не установлен в системе, а сервис Nami работает без прав root.\n\
-                     Для завершения автоматической настройки выполните в консоли сервера через sudo:\n\
-                     \x20 sudo nami domain {domain}\n\
-                     (команда автоматически установит Caddy, настроит порты 80/443 и выпустит SSL-сертификат)\n\
-                     Или установите Caddy вручную: https://caddyserver.com/docs/install"
-                ));
-            }
-
-            steps.push("• Caddy не найден, запускаем автоматическую установку...".into());
-            install_caddy_linux()?;
-            steps.push("✓ Caddy успешно установлен".into());
+        if is_nginx_present() {
+            setup_nginx(&domain, nami_port, &mut steps, sudo)?;
         } else {
-            steps.push("✓ Reverse Proxy Caddy найден в системе".into());
-        }
-
-        // 4. Генерация Caddyfile
-        let caddyfile_content = format!(
-            "# Автоматическая конфигурация Nami Music Server\n\
-             {domain} {{\n\
-             \x20   reverse_proxy 127.0.0.1:{nami_port} {{\n\
-             \x20       transport http {{\n\
-             \x20           tls_insecure_skip_verify\n\
-             \x20       }}\n\
-             \x20   }}\n\
-             }}\n"
-        );
-
-        let caddy_dir = Path::new("/etc/caddy");
-        if !caddy_dir.exists() {
-            let _ = std::fs::create_dir_all(caddy_dir);
-            if !caddy_dir.exists() {
-                let _ = Command::new("sh").arg("-c").arg(format!("{sudo}mkdir -p /etc/caddy")).output();
-            }
-        }
-        let caddyfile_path = caddy_dir.join("Caddyfile");
-
-        // Бэкап старого конфига, если есть
-        if caddyfile_path.exists() {
-            let backup_path = caddy_dir.join("Caddyfile.nami.bak");
-            let _ = std::fs::copy(&caddyfile_path, &backup_path);
-        }
-
-        if let Err(e) = std::fs::write(&caddyfile_path, &caddyfile_content) {
-            let child = Command::new("sh")
-                .arg("-c")
-                .arg(format!("{sudo}tee /etc/caddy/Caddyfile >/dev/null"))
-                .stdin(std::process::Stdio::piped())
-                .spawn();
-            match child {
-                Ok(mut c) => {
-                    if let Some(mut stdin) = c.stdin.take() {
-                        use std::io::Write;
-                        let _ = stdin.write_all(caddyfile_content.as_bytes());
-                    }
-                    let res = c.wait();
-                    if res.is_err() || !res.unwrap().success() {
-                        return Err(format!("Не удалось записать /etc/caddy/Caddyfile: {e}"));
-                    }
-                }
-                Err(se) => return Err(format!("Не удалось записать /etc/caddy/Caddyfile: {e} ({se})")),
-            }
-        }
-        steps.push(format!("✓ Конфигурация Caddy сохранена для «{domain}» -> 127.0.0.1:{nami_port}"));
-
-        // 5. Запуск и перезагрузка Caddy
-        let reloaded_via_api = ureq::post("http://127.0.0.1:2019/load")
-            .config()
-            .timeout_global(Some(std::time::Duration::from_secs(3)))
-            .build()
-            .header("Content-Type", "text/caddyfile")
-            .send(caddyfile_content.as_bytes())
-            .map(|r| r.status().is_success())
-            .unwrap_or(false);
-
-        if reloaded_via_api {
-            steps.push("✓ Конфигурация Caddy обновлена на лету через Admin API (localhost:2019)".into());
-        } else {
-            let _ = Command::new("sh").arg("-c").arg(format!("{sudo}systemctl enable caddy")).output();
-            let reload = Command::new("sh").arg("-c").arg(format!("{sudo}systemctl reload caddy")).output();
-            let restarted = if reload.is_ok() && reload.unwrap().status.success() {
-                true
-            } else {
-                Command::new("sh")
-                    .arg("-c")
-                    .arg(format!("{sudo}systemctl restart caddy"))
-                    .output()
-                    .map(|o| o.status.success())
-                    .unwrap_or(false)
-            };
-
-            if restarted {
-                steps.push("✓ Служба Caddy запущена: автоматический выпуск Let's Encrypt активен".into());
-            } else {
-                steps.push("⚠ Не удалось перезапустить caddy через systemctl (попробуйте sudo systemctl restart caddy)".into());
-            }
+            setup_caddy(&domain, nami_port, &mut steps, sudo, is_sys_root)?;
         }
     }
 
     #[cfg(not(unix))]
     {
-        steps.push("• В Windows автоматическая установка службы Caddy не поддерживается напрямую, требуется запуск caddy вручную".into());
+        steps.push("• В Windows автоматическая установка веб-сервера не поддерживается напрямую, требуется ручная настройка".into());
     }
 
     // 6. Обновление external_url в config.toml
@@ -406,6 +312,266 @@ fn is_command_available(cmd: &str) -> bool {
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false)
+}
+
+#[cfg(unix)]
+fn is_nginx_present() -> bool {
+    if Path::new("/etc/nginx").exists() {
+        return true;
+    }
+    if is_command_available("nginx") {
+        return true;
+    }
+    let out = Command::new("sh")
+        .arg("-c")
+        .arg("systemctl is-active nginx 2>/dev/null")
+        .output();
+    if let Ok(o) = out {
+        if String::from_utf8_lossy(&o.stdout).trim() == "active" {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(unix)]
+fn write_privileged_file(path: &Path, content: &str, sudo: &str) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        if !parent.exists() {
+            let _ = std::fs::create_dir_all(parent);
+            if !parent.exists() {
+                let _ = Command::new("sh").arg("-c").arg(format!("{sudo}mkdir -p {}", parent.display())).output();
+            }
+        }
+    }
+
+    if let Err(e) = std::fs::write(path, content) {
+        let child = Command::new("sh")
+            .arg("-c")
+            .arg(format!("{sudo}tee {} >/dev/null", path.display()))
+            .stdin(std::process::Stdio::piped())
+            .spawn();
+        match child {
+            Ok(mut c) => {
+                if let Some(mut stdin) = c.stdin.take() {
+                    use std::io::Write;
+                    let _ = stdin.write_all(content.as_bytes());
+                }
+                let res = c.wait();
+                if res.is_err() || !res.unwrap().success() {
+                    return Err(format!("Не удалось записать {}: {e}", path.display()));
+                }
+            }
+            Err(se) => return Err(format!("Не удалось записать {}: {e} ({se})", path.display())),
+        }
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn install_certbot(sudo: &str) -> Result<(), String> {
+    if is_command_available("apt-get") {
+        let script = format!("{sudo}apt-get update -y && {sudo}apt-get install -y certbot python3-certbot-nginx");
+        if let Ok(o) = Command::new("sh").arg("-c").arg(&script).output() {
+            if o.status.success() {
+                return Ok(());
+            }
+        }
+    }
+    if is_command_available("dnf") {
+        let script = format!("{sudo}dnf install -y certbot python3-certbot-nginx");
+        if let Ok(o) = Command::new("sh").arg("-c").arg(&script).output() {
+            if o.status.success() {
+                return Ok(());
+            }
+        }
+    }
+    if is_command_available("pacman") {
+        let script = format!("{sudo}pacman -S --noconfirm certbot certbot-nginx");
+        if let Ok(o) = Command::new("sh").arg("-c").arg(&script).output() {
+            if o.status.success() {
+                return Ok(());
+            }
+        }
+    }
+    if is_command_available("apk") {
+        let script = format!("{sudo}apk add --no-cache certbot certbot-nginx");
+        if let Ok(o) = Command::new("sh").arg("-c").arg(&script).output() {
+            if o.status.success() {
+                return Ok(());
+            }
+        }
+    }
+    Err("Не удалось автоматически установить Certbot. Установите python3-certbot-nginx вручную.".into())
+}
+
+#[cfg(unix)]
+fn setup_nginx(domain: &str, nami_port: u16, steps: &mut Vec<String>, sudo: &str) -> Result<(), String> {
+    steps.push("✓ Обнаружен веб-сервер Nginx: интеграция через Nginx reverse proxy + Certbot".into());
+
+    let nginx_conf = format!(
+        "# Автоматическая конфигурация Nami Music Server для Nginx\n\
+         server {{\n\
+         \x20   listen 80;\n\
+         \x20   server_name {domain};\n\n\
+         \x20   location / {{\n\
+         \x20       proxy_pass https://127.0.0.1:{nami_port};\n\
+         \x20       proxy_ssl_verify off;\n\
+         \x20       proxy_set_header Host $host;\n\
+         \x20       proxy_set_header X-Real-IP $remote_addr;\n\
+         \x20       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n\
+         \x20       proxy_set_header X-Forwarded-Proto $scheme;\n\n\
+         \x20       # Поддержка WebSocket для Jam и синхронизации\n\
+         \x20       proxy_http_version 1.1;\n\
+         \x20       proxy_set_header Upgrade $http_upgrade;\n\
+         \x20       proxy_set_header Connection \"upgrade\";\n\n\
+         \x20       proxy_buffering off;\n\
+         \x20       client_max_body_size 500M;\n\
+         \x20   }}\n\
+         }}\n"
+    );
+
+    let sites_available = Path::new("/etc/nginx/sites-available");
+    let conf_d = Path::new("/etc/nginx/conf.d");
+
+    let (conf_file, needs_symlink) = if sites_available.exists() {
+        (sites_available.join(domain), true)
+    } else if conf_d.exists() {
+        (conf_d.join(format!("{domain}.conf")), false)
+    } else {
+        let _ = Command::new("sh").arg("-c").arg(format!("{sudo}mkdir -p /etc/nginx/conf.d")).output();
+        (PathBuf::from(format!("/etc/nginx/conf.d/{domain}.conf")), false)
+    };
+
+    write_privileged_file(&conf_file, &nginx_conf, sudo)?;
+
+    if needs_symlink {
+        let sites_enabled = Path::new("/etc/nginx/sites-enabled");
+        let _ = Command::new("sh").arg("-c").arg(format!("{sudo}mkdir -p /etc/nginx/sites-enabled")).output();
+        let symlink_path = sites_enabled.join(domain);
+        let _ = Command::new("sh")
+            .arg("-c")
+            .arg(format!("{sudo}ln -sf {} {}", conf_file.display(), symlink_path.display()))
+            .output();
+    }
+
+    steps.push(format!("✓ Конфигурация Nginx сохранена в {}", conf_file.display()));
+
+    let test_out = Command::new("sh").arg("-c").arg(format!("{sudo}nginx -t")).output();
+    if let Ok(out) = test_out {
+        if !out.status.success() {
+            let err = String::from_utf8_lossy(&out.stderr);
+            return Err(format!("Ошибка проверки конфигурации Nginx (nginx -t): {}", err.trim()));
+        }
+    }
+
+    let _ = Command::new("sh").arg("-c").arg(format!("{sudo}systemctl reload nginx || {sudo}systemctl restart nginx")).output();
+    steps.push("✓ Служба Nginx успешно перезагружена".into());
+
+    if !is_command_available("certbot") {
+        steps.push("• Утилита Certbot не найдена, запускаем установку...".into());
+        install_certbot(sudo)?;
+        steps.push("✓ Certbot успешно установлен".into());
+    }
+
+    steps.push(format!("• Получение SSL-сертификата Let's Encrypt для «{domain}» через Certbot..."));
+    let cert_cmd = format!(
+        "{sudo}certbot --nginx -d {domain} --non-interactive --agree-tos --register-unsafely-without-email --redirect"
+    );
+    let cert_res = Command::new("sh").arg("-c").arg(&cert_cmd).output();
+    match cert_res {
+        Ok(out) if out.status.success() => {
+            steps.push("✓ SSL-сертификат Let's Encrypt успешно получен и настроен в Nginx".into());
+        }
+        Ok(out) => {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            let msg = if !stderr.trim().is_empty() { stderr.trim() } else { stdout.trim() };
+            steps.push(format!("⚠ Certbot: {}\nДля ручной настройки выполните: sudo certbot --nginx -d {}", msg, domain));
+        }
+        Err(e) => {
+            steps.push(format!("⚠ Ошибка запуска certbot: {e}. Вы можете настроить SSL командой: sudo certbot --nginx -d {}", domain));
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(unix)]
+fn setup_caddy(domain: &str, nami_port: u16, steps: &mut Vec<String>, sudo: &str, is_sys_root: bool) -> Result<(), String> {
+    if !is_command_available("caddy") {
+        if !is_sys_root && !can_run_sudo() {
+            return Err(format!(
+                "Caddy не установлен в системе, а сервис Nami работает без прав root.\n\
+                 Для завершения автоматической настройки выполните в консоли сервера через sudo:\n\
+                 \x20 sudo nami domain {domain}\n\
+                 (команда автоматически установит Caddy, настроит порты 80/443 и выпустит SSL-сертификат)\n\
+                 Или установите Caddy вручную: https://caddyserver.com/docs/install"
+            ));
+        }
+
+        steps.push("• Caddy не найден, запускаем автоматическую установку...".into());
+        install_caddy_linux()?;
+        steps.push("✓ Caddy успешно установлен".into());
+    } else {
+        steps.push("✓ Reverse Proxy Caddy найден в системе".into());
+    }
+
+    let caddyfile_content = format!(
+        "# Автоматическая конфигурация Nami Music Server\n\
+         {domain} {{\n\
+         \x20   reverse_proxy 127.0.0.1:{nami_port} {{\n\
+         \x20       transport http {{\n\
+         \x20           tls_insecure_skip_verify\n\
+         \x20       }}\n\
+         \x20   }}\n\
+         }}\n"
+    );
+
+    let caddy_dir = Path::new("/etc/caddy");
+    let caddyfile_path = caddy_dir.join("Caddyfile");
+
+    if caddyfile_path.exists() {
+        let backup_path = caddy_dir.join("Caddyfile.nami.bak");
+        let _ = std::fs::copy(&caddyfile_path, &backup_path);
+    }
+
+    write_privileged_file(&caddyfile_path, &caddyfile_content, sudo)?;
+    steps.push(format!("✓ Конфигурация Caddy сохранена для «{domain}» -> 127.0.0.1:{nami_port}"));
+
+    let reloaded_via_api = ureq::post("http://127.0.0.1:2019/load")
+        .config()
+        .timeout_global(Some(std::time::Duration::from_secs(3)))
+        .build()
+        .header("Content-Type", "text/caddyfile")
+        .send(caddyfile_content.as_bytes())
+        .map(|r| r.status().is_success())
+        .unwrap_or(false);
+
+    if reloaded_via_api {
+        steps.push("✓ Конфигурация Caddy обновлена на лету через Admin API (localhost:2019)".into());
+    } else {
+        let _ = Command::new("sh").arg("-c").arg(format!("{sudo}systemctl enable caddy")).output();
+        let reload = Command::new("sh").arg("-c").arg(format!("{sudo}systemctl reload caddy")).output();
+        let restarted = if reload.is_ok() && reload.unwrap().status.success() {
+            true
+        } else {
+            Command::new("sh")
+                .arg("-c")
+                .arg(format!("{sudo}systemctl restart caddy"))
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+        };
+
+        if restarted {
+            steps.push("✓ Служба Caddy запущена: автоматический выпуск Let's Encrypt активен".into());
+        } else {
+            steps.push("⚠ Не удалось перезапустить caddy через systemctl (попробуйте sudo systemctl restart caddy)".into());
+        }
+    }
+
+    Ok(())
 }
 
 #[cfg(unix)]
