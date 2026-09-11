@@ -29,7 +29,7 @@ use crate::users::{self, Ident};
 const BUFFER: usize = 16;
 
 pub struct Session {
-    host_ident: i64,
+    host_ident: (Option<i64>, Option<i64>),
     /// Общая очередь - её может пополнить любой участник.
     queue: Vec<i64>,
     pub current_track: Option<i64>,
@@ -145,7 +145,9 @@ pub fn cleanup_host(st: &Shared, m: &mut Membership, ident: &Ident) {
     if let Some(code) = m.code.take() {
         let db = st.db.lock().unwrap();
         let mut reg = st.jams.0.lock().unwrap();
-        let is_host = reg.get(&code).map_or(false, |s| s.host_ident == ident.state_key());
+        let is_host = reg
+            .get(&code)
+            .is_some_and(|s| s.host_ident == (ident.user_id, ident.device_id));
         if is_host {
             if let Some(s) = reg.remove(&code) {
                 let _ = s.tx.send(serde_json::json!({"type": "jam_closed", "reason": "host_left"}).to_string());
@@ -218,7 +220,7 @@ pub fn handle(st: &Shared, ident: &Ident, m: &mut Membership, text: &str) -> Opt
                 reg.insert(
                     code.clone(),
                     Session {
-                        host_ident: ident.state_key(),
+                        host_ident: (ident.user_id, ident.device_id),
                         queue: Vec::new(),
                         current_track: None,
                         position_ms: 0,
@@ -272,7 +274,9 @@ pub fn handle(st: &Shared, ident: &Ident, m: &mut Membership, text: &str) -> Opt
             if let Some(code) = m.code.take() {
                 let db = st.db.lock().unwrap();
                 let mut reg = st.jams.0.lock().unwrap();
-                let is_host = reg.get(&code).map_or(false, |s| s.host_ident == ident.state_key());
+                let is_host = reg
+                    .get(&code)
+                    .is_some_and(|s| s.host_ident == (ident.user_id, ident.device_id));
                 if is_host {
                     if let Some(s) = reg.remove(&code) {
                         let _ = s.tx.send(serde_json::json!({"type": "jam_closed", "reason": "host_left"}).to_string());
@@ -521,7 +525,7 @@ mod tests {
         registry.0.lock().unwrap().insert(
             "ABC234".into(),
             Session {
-                host_ident: 1,
+                host_ident: (Some(1), None),
                 queue: vec![8],
                 current_track: Some(7),
                 position_ms: 0,

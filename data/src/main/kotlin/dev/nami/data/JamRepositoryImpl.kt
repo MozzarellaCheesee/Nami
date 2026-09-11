@@ -1062,6 +1062,8 @@ class JamRepositoryImpl @Inject constructor(
         val servers = (allHostUrls.value + recentHosts.value).distinct().filter { it.isNotBlank() }
         if (servers.isEmpty()) return
 
+        val reachableServers = mutableSetOf<String>()
+        val activeServerRooms = mutableSetOf<Pair<String, String>>()
         for (srv in servers) {
             val base = srv.trimEnd('/')
             val cert = settingsRepository.namiServerCertSha256.value
@@ -1073,6 +1075,7 @@ class JamRepositoryImpl @Inject constructor(
                     withContext(Dispatchers.IO) {
                         client.newCall(req).execute().use { resp ->
                             if (resp.isSuccessful) {
+                                reachableServers += base
                                 val body = resp.body?.string() ?: return@use
                                 val json = JSONObject(body)
                                 val arr = json.optJSONArray("rooms")
@@ -1081,6 +1084,7 @@ class JamRepositoryImpl @Inject constructor(
                                     for (i in 0 until arr.length()) {
                                         val code = arr.optString(i)?.trim()?.uppercase() ?: continue
                                         if (code.isNotBlank()) {
+                                            activeServerRooms += code to base
                                             val existing = foundRoomsMap[code]
                                             if (existing == null) {
                                                 foundRoomsMap[code] = dev.nami.domain.DiscoveredJamRoom(
@@ -1104,6 +1108,13 @@ class JamRepositoryImpl @Inject constructor(
                 }
             } catch (_: Exception) {}
         }
+        foundRoomsMap.entries.removeAll { (_, room) ->
+            room.source == dev.nami.domain.JamDiscoverySource.RECENT_SERVER &&
+                room.hostUrl?.let { host ->
+                    host in reachableServers && (room.code to host) !in activeServerRooms
+                } == true
+        }
+        _discoveredRooms.value = foundRoomsMap.values.toList()
     }
 
     private fun activeConfig(): NamiServerClient.Config? {
