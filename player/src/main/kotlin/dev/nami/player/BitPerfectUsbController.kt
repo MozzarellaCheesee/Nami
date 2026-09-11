@@ -69,7 +69,11 @@ class BitPerfectUsbController(
 
         try {
             val usage = Media3AudioAttributes.DEFAULT.usage
-            val nativeAttrs = android.media.AudioAttributes.Builder().setUsage(usage).build()
+            val nativeAttrs = android.media.AudioAttributes.Builder()
+                .setUsage(usage)
+                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
+                .setSpatializationBehavior(android.media.AudioAttributes.SPATIALIZATION_BEHAVIOR_NEVER)
+                .build()
             audioManager.setPreferredMixerAttributes(nativeAttrs, usbDevice, bitPerfectAttrs)
         } catch (e: Exception) {
             // Same reasoning: an unsupported/broken vendor implementation degrades to normal
@@ -85,7 +89,11 @@ class BitPerfectUsbController(
             ?: return
         try {
             val usage = Media3AudioAttributes.DEFAULT.usage
-            val nativeAttrs = android.media.AudioAttributes.Builder().setUsage(usage).build()
+            val nativeAttrs = android.media.AudioAttributes.Builder()
+                .setUsage(usage)
+                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
+                .setSpatializationBehavior(android.media.AudioAttributes.SPATIALIZATION_BEHAVIOR_NEVER)
+                .build()
             // Mandatory per План.md: never leave a preferred mixer attribute set once the app
             // isn't using it, or the user loses system sounds on that USB output entirely.
             audioManager.clearPreferredMixerAttributes(nativeAttrs, usbDevice)

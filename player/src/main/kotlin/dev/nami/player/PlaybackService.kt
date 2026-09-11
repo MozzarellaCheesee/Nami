@@ -7,8 +7,11 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import dev.nami.player.net.pinnedOkHttpDataSourceFactory
 import androidx.media3.session.CommandButton
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
@@ -451,8 +454,15 @@ class PlaybackService : MediaSessionService() {
         } else {
             ExoPlayer.Builder(this)
         }
+        // Сеть (стрим с сервера NAMI) - через OkHttp с пиннингом отпечатка: иначе
+        // самоподписанный сертификат сервера в LAN по https://<IP> ронял бы рукопожатие.
+        // Локальные файлы этот же factory отдаёт как обычно (DefaultDataSource делегирует
+        // file:// встроенному FileDataSource).
+        val httpFactory = pinnedOkHttpDataSourceFactory { settingsRepository.namiServerCertSha256.value }
+        val dataSourceFactory = DefaultDataSource.Factory(this, httpFactory)
         return builder
             .setLoadControl(loadControl)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
             .setAudioAttributes(audioAttributes, handleAudioFocus)
             // ACTION_AUDIO_BECOMING_NOISY - без него отключение BT-наушников/выдёргивание
             // проводных на паузу не ставило, звук просто переключался на динамик и продолжал

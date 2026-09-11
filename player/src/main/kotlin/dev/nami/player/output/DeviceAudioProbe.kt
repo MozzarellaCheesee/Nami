@@ -60,6 +60,11 @@ object DeviceAudioProbe {
                     AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_MEDIA)
                         .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .apply {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S_V2) {
+                                setSpatializationBehavior(AudioAttributes.SPATIALIZATION_BEHAVIOR_NEVER)
+                            }
+                        }
                         .build(),
                 )
                 .setAudioFormat(

@@ -30,48 +30,47 @@ class BackupRepositoryImpl @Inject constructor(
     private val tagDao: TagDao,
 ) : BackupRepository {
 
-    override suspend fun exportLibrary(destinationUri: String): Boolean =
-        withContext(Dispatchers.IO) {
-            try {
-                val manifest = buildManifest()
-                val resolver = context.contentResolver
-                resolver.openOutputStream(android.net.Uri.parse(destinationUri))?.use { out ->
-                    ZipOutputStream(out).use { zip ->
-                        zip.putNextEntry(ZipEntry("manifest.json"))
-                        zip.write(manifest.toString(2).toByteArray())
-                        zip.closeEntry()
+    override suspend fun exportLibrary(
+        destinationUri: String,
+        onProgress: ((dev.nami.domain.BackupProgress) -> Unit)?,
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val manifest = buildManifest()
+            val resolver = context.contentResolver
+            val rawTracks = trackDao.allRaw().filter { File(it.path).isFile }
+            val totalCount = rawTracks.size + 1
+            var currentIdx = 0
 
-                        // Раньше архив собирался листингом musicDir.listFiles() - на реальном
-                        // устройстве это давало пустой архив (только manifest.json без единого
-                        // трека), хотя все файлы реально лежат на диске. По реальным путям из БД
-                        // (t.path - тот же абсолютный путь, что уже используется в LibraryHealth
-                        // для проверки File(it.path).exists()) надёжнее в любом случае: не
-                        // зависит от того, плоско ли лежат файлы в одном каталоге, и естественно
-                        // пропускает треки без локальной копии (например будущий режим
-                        // наблюдения за папкой без копирования, П.md §2), а не падает на них.
-                        val usedNames = HashSet<String>()
-                        trackDao.allRaw().forEach { t ->
-                            val file = File(t.path)
-                            if (!file.isFile) return@forEach
-                            // Разные треки могут называться одинаково (UUID-имена от импорта
-                            // обычно уникальны, но не гарантированно для любых путей) -
-                            // избегаем перезаписи одной entry другой внутри архива.
-                            var entryName = file.name
-                            var suffix = 1
-                            while (!usedNames.add(entryName)) {
-                                entryName = "${file.nameWithoutExtension}_${suffix++}.${file.extension}"
-                            }
-                            zip.putNextEntry(ZipEntry("music/$entryName"))
-                            file.inputStream().use { it.copyTo(zip) }
-                            zip.closeEntry()
+            onProgress?.invoke(dev.nami.domain.BackupProgress(currentIdx, totalCount, "manifest.json"))
+
+            resolver.openOutputStream(android.net.Uri.parse(destinationUri))?.use { out ->
+                ZipOutputStream(out).use { zip ->
+                    zip.putNextEntry(ZipEntry("manifest.json"))
+                    zip.write(manifest.toString(2).toByteArray())
+                    zip.closeEntry()
+                    currentIdx++
+
+                    val usedNames = HashSet<String>()
+                    rawTracks.forEach { t ->
+                        val file = File(t.path)
+                        onProgress?.invoke(dev.nami.domain.BackupProgress(currentIdx, totalCount, file.name))
+                        var entryName = file.name
+                        var suffix = 1
+                        while (!usedNames.add(entryName)) {
+                            entryName = "${file.nameWithoutExtension}_${suffix++}.${file.extension}"
                         }
+                        zip.putNextEntry(ZipEntry("music/$entryName"))
+                        file.inputStream().use { it.copyTo(zip) }
+                        zip.closeEntry()
+                        currentIdx++
                     }
-                } ?: return@withContext false
-                true
-            } catch (e: Exception) {
-                false
-            }
+                }
+            } ?: return@withContext false
+            true
+        } catch (e: Exception) {
+            false
         }
+    }
 
     private suspend fun buildManifest(): JSONObject {
         val root = JSONObject()

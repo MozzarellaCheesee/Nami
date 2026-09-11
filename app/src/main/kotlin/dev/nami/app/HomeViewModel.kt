@@ -134,6 +134,12 @@ class HomeViewModel @Inject constructor(
     fun pullDrop(device: DiscoveredDevice) {
         viewModelScope.launch { localShareRepository.pullDrop(device) }
     }
+    fun addCurrentListenTogetherTrackToLibrary(onDone: ((Boolean) -> Unit)? = null) {
+        viewModelScope.launch {
+            val ok = localShareRepository.addCurrentListenTogetherTrackToLibrary()
+            onDone?.invoke(ok)
+        }
+    }
 
     private suspend fun rebuild(blocks: List<HomeBlockConfig>, allTracks: List<Track>) {
         val enabledTypes = blocks.filter { it.enabled }.map { it.type }.toSet()

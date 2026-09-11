@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -215,12 +216,22 @@ fun HomeScreen(
                     HomeBlockType.NEARBY_NETWORK -> {
                         item { HomeSectionHeader("Рядом") }
                         item {
+                            val context = LocalContext.current
                             HomeNearbyBlock(
                                 devices = nearbyDevices,
                                 guestState = guestState,
                                 onJoinListenTogether = viewModel::joinListenTogether,
                                 onPullDrop = viewModel::pullDrop,
                                 onLeaveListenTogether = viewModel::leaveListenTogether,
+                                onAddToLibrary = {
+                                    viewModel.addCurrentListenTogetherTrackToLibrary { ok ->
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            if (ok) "Трек добавлен в библиотеку" else "Не удалось сохранить трек",
+                                            android.widget.Toast.LENGTH_SHORT,
+                                        ).show()
+                                    }
+                                },
                                 onOpenLocalShare = onOpenLocalShare,
                             )
                         }
@@ -459,6 +470,7 @@ private fun HomeNearbyBlock(
     onJoinListenTogether: (dev.nami.domain.DiscoveredDevice) -> Unit,
     onPullDrop: (dev.nami.domain.DiscoveredDevice) -> Unit,
     onLeaveListenTogether: () -> Unit,
+    onAddToLibrary: (() -> Unit)? = null,
     onOpenLocalShare: () -> Unit,
 ) {
     Column(
@@ -471,12 +483,20 @@ private fun HomeNearbyBlock(
         if (guestState != null) {
             Text("Слушаю вместе с ${guestState.hostName}", color = NamiColors.Wakaba, style = MaterialTheme.typography.bodyMedium)
             Text(guestState.trackTitle ?: "-", color = NamiColors.Paper100, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            dev.nami.core.designsystem.NamiPill(
-                text = "Выйти",
-                color = NamiColors.Paper70,
-                modifier = Modifier.padding(top = 10.dp),
-                onClick = onLeaveListenTogether,
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 10.dp)) {
+                if (!guestState.downloading && guestState.cachedPath != null && onAddToLibrary != null) {
+                    dev.nami.core.designsystem.NamiPill(
+                        text = "В библиотеку",
+                        color = NamiColors.Shu,
+                        onClick = onAddToLibrary,
+                    )
+                }
+                dev.nami.core.designsystem.NamiPill(
+                    text = "Выйти",
+                    color = NamiColors.Paper70,
+                    onClick = onLeaveListenTogether,
+                )
+            }
         } else if (devices.isEmpty()) {
             Text("Пока никого не видно рядом", color = NamiColors.Paper40, style = MaterialTheme.typography.bodyMedium)
         } else {

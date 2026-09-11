@@ -370,6 +370,25 @@ class LocalShareRepositoryImpl @Inject constructor(
     // withContext(IO) не только ради сети (её httpDownload уже переключает сам), но и ради записи
     // скачанного трека на диск - вызов приходит из viewModelScope, то есть из main-потока.
     override suspend fun pullDrop(device: DiscoveredDevice): Boolean = withContext(Dispatchers.IO) {
+        val meta = httpGetJson(device, "/dropmeta")
+        val remoteTitle = meta?.optString("title")?.trim()
+        val remoteArtist = meta?.optString("artistName")?.trim()
+        val remoteDuration = meta?.optLong("durationMs", 0L) ?: 0L
+
+        // Защита от дубликатов (Проблемы.md §2): если трек уже есть в локальной библиотеке,
+        // не импортируем файл заново и не плодим дубликаты альбома/трека.
+        if (!remoteTitle.isNullOrBlank()) {
+            val existing = libraryRepository.allTracksOrdered().firstOrNull { local ->
+                local.title.equals(remoteTitle, ignoreCase = true) &&
+                    (remoteArtist.isNullOrBlank() || local.artistName.isNullOrBlank() || local.artistName.equals(remoteArtist, ignoreCase = true)) &&
+                    (remoteDuration == 0L || Math.abs(local.durationMs - remoteDuration) <= MATCH_DURATION_TOLERANCE_MS)
+            }
+            if (existing != null) {
+                applyRemoteMeta(device, meta, existing.id)
+                return@withContext true
+            }
+        }
+
         val (bytes, fileName) = httpDownload(device, "/drop") ?: return@withContext false
         // Уникальность даёт ПАПКА, а не префикс в имени файла: с "uuid_Fall Of Tears.mp3" импорт
         // подхватывал этот uuid как часть названия трека у тех файлов, где нет тегов.
@@ -382,7 +401,7 @@ class LocalShareRepositoryImpl @Inject constructor(
             val before = libraryRepository.allTracksOrdered().map { it.id.value }.toSet()
             libraryRepository.import(ImportSource.Files(listOf(Uri.fromFile(scratchFile).toString()))).collect { }
             val imported = libraryRepository.allTracksOrdered().firstOrNull { it.id.value !in before }
-            if (imported != null) applyRemoteMeta(device, httpGetJson(device, "/dropmeta"), imported.id)
+            if (imported != null) applyRemoteMeta(device, meta, imported.id)
             true
         } catch (e: Exception) {
             Log.w(TAG, "drop import failed", e)
@@ -585,15 +604,31 @@ class LocalShareRepositoryImpl @Inject constructor(
         val device = guestHostDevice
         val remoteTrackId = state.trackId?.value
         return@withContext try {
+            val meta = if (device != null && remoteTrackId != null) httpGetJson(device, "/meta/$remoteTrackId") else null
+            val remoteTitle = meta?.optString("title")?.trim() ?: state.trackTitle.orEmpty().trim()
+            val remoteArtist = meta?.optString("artistName")?.trim() ?: state.artistName?.trim()
+
+            // Защита от дубликатов: не импортируем повторно, если трек уже есть в библиотеке
+            if (remoteTitle.isNotBlank()) {
+                val existing = libraryRepository.allTracksOrdered().firstOrNull { local ->
+                    local.title.equals(remoteTitle, ignoreCase = true) &&
+                        (remoteArtist.isNullOrBlank() || local.artistName.isNullOrBlank() || local.artistName.equals(remoteArtist, ignoreCase = true))
+                }
+                if (existing != null) {
+                    if (meta != null && device != null) {
+                        applyRemoteMeta(device, meta, existing.id)
+                    }
+                    return@withContext true
+                }
+            }
+
             // Ровно та же схема, что и Wi-Fi Drop: сначала файл, потом теги/обложка/фото артиста с
-            // того же хоста. Раньше импортировался только аудиофайл, и добавленный из совместного
-            // прослушивания трек оседал в библиотеке безымянным и без картинок, в отличие от того
-            // же самого трека, полученного раздачей.
+            // того же хоста.
             val before = libraryRepository.allTracksOrdered().map { it.id.value }.toSet()
             libraryRepository.import(ImportSource.Files(listOf(Uri.fromFile(File(path)).toString()))).collect { }
             val imported = libraryRepository.allTracksOrdered().firstOrNull { it.id.value !in before }
             if (imported != null && device != null && remoteTrackId != null) {
-                applyRemoteMeta(device, httpGetJson(device, "/meta/$remoteTrackId"), imported.id)
+                applyRemoteMeta(device, meta ?: httpGetJson(device, "/meta/$remoteTrackId"), imported.id)
             }
             true
         } catch (e: Exception) {

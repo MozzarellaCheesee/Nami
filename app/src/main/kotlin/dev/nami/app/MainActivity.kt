@@ -18,6 +18,10 @@ import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Image
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -251,11 +255,42 @@ class MainActivity : ComponentActivity() {
                 window.attributes = attrs
             }
             val exportResult by backupViewModel.exportResult.collectAsState()
+            val exportProgress by backupViewModel.exportProgress.collectAsState()
             LaunchedEffect(exportResult) {
                 val result = exportResult ?: return@LaunchedEffect
                 val message = if (result) "Библиотека экспортирована" else "Ошибка экспорта"
                 android.widget.Toast.makeText(this@MainActivity, message, android.widget.Toast.LENGTH_SHORT).show()
                 backupViewModel.exportResultShown()
+            }
+            exportProgress?.let { progress ->
+                val fraction = if (progress.total > 0) progress.current.toFloat() / progress.total else 0f
+                dev.nami.core.designsystem.NamiAlertDialog(
+                    onDismissRequest = {},
+                    title = { androidx.compose.material3.Text("Экспорт библиотеки", color = dev.nami.core.designsystem.NamiColors.Paper100) },
+                    text = {
+                        androidx.compose.foundation.layout.Column(
+                            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                        ) {
+                            androidx.compose.material3.Text(
+                                text = "Файл ${progress.current} из ${progress.total}: ${progress.currentFileName}",
+                                color = dev.nami.core.designsystem.NamiColors.Paper70,
+                                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                            )
+                            androidx.compose.material3.LinearProgressIndicator(
+                                progress = { fraction },
+                                modifier = Modifier.fillMaxWidth().height(6.dp),
+                                color = dev.nami.core.designsystem.NamiColors.Shu,
+                                trackColor = dev.nami.core.designsystem.NamiColors.Ink700,
+                            )
+                            androidx.compose.material3.Text(
+                                text = "${(fraction * 100).toInt()}%",
+                                color = dev.nami.core.designsystem.NamiColors.Paper40,
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    },
+                    confirmButton = {},
+                )
             }
             LaunchedEffect(hideSystemBars) {
                 val controller = WindowInsetsControllerCompat(window, window.decorView)

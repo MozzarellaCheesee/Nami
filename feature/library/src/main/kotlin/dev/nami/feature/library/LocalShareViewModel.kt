@@ -106,8 +106,11 @@ class LocalShareViewModel @Inject constructor(
     fun joinListenTogether(device: DiscoveredDevice) = repository.joinListenTogether(device)
     fun leaveListenTogether() = repository.leaveListenTogether()
 
-    fun addCurrentListenTogetherTrackToLibrary() {
-        viewModelScope.launch { repository.addCurrentListenTogetherTrackToLibrary() }
+    fun addCurrentListenTogetherTrackToLibrary(onDone: ((Boolean) -> Unit)? = null) {
+        viewModelScope.launch {
+            val ok = repository.addCurrentListenTogetherTrackToLibrary()
+            onDone?.invoke(ok)
+        }
     }
 
     fun setListenTogetherHost(enabled: Boolean) = repository.setListenTogetherHost(enabled)

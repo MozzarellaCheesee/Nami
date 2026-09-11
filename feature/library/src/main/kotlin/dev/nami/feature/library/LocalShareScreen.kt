@@ -256,7 +256,15 @@ fun LocalShareScreen(
                                 }
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 10.dp)) {
                                     if (!g.downloading && g.cachedPath != null) {
-                                        Pill("В библиотеку", NamiColors.Shu) { viewModel.addCurrentListenTogetherTrackToLibrary() }
+                                        Pill("В библиотеку", NamiColors.Shu) {
+                                            viewModel.addCurrentListenTogetherTrackToLibrary { ok ->
+                                                android.widget.Toast.makeText(
+                                                    context,
+                                                    if (ok) "Трек добавлен в библиотеку" else "Не удалось сохранить трек",
+                                                    android.widget.Toast.LENGTH_SHORT,
+                                                ).show()
+                                            }
+                                        }
                                     }
                                     Pill("Выйти", NamiColors.Paper70) { viewModel.leaveListenTogether() }
                                 }
