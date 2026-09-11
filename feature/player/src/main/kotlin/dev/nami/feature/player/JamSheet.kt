@@ -34,6 +34,7 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.QrCode
+import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -238,6 +239,7 @@ private fun JamSheetNoSession(
     val recentHosts by viewModel.recentHosts.collectAsState()
     val discoveredRooms by viewModel.discoveredRooms.collectAsState()
     val context = LocalContext.current
+    var showCameraScanner by remember { mutableStateOf(false) }
 
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -250,6 +252,19 @@ private fun JamSheetNoSession(
                 Toast.makeText(context, "QR-код не найден на изображении", Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    if (showCameraScanner) {
+        JamCameraScannerDialog(
+            onDismiss = { showCameraScanner = false },
+            onQrScanned = { qrText ->
+                if (viewModel.joinFromQrText(qrText)) {
+                    Toast.makeText(context, "Подключение к комнате...", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "Некорректный QR-код Джема", Toast.LENGTH_SHORT).show()
+                }
+            },
+        )
     }
 
     Column(
@@ -481,47 +496,89 @@ private fun JamSheetNoSession(
                     style = MaterialTheme.typography.bodyMedium,
                     color = NamiColors.Paper70,
                 )
-                OutlinedTextField(
-                    value = joinCode,
-                    onValueChange = { input ->
-                        joinCode = if (input.startsWith("nami://") || input.contains("http://") || input.contains("https://")) {
-                            input.trim()
-                        } else {
-                            input.uppercase().filter { it in ALLOWED_JAM_CODE_CHARS }.take(6)
-                        }
-                    },
-                    enabled = true,
-                    label = { Text("Код комнаты или ссылка") },
-                    placeholder = { Text("Например ABC234 или ссылка") },
-                    singleLine = true,
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(NamiRadius.Card),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = NamiColors.Paper100,
-                        unfocusedTextColor = NamiColors.Paper100,
-                        focusedBorderColor = NamiColors.Shu,
-                        unfocusedBorderColor = NamiColors.Ink600,
-                        focusedLabelColor = NamiColors.Shu,
-                        unfocusedLabelColor = NamiColors.Paper40,
-                        cursorColor = NamiColors.Shu,
-                    ),
-                )
-
-                OutlinedButton(
-                    onClick = { galleryLauncher.launch("image/*") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(NamiRadius.Button),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = NamiColors.Paper100),
-                    border = BorderStroke(1.dp, NamiColors.Ink600),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Image,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = NamiColors.Paper70,
+                    OutlinedTextField(
+                        value = joinCode,
+                        onValueChange = { input ->
+                            joinCode = if (input.startsWith("nami://") || input.contains("http://") || input.contains("https://")) {
+                                input.trim()
+                            } else {
+                                input.uppercase().filter { it in ALLOWED_JAM_CODE_CHARS }.take(6)
+                            }
+                        },
+                        enabled = true,
+                        label = { Text("Код комнаты или ссылка") },
+                        placeholder = { Text("Например ABC234 или ссылка") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(NamiRadius.Card),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = NamiColors.Paper100,
+                            unfocusedTextColor = NamiColors.Paper100,
+                            focusedBorderColor = NamiColors.Shu,
+                            unfocusedBorderColor = NamiColors.Ink600,
+                            focusedLabelColor = NamiColors.Shu,
+                            unfocusedLabelColor = NamiColors.Paper40,
+                            cursorColor = NamiColors.Shu,
+                        ),
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Выбрать QR-код из галереи (скриншот)", style = MaterialTheme.typography.bodyMedium)
+
+                    IconButton(
+                        onClick = { showCameraScanner = true },
+                        modifier = Modifier
+                            .size(52.dp)
+                            .background(NamiColors.Ink700, RoundedCornerShape(NamiRadius.Card)),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.QrCodeScanner,
+                            contentDescription = "Сканировать QR камерой",
+                            tint = NamiColors.Paper100,
+                        )
+                    }
+                }
+
+                // Кнопки быстрого сканирования
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = { showCameraScanner = true },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(NamiRadius.Button),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = NamiColors.Paper100),
+                        border = BorderStroke(1.dp, NamiColors.Shu.copy(alpha = 0.5f)),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.QrCodeScanner,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = NamiColors.Shu,
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Камерой", style = MaterialTheme.typography.bodyMedium)
+                    }
+
+                    OutlinedButton(
+                        onClick = { galleryLauncher.launch("image/*") },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(NamiRadius.Button),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = NamiColors.Paper100),
+                        border = BorderStroke(1.dp, NamiColors.Ink600),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Image,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = NamiColors.Paper70,
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Из галереи", style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
 
                 // Недавние серверы хостов для быстрого выбора
