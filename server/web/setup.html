@@ -84,10 +84,10 @@ input:focus { outline: none; border-color: #666; }
 <!-- Экран 1: Папка с музыкой -->
 <div class="step" id="step1">
   <h1>Где находится ваша музыка?</h1>
-  <p class="subtitle">Укажите папку с аудиофайлами. Можно добавить несколько.</p>
+  <p class="subtitle">Укажите папку с аудиофайлами на сервере (например: <code>/var/lib/nami/music</code>). Если музыки пока нет, шаг можно пропустить — треки можно будет загрузить со смартфона.</p>
   <div id="status1" class="status" style="display:none"></div>
-  <label>Путь к папке:</label>
-  <input type="text" id="musicPath" placeholder="/home/user/Music">
+  <label>Путь к папке (необязательно):</label>
+  <input type="text" id="musicPath" placeholder="/var/lib/nami/music">
   <button class="btn btn-secondary" onclick="validateAndAdd()">Добавить папку</button>
   <div class="music-dirs" id="musicDirs"></div>
   <div class="btn-group">
@@ -101,7 +101,7 @@ input:focus { outline: none; border-color: #666; }
   <h1>Сетевые настройки</h1>
   <p class="subtitle">Порт сервера и TLS-шифрование.</p>
   <label>Порт:</label>
-  <input type="number" id="port" value="3030">
+  <input type="number" id="port" value="4533">
   <div class="checkbox-group">
     <label><input type="checkbox" id="tls" checked> Включить TLS (рекомендуется)</label>
   </div>
@@ -225,10 +225,6 @@ function showStep(n) {
 }
 
 function nextStep() {
-  if (currentStep === 1 && musicDirs.length === 0) {
-    showStatus('status1', 'error', 'Добавьте хотя бы одну папку')
-    return
-  }
   if (currentStep === 3) {
     const user = document.getElementById('adminUser').value
     const pass = document.getElementById('adminPass').value
@@ -255,16 +251,22 @@ async function validateAndAdd() {
   const path = document.getElementById('musicPath').value.trim()
   if (!path) return
 
-  const res = await fetch('/setup/api/validate-path?path=' + encodeURIComponent(path))
-  const data = await res.json()
+  try {
+    const res = await fetch('/setup/api/validate-path?path=' + encodeURIComponent(path))
+    const data = await res.json()
 
-  if (data.ok) {
-    musicDirs.push(path)
-    renderMusicDirs()
-    document.getElementById('musicPath').value = ''
-    showStatus('status1', 'success', data.message)
-  } else {
-    showStatus('status1', 'error', data.message)
+    if (data.ok) {
+      if (!musicDirs.includes(path)) {
+        musicDirs.push(path)
+        renderMusicDirs()
+      }
+      document.getElementById('musicPath').value = ''
+      showStatus('status1', 'success', data.message)
+    } else {
+      showStatus('status1', 'error', data.message)
+    }
+  } catch (e) {
+    showStatus('status1', 'error', 'Ошибка связи с сервером при проверке пути: ' + e.message)
   }
 }
 

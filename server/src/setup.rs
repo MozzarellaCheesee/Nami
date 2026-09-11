@@ -54,40 +54,52 @@ struct ValidatePathResult {
 async fn validate_path(Query(q): Query<ValidatePathQuery>) -> Json<ValidatePathResult> {
     let path = Path::new(&q.path);
     if !path.is_dir() {
-        return Json(ValidatePathResult {
-            ok: false,
-            exists: path.exists(),
-            audio_files: 0,
-            message: if path.exists() { "Это не папка" } else { "Папка не существует" }.into(),
-        });
+        if !path.exists() {
+            if let Err(e) = std::fs::create_dir_all(path) {
+                return Json(ValidatePathResult {
+                    ok: false,
+                    exists: false,
+                    audio_files: 0,
+                    message: format!("Папка не существует и её не удалось создать: {e}"),
+                });
+            }
+        } else {
+            return Json(ValidatePathResult {
+                ok: false,
+                exists: true,
+                audio_files: 0,
+                message: "Указанный путь существует, но это файл, а не папка".into(),
+            });
+        }
     }
-    let audio = std::fs::read_dir(path)
-        .map(|entries| {
-            entries
-                .filter_map(|e| e.ok())
-                .filter(|e| {
-                    e.path()
-                        .extension()
-                        .and_then(|s| s.to_str())
-                        .map(|x| {
-                            matches!(
-                                x.to_ascii_lowercase().as_str(),
-                                "mp3" | "flac" | "m4a" | "ogg" | "opus" | "wav"
-                            )
-                        })
-                        .unwrap_or(false)
+
+    let audio = walkdir::WalkDir::new(path)
+        .max_depth(5)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+        .filter(|e| {
+            e.path()
+                .extension()
+                .and_then(|s| s.to_str())
+                .map(|x| {
+                    matches!(
+                        x.to_ascii_lowercase().as_str(),
+                        "mp3" | "flac" | "m4a" | "ogg" | "opus" | "wav" | "aac" | "alac" | "aif" | "aiff"
+                    )
                 })
-                .count()
+                .unwrap_or(false)
         })
-        .unwrap_or(0);
+        .count();
+
     Json(ValidatePathResult {
-        ok: audio > 0,
+        ok: true,
         exists: true,
         audio_files: audio,
         message: if audio > 0 {
-            format!("Найдено {audio} аудиофайлов")
+            format!("Папка добавлена (найдено {audio} аудиофайлов)")
         } else {
-            "В папке нет аудиофайлов на верхнем уровне (вложенные тоже подхватятся при сканировании)".into()
+            "Папка добавлена (пока пустая, треки можно загрузить позже из приложения)".into()
         },
     })
 }
@@ -111,15 +123,22 @@ async fn save_config(Json(req): Json<SaveConfigRequest>) -> Response {
         return (StatusCode::BAD_REQUEST, Json(msg("Логин обязателен, пароль - от 8 символов")))
             .into_response();
     }
-    if req.music_dirs.iter().all(|d| d.trim().is_empty()) {
-        return (StatusCode::BAD_REQUEST, Json(msg("Укажите хотя бы одну папку с музыкой")))
-            .into_response();
+
+    let mut music_dirs = req
+        .music_dirs
+        .into_iter()
+        .map(|d| d.trim().to_string())
+        .filter(|d| !d.is_empty())
+        .collect::<Vec<_>>();
+
+    if music_dirs.is_empty() {
+        let _ = std::fs::create_dir_all("music");
+        music_dirs.push("music".to_string());
     }
 
-    let dirs = req
-        .music_dirs
+    let dirs = music_dirs
         .iter()
-        .map(|p| format!("\"{}\"", p.trim().replace('\\', "\\\\").replace('"', "")))
+        .map(|p| format!("\"{}\"", p.replace('\\', "\\\\").replace('"', "")))
         .collect::<Vec<_>>()
         .join(", ");
     // Нормализуем внешний адрес: без завершающего слэша, с явной схемой.
