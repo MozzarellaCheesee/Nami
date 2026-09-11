@@ -2,6 +2,11 @@ package dev.nami.data
 
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.nami.core.database.dao.TrackDao
+import dev.nami.core.model.AlbumId
+import dev.nami.core.model.ArtistId
+import dev.nami.core.model.Track
+import dev.nami.core.model.TrackId
 import dev.nami.domain.ServerLibraryRepository
 import dev.nami.domain.ServerTrackMeta
 import dev.nami.domain.SettingsRepository
@@ -21,6 +26,7 @@ import javax.inject.Singleton
 class ServerLibraryRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val settingsRepository: SettingsRepository,
+    private val trackDao: TrackDao,
 ) : ServerLibraryRepository {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -32,28 +38,125 @@ class ServerLibraryRepositoryImpl @Inject constructor(
         _uploadProgress.value = null
     }
 
-    override fun uploadTracksBackground(paths: List<String>) {
-        if (paths.isEmpty()) return
+    override fun uploadTracksBackground(tracks: List<Track>) {
+        if (tracks.isEmpty()) return
         uploadJob?.cancel()
         uploadJob = scope.launch {
+            val cfg = activeConfig()
+            if (cfg == null) {
+                _uploadProgress.value = "Сервер не подключён"
+                return@launch
+            }
+
+            val total = tracks.size
+            _uploadProgress.value = "Проверка наличия на сервере: 0/$total…"
+
+            val matchRequests = tracks.map {
+                NamiServerClient.MatchTrackRequest(
+                    title = it.title,
+                    artist = it.artistName,
+                    durationMs = it.durationMs,
+                    fileHash = it.fileHash,
+                )
+            }
+
+            val matchResults = NamiServerClient.matchTracks(cfg, matchRequests) { done, _ ->
+                _uploadProgress.value = "Проверка наличия на сервере: $done/$total…"
+            }
+
+            val toUpload = mutableListOf<Track>()
+            var alreadyOnServer = 0
+
+            if (matchResults != null && matchResults.size == tracks.size) {
+                for (i in tracks.indices) {
+                    if (matchResults[i] != null) {
+                        alreadyOnServer++
+                    } else {
+                        toUpload.add(tracks[i])
+                    }
+                }
+            } else {
+                toUpload.addAll(tracks)
+            }
+
+            if (toUpload.isEmpty()) {
+                _uploadProgress.value = "Все треки ($total) уже есть на сервере"
+                return@launch
+            }
+
+            val needUploadCount = toUpload.size
             var uploaded = 0
             var duplicates = 0
             var failed = 0
-            val total = paths.size
-            _uploadProgress.value = "Отправка на сервер: 0/$total…"
-            for ((index, path) in paths.withIndex()) {
-                val res = uploadLocalTrack(path)
+
+            _uploadProgress.value = if (alreadyOnServer > 0) {
+                "На сервере уже $alreadyOnServer из $total. Отправка новых: 0/$needUploadCount…"
+            } else {
+                "Отправка на сервер: 0/$needUploadCount…"
+            }
+
+            for ((index, track) in toUpload.withIndex()) {
+                val res = uploadLocalTrack(track.path)
                 if (res == "Уже есть на сервере") duplicates++
                 else if (res != null) uploaded++
                 else failed++
-                _uploadProgress.value = "Отправка на сервер: ${index + 1}/$total…"
+
+                _uploadProgress.value = if (alreadyOnServer > 0) {
+                    "На сервере уже $alreadyOnServer из $total. Отправка новых: ${index + 1}/$needUploadCount…"
+                } else {
+                    "Отправка на сервер: ${index + 1}/$needUploadCount…"
+                }
             }
+
             _uploadProgress.value = buildString {
                 append("Выгрузка завершена: ")
                 if (uploaded > 0) append("загружено $uploaded ")
-                if (duplicates > 0) append("(уже было $duplicates) ")
+                val totalAlready = alreadyOnServer + duplicates
+                if (totalAlready > 0) append("(уже было на сервере: $totalAlready) ")
                 if (failed > 0) append("ошибок $failed")
             }.trim()
+        }
+    }
+
+    override fun uploadPathsBackground(paths: List<String>) {
+        if (paths.isEmpty()) return
+        scope.launch {
+            val dbMap = runCatching {
+                trackDao.allOrderedWithArtwork().associateBy { it.track.path }
+            }.getOrNull()
+
+            val tracks = paths.map { path ->
+                val item = dbMap?.get(path)
+                if (item != null) {
+                    Track(
+                        id = TrackId(item.track.id),
+                        title = item.track.title,
+                        artistId = item.track.artistId?.let { ArtistId(it) },
+                        albumId = item.track.albumId?.let { AlbumId(it) },
+                        durationMs = item.track.durationMs,
+                        path = item.track.path,
+                        format = item.track.format,
+                        sizeBytes = item.track.sizeBytes,
+                        dateAdded = item.track.dateAdded,
+                        artistName = item.artistName,
+                        fileHash = item.track.fileHash,
+                    )
+                } else {
+                    val f = File(path)
+                    Track(
+                        id = TrackId(path),
+                        title = f.nameWithoutExtension,
+                        artistId = null,
+                        albumId = null,
+                        durationMs = 0L,
+                        path = path,
+                        format = f.extension,
+                        sizeBytes = f.length(),
+                        dateAdded = System.currentTimeMillis(),
+                    )
+                }
+            }
+            uploadTracksBackground(tracks)
         }
     }
 

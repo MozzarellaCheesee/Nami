@@ -70,19 +70,61 @@ object NamiServerClient {
      * (исполнитель, название, длительность ±2 с). Возвращает массив той же длины и
      * порядка: id сервера либо null. null весь ответ - сеть/ошибка.
      */
-    fun matchTrackIds(cfg: Config, tracks: List<Triple<String?, String, Long>>): List<Long?>? {
-        val arr = org.json.JSONArray()
-        for ((artist, title, dur) in tracks) {
-            val o = JSONObject().put("title", title).put("duration_ms", dur)
-            if (!artist.isNullOrBlank()) o.put("artist", artist)
-            arr.put(o)
+    data class MatchTrackRequest(
+        val title: String,
+        val artist: String?,
+        val durationMs: Long,
+        val fileHash: String? = null,
+    )
+
+    /**
+     * POST /api/tracks/match - сопоставляет треки клиента с id библиотеки сервера по
+     * хешу файла или (исполнитель, название, длительность ±2 с). Возвращает массив той же длины и
+     * порядка: id сервера либо null. null весь ответ - сеть/ошибка.
+     * Запросы автоматически разбиваются на порции по 500 треков (потолок сервера 1000).
+     */
+    fun matchTracks(
+        cfg: Config,
+        tracks: List<MatchTrackRequest>,
+        onProgress: ((done: Int, total: Int) -> Unit)? = null,
+    ): List<Long?>? {
+        if (tracks.isEmpty()) return emptyList()
+        val base = reachableBase(cfg.bases, cfg.certSha256) ?: cfg.baseUrl
+        val result = ArrayList<Long?>(tracks.size)
+        val chunkSize = 500
+        for (chunk in tracks.chunked(chunkSize)) {
+            val arr = org.json.JSONArray()
+            for (t in chunk) {
+                val o = JSONObject().put("title", t.title).put("duration_ms", t.durationMs)
+                if (!t.artist.isNullOrBlank()) o.put("artist", t.artist)
+                if (!t.fileHash.isNullOrBlank()) o.put("file_hash", t.fileHash)
+                arr.put(o)
+            }
+            val body = JSONObject().put("tracks", arr).toString()
+            val (code, text) = request("POST", "$base/api/tracks/match", body, cfg.token, cfg.certSha256)
+                ?: return null
+            if (code != 200) return null
+            val res = runCatching { JSONObject(text).getJSONArray("matches") }.getOrNull() ?: return null
+            for (i in 0 until res.length()) {
+                result.add(if (res.isNull(i)) null else res.getLong(i))
+            }
+            onProgress?.invoke(result.size, tracks.size)
         }
-        val body = JSONObject().put("tracks", arr).toString()
-        val (code, text) = request("POST", "${cfg.baseUrl}/api/tracks/match", body, cfg.token, cfg.certSha256)
-            ?: return null
-        if (code != 200) return null
-        val res = runCatching { JSONObject(text).getJSONArray("matches") }.getOrNull() ?: return null
-        return (0 until res.length()).map { if (res.isNull(it)) null else res.getLong(it) }
+        return result
+    }
+
+    /**
+     * POST /api/tracks/match - сопоставляет треки клиента с id библиотеки сервера по
+     * (исполнитель, название, длительность ±2 с). Возвращает массив той же длины и
+     * порядка: id сервера либо null. null весь ответ - сеть/ошибка.
+     */
+    fun matchTrackIds(cfg: Config, tracks: List<Triple<String?, String, Long>>): List<Long?>? {
+        return matchTracks(
+            cfg = cfg,
+            tracks = tracks.map { (artist, title, dur) ->
+                MatchTrackRequest(title = title, artist = artist, durationMs = dur)
+            },
+        )
     }
 
     /** GET /api/tracks/{id}/waveform - JSON-массив из 120 значений RMS 0..1. */

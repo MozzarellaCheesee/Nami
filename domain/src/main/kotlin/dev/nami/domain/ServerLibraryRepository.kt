@@ -41,12 +41,16 @@ interface ServerLibraryRepository {
 
     /** Текущий статус фоновой пакетной выгрузки треков на сервер (не сбрасывается при выходе с экрана). */
     val uploadProgress: kotlinx.coroutines.flow.StateFlow<String?>
+        get() = kotlinx.coroutines.flow.MutableStateFlow(null)
+
+    /** Запустить фоновую выгрузку треков с предварительной проверкой их наличия на сервере. */
+    fun uploadTracksBackground(tracks: List<dev.nami.core.model.Track>) {}
 
     /** Запустить фоновую выгрузку путей к файлам в синглтоне репозитория. */
-    fun uploadTracksBackground(paths: List<String>)
+    fun uploadPathsBackground(paths: List<String>) {}
 
     /** Сбросить статус выгрузки. */
-    fun clearUploadProgress()
+    fun clearUploadProgress() {}
 
     /**
      * Создать гостевую ссылку на набор треков. `tracks` - метаданные локальных треков

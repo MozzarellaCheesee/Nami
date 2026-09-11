@@ -101,7 +101,7 @@ class LibraryViewModel @Inject constructor(
     fun isServerActive(): Boolean = serverLibraryRepository.isServerActive()
 
     fun uploadTrackToServer(track: Track) {
-        serverLibraryRepository.uploadTracksBackground(listOf(track.path))
+        serverLibraryRepository.uploadTracksBackground(listOf(track))
         _serverActionMsg.value = "Отправка трека на сервер…"
     }
 
@@ -117,10 +117,10 @@ class LibraryViewModel @Inject constructor(
         if (ids.isEmpty()) return
         clearSelection()
         viewModelScope.launch(Dispatchers.IO) {
-            val paths = ids.mapNotNull { id -> libraryRepository.track(id).first()?.path }
-            if (paths.isNotEmpty()) {
-                serverLibraryRepository.uploadTracksBackground(paths)
-                _serverActionMsg.value = "Отправка ${paths.size} треков на сервер…"
+            val tracks = ids.mapNotNull { id -> libraryRepository.track(id).first() }
+            if (tracks.isNotEmpty()) {
+                serverLibraryRepository.uploadTracksBackground(tracks)
+                _serverActionMsg.value = "Отправка ${tracks.size} треков на сервер…"
             }
         }
     }
