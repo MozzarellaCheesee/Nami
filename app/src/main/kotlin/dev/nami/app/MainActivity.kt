@@ -321,6 +321,76 @@ class MainActivity : ComponentActivity() {
                     confirmButton = {},
                 )
             }
+            val activeImportProgress by importProgress.collectAsState()
+            val importResult by libraryViewModel.importResult.collectAsState()
+            LaunchedEffect(importResult) {
+                val msg = importResult ?: return@LaunchedEffect
+                android.widget.Toast.makeText(this@MainActivity, msg, android.widget.Toast.LENGTH_LONG).show()
+                libraryViewModel.clearImportResult()
+            }
+            activeImportProgress?.let { progress ->
+                dev.nami.core.designsystem.NamiAlertDialog(
+                    onDismissRequest = {},
+                    title = {
+                        androidx.compose.material3.Text(
+                            text = progress.phase ?: "Импорт из архива",
+                            color = dev.nami.core.designsystem.NamiColors.Paper100,
+                        )
+                    },
+                    text = {
+                        androidx.compose.foundation.layout.Column(
+                            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                        ) {
+                            val fileName = progress.currentFileName
+                            if (!fileName.isNullOrBlank()) {
+                                androidx.compose.material3.Text(
+                                    text = fileName,
+                                    color = dev.nami.core.designsystem.NamiColors.Paper70,
+                                    style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                                    maxLines = 2,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                )
+                            }
+                            if (progress.total > 0) {
+                                val fraction = (progress.done.toFloat() / progress.total).coerceIn(0f, 1f)
+                                androidx.compose.material3.LinearProgressIndicator(
+                                    progress = { fraction },
+                                    modifier = Modifier.fillMaxWidth().height(6.dp),
+                                    color = dev.nami.core.designsystem.NamiColors.Shu,
+                                    trackColor = dev.nami.core.designsystem.NamiColors.Ink700,
+                                )
+                                androidx.compose.foundation.layout.Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+                                ) {
+                                    androidx.compose.material3.Text(
+                                        text = "${progress.done} из ${progress.total}",
+                                        color = dev.nami.core.designsystem.NamiColors.Paper40,
+                                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                    )
+                                    androidx.compose.material3.Text(
+                                        text = "${(fraction * 100).toInt()}%",
+                                        color = dev.nami.core.designsystem.NamiColors.Paper40,
+                                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                    )
+                                }
+                            } else {
+                                androidx.compose.material3.LinearProgressIndicator(
+                                    modifier = Modifier.fillMaxWidth().height(6.dp),
+                                    color = dev.nami.core.designsystem.NamiColors.Shu,
+                                    trackColor = dev.nami.core.designsystem.NamiColors.Ink700,
+                                )
+                                androidx.compose.material3.Text(
+                                    text = "Подготовка и распаковка архива...",
+                                    color = dev.nami.core.designsystem.NamiColors.Paper40,
+                                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        }
+                    },
+                    confirmButton = {},
+                )
+            }
             LaunchedEffect(hideSystemBars) {
                 val controller = WindowInsetsControllerCompat(window, window.decorView)
                 if (hideSystemBars) {

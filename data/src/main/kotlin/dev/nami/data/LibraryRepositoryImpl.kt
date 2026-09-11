@@ -534,9 +534,11 @@ class LibraryRepositoryImpl @Inject constructor(
         val resolver = context.contentResolver
 
         uris.forEachIndexed { index, uri ->
+            val fileName = uri.lastPathSegment?.substringAfterLast('/') ?: "Файл ${index + 1}"
+            emit(ImportProgress(done = index, total = uris.size, currentFileName = fileName, phase = "Импорт файлов"))
             val result = copyAndIndex(resolver, uri, musicDir)
             result?.albumId?.let { syncAlbumIsSingle(it) }
-            emit(ImportProgress(done = index + 1, total = uris.size))
+            emit(ImportProgress(done = index + 1, total = uris.size, currentFileName = fileName, phase = "Импорт файлов"))
         }
     }.flowOn(Dispatchers.IO)
 
@@ -553,14 +555,59 @@ class LibraryRepositoryImpl @Inject constructor(
         val resolver = context.contentResolver
         val scratchDir = File(context.cacheDir, "zip_import").apply { mkdirs() }
 
+        val uri = uriString.toUri()
+        val totalBytes = runCatching {
+            resolver.openFileDescriptor(uri, "r")?.use { it.statSize }
+        }.getOrNull() ?: -1L
+
         // 1. Копируем входящий архив во временный локальный файл в кэше.
         // Это гарантирует работу с одноразовыми потоками (Google Drive, Downloads, SAF)
         // и позволяет использовать случайный доступ ZipFile вместо двойного чтения потока.
         val tempZip = File(scratchDir, "archive_${UUID.randomUUID()}.zip")
         try {
-            resolver.openInputStream(uriString.toUri())?.use { input ->
-                tempZip.outputStream().use { out -> input.copyTo(out) }
+            emit(ImportProgress(done = 0, total = 0, currentFileName = "Чтение архива...", phase = "Подготовка"))
+
+            resolver.openInputStream(uri)?.use { input ->
+                tempZip.outputStream().use { out ->
+                    val buffer = ByteArray(64 * 1024)
+                    var bytesCopied = 0L
+                    var lastEmitTime = 0L
+                    var bytes = input.read(buffer)
+                    while (bytes >= 0) {
+                        out.write(buffer, 0, bytes)
+                        bytesCopied += bytes
+                        val now = System.currentTimeMillis()
+                        if (now - lastEmitTime > 150) {
+                            lastEmitTime = now
+                            if (totalBytes > 0) {
+                                val mbCopied = bytesCopied / (1024 * 1024)
+                                val mbTotal = totalBytes / (1024 * 1024)
+                                emit(
+                                    ImportProgress(
+                                        done = (bytesCopied * 100 / totalBytes).toInt(),
+                                        total = 100,
+                                        currentFileName = if (mbTotal > 0) "$mbCopied МБ из $mbTotal МБ" else "$mbCopied МБ",
+                                        phase = "Чтение архива",
+                                    )
+                                )
+                            } else {
+                                val mbCopied = bytesCopied / (1024 * 1024)
+                                emit(
+                                    ImportProgress(
+                                        done = 0,
+                                        total = 0,
+                                        currentFileName = "$mbCopied МБ прочитано",
+                                        phase = "Чтение архива",
+                                    )
+                                )
+                            }
+                        }
+                        bytes = input.read(buffer)
+                    }
+                }
             } ?: return@flow
+
+            emit(ImportProgress(done = 0, total = 0, currentFileName = "Анализ содержимого архива...", phase = "Распаковка"))
 
             // 2. Открываем ZipFile с автоопределением кодировки (UTF-8 -> CP866 -> windows-1251)
             val zipFile = runCatching {
@@ -580,11 +627,12 @@ class LibraryRepositoryImpl @Inject constructor(
                 }
 
                 if (manifestEntry != null) {
+                    emit(ImportProgress(done = 0, total = 0, currentFileName = "Чтение манифеста бэкапа...", phase = "Восстановление бэкапа"))
                     val manifestJson = zip.getInputStream(manifestEntry).bufferedReader(Charsets.UTF_8).use { it.readText() }
                     val manifest = runCatching { JSONObject(manifestJson) }.getOrNull()
                     if (manifest != null) {
-                        restoreFromManifest(zip, manifest, entries, musicDir, scratchDir) { done, total ->
-                            emit(ImportProgress(done = done, total = total))
+                        restoreFromManifest(zip, manifest, entries, musicDir, scratchDir) { done, total, name, phase ->
+                            emit(ImportProgress(done = done, total = total, currentFileName = name, phase = phase))
                         }
                         return@flow
                     }
@@ -600,6 +648,7 @@ class LibraryRepositoryImpl @Inject constructor(
 
                 for (entry in audioEntries) {
                     val rawName = entry.name.substringAfterLast('/')
+                    emit(ImportProgress(done = done, total = total, currentFileName = rawName, phase = "Распаковка и индексация"))
                     val ext = rawName.substringAfterLast('.', "mp3")
                     val scratchFile = File(scratchDir, "${UUID.randomUUID()}.$ext")
 
@@ -632,7 +681,7 @@ class LibraryRepositoryImpl @Inject constructor(
                         scratchLrc?.delete()
                     }
                     done++
-                    emit(ImportProgress(done = done, total = total))
+                    emit(ImportProgress(done = done, total = total, currentFileName = rawName, phase = "Распаковка и индексация"))
                 }
             }
         } finally {
@@ -646,7 +695,7 @@ class LibraryRepositoryImpl @Inject constructor(
         entries: List<ZipEntry>,
         musicDir: File,
         scratchDir: File,
-        onProgress: suspend (Int, Int) -> Unit,
+        onProgress: suspend (done: Int, total: Int, currentName: String, phase: String) -> Unit,
     ) {
         val tracksArray = manifest.optJSONArray("tracks") ?: JSONArray()
         val total = tracksArray.length()
@@ -659,6 +708,7 @@ class LibraryRepositoryImpl @Inject constructor(
             val trackObj = tracksArray.optJSONObject(i) ?: continue
             val oldId = trackObj.optString("id")
             val fileName = trackObj.optString("fileName").ifBlank { File(trackObj.optString("path")).name }
+            onProgress(i, total, fileName, "Восстановление треков")
             val zipEntry = entriesByFileName[fileName] ?: entries.firstOrNull { it.name.endsWith("/$fileName") || it.name == fileName }
 
             if (zipEntry != null) {
@@ -717,8 +767,10 @@ class LibraryRepositoryImpl @Inject constructor(
                     scratchLrc?.delete()
                 }
             }
-            onProgress(i + 1, total)
+            onProgress(i + 1, total, fileName, "Восстановление треков")
         }
+
+        onProgress(total, total, "Восстановление плейлистов и настроек...", "Восстановление данных")
 
         playlistDao?.let { plDao ->
             playlistTrackDao?.let { plTrackDao ->
@@ -824,7 +876,7 @@ class LibraryRepositoryImpl @Inject constructor(
                 )
                 if (albumIdForGroup == null) albumIdForGroup = result?.albumId
                 done++
-                emit(ImportProgress(done = done, total = total))
+                emit(ImportProgress(done = done, total = total, currentFileName = doc.name ?: "Аудиофайл", phase = "Импорт папки"))
             }
 
             val albumId = albumIdForGroup

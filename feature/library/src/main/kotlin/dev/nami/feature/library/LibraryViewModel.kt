@@ -82,6 +82,10 @@ class LibraryViewModel @Inject constructor(
     val serverActionMsg: kotlinx.coroutines.flow.StateFlow<String?> = _serverActionMsg
     fun clearServerActionMsg() { _serverActionMsg.value = null }
 
+    private val _importResult = MutableStateFlow<String?>(null)
+    val importResult: StateFlow<String?> = _importResult
+    fun clearImportResult() { _importResult.value = null }
+
     /** Виден ли пункт меню «Отправить на сервер». */
     fun isServerActive(): Boolean = serverLibraryRepository.isServerActive()
 
@@ -246,6 +250,9 @@ class LibraryViewModel @Inject constructor(
 
     fun importFiles(uris: List<String>) {
         viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                importProgress = ImportProgress(0, uris.size, currentFileName = "Подготовка...", phase = "Импорт файлов")
+            )
             try {
                 libraryRepository.import(ImportSource.Files(uris)).collect { progress ->
                     _uiState.value = _uiState.value.copy(importProgress = progress)
@@ -264,6 +271,9 @@ class LibraryViewModel @Inject constructor(
 
     fun importFolder(treeUri: String) {
         viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                importProgress = ImportProgress(0, 0, currentFileName = "Сканирование папки...", phase = "Импорт папки")
+            )
             try {
                 libraryRepository.import(ImportSource.Folder(treeUri)).collect { progress ->
                     _uiState.value = _uiState.value.copy(importProgress = progress)
@@ -318,15 +328,25 @@ class LibraryViewModel @Inject constructor(
 
     fun importZip(uri: String) {
         viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                importProgress = ImportProgress(
+                    done = 0,
+                    total = 0,
+                    currentFileName = "Подготовка архива...",
+                    phase = "Импорт из архива",
+                )
+            )
+            var count = 0
             try {
                 libraryRepository.import(ImportSource.Zip(uri)).collect { progress ->
                     _uiState.value = _uiState.value.copy(importProgress = progress)
+                    if (progress.done > 0) count = progress.done
                 }
+                _importResult.value = if (count > 0) "Импорт завершён ($count треков)" else "В архиве не найдено подходящих аудиофайлов"
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // Partial import failure: full error handling/reporting is a later task.
-                // Swallow so viewModelScope survives and rebuildIndex still runs below.
+                _importResult.value = "Ошибка при импорте архива: ${e.message}"
             } finally {
                 searchRepository.rebuildIndex()
                 _uiState.value = _uiState.value.copy(importProgress = null)
