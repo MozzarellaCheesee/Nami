@@ -109,24 +109,44 @@ trap cleanup EXIT
 BINARY_FOUND=false
 ASSET_NAME="nami-server-linux-${TARGET_ARCH}.tar.gz"
 DOWNLOAD_SUCCESS=false
+SPECIFIED_VERSION="${1:-${VERSION:-}}"
 
 log_info "Поиск релиза в репозитории ${GITHUB_REPO}..."
 
-# Пытаемся получить URL последнего релиза через GitHub API
-LATEST_API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
-RELEASE_JSON="$(curl -fsSL "$LATEST_API_URL" 2>/dev/null || true)"
-
 DOWNLOAD_URL=""
-if [ -n "$RELEASE_JSON" ]; then
-    DOWNLOAD_URL="$(echo "$RELEASE_JSON" | grep -o "https://[^\"]*${ASSET_NAME}" | head -n1 || true)"
+
+if [ -n "$SPECIFIED_VERSION" ]; then
+    log_info "Используется указанная версия: ${SPECIFIED_VERSION}"
+    DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/download/${SPECIFIED_VERSION}/${ASSET_NAME}"
 fi
 
+# 1. Пробуем получить через GitHub API список всех релизов (включая pre-releases)
 if [ -z "$DOWNLOAD_URL" ]; then
-    DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/latest/download/${ASSET_NAME}"
+    RELEASES_API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases"
+    RELEASE_JSON="$(curl -fsSL -H "Accept: application/vnd.github+json" "$RELEASES_API_URL" 2>/dev/null || true)"
+    if [ -n "$RELEASE_JSON" ]; then
+        DOWNLOAD_URL="$(echo "$RELEASE_JSON" | grep -o "https://[^\"]*releases/download/[^\"]*${ASSET_NAME}" | head -n1 || true)"
+    fi
+fi
+
+# 2. Если API вернуло пустоту (например, rate-limit), пробуем получить последний тег
+if [ -z "$DOWNLOAD_URL" ]; then
+    TAGS_API_URL="https://api.github.com/repos/${GITHUB_REPO}/tags"
+    LATEST_TAG="$(curl -fsSL "$TAGS_API_URL" 2>/dev/null | grep -o '"name": *"[^"]*"' | head -n1 | cut -d'"' -f4 || true)"
+    if [ -n "$LATEST_TAG" ]; then
+        DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/download/${LATEST_TAG}/${ASSET_NAME}"
+    fi
+fi
+
+# 3. Финальный fallback на текущую актуальную бета-версию
+if [ -z "$DOWNLOAD_URL" ]; then
+    DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/download/v0.1.1-beta.1/${ASSET_NAME}"
 fi
 
 log_info "Попытка скачивания бинарного архива: ${ASSET_NAME}..."
-if curl -fsSL -L "$DOWNLOAD_URL" -o "${TMP_DIR}/${ASSET_NAME}" 2>/dev/null; then
+log_info "URL: ${DOWNLOAD_URL}"
+
+if curl -fSL --connect-timeout 15 --retry 3 "$DOWNLOAD_URL" -o "${TMP_DIR}/${ASSET_NAME}"; then
     log_info "Распаковка архива..."
     if tar -xzf "${TMP_DIR}/${ASSET_NAME}" -C "$TMP_DIR" 2>/dev/null; then
         if [ -f "${TMP_DIR}/nami-server" ]; then
@@ -135,6 +155,8 @@ if curl -fsSL -L "$DOWNLOAD_URL" -o "${TMP_DIR}/${ASSET_NAME}" 2>/dev/null; then
             log_ok "Бинарный файл nami-server успешно получен из релиза."
         fi
     fi
+else
+    log_warn "Загрузка по прямому URL не удалась."
 fi
 
 # Запасной вариант: сборка из исходников, если доступен cargo
