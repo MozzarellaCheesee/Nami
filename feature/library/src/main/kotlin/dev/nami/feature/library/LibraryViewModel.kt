@@ -77,20 +77,13 @@ class LibraryViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val tagRepository: TagRepository,
     private val serverLibraryRepository: dev.nami.domain.ServerLibraryRepository,
-    private val serverAudioRepository: dev.nami.domain.ServerAudioRepository,
-    jamRepository: dev.nami.domain.JamRepository,
+    jamRepository: dev.nami.domain.JamRepository? = null,
 ) : ViewModel() {
 
     private val _serverActionMsg = MutableStateFlow<String?>(null)
     /** Итог последнего действия «Отправить на сервер» - экран показывает Snackbar. */
     val serverActionMsg: StateFlow<String?> = _serverActionMsg
     fun clearServerActionMsg() { _serverActionMsg.value = null }
-
-    private val _serverTracks = MutableStateFlow<List<dev.nami.domain.ServerTrackMeta>>(emptyList())
-    val serverTracks: StateFlow<List<dev.nami.domain.ServerTrackMeta>> = _serverTracks.asStateFlow()
-
-    /** Кешированный снимок локальных треков для быстрой синхронной дедупликации с сервером. */
-    @Volatile private var localTracksSnapshot: List<dev.nami.core.model.Track> = emptyList()
 
     init {
         viewModelScope.launch {
@@ -100,11 +93,8 @@ class LibraryViewModel @Inject constructor(
                 }
             }
         }
-        viewModelScope.launch(Dispatchers.IO) {
-            localTracksSnapshot = libraryRepository.allTracksOrdered()
-        }
         refreshServerTracks()
-        jamRepository.serverChanges
+        jamRepository?.serverChanges
             .onEach { entities -> if ("tracks" in entities) refreshServerTracks() }
             .launchIn(viewModelScope)
     }
@@ -112,63 +102,7 @@ class LibraryViewModel @Inject constructor(
     fun refreshServerTracks() {
         if (!isServerActive()) return
         viewModelScope.launch(Dispatchers.IO) {
-            localTracksSnapshot = libraryRepository.allTracksOrdered()
-            val tracks = serverLibraryRepository.listTracks()
-            if (tracks != null) {
-                _serverTracks.value = tracks
-            }
-        }
-    }
-
-    fun isLocallyAvailable(serverTrack: dev.nami.domain.ServerTrackMeta): Boolean {
-        val title = serverTrack.title.trim().lowercase()
-        val artist = serverTrack.artist.trim().lowercase()
-        val duration = serverTrack.durationMs
-        return localTracksSnapshot.any { local ->
-            local.title.trim().lowercase() == title &&
-            (local.artistName?.trim()?.lowercase() ?: "") == artist &&
-            kotlin.math.abs(local.durationMs - duration) <= 2000
-        }
-    }
-
-    fun playServerTrack(track: dev.nami.domain.ServerTrackMeta) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val streamUrl = serverAudioRepository.serverStreamUrl(track.id) ?: return@launch
-            val artworkUrl = serverAudioRepository.serverArtworkUrl(track.id)
-            val playable = dev.nami.domain.PlayableTrack(
-                id = dev.nami.core.model.TrackId("server_${track.id}"),
-                title = track.title,
-                artistName = track.artist,
-                path = streamUrl,
-                artworkPath = artworkUrl,
-                durationMs = track.durationMs,
-            )
-            withContext(Dispatchers.Main) {
-                playerRepository.play(listOf(playable), startIndex = 0)
-            }
-        }
-    }
-
-    fun playAllServerTracks() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val notLocal = _serverTracks.value.filter { !isLocallyAvailable(it) }
-            val playables = notLocal.mapNotNull { track ->
-                val streamUrl = serverAudioRepository.serverStreamUrl(track.id) ?: return@mapNotNull null
-                val artworkUrl = serverAudioRepository.serverArtworkUrl(track.id)
-                dev.nami.domain.PlayableTrack(
-                    id = dev.nami.core.model.TrackId("server_${track.id}"),
-                    title = track.title,
-                    artistName = track.artist,
-                    path = streamUrl,
-                    artworkPath = artworkUrl,
-                    durationMs = track.durationMs,
-                )
-            }
-            if (playables.isNotEmpty()) {
-                withContext(Dispatchers.Main) {
-                    playerRepository.play(playables, startIndex = 0)
-                }
-            }
+            serverLibraryRepository.listTracks()
         }
     }
 
@@ -336,7 +270,7 @@ class LibraryViewModel @Inject constructor(
     private fun folderOf(path: String) = path.substringBeforeLast('/', "").ifBlank { "/" }
 
     private companion object {
-        const val UNKNOWN_KEY = " none"
+        const val UNKNOWN_KEY = "\u0000none"
     }
 
     fun addToQueue(track: Track) {

@@ -9,6 +9,10 @@ data class ServerTrackMeta(
     val artist: String,
     val album: String?,
     val durationMs: Long,
+    val trackNo: Int? = null,
+    val year: Int? = null,
+    val sizeBytes: Long = 0,
+    val format: String? = null,
 )
 
 /**
@@ -21,7 +25,7 @@ interface ServerLibraryRepository {
     fun isServerActive(): Boolean
 
     /** Список треков сервера, постранично. Null - сервера нет или запрос не удался. */
-    suspend fun listTracks(limit: Int = 500, offset: Int = 0): List<ServerTrackMeta>?
+    suspend fun listTracks(limit: Int = 1000, offset: Int = 0): List<ServerTrackMeta>?
 
     /** Скачать трек сервера в офлайн-кеш. Возвращает файл или null при ошибке. */
     suspend fun downloadTrack(serverTrackId: Long): File?

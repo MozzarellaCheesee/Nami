@@ -43,7 +43,6 @@ import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Sort
 import androidx.compose.material3.CircularProgressIndicator
@@ -232,16 +231,8 @@ fun LibraryScreen(
                 }
                 when (uiState.selectedTab) {
                     LibraryTab.TRACKS -> {
-                        val serverTracksAll by viewModel.serverTracks.collectAsState()
-                        val uniqueServerTracks = remember(serverTracksAll) {
-                            serverTracksAll.filter { !viewModel.isLocallyAvailable(it) }
-                        }
                         TrackListContent(
                             tracks = tracks,
-                            serverTracks = uniqueServerTracks,
-                            onPlayServerTrack = viewModel::playServerTrack,
-                            onPlayAllServerTracks = viewModel::playAllServerTracks,
-                            onRefreshServerTracks = viewModel::refreshServerTracks,
                             listState = trackListState,
                             selectionMode = selectionMode,
                             selectedTrackIds = uiState.selectedTrackIds,
@@ -666,10 +657,6 @@ private const val AUTO_SCROLL_MAX_PX_PER_TICK = 20f
 @Composable
 private fun TrackListContent(
     tracks: LazyPagingItems<Track>,
-    serverTracks: List<dev.nami.domain.ServerTrackMeta>,
-    onPlayServerTrack: (dev.nami.domain.ServerTrackMeta) -> Unit,
-    onPlayAllServerTracks: () -> Unit,
-    onRefreshServerTracks: () -> Unit,
     listState: LazyListState,
     selectionMode: Boolean,
     selectedTrackIds: Set<TrackId>,
@@ -696,7 +683,7 @@ private fun TrackListContent(
     nowPlaying: NowPlayingRow?,
     sort: dev.nami.domain.TrackSort,
 ) {
-    if (tracks.itemCount == 0 && serverTracks.isEmpty()) {
+    if (tracks.itemCount == 0) {
         if (tracks.loadState.refresh is androidx.paging.LoadState.Loading) {
             LibrarySkeleton()
         } else {
@@ -788,44 +775,6 @@ private fun TrackListContent(
             },
     ) {
         LazyColumn(state = listState) {
-            if (serverTracks.isNotEmpty()) {
-                item(key = "server-header") {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(onClick = onPlayAllServerTracks)
-                            .padding(start = 20.dp, top = 12.dp, bottom = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "☁ На сервере: ${serverTracks.size}",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = NamiColors.Paper100,
-                            modifier = Modifier.weight(1f),
-                        )
-                        IconButton(onClick = onRefreshServerTracks) {
-                            Icon(Icons.Outlined.Refresh, contentDescription = "Обновить серверные треки")
-                        }
-                    }
-                }
-                items(serverTracks, key = { "server_${it.id}" }) { track ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onPlayServerTrack(track) }
-                            .padding(horizontal = 20.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(Icons.Outlined.CloudUpload, contentDescription = "Server track", tint = NamiColors.Paper70)
-                        androidx.compose.foundation.layout.Spacer(Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(track.title, color = NamiColors.Paper100, maxLines = 1)
-                            Text(track.artist, color = NamiColors.Paper70, style = MaterialTheme.typography.bodySmall, maxLines = 1)
-                        }
-                        Text(formatDuration(track.durationMs), color = NamiColors.Paper40, style = MaterialTheme.typography.labelMedium)
-                    }
-                }
-            }
             if (recentAlbums.isNotEmpty()) {
                 item(key = DISCOGRAPHY_HEADER_KEY) {
                     DiscographySection(albums = recentAlbums, onAlbumClick = onAlbumClick, onShowAllAlbums = onShowAllAlbums)

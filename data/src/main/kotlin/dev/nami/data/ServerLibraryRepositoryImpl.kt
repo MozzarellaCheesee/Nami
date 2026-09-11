@@ -3,13 +3,16 @@ package dev.nami.data
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.nami.core.database.dao.TrackDao
+import dev.nami.core.database.entity.TrackEntity
 import dev.nami.core.model.AlbumId
 import dev.nami.core.model.ArtistId
 import dev.nami.core.model.Track
 import dev.nami.core.model.TrackId
+import dev.nami.data.mapper.toDomain
 import dev.nami.domain.ServerLibraryRepository
 import dev.nami.domain.ServerTrackMeta
 import dev.nami.domain.SettingsRepository
+import dev.nami.domain.SearchRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -27,6 +30,8 @@ class ServerLibraryRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val settingsRepository: SettingsRepository,
     private val trackDao: TrackDao,
+    private val metadataResolver: MetadataResolver,
+    private val searchRepository: SearchRepository,
 ) : ServerLibraryRepository {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -183,7 +188,7 @@ class ServerLibraryRepositoryImpl @Inject constructor(
         withContext(Dispatchers.IO) {
             val cfg = activeConfig() ?: return@withContext null
             val arr = NamiServerClient.tracks(cfg, limit, offset) ?: return@withContext null
-            (0 until arr.length()).mapNotNull { i ->
+            val tracks = (0 until arr.length()).mapNotNull { i ->
                 val o = arr.optJSONObject(i) ?: return@mapNotNull null
                 val id = o.optLong("id", -1)
                 if (id < 0) return@mapNotNull null
@@ -193,9 +198,69 @@ class ServerLibraryRepositoryImpl @Inject constructor(
                     artist = o.optString("artist", ""),
                     album = o.optString("album").takeIf { it.isNotBlank() },
                     durationMs = o.optLong("duration_ms", 0L),
+                    trackNo = o.optInt("track_no").takeIf { o.has("track_no") && !o.isNull("track_no") },
+                    year = o.optInt("year").takeIf { o.has("year") && !o.isNull("year") },
+                    sizeBytes = o.optLong("size_bytes", 0L),
+                    format = o.optString("format").takeIf { it.isNotBlank() && it != "null" },
                 )
             }
+            mirrorIntoLibrary(tracks)
+            tracks
         }
+
+    /** Серверные записи живут в общей Room-библиотеке, поэтому все существующие очереди,
+     * shuffle, Home и поиск получают их без специальных веток в UI. */
+    private suspend fun mirrorIntoLibrary(serverTracks: List<ServerTrackMeta>) {
+        val localTracks = trackDao.allOrderedWithArtwork()
+            .map { it.toDomain() }
+            .filterNot { it.path.startsWith(SERVER_PATH_PREFIX) }
+        val unique = serverTracks.filterNot { server ->
+            localTracks.any { local ->
+                local.title.equals(server.title, ignoreCase = true) &&
+                    local.artistName.orEmpty().equals(server.artist, ignoreCase = true) &&
+                    kotlin.math.abs(local.durationMs - server.durationMs) <= 2_000
+            }
+        }
+        val ids = unique.map { "server_${it.id}" }
+        if (ids.isEmpty()) trackDao.deleteAllServerTracks() else trackDao.deleteServerTracksExcept(ids)
+
+        unique.forEach { track ->
+            val artistId = metadataResolver.resolveArtist(track.artist)
+            val albumId = metadataResolver.resolveAlbum(track.album, artistId, track.year)
+            val id = "server_${track.id}"
+            val artworkPath = cachedArtwork(track.id)?.absolutePath
+            trackDao.insertAll(
+                listOf(
+                    TrackEntity(
+                        id = id,
+                        title = track.title,
+                        artistId = artistId,
+                        albumId = albumId,
+                        trackNo = track.trackNo,
+                        discNo = null,
+                        durationMs = track.durationMs,
+                        path = "$SERVER_PATH_PREFIX${track.id}",
+                        format = track.format ?: "server",
+                        sizeBytes = track.sizeBytes,
+                        dateAdded = System.currentTimeMillis(),
+                        lastPlayed = null,
+                        playCount = 0,
+                        artworkPath = artworkPath,
+                    ),
+                ),
+            )
+            trackDao.updateServerTrack(
+                id, track.title, artistId, albumId, track.trackNo, track.durationMs,
+                track.format ?: "server", track.sizeBytes, artworkPath,
+            )
+            if (artworkPath == null) {
+                scope.launch {
+                    downloadArtwork(track.id)?.let { trackDao.setArtworkPath(id, it.absolutePath) }
+                }
+            }
+        }
+        searchRepository.rebuildIndex()
+    }
 
     override suspend fun downloadTrack(serverTrackId: Long): File? =
         withContext(Dispatchers.IO) {
@@ -276,4 +341,8 @@ class ServerLibraryRepositoryImpl @Inject constructor(
     // Расширение не по формату (сервер отдаёт что попросили) - ExoPlayer определяет по содержимому.
     private fun fileFor(id: Long) = File(cacheDir, "$id.audio")
     private fun artworkFileFor(id: Long) = File(cacheDir, "$id.artwork")
+
+    private companion object {
+        const val SERVER_PATH_PREFIX = "nami-server://"
+    }
 }
