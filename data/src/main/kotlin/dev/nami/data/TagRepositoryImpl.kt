@@ -23,7 +23,7 @@ class TagRepositoryImpl @Inject constructor(
 
     override suspend fun createTag(name: String, colorArgb: Int): TagId {
         val id = UUID.randomUUID().toString()
-        tagDao.insert(TagEntity(id = id, name = name, colorArgb = colorArgb))
+        tagDao.insert(TagEntity(id = id, name = name, colorArgb = colorArgb, updatedAt = System.currentTimeMillis()))
         return TagId(id)
     }
 
@@ -35,7 +35,7 @@ class TagRepositoryImpl @Inject constructor(
         tagDao.observeForTrack(trackId.value).map { rows -> rows.map { it.toDomain() } }
 
     override suspend fun assignTag(trackId: TrackId, tagId: TagId) {
-        tagDao.assign(TrackTagEntity(trackId = trackId.value, tagId = tagId.value))
+        tagDao.assign(TrackTagEntity(trackId = trackId.value, tagId = tagId.value, updatedAt = System.currentTimeMillis()))
     }
 
     override suspend fun unassignTag(trackId: TrackId, tagId: TagId) {

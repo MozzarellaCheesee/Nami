@@ -30,4 +30,5 @@ data class PlaylistEntity(
     val eqGainsCsv: String? = null,
     val crossfadeEnabled: Boolean? = null,
     val shuffleOnStart: Boolean? = null,
+    val updatedAt: Long = 0,
 )

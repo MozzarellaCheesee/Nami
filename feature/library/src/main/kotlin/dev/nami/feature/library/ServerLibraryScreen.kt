@@ -48,6 +48,8 @@ import dev.nami.domain.ServerAudioRepository
 import dev.nami.domain.ServerLibraryRepository
 import dev.nami.domain.ServerTrackMeta
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import javax.inject.Inject
 
 @HiltViewModel
@@ -71,6 +73,8 @@ class ServerLibraryViewModel @Inject constructor(
     /** id треков, лежащих в офлайн-кеше. */
     var cached by mutableStateOf<Set<Long>>(emptySet())
         private set
+    var artworkFiles by mutableStateOf<Map<Long, String>>(emptyMap())
+        private set
 
     fun load() {
         if (loading) return
@@ -89,6 +93,16 @@ class ServerLibraryViewModel @Inject constructor(
                     return@launch
                 }
                 tracks = result
+                val artworkDownloads = Semaphore(4)
+                result.forEach { track ->
+                    launch {
+                        artworkDownloads.withPermit {
+                            serverLibraryRepository.downloadArtwork(track.id)?.let { file ->
+                                artworkFiles = artworkFiles + (track.id to android.net.Uri.fromFile(file).toString())
+                            }
+                        }
+                    }
+                }
             } finally {
                 loading = false
             }
@@ -113,7 +127,7 @@ class ServerLibraryViewModel @Inject constructor(
         }
     }
 
-    fun artworkUrl(trackId: Long): String? = serverAudioRepository.serverArtworkUrl(trackId)
+    fun artworkUrl(trackId: Long): String? = artworkFiles[trackId]
 
     fun playTrack(track: ServerTrackMeta) {
         viewModelScope.launch {
@@ -204,7 +218,7 @@ fun ServerLibraryScreen(
                             .padding(horizontal = 16.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        val artUrl = remember(track.id) { viewModel.artworkUrl(track.id) }
+                        val artUrl = viewModel.artworkUrl(track.id)
                         AsyncImage(
                             model = artUrl,
                             contentDescription = track.title,

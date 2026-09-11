@@ -16,4 +16,5 @@ import androidx.room.Index
 data class TrackTagEntity(
     val trackId: String,
     val tagId: String,
+    val updatedAt: Long = 0,
 )

@@ -90,4 +90,6 @@ data class TrackEntity(
      * намеренно без ForeignKey: удаление трека-преемника должно оставлять звено висящим и молча
      * игнорироваться при построении очереди, а не каскадом чистить чужие строки. */
     val chainNextTrackId: String? = null,
+    val ratingUpdatedAt: Long = 0,
+    val noteUpdatedAt: Long = 0,
 )

@@ -10,4 +10,5 @@ data class TagEntity(
     @PrimaryKey val id: String,
     val name: String,
     val colorArgb: Int,
+    val updatedAt: Long = 0,
 )

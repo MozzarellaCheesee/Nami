@@ -65,7 +65,8 @@ class PlaylistRepositoryImpl @Inject constructor(
 
     override suspend fun createPlaylist(name: String): PlaylistId {
         val id = UUID.randomUUID().toString()
-        playlistDao.insert(PlaylistEntity(id = id, name = name, coverPath = null, createdAt = System.currentTimeMillis()))
+        val now = System.currentTimeMillis()
+        playlistDao.insert(PlaylistEntity(id = id, name = name, coverPath = null, createdAt = now, updatedAt = now))
         return PlaylistId(id)
     }
 
@@ -98,6 +99,7 @@ class PlaylistRepositoryImpl @Inject constructor(
                 trackId = trackId.value,
                 position = position,
                 addedAt = System.currentTimeMillis(),
+                updatedAt = System.currentTimeMillis(),
             ),
         )
     }

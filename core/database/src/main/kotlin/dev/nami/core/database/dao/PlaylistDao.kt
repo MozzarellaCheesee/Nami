@@ -13,8 +13,8 @@ interface PlaylistDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(playlist: PlaylistEntity)
 
-    @Query("UPDATE playlists SET name = :name WHERE id = :id")
-    suspend fun rename(id: String, name: String)
+    @Query("UPDATE playlists SET name = :name, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun rename(id: String, name: String, updatedAt: Long = System.currentTimeMillis())
 
     @Query("UPDATE playlists SET coverPath = :coverPath WHERE id = :id")
     suspend fun setCoverPath(id: String, coverPath: String)
@@ -34,6 +34,9 @@ interface PlaylistDao {
     /** Snapshot of every non-deleted playlist for export/backup - see BackupRepository. */
     @Query("SELECT * FROM playlists WHERE deletedAt IS NULL")
     suspend fun allRaw(): List<PlaylistEntity>
+
+    @Query("SELECT * FROM playlists")
+    suspend fun allForSync(): List<PlaylistEntity>
 
     @Query("SELECT * FROM playlists WHERE id = :id")
     fun findByIdFlow(id: String): Flow<PlaylistEntity?>

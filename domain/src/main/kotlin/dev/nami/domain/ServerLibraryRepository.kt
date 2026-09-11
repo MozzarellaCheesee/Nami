@@ -32,6 +32,9 @@ interface ServerLibraryRepository {
     /** Файл сохранённой обложки в офлайн-кеше, если есть. */
     fun cachedArtwork(serverTrackId: Long): File?
 
+    /** Скачать только обложку через тот же TLS-pinning, который использует API-клиент. */
+    suspend fun downloadArtwork(serverTrackId: Long): File? = null
+
     /** Все id треков, лежащих в офлайн-кеше. */
     fun cachedTrackIds(): Set<Long>
 

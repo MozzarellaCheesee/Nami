@@ -50,13 +50,15 @@ class SyncRepositoryImpl @Inject constructor(
     override suspend fun pullFromServer(): Boolean {
         val cfg = serverConfig() ?: return false
         var currentSince = _lastSyncTimestamp.value
+        val positionSince = currentSince
+        var cursor = prefs.getLong("last_sync_cursor", 0L)
         var maxNow = currentSince
         var totalApplied = 0
 
         var iterations = 0
         while (iterations < 100) {
             iterations++
-            val result = NamiServerClient.syncPull(cfg, currentSince) ?: return false
+            val result = NamiServerClient.syncPull(cfg, currentSince, cursor) ?: return false
             val changes = result.optJSONArray("changes") ?: JSONArray()
             val now = result.optLong("now", System.currentTimeMillis() / 1000)
             val truncated = result.optBoolean("truncated", false)
@@ -78,15 +80,28 @@ class SyncRepositoryImpl @Inject constructor(
 
             if (truncated && changes.length() > 0 && maxUpdatedAtInBatch > currentSince) {
                 currentSince = maxUpdatedAtInBatch
+                cursor = result.optLong("next_cursor", 0L)
+            } else if (truncated && changes.length() > 0) {
+                cursor = result.optLong("next_cursor", 0L)
             } else {
+                cursor = 0L
                 break
             }
         }
 
         val finalTs = if (maxNow > 0) maxNow else (System.currentTimeMillis() / 1000)
         _lastSyncTimestamp.value = finalTs
-        prefs.edit().putLong("last_sync_ts", finalTs).apply()
+        prefs.edit().putLong("last_sync_ts", finalTs).putLong("last_sync_cursor", cursor).apply()
         Log.d(TAG, "pullFromServer: applied $totalApplied changes, new lastSync=$finalTs")
+        NamiServerClient.positions(cfg, positionSince)?.optJSONObject(0)?.let { position ->
+            val serverTrackId = position.optLong("track_id").takeIf { it > 0 } ?: return@let
+            settingsRepository.setLastPlayback(
+                listOf("server_$serverTrackId"),
+                0,
+                position.optLong("position_ms").coerceAtLeast(0L),
+                position.optLong("updated_at") * 1000L,
+            )
+        }
         flushPendingScrobbles(cfg)
         return true
     }
@@ -107,7 +122,7 @@ class SyncRepositoryImpl @Inject constructor(
                     val name = change.optString("value")
                     val existing = playlistDao.findById(id)
                     if (existing != null) {
-                        playlistDao.rename(id, name)
+                        playlistDao.rename(id, name, updatedAt * 1000L)
                         val delAt = existing.deletedAt
                         if (delAt != null && updatedAt * 1000L > delAt) {
                             playlistDao.restore(id)
@@ -165,6 +180,7 @@ class SyncRepositoryImpl @Inject constructor(
                                     trackId = targetTrackId,
                                     position = pos,
                                     addedAt = updatedAt * 1000L,
+                                    updatedAt = updatedAt * 1000L,
                                 ),
                             )
                         }
@@ -178,11 +194,11 @@ class SyncRepositoryImpl @Inject constructor(
                     else -> id
                 }
                 if (isDeleted || change.isNull("value")) {
-                    trackDao.updateRating(targetTrackId, null)
+                    trackDao.updateRating(targetTrackId, null, updatedAt * 1000L)
                 } else {
                     val stars = change.optInt("value", 0)
                     val rating = if (stars in 1..5) stars else null
-                    trackDao.updateRating(targetTrackId, rating)
+                    trackDao.updateRating(targetTrackId, rating, updatedAt * 1000L)
                 }
             }
             "track_note" -> {
@@ -192,10 +208,10 @@ class SyncRepositoryImpl @Inject constructor(
                     else -> id
                 }
                 if (isDeleted || change.isNull("value")) {
-                    trackDao.updateNote(targetTrackId, null)
+                    trackDao.updateNote(targetTrackId, null, updatedAt * 1000L)
                 } else {
                     val note = change.optString("value").ifBlank { null }
-                    trackDao.updateNote(targetTrackId, note)
+                    trackDao.updateNote(targetTrackId, note, updatedAt * 1000L)
                 }
             }
             "moment" -> {
@@ -229,6 +245,7 @@ class SyncRepositoryImpl @Inject constructor(
                                 color = color,
                                 createdAt = createdAt,
                                 isChapter = isChapter,
+                                updatedAt = updatedAt * 1000L,
                             ),
                         )
                     }
@@ -263,6 +280,7 @@ class SyncRepositoryImpl @Inject constructor(
                                 endMs = endMs,
                                 name = name,
                                 createdAt = createdAt,
+                                updatedAt = updatedAt * 1000L,
                             ),
                         )
                     }
@@ -280,7 +298,7 @@ class SyncRepositoryImpl @Inject constructor(
                     val name = obj?.optString("name") ?: (if (field == "name") change.optString("value") else "")
                     val colorArgb = obj?.optInt("color_argb") ?: obj?.optInt("colorArgb") ?: 0
                     if (name.isNotBlank()) {
-                        tagDao.insert(TagEntity(id = id, name = name, colorArgb = colorArgb))
+                        tagDao.insert(TagEntity(id = id, name = name, colorArgb = colorArgb, updatedAt = updatedAt * 1000L))
                     }
                 }
             }
@@ -305,7 +323,7 @@ class SyncRepositoryImpl @Inject constructor(
                             else -> rawTrackId
                         }
                         if (trackDao.findById(targetTrackId) != null && tagDao.allRaw().any { it.id == tagId }) {
-                            tagDao.assign(TrackTagEntity(trackId = targetTrackId, tagId = tagId))
+                            tagDao.assign(TrackTagEntity(trackId = targetTrackId, tagId = tagId, updatedAt = updatedAt * 1000L))
                         }
                     }
                 }
@@ -344,11 +362,41 @@ class SyncRepositoryImpl @Inject constructor(
         val nowSec = System.currentTimeMillis() / 1000L
 
         val changes = JSONArray()
+        val playlistEntries = playlistTrackDao.allRaw()
+
+        // Серверное состояние ссылается только на id серверной библиотеки. Локальные Room id
+        // разных устройств намеренно никогда не уходят в sync-протокол.
+        val localTracks = trackDao.allRaw()
+        val matchedIds = NamiServerClient.matchTracks(
+            cfg,
+            localTracks.map { track ->
+                NamiServerClient.MatchTrackRequest(
+                    title = track.title,
+                    artist = track.artistId?.let { artistDao.findById(it)?.name },
+                    durationMs = track.durationMs,
+                    fileHash = track.fileHash,
+                )
+            },
+        ) ?: return false
+        val serverIds = localTracks.zip(matchedIds).mapNotNull { (track, matched) ->
+            val direct = track.id.removePrefix("server_").toLongOrNull()
+            (direct ?: matched)?.let { track.id to it.toString() }
+        }.toMap()
 
         // 1. Плейлисты и треки в плейлистах
-        val playlists = playlistDao.allRaw()
+        val playlists = playlistDao.allForSync()
         for (p in playlists) {
-            val pUpdatedAt = (p.createdAt / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec)
+            val pUpdatedAt = ((p.updatedAt.takeIf { it > 0 } ?: p.createdAt) / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec)
+            if (p.deletedAt != null) {
+                changes.put(JSONObject().apply {
+                    put("entity", "playlist")
+                    put("id", p.id)
+                    put("field", "__deleted")
+                    put("value", true)
+                    put("updated_at", (p.deletedAt / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec))
+                })
+                continue
+            }
             changes.put(JSONObject().apply {
                 put("entity", "playlist")
                 put("id", p.id)
@@ -359,38 +407,38 @@ class SyncRepositoryImpl @Inject constructor(
 
             val tracks = playlistTrackDao.tracksInPlaylist(p.id)
             tracks.forEachIndexed { index, track ->
+                val serverTrackId = serverIds[track.id] ?: return@forEachIndexed
                 changes.put(JSONObject().apply {
                     put("entity", "playlist_track")
-                    put("id", "${p.id}:${track.id}")
+                    put("id", "${p.id}:$serverTrackId")
                     put("field", "position")
                     put("value", index)
-                    put("updated_at", pUpdatedAt)
+                    val entry = playlistEntries.firstOrNull { it.playlistId == p.id && it.trackId == track.id }
+                    val changedAt = entry?.updatedAt?.takeIf { it > 0 } ?: entry?.addedAt ?: p.createdAt
+                    put("updated_at", (changedAt / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec))
                 })
             }
         }
 
         // 2. Треки с рейтингом или заметкой
-        val tracks = trackDao.allRaw()
-        for (track in tracks) {
-            val trackUpdatedAt = (track.dateAdded / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec)
+        for (track in localTracks) {
+            val serverTrackId = serverIds[track.id] ?: continue
             if (track.rating != null) {
-                val ratingTrackId = track.id.removePrefix("server_")
                 changes.put(JSONObject().apply {
                     put("entity", "rating")
-                    put("id", ratingTrackId)
+                    put("id", serverTrackId)
                     put("field", "stars")
                     put("value", track.rating)
-                    put("updated_at", trackUpdatedAt)
+                    put("updated_at", (track.ratingUpdatedAt / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec))
                 })
             }
             if (!track.note.isNullOrBlank()) {
-                val noteTrackId = track.id.removePrefix("server_")
                 changes.put(JSONObject().apply {
                     put("entity", "track_note")
-                    put("id", noteTrackId)
+                    put("id", serverTrackId)
                     put("field", "note")
                     put("value", track.note)
-                    put("updated_at", trackUpdatedAt)
+                    put("updated_at", (track.noteUpdatedAt / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec))
                 })
             }
         }
@@ -398,13 +446,14 @@ class SyncRepositoryImpl @Inject constructor(
         // 3. Моменты
         val moments = momentDao.allSnapshot()
         for (m in moments) {
-            val mUpdatedAt = (m.createdAt / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec)
+            val serverTrackId = serverIds[m.trackId] ?: continue
+            val mUpdatedAt = ((m.updatedAt.takeIf { it > 0 } ?: m.createdAt) / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec)
             changes.put(JSONObject().apply {
                 put("entity", "moment")
                 put("id", m.id.toString())
                 put("field", "data")
                 put("value", JSONObject().apply {
-                    put("track_id", m.trackId)
+                    put("track_id", serverTrackId)
                     put("position_ms", m.positionMs)
                     put("label", m.label)
                     put("color", m.color)
@@ -418,13 +467,14 @@ class SyncRepositoryImpl @Inject constructor(
         // 4. Петли
         val loops = loopDao.allSnapshot()
         for (l in loops) {
-            val lUpdatedAt = (l.createdAt / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec)
+            val serverTrackId = serverIds[l.trackId] ?: continue
+            val lUpdatedAt = ((l.updatedAt.takeIf { it > 0 } ?: l.createdAt) / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec)
             changes.put(JSONObject().apply {
                 put("entity", "loop")
                 put("id", l.id.toString())
                 put("field", "data")
                 put("value", JSONObject().apply {
-                    put("track_id", l.trackId)
+                    put("track_id", serverTrackId)
                     put("start_ms", l.startMs)
                     put("end_ms", l.endMs)
                     put("name", l.name)
@@ -445,30 +495,32 @@ class SyncRepositoryImpl @Inject constructor(
                     put("name", tag.name)
                     put("color_argb", tag.colorArgb)
                 })
-                put("updated_at", 1L)
+                put("updated_at", (tag.updatedAt / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec))
             })
         }
         val assignments = tagDao.allAssignmentsRaw()
         for (a in assignments) {
+            val serverTrackId = serverIds[a.trackId] ?: continue
             changes.put(JSONObject().apply {
                 put("entity", "tag_assignment")
-                put("id", "${a.trackId}:${a.tagId}")
+                put("id", "$serverTrackId:${a.tagId}")
                 put("field", "assigned")
                 put("value", true)
-                put("updated_at", 1L)
+                put("updated_at", (a.updatedAt / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec))
             })
         }
 
         // 6. История прослушиваний
         val historyList = playHistoryDao.since(since * 1000L)
         for (h in historyList) {
+            val serverTrackId = serverIds[h.trackId] ?: continue
             val hUpdatedAt = (h.playedAt / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec)
             changes.put(JSONObject().apply {
                 put("entity", "listening_history")
-                put("id", "${h.trackId}:${h.playedAt}")
+                put("id", "$serverTrackId:${h.playedAt}")
                 put("field", "history")
                 put("value", JSONObject().apply {
-                    put("track_id", h.trackId)
+                    put("track_id", serverTrackId)
                     put("played_at", h.playedAt)
                     put("duration_ms", h.durationMs)
                 })
@@ -493,6 +545,18 @@ class SyncRepositoryImpl @Inject constructor(
             if (!ok) {
                 Log.w(TAG, "pushToServer: push batch failed at offset $i")
                 return false
+            }
+        }
+        val queue = settingsRepository.lastPlaybackQueueTrackIds.value
+        val index = settingsRepository.lastPlaybackQueueIndex.value
+        queue.getOrNull(index)?.let { localId ->
+            serverIds[localId]?.toLongOrNull()?.let { serverId ->
+                NamiServerClient.positionPost(
+                    cfg,
+                    serverId,
+                    settingsRepository.lastPlaybackPositionMs.value,
+                    (settingsRepository.lastPlaybackPausedAt.value / 1000L).coerceAtLeast(1L),
+                )
             }
         }
         flushPendingScrobbles(cfg)

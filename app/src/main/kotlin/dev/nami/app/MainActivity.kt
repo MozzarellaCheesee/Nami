@@ -215,6 +215,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        jamRepository.connectServerEvents()
         // Transparent system nav bar: content draws edge-to-edge under it (NamiBottomBar already
         // adds its own navigationBarsPadding inset, so nothing shifts), and the gesture bar/
         // buttons overlay directly on the app's own dark background instead of a separate solid

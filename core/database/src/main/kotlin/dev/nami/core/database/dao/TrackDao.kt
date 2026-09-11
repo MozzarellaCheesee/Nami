@@ -233,8 +233,8 @@ interface TrackDao {
     @Query("UPDATE tracks SET replayGainDb = :gainDb WHERE id = :id")
     suspend fun updateReplayGain(id: String, gainDb: Float)
 
-    @Query("UPDATE tracks SET note = :note WHERE id = :id")
-    suspend fun updateNote(id: String, note: String?)
+    @Query("UPDATE tracks SET note = :note, noteUpdatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateNote(id: String, note: String?, updatedAt: Long = System.currentTimeMillis())
 
     @Query("UPDATE tracks SET genre = :genre WHERE id = :id")
     suspend fun updateGenre(id: String, genre: String?)
@@ -245,8 +245,8 @@ interface TrackDao {
     @Query("UPDATE tracks SET bpm = :bpm, musicalKey = :musicalKey WHERE id = :id")
     suspend fun updateBpmKey(id: String, bpm: Float?, musicalKey: String?)
 
-    @Query("UPDATE tracks SET rating = :rating WHERE id = :id")
-    suspend fun updateRating(id: String, rating: Int?)
+    @Query("UPDATE tracks SET rating = :rating, ratingUpdatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateRating(id: String, rating: Int?, updatedAt: Long = System.currentTimeMillis())
 
     // Only ever set once - firstPlayed IS NULL guards against a later play overwriting it.
     @Query("UPDATE tracks SET firstPlayed = :timestamp WHERE id = :id AND firstPlayed IS NULL")
