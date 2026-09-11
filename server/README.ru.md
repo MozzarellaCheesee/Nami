@@ -471,6 +471,60 @@ cloudflared tunnel run --url http://localhost:4533 nami
 
 Когда TLS завершается Tailscale Serve, Caddy или Cloudflare, ожидается запуск самого Nami с `NAMI_TLS=false`.
 
+## Консольные команды управления (CLI)
+
+Сервер Nami можно полностью администрировать прямо из терминала без необходимости открывать браузер:
+
+### Сопряжение с мобильным приложением
+```bash
+# Генерация одноразового 8-значного кода и вывод ASCII QR-кода прямо в терминал
+nami pair
+
+# Сопряжение для конкретного пользователя (вместо владельца)
+nami pair --user alice
+```
+
+### Автоматическая настройка домена и HTTPS
+```bash
+# Проверяет DNS, открывает порты 80/443, ставит Caddy с автовыпуском Let's Encrypt и настраивает config.toml
+nami domain music.example.com
+```
+
+### Управление пользователями (`nami users`)
+```bash
+nami users list                     # Список зарегистрированных пользователей
+nami users add <username>           # Добавить пользователя (запросит пароль или сгенерирует)
+nami users passwd <username>        # Сменить пароль пользователя
+nami users delete <username>        # Удалить пользователя
+nami users invite --ttl-days 7      # Создать временную пригласительную ссылку
+```
+
+### Управление сопряжёнными устройствами (`nami devices`)
+```bash
+nami devices list                   # Список сопряжённых смартфонов и клиентов
+nami devices revoke <device_id>     # Отозвать доступ устройства
+```
+
+### Управление библиотекой (`nami library`)
+```bash
+nami library health                 # Проверка здоровья библиотеки (битые файлы, дубликаты, треки без тегов)
+nami library scan                   # Запуск фонового сканирования медиафайлов
+nami library dirs                   # Список добавленных папок с музыкой
+nami library add-dir /path/to/music # Добавить новую музыкальную директорию
+```
+
+### Просмотр и редактирование конфигурации (`nami config`)
+```bash
+nami config show                    # Показать текущую конфигурацию config.toml
+nami config set <key> <value>       # Изменить значение параметра в config.toml
+```
+
+### Удаление сервера (`nami uninstall`)
+```bash
+nami uninstall                      # Останавливает службу, удаляет бинарник, интерактивно спрашивает про БД
+nami uninstall --purge              # Полное удаление всех данных (/var/lib/nami) без подтверждения
+```
+
 ## Заметки по безопасности
 
 - Пароли людей хранятся как Argon2id-хеши.
