@@ -110,6 +110,41 @@ object NamiServerClient {
         return parseLyrics(text)
     }
 
+    data class FriendNowPlaying(
+        val userId: Long,
+        val username: String,
+        val trackId: Long,
+        val title: String,
+        val artist: String?,
+        val positionMs: Long,
+        val updatedAt: Long,
+    )
+
+    /** GET /api/now-playing - что слушают пользователи сервера прямо сейчас. */
+    fun nowPlaying(cfg: Config): List<FriendNowPlaying>? {
+        val (code, text) = request("GET", "${cfg.baseUrl}/api/now-playing", null, cfg.token, cfg.certSha256)
+            ?: return null
+        if (code != 200) return null
+        val arr = runCatching { org.json.JSONArray(text) }.getOrNull() ?: return null
+        val list = mutableListOf<FriendNowPlaying>()
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            list.add(
+                FriendNowPlaying(
+                    userId = o.optLong("user_id"),
+                    username = o.optString("username"),
+                    trackId = o.optLong("track_id"),
+                    title = o.optString("title"),
+                    artist = o.optString("artist").takeIf { it.isNotBlank() },
+                    positionMs = o.optLong("position_ms"),
+                    updatedAt = o.optLong("updated_at"),
+                ),
+            )
+        }
+        return list
+    }
+
+
     /**
      * POST /api/auth/pair - обменивает восьмизначный код сопряжения (его показывает мастер
      * настройки рядом с QR) на постоянный токен устройства. Для ручного ввода в приложении,

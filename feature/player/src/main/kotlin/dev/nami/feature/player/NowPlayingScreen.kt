@@ -640,7 +640,10 @@ fun NowPlayingScreen(
                             .fillMaxSize()
                             .background(NamiColors.Ink700, RoundedCornerShape(4.dp))
                             .pointerInput(Unit) {
-                                detectTapGestures(onDoubleTap = { viewModel.performDoubleTapAction() })
+                                detectTapGestures(
+                                    onDoubleTap = { viewModel.performDoubleTapAction() },
+                                    onLongPress = { viewModel.performLongPressAction() },
+                                )
                             },
                     )
                 }

@@ -8,6 +8,9 @@ enum class GestureAction {
     NONE,
     TOGGLE_LIKE,
     SKIP_NEXT,
+    PREV_TRACK,
     PLAY_PAUSE,
     SHOW_LYRICS,
+    SHUFFLE,
 }
+

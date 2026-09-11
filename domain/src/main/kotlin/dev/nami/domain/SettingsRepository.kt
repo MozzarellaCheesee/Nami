@@ -450,7 +450,24 @@ interface SettingsRepository {
     val convolutionIrPath: StateFlow<String?>
     fun setConvolutionIrPath(value: String?)
 
+    /** Встряхивание для перемешивания очереди (акселерометр). */
+    val shakeToShuffleEnabled: StateFlow<Boolean>
+    fun setShakeToShuffleEnabled(enabled: Boolean)
+
+    /** Порог чувствительности акселерометра для Shake to shuffle (g-force). */
+    val shakeSensitivity: StateFlow<Float>
+    fun setShakeSensitivity(value: Float)
+
+    /** Действие по долгому нажатию на обложку Now Playing. */
+    val longPressArtworkAction: StateFlow<GestureAction>
+    fun setLongPressArtworkAction(action: GestureAction)
+
+    /** Динамическая строка лирики на экране блокировки / в медиа-уведомлении. */
+    val lockscreenLyricsEnabled: StateFlow<Boolean>
+    fun setLockscreenLyricsEnabled(enabled: Boolean)
+
     companion object {
         const val STANDS4_DAILY_LIMIT = 100
     }
 }
+

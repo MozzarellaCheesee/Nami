@@ -164,15 +164,31 @@ class NowPlayingViewModel @Inject constructor(
     private val _requestShowLyrics = MutableSharedFlow<Unit>()
     val requestShowLyrics = _requestShowLyrics.asSharedFlow()
 
+    val longPressArtworkAction: StateFlow<dev.nami.domain.GestureAction> =
+        settingsRepository?.longPressArtworkAction ?: MutableStateFlow(dev.nami.domain.GestureAction.SHOW_LYRICS)
+
     fun performDoubleTapAction() {
-        when (doubleTapArtworkAction.value) {
+        executeGestureAction(doubleTapArtworkAction.value)
+    }
+
+    fun performLongPressAction() {
+        executeGestureAction(longPressArtworkAction.value)
+    }
+
+    private fun executeGestureAction(action: dev.nami.domain.GestureAction) {
+        when (action) {
             dev.nami.domain.GestureAction.NONE -> Unit
             dev.nami.domain.GestureAction.TOGGLE_LIKE -> toggleLikeCurrentTrack()
             dev.nami.domain.GestureAction.SKIP_NEXT -> viewModelScope.launch { playerRepository.skipNext() }
+            dev.nami.domain.GestureAction.PREV_TRACK -> viewModelScope.launch { playerRepository.skipPrevious() }
             dev.nami.domain.GestureAction.PLAY_PAUSE -> viewModelScope.launch { playerRepository.toggle() }
             dev.nami.domain.GestureAction.SHOW_LYRICS -> viewModelScope.launch { _requestShowLyrics.emit(Unit) }
+            dev.nami.domain.GestureAction.SHUFFLE -> viewModelScope.launch {
+                playerRepository.setShuffleEnabled(!playerRepository.shuffleEnabled.value)
+            }
         }
     }
+
 
     /** Метки моментов (План.md §22.1) for whatever's currently playing - see WaveformScrubber's
      * `moments` param, which just draws these, and NowPlayingScreen's long-press dialog, which

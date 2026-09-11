@@ -59,6 +59,14 @@ class SettingsViewModel @Inject constructor(
     val uiCjkFontPath: StateFlow<String?> = appSettingsRepository.uiCjkFontPath
     val lyricsCjkFontPath: StateFlow<String?> = appSettingsRepository.lyricsCjkFontPath
     val doubleTapArtworkAction: StateFlow<dev.nami.domain.GestureAction> = appSettingsRepository.doubleTapArtworkAction
+    val longPressArtworkAction: StateFlow<dev.nami.domain.GestureAction> = appSettingsRepository.longPressArtworkAction
+    fun setLongPressArtworkAction(action: dev.nami.domain.GestureAction) = appSettingsRepository.setLongPressArtworkAction(action)
+    val shakeToShuffleEnabled: StateFlow<Boolean> = appSettingsRepository.shakeToShuffleEnabled
+    fun setShakeToShuffleEnabled(enabled: Boolean) = appSettingsRepository.setShakeToShuffleEnabled(enabled)
+    val shakeSensitivity: StateFlow<Float> = appSettingsRepository.shakeSensitivity
+    fun setShakeSensitivity(value: Float) = appSettingsRepository.setShakeSensitivity(value)
+    val lockscreenLyricsEnabled: StateFlow<Boolean> = appSettingsRepository.lockscreenLyricsEnabled
+    fun setLockscreenLyricsEnabled(enabled: Boolean) = appSettingsRepository.setLockscreenLyricsEnabled(enabled)
     val scrobblingEnabled: StateFlow<Boolean> = appSettingsRepository.scrobblingEnabled
     val airPlayEnabled: StateFlow<Boolean> = appSettingsRepository.airPlayEnabled
     fun setAirPlayEnabled(value: Boolean) = appSettingsRepository.setAirPlayEnabled(value)

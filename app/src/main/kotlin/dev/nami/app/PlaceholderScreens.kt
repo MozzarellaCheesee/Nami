@@ -48,6 +48,8 @@ import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Shuffle
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Usb
+import androidx.compose.material.icons.outlined.TouchApp
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Icon
@@ -88,6 +90,7 @@ fun SettingsScreen(
     onAudioTractClick: () -> Unit,
     onAppearanceClick: () -> Unit,
     onPlayerClick: () -> Unit,
+    onGesturesClick: () -> Unit,
     onLyricsClick: () -> Unit,
     onLibraryHealthClick: () -> Unit,
     onStatsClick: () -> Unit,
@@ -120,7 +123,8 @@ fun SettingsScreen(
         // и служебное - под "Ещё": их открывают раз в месяц, а место наверху они занимали каждый.
         NamiSectionLabel("Звук и плеер")
         SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
-            NavRow(Icons.Outlined.PlayCircleOutline, "Плеер", "Макет Now Playing, жесты, перемешивание", onPlayerClick)
+            NavRow(Icons.Outlined.PlayCircleOutline, "Плеер", "Макет Now Playing, экран блокировки", onPlayerClick)
+            NavRow(Icons.Outlined.TouchApp, "Жесты", "Двойной тап, долгое нажатие, Shake-to-shuffle", onGesturesClick)
             NavRow(Icons.Outlined.GraphicEq, "Аудиотракт", "Эквалайзер, кроссфейд, вывод звука - Beta", onAudioTractClick)
             NavRow(Icons.Outlined.School, "Лирика", "Тексты, перевод, режим изучения", onLyricsClick)
         }
@@ -244,6 +248,7 @@ fun SettingsServerScreen(
     onBack: () -> Unit,
     onScanClick: () -> Unit,
     onLibraryClick: () -> Unit,
+    onFriendsClick: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val url by viewModel.namiServerUrl.collectAsState()
@@ -389,6 +394,13 @@ fun SettingsServerScreen(
                     subtitle = "Треки с сервера, скачивание в офлайн",
                     trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
                     onClick = onLibraryClick,
+                )
+                SettingsRow(
+                    icon = Icons.Outlined.Person,
+                    title = "Что слушают друзья",
+                    subtitle = "Активность пользователей прямо сейчас",
+                    trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
+                    onClick = onFriendsClick,
                 )
             }
             val syncMsg by viewModel.syncMsg.collectAsState()
@@ -875,6 +887,7 @@ fun SettingsPlayerScreen(
     onSessionsClick: () -> Unit,
     onDriveModeClick: () -> Unit,
     onBlockOrderClick: () -> Unit,
+    onGesturesClick: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val autoOpenPlayer by viewModel.autoOpenPlayer.collectAsState()
@@ -955,52 +968,10 @@ fun SettingsPlayerScreen(
                 onClick = onDriveModeClick,
             )
             SettingsRow(
-                icon = Icons.Outlined.PlayCircleOutline,
-                title = "Двойной тап по обложке",
-                trailing = {
-                    Text(
-                        text = when (doubleTapAction) {
-                            dev.nami.domain.GestureAction.NONE -> "Ничего"
-                            dev.nami.domain.GestureAction.TOGGLE_LIKE -> "Любимый трек"
-                            dev.nami.domain.GestureAction.SKIP_NEXT -> "Следующий трек"
-                            dev.nami.domain.GestureAction.PLAY_PAUSE -> "Пауза/играть"
-                            dev.nami.domain.GestureAction.SHOW_LYRICS -> "Показать лирику"
-                        },
-                        color = NamiColors.Paper40,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                },
-                onClick = {
-                    val values = dev.nami.domain.GestureAction.entries
-                    val next = values[(values.indexOf(doubleTapAction) + 1) % values.size]
-                    viewModel.setDoubleTapArtworkAction(next)
-                },
-            )
-            // §13 "действия свайпов настраиваются". Значений ровно два, а не весь GestureAction:
-            // свайп по мини-плееру двусторонний (влево/вправо), и единственное действие, у
-            // которого есть осмысленные обе стороны - листание трека. "Лайк влево и лайк вправо"
-            // действием не является, поэтому остальные варианты сюда не пускаем.
-            SettingsRow(
-                icon = Icons.Outlined.Tune,
-                title = "Свайп вбок по мини-плееру",
-                trailing = {
-                    Text(
-                        text = when (miniPlayerSideSwipe) {
-                            dev.nami.domain.GestureAction.SKIP_NEXT -> "Листать треки"
-                            else -> "Ничего"
-                        },
-                        color = NamiColors.Paper40,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                },
-                onClick = {
-                    val next = if (miniPlayerSideSwipe == dev.nami.domain.GestureAction.SKIP_NEXT) {
-                        dev.nami.domain.GestureAction.NONE
-                    } else {
-                        dev.nami.domain.GestureAction.SKIP_NEXT
-                    }
-                    viewModel.setMiniPlayerSideSwipeAction(next)
-                },
+                icon = Icons.Outlined.TouchApp,
+                title = "Жесты и управление",
+                trailing = { Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = NamiColors.Paper40) },
+                onClick = onGesturesClick,
             )
             SettingsRow(
                 icon = Icons.Outlined.GraphicEq,

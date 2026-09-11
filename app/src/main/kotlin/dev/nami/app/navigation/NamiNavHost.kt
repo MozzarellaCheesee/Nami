@@ -75,6 +75,7 @@ private const val ROUTE_SETTINGS = "settings"
 private const val ROUTE_SETTINGS_SERVER = "settings_server"
 private const val ROUTE_SETTINGS_SERVER_SCAN = "settings_server_scan"
 private const val ROUTE_SERVER_LIBRARY = "server_library"
+private const val ROUTE_FRIENDS_ACTIVITY = "friends_activity"
 private const val ROUTE_ALBUM_DETAIL = "album/{albumId}"
 private const val ROUTE_ARTIST_DETAIL = "artist/{artistId}"
 private const val ROUTE_ARTIST_DISCOGRAPHY = "artist/{artistId}/discography"
@@ -85,6 +86,7 @@ private const val ROUTE_SMART_PLAYLIST_EDIT_EXISTING = "smart_playlist_editor/{p
 private const val ROUTE_SETTINGS_APPEARANCE = "settings/appearance"
 private const val ROUTE_THEME_EDITOR = "settings/theme_editor"
 private const val ROUTE_SETTINGS_PLAYER = "settings/player"
+private const val ROUTE_SETTINGS_GESTURES = "settings/gestures"
 private const val ROUTE_NOW_PLAYING_BLOCKS = "settings/player/blocks"
 private const val ROUTE_SESSIONS = "settings/sessions"
 private const val ROUTE_SETTINGS_LYRICS = "settings/lyrics"
@@ -522,6 +524,7 @@ fun NamiNavHost(
                     onAudioTractClick = { navController.navigate(ROUTE_AUDIO_TRACT) },
                     onAppearanceClick = { navController.navigate(ROUTE_SETTINGS_APPEARANCE) },
                     onPlayerClick = { navController.navigate(ROUTE_SETTINGS_PLAYER) },
+                    onGesturesClick = { navController.navigate(ROUTE_SETTINGS_GESTURES) },
                     onLyricsClick = { navController.navigate(ROUTE_SETTINGS_LYRICS) },
                     onLibraryHealthClick = { navController.navigate(ROUTE_LIBRARY_HEALTH) },
                     onStatsClick = { navController.navigate(ROUTE_STATS) },
@@ -546,7 +549,11 @@ fun NamiNavHost(
                     onBack = { navController.popBackStack() },
                     onScanClick = { navController.navigate(ROUTE_SETTINGS_SERVER_SCAN) },
                     onLibraryClick = { navController.navigate(ROUTE_SERVER_LIBRARY) },
+                    onFriendsClick = { navController.navigate(ROUTE_FRIENDS_ACTIVITY) },
                 )
+            }
+            composable(ROUTE_FRIENDS_ACTIVITY) {
+                dev.nami.feature.library.FriendsActivityScreen(onBack = { navController.popBackStack() })
             }
             composable(ROUTE_SERVER_LIBRARY) {
                 dev.nami.feature.library.ServerLibraryScreen(onBack = { navController.popBackStack() })
@@ -594,6 +601,13 @@ fun NamiNavHost(
                     onSessionsClick = { navController.navigate(ROUTE_SESSIONS) },
                     onDriveModeClick = { navController.navigate(ROUTE_DRIVE_MODE) },
                     onBlockOrderClick = { navController.navigate(ROUTE_NOW_PLAYING_BLOCKS) },
+                    onGesturesClick = { navController.navigate(ROUTE_SETTINGS_GESTURES) },
+                )
+            }
+            composable(ROUTE_SETTINGS_GESTURES) {
+                dev.nami.app.gesture.GestureSettingsScreen(
+                    viewModel = hiltViewModel(),
+                    onBack = { navController.popBackStack() },
                 )
             }
             composable(ROUTE_NOW_PLAYING_BLOCKS) {

@@ -1,3 +1,7 @@
+<p align="right">
+  <strong>Русский</strong> · <a href="README.en.md">English</a>
+</p>
+
 # Развёртывание Nami на NAS
 
 Шаблоны для популярных NAS-систем.
@@ -25,7 +29,6 @@
 5. Deploy
 
 Альтернатива через CLI:
-
 ```bash
 helm install nami ./nami-chart \
   --set persistence.music.hostPath=/mnt/tank/Music \
@@ -49,7 +52,6 @@ helm install nami ./nami-chart \
 ## Общие настройки
 
 Все шаблоны используют:
-
 - **Порт**: 3030 (HTTP + WebSocket)
 - **Тома**:
   - `/music` - музыкальная коллекция (read-only)

@@ -105,6 +105,24 @@ class ServerAudioRepositoryImpl @Inject constructor(
             }
         }
 
+    override suspend fun fetchFriendsNowPlaying(): List<dev.nami.domain.FriendNowPlaying>? {
+        val cfg = activeConfig() ?: return null
+        val items = withContext(Dispatchers.IO) {
+            NamiServerClient.nowPlaying(cfg)
+        } ?: return null
+        return items.map {
+            dev.nami.domain.FriendNowPlaying(
+                userId = it.userId,
+                username = it.username,
+                trackId = it.trackId,
+                title = it.title,
+                artist = it.artist,
+                positionMs = it.positionMs,
+                updatedAt = it.updatedAt,
+            )
+        }
+    }
+
     companion object {
         /** Разбор полей анализа из ответа `GET /api/tracks/{id}` - отдельно, чтобы тестировать. */
         fun parseAnalysis(o: JSONObject): ServerAnalysis? {

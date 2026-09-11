@@ -1,3 +1,7 @@
+<p align="right">
+  <strong>English</strong> · <a href="README.ru.md">Русский</a>
+</p>
+
 <p align="center">
   <img src="assets/icon-wave.png" width="112" alt="Nami logo" />
 </p>

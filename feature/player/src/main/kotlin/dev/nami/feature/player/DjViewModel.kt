@@ -40,6 +40,7 @@ class DjViewModel @Inject constructor(
                 artworkPath = track.albumArtworkPath,
                 format = track.format,
                 durationMs = track.durationMs,
+                bpm = track.bpm,
             ),
         )
     }
@@ -47,6 +48,14 @@ class DjViewModel @Inject constructor(
     fun toggleDeck(deck: DjDeck) = djRepository.toggleDeck(deck)
     fun seekDeck(deck: DjDeck, positionMs: Long) = djRepository.seekDeck(deck, positionMs)
     fun setCrossfade(value: Float) = djRepository.setCrossfade(value)
+    fun setDeckSpeed(deck: DjDeck, speed: Float) = djRepository.setDeckSpeed(deck, speed)
+    fun adjustSpeed(deck: DjDeck, delta: Float) {
+        val currentSpeed = if (deck == DjDeck.A) deckA.value.speed else deckB.value.speed
+        djRepository.setDeckSpeed(deck, (currentSpeed + delta).coerceIn(0.5f, 2.0f))
+    }
+    fun resetSpeed(deck: DjDeck) = djRepository.setDeckSpeed(deck, 1.0f)
+    fun syncBpm(targetDeck: DjDeck, sourceDeck: DjDeck) = djRepository.syncBpm(targetDeck, sourceDeck)
+    fun nudge(deck: DjDeck, deltaMs: Long) = djRepository.nudge(deck, deltaMs)
 
     override fun onCleared() {
         djRepository.release()
