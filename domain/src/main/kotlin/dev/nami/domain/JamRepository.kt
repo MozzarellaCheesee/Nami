@@ -1,6 +1,8 @@
 package dev.nami.domain
 
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 
 /** State of an active Jam session. */
 data class JamSession(
@@ -29,6 +31,10 @@ data class DiscoveredJamRoom(
 )
 
 interface JamRepository {
+    /** Типы сущностей из серверных WebSocket-событий `changed`. */
+    val serverChanges: Flow<Set<String>>
+        get() = emptyFlow()
+
     /** Current session or null if not in a Jam. */
     val session: StateFlow<JamSession?>
 

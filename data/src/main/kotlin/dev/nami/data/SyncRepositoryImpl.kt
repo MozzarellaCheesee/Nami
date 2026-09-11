@@ -388,12 +388,13 @@ class SyncRepositoryImpl @Inject constructor(
         for (p in playlists) {
             val pUpdatedAt = ((p.updatedAt.takeIf { it > 0 } ?: p.createdAt) / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec)
             if (p.deletedAt != null) {
+                val deletedAt = p.deletedAt ?: continue
                 changes.put(JSONObject().apply {
                     put("entity", "playlist")
                     put("id", p.id)
                     put("field", "__deleted")
                     put("value", true)
-                    put("updated_at", (p.deletedAt / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec))
+                    put("updated_at", (deletedAt / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec))
                 })
                 continue
             }

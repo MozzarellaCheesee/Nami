@@ -22,6 +22,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -77,6 +79,9 @@ class JamRepositoryImpl @Inject constructor(
 ) : JamRepository {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private val _serverChanges = MutableSharedFlow<Set<String>>(extraBufferCapacity = 1)
+    override val serverChanges: SharedFlow<Set<String>> = _serverChanges
 
     private val _session = MutableStateFlow<JamSession?>(null)
     override val session: StateFlow<JamSession?> = _session
@@ -792,6 +797,13 @@ class JamRepositoryImpl @Inject constructor(
                     previousSession = null
                 }
                 "changed" -> {
+                    val entities = json.optJSONArray("entities")
+                    val names = buildSet {
+                        if (entities != null) for (i in 0 until entities.length()) {
+                            entities.optString(i).takeIf { it.isNotBlank() }?.let(::add)
+                        }
+                    }
+                    _serverChanges.tryEmit(names)
                     scope.launch { runCatching { syncRepository.pullFromServer() } }
                 }
                 "position" -> {

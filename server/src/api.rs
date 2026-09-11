@@ -873,19 +873,20 @@ async fn transcode_profiles(State(st): State<Shared>) -> Json<serde_json::Value>
 
 async fn scan(State(st): State<Shared>) -> ApiResult<Json<scanner::ScanReport>> {
     // Сканирование блокирующее (walkdir + разбор тегов) - уводим с async-потоков.
+    let scan_st = st.clone();
     let rep = tokio::task::spawn_blocking(move || -> crate::Res<scanner::ScanReport> {
-        let mut db = st.db.lock().unwrap();
+        let mut db = scan_st.db.lock().unwrap();
         // Библиотека по умолчанию (music_dirs), затем каждая заведённая отдельно.
         // Папка загрузок сканируется вместе со своей библиотекой - иначе всё,
         // что клиенты прислали, вычистилось бы как "файлы, которых больше нет".
-        let mut dirs0 = st.cfg.music_dirs.clone();
-        dirs0.push(st.cfg.upload_dir(0));
+        let mut dirs0 = scan_st.cfg.music_dirs.clone();
+        dirs0.push(scan_st.cfg.upload_dir(0));
         let mut total = scanner::scan(&mut db, &dirs0, 0)?;
         for (id, mut dirs) in scanner::library_dirs(&db)? {
             if id == 0 || dirs.is_empty() {
                 continue;
             }
-            dirs.push(st.cfg.upload_dir(id));
+            dirs.push(scan_st.cfg.upload_dir(id));
             let r = scanner::scan(&mut db, &dirs, id)?;
             total.scanned += r.scanned;
             total.added += r.added;
@@ -898,6 +899,13 @@ async fn scan(State(st): State<Shared>) -> ApiResult<Json<scanner::ScanReport>> 
     .await
     .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
     .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    if rep.added + rep.updated + rep.removed > 0 {
+        st.notify(serde_json::json!({
+            "type": "changed",
+            "entities": ["tracks"],
+            "at": crate::db::now(),
+        }));
+    }
     Ok(Json(rep))
 }
 
@@ -2345,6 +2353,7 @@ async fn upload(
     Query(q): Query<UploadQuery>,
     body: axum::body::Body,
 ) -> ApiResult<Json<Uploaded>> {
+    let state_key = ident.state_key();
     let library_id = {
         let db = st.db.lock().unwrap();
         match users::library_mode(&db) {
@@ -2375,6 +2384,7 @@ async fn upload(
         return Err(ApiError(StatusCode::BAD_REQUEST, e.to_string()));
     }
 
+    let upload_st = st.clone();
     let result = tokio::task::spawn_blocking(move || -> crate::Res<Uploaded> {
         // Что бы дальше ни случилось, временный файл в папке загрузок не остаётся.
         let cleanup = |r: crate::Res<Uploaded>| {
@@ -2389,13 +2399,13 @@ async fn upload(
             Ok(h) => h,
             Err(e) => return cleanup(Err(e.into())),
         };
-        let db = st.db.lock().unwrap();
+        let db = upload_st.db.lock().unwrap();
         if let Some((id, why)) = scanner::find_duplicate(&db, &hash, &meta, library_id) {
             return cleanup(Ok(Uploaded { track_id: id, duplicate_of: Some(why) }));
         }
         // Раскладка по шаблону автосортировки (config.import_pattern). Пустой шаблон -
         // файл в корень папки загрузок, как было.
-        let rel = scanner::sort_path(&st.cfg.import_pattern, &meta, &ext);
+        let rel = scanner::sort_path(&upload_st.cfg.import_pattern, &meta, &ext);
         let mut final_path = dir.join(&rel);
         if let Some(parent) = final_path.parent() {
             if let Err(e) = std::fs::create_dir_all(parent) {
@@ -2421,7 +2431,17 @@ async fn upload(
     .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     match result {
-        Ok(u) => Ok(Json(u)),
+        Ok(u) => {
+            if u.duplicate_of.is_none() {
+                st.notify(serde_json::json!({
+                    "type": "changed",
+                    "user_id": state_key,
+                    "entities": ["tracks"],
+                    "at": crate::db::now(),
+                }));
+            }
+            Ok(Json(u))
+        }
         // Не аудио или битые теги - это ошибка клиента, а не сервера.
         Err(e) => Err(ApiError(StatusCode::BAD_REQUEST, format!("файл не принят: {e}"))),
     }
