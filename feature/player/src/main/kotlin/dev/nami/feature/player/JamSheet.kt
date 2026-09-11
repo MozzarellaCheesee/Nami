@@ -1,6 +1,8 @@
 package dev.nami.feature.player
 
+import android.content.Intent
 import android.widget.Toast
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -8,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -21,6 +24,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.MusicNote
+import androidx.compose.material.icons.outlined.QrCode
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -31,9 +37,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -43,6 +51,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
@@ -57,6 +68,30 @@ import dev.nami.domain.JamSession
 
 private const val ALLOWED_JAM_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
+@Composable
+private fun QrCodeImage(content: String, modifier: Modifier = Modifier) {
+    if (content.isBlank()) return
+    val hints = mapOf(com.google.zxing.EncodeHintType.ERROR_CORRECTION to com.google.zxing.qrcode.decoder.ErrorCorrectionLevel.H)
+    val code = runCatching {
+        com.google.zxing.qrcode.encoder.Encoder.encode(content, com.google.zxing.qrcode.decoder.ErrorCorrectionLevel.H, hints)
+    }.getOrNull() ?: return
+    val matrix = code.matrix
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val cellW = w / matrix.width
+        val cellH = h / matrix.height
+        drawRect(Color.White)
+        for (y in 0 until matrix.height) {
+            for (x in 0 until matrix.width) {
+                if (matrix.get(x, y).toInt() == 1) {
+                    drawRect(Color.Black, Offset(x * cellW, y * cellH), Size(cellW, cellH))
+                }
+            }
+        }
+    }
+}
+
 /**
  * Выезжающая снизу панель (ModalBottomSheet) для совместного прослушивания (Джем) через сервер.
  */
@@ -70,6 +105,7 @@ fun JamSheet(
     val connected by viewModel.connected.collectAsState()
     val error by viewModel.error.collectAsState()
     val isServerConfigured by viewModel.isServerConfigured.collectAsState()
+    val activeHostUrl by viewModel.activeHostUrl.collectAsState()
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -149,13 +185,15 @@ fun JamSheet(
             if (currentSession == null) {
                 JamSheetNoSession(
                     isServerConfigured = isServerConfigured,
+                    activeHostUrl = activeHostUrl,
                     onCreateRoom = { viewModel.createRoom() },
-                    onJoinRoom = { code -> viewModel.joinRoom(code) },
+                    onJoinRoom = { code, host -> viewModel.joinRoom(code, host) },
                 )
             } else {
                 JamSheetActiveSession(
                     session = currentSession,
                     connected = connected,
+                    activeHostUrl = activeHostUrl,
                     onLeave = { viewModel.leave() },
                 )
             }
@@ -168,10 +206,13 @@ fun JamSheet(
 @Composable
 private fun JamSheetNoSession(
     isServerConfigured: Boolean,
+    activeHostUrl: String? = null,
     onCreateRoom: () -> Unit,
-    onJoinRoom: (String) -> Unit,
+    onJoinRoom: (String, String?) -> Unit,
 ) {
     var joinCode by remember { mutableStateOf("") }
+    var hostUrl by remember { mutableStateOf(activeHostUrl ?: "") }
+    var showAdvancedHost by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -194,9 +235,9 @@ private fun JamSheetNoSession(
                 )
                 Text(
                     text = if (isServerConfigured) {
-                        "Начните совместное прослушивание. Другие участники смогут подключиться по коду комнаты."
+                        "Начните совместное прослушивание. Другие участники смогут подключиться по коду комнаты или QR-коду без настройки сервера."
                     } else {
-                        "Для создания комнаты необходимо подключить сервер NAMI в Настройках."
+                        "Для создания комнаты необходимо подключить сервер NAMI в Настройках (вы выступаете хостом сессии)."
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (isServerConfigured) NamiColors.Paper70 else NamiColors.Paper40,
@@ -239,23 +280,22 @@ private fun JamSheetNoSession(
                     color = NamiColors.Paper100,
                 )
                 Text(
-                    text = if (isServerConfigured) {
-                        "Введите 6-значный код комнаты, чтобы слушать музыку вместе."
-                    } else {
-                        "Для подключения требуется настроенный сервер NAMI."
-                    },
+                    text = "Введите 6-значный код комнаты, ссылку-приглашение или адрес сервера хоста. Личный сервер не требуется.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (isServerConfigured) NamiColors.Paper70 else NamiColors.Paper40,
+                    color = NamiColors.Paper70,
                 )
                 OutlinedTextField(
                     value = joinCode,
                     onValueChange = { input ->
-                        val filtered = input.uppercase().filter { it in ALLOWED_JAM_CODE_CHARS }.take(6)
-                        joinCode = filtered
+                        joinCode = if (input.startsWith("nami://") || input.contains("http://") || input.contains("https://")) {
+                            input.trim()
+                        } else {
+                            input.uppercase().filter { it in ALLOWED_JAM_CODE_CHARS }.take(6)
+                        }
                     },
-                    enabled = isServerConfigured,
-                    label = { Text("Код комнаты") },
-                    placeholder = { Text("6 символов") },
+                    enabled = true,
+                    label = { Text("Код комнаты или ссылка") },
+                    placeholder = { Text("Например ABC234") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(NamiRadius.Card),
@@ -267,14 +307,50 @@ private fun JamSheetNoSession(
                         focusedLabelColor = NamiColors.Shu,
                         unfocusedLabelColor = NamiColors.Paper40,
                         cursorColor = NamiColors.Shu,
-                        disabledTextColor = NamiColors.Paper40,
-                        disabledBorderColor = NamiColors.Ink700,
-                        disabledLabelColor = NamiColors.Paper40,
                     ),
                 )
+
+                if (showAdvancedHost || hostUrl.isNotBlank()) {
+                    OutlinedTextField(
+                        value = hostUrl,
+                        onValueChange = { hostUrl = it.trim() },
+                        enabled = true,
+                        label = { Text("Адрес сервера хоста (если не в одном Wi-Fi)") },
+                        placeholder = { Text("http://192.168.1.100:4533") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(NamiRadius.Card),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = NamiColors.Paper100,
+                            unfocusedTextColor = NamiColors.Paper100,
+                            focusedBorderColor = NamiColors.Shu,
+                            unfocusedBorderColor = NamiColors.Ink600,
+                            focusedLabelColor = NamiColors.Shu,
+                            unfocusedLabelColor = NamiColors.Paper40,
+                            cursorColor = NamiColors.Shu,
+                        ),
+                    )
+                } else {
+                    TextButton(
+                        onClick = { showAdvancedHost = true },
+                        modifier = Modifier.align(Alignment.Start),
+                    ) {
+                        Text(
+                            text = "+ Указать адрес сервера вручную",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = NamiColors.Paper40,
+                        )
+                    }
+                }
+
+                val canJoin = joinCode.isNotBlank() && (joinCode.length >= 6 || joinCode.contains("jam"))
                 Button(
-                    onClick = { onJoinRoom(joinCode) },
-                    enabled = joinCode.length == 6 && isServerConfigured,
+                    onClick = {
+                        val trimmedCode = joinCode.trim()
+                        val customHost = hostUrl.trim().ifBlank { null }
+                        onJoinRoom(trimmedCode, customHost)
+                    },
+                    enabled = canJoin,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(48.dp),
@@ -300,10 +376,68 @@ private fun JamSheetNoSession(
 private fun JamSheetActiveSession(
     session: JamSession,
     connected: Boolean,
+    activeHostUrl: String? = null,
     onLeave: () -> Unit,
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
+    var showQrDialog by remember { mutableStateOf(false) }
+
+    val hostPart = activeHostUrl?.let { "&host=${java.net.URLEncoder.encode(it, "UTF-8")}" } ?: ""
+    val inviteLink = "nami://jam?code=${session.code}$hostPart"
+
+    if (showQrDialog) {
+        AlertDialog(
+            onDismissRequest = { showQrDialog = false },
+            title = {
+                Text(
+                    text = "QR-код для подключения",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = NamiColors.Paper100,
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text = "Отсканируйте камерой или сканером в Nami",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = NamiColors.Paper70,
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(200.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.White)
+                            .padding(12.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        QrCodeImage(
+                            content = inviteLink,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = session.code,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = NamiColors.Paper100,
+                        letterSpacing = 4.sp,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showQrDialog = false }) {
+                    Text("Закрыть", color = NamiColors.Shu)
+                }
+            },
+            containerColor = NamiColors.Ink800,
+        )
+    }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -377,10 +511,55 @@ private fun JamSheetActiveSession(
                         color = NamiColors.Paper40,
                     )
                     Text(
-                        text = if (session.isHost) "Организатор" else "Участник",
+                        text = if (session.isHost) "Организатор" else "Участник (Гость)",
                         style = MaterialTheme.typography.bodySmall,
                         color = NamiColors.Paper70,
                     )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                putExtra(
+                                    Intent.EXTRA_TEXT,
+                                    "Присоединяйся к совместному прослушиванию в Nami!\nКод комнаты: ${session.code}\nСсылка: $inviteLink",
+                                )
+                                type = "text/plain"
+                            }
+                            context.startActivity(Intent.createChooser(sendIntent, "Пригласить в Jam"))
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(NamiRadius.Button),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Share,
+                            contentDescription = null,
+                            tint = NamiColors.Paper100,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Поделиться", color = NamiColors.Paper100)
+                    }
+
+                    OutlinedButton(
+                        onClick = { showQrDialog = true },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(NamiRadius.Button),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.QrCode,
+                            contentDescription = null,
+                            tint = NamiColors.Paper100,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("QR-код", color = NamiColors.Paper100)
+                    }
                 }
             }
         }
