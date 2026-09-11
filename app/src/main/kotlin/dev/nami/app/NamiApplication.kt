@@ -5,6 +5,7 @@ import dagger.hilt.android.HiltAndroidApp
 import dev.nami.app.widget.updateAllNamiWidgets
 import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerRepository
+import dev.nami.domain.ServerLibraryRepository
 import dev.nami.domain.SettingsRepository
 import dev.nami.domain.TrashRepository
 import coil3.ImageLoader
@@ -24,6 +25,7 @@ class NamiApplication : Application(), SingletonImageLoader.Factory {
 
     @Inject lateinit var trashRepository: TrashRepository
     @Inject lateinit var playerRepository: PlayerRepository
+    @Inject lateinit var serverLibraryRepository: ServerLibraryRepository
     @Inject lateinit var settingsRepository: SettingsRepository
 
     override fun newImageLoader(context: PlatformContext): ImageLoader {
@@ -39,6 +41,20 @@ class NamiApplication : Application(), SingletonImageLoader.Factory {
 
     override fun onCreate() {
         super.onCreate()
+        dev.nami.data.NamiServerClient.setUnauthorizedHandler { rejectedToken ->
+            if (settingsRepository.namiServerToken.value == rejectedToken) {
+                settingsRepository.setNamiServerToken(null)
+            }
+        }
+        CoroutineScope(SupervisorJob() + Dispatchers.Main).launch {
+            settingsRepository.namiServerToken.distinctUntilChanged().collect { token ->
+                if (token.isNullOrBlank()) {
+                    serverLibraryRepository.clearMirroredTracks()
+                    val id = playerRepository.queue.value.nowPlaying?.id?.value.orEmpty()
+                    if (id.startsWith("server_") || id.startsWith("jam_")) playerRepository.stop()
+                }
+            }
+        }
         // ponytail: fire-and-forget startup sweep, not a scheduled job — see the plan's
         // "purge mechanism" note for why WorkManager is out of scope for now.
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {

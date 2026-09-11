@@ -132,7 +132,7 @@ interface TrackDao {
     )
 
     @Query("DELETE FROM tracks WHERE path LIKE 'nami-server://%'")
-    suspend fun deleteAllServerTracks()
+    suspend fun deleteAllServerTracks(): Int
 
     @Query("DELETE FROM tracks WHERE path LIKE 'nami-server://%' AND id NOT IN (:ids)")
     suspend fun deleteServerTracksExcept(ids: List<String>)

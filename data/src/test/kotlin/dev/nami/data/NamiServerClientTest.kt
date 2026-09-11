@@ -4,12 +4,32 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 // Robolectric: `org.json` под plain-JVM unit-тестом заглушён и бросает "not mocked"
 // (та же причина, по которой LrcLibClient не покрыт обычным тестом).
 @RunWith(RobolectricTestRunner::class)
 class NamiServerClientTest {
+
+    @Test
+    fun `authorized address wins over an earlier unauthorized address`() {
+        val (base, unauthorized) = NamiServerClient.selectAuthorizedBase(listOf("https://old", "https://current")) {
+            if (it.endsWith("old")) 401 else 200
+        }
+        assertEquals("https://current", base)
+        assertFalse(unauthorized)
+    }
+
+    @Test
+    fun `unauthorized is reported only after every address fails`() {
+        val (base, unauthorized) = NamiServerClient.selectAuthorizedBase(listOf("https://lan", "https://external")) {
+            if (it.endsWith("lan")) 401 else null
+        }
+        assertNull(base)
+        assertTrue(unauthorized)
+    }
 
     @Test
     fun `parseLyrics reads synced lines`() {

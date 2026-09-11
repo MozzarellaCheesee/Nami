@@ -46,6 +46,10 @@ class ServerLibraryRepositoryImpl @Inject constructor(
         _uploadProgress.value = null
     }
 
+    override suspend fun clearMirroredTracks() {
+        if (trackDao.deleteAllServerTracks() > 0) searchRepository.rebuildIndex()
+    }
+
     override fun uploadTracksBackground(tracks: List<Track>) {
         if (tracks.isEmpty()) return
         uploadJob?.cancel()
