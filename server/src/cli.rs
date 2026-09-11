@@ -57,12 +57,108 @@ pub enum Commands {
         input: PathBuf,
     },
     /// Диагностика: порты, ffmpeg, место на диске, права
+    /// Диагностика: порты, ffmpeg, место на диске, права
     Doctor,
     /// Автоматическая настройка домена (DNS, Caddy Reverse Proxy, Let's Encrypt SSL)
     Domain {
         /// Доменное имя (например: music.example.com)
         #[arg(index = 1)]
         domain: Option<String>,
+    },
+    /// Сопряжение смартфона: генерация кода и QR прямо в консоль
+    Pair {
+        /// Привязать устройство к конкретному пользователю (username)
+        #[arg(short, long)]
+        user: Option<String>,
+    },
+    /// Управление пользователями библиотеки (list, add, passwd, delete, invite)
+    Users {
+        #[command(subcommand)]
+        action: Option<UsersAction>,
+    },
+    /// Управление сопряжёнными устройствами (list, revoke)
+    Devices {
+        #[command(subcommand)]
+        action: Option<DevicesAction>,
+    },
+    /// Здоровье и управление библиотекой (health, scan, dirs, add-dir)
+    Library {
+        #[command(subcommand)]
+        action: Option<LibraryAction>,
+    },
+    /// Просмотр и редактирование конфигурации config.toml
+    Config {
+        #[command(subcommand)]
+        action: Option<ConfigAction>,
+    },
+}
+
+#[derive(Subcommand, Clone, Debug)]
+pub enum UsersAction {
+    /// Список пользователей
+    List,
+    /// Добавить пользователя
+    Add {
+        username: String,
+        password: Option<String>,
+        #[arg(short, long, default_value = "user")]
+        role: String,
+    },
+    /// Сменить пароль пользователя
+    Passwd {
+        username: String,
+        password: Option<String>,
+    },
+    /// Удалить пользователя
+    Delete {
+        username: String,
+    },
+    /// Создать пригласительную ссылку (инвайт)
+    Invite {
+        #[arg(short, long, default_value = "user")]
+        role: String,
+        #[arg(short, long)]
+        ttl_days: Option<i64>,
+    },
+}
+
+#[derive(Subcommand, Clone, Debug)]
+pub enum DevicesAction {
+    /// Список сопряжённых устройств
+    List,
+    /// Отозвать сопряжение устройства по ID
+    Revoke {
+        id: i64,
+    },
+}
+
+#[derive(Subcommand, Clone, Debug)]
+pub enum LibraryAction {
+    /// Отчёт о здоровье библиотеки (битые файлы, дубликаты, теги)
+    Health,
+    /// Сканировать папки библиотеки
+    Scan {
+        #[arg(short, long)]
+        path: Option<PathBuf>,
+        #[arg(short, long, default_value_t = false)]
+        deep: bool,
+    },
+    /// Список музыкальных папок
+    Dirs,
+    /// Добавить папку в конфигурацию
+    AddDir {
+        path: PathBuf,
+    },
+}
+
+#[derive(Subcommand, Clone, Debug)]
+pub enum ConfigAction {
+    /// Показать текущую конфигурацию
+    Show,
+    /// Установить значение параметра
+    Set {
+        key: String,
+        value: String,
     },
 }
 
@@ -82,6 +178,11 @@ impl Commands {
             Commands::Restore { input } => restore(cfg, input),
             Commands::Doctor => doctor(cfg),
             Commands::Domain { domain } => domain_setup(cfg, domain.as_deref()),
+            Commands::Pair { user } => pair_cmd(cfg, user.as_deref()),
+            Commands::Users { action } => users_cmd(cfg, action.clone()),
+            Commands::Devices { action } => devices_cmd(cfg, action.clone()),
+            Commands::Library { action } => library_cmd(cfg, action.clone()),
+            Commands::Config { action } => config_cmd(cfg, action.clone()),
         }
     }
 }
@@ -535,26 +636,51 @@ fn scan(cfg: &crate::config::Config, custom_path: &Option<PathBuf>, deep: bool) 
 
 /// Остановка и удаление Nami сервера
 fn uninstall(cfg: &crate::config::Config, purge: bool) -> Res<()> {
-    println!("Остановка и удаление Nami сервера...");
+    println!("=== 🗑️ Удаление Nami Music Server ===\n");
+    use std::io::{self, Write};
 
     #[cfg(unix)]
     {
-        println!("Остановка службы systemd nami...");
-        let _ = Command::new("systemctl").args(["stop", "nami"]).status();
-        let _ = Command::new("systemctl").args(["disable", "nami"]).status();
+        println!("1. Остановка и отключение службы systemd...");
+        let _ = Command::new("systemctl").args(["stop", "nami"]).output();
+        let _ = Command::new("systemctl").args(["disable", "nami"]).output();
 
         let service_file = PathBuf::from("/etc/systemd/system/nami.service");
         if service_file.exists() {
             if let Err(e) = std::fs::remove_file(&service_file) {
-                println!("Предупреждение: не удалось удалить {}: {}", service_file.display(), e);
+                println!("   ⚠ Не удалось удалить {}: {}", service_file.display(), e);
             } else {
-                println!("✓ Удалён {}", service_file.display());
-                let _ = Command::new("systemctl").args(["daemon-reload"]).status();
+                println!("   ✓ Служба {} удалена", service_file.display());
+                let _ = Command::new("systemctl").args(["daemon-reload"]).output();
             }
         }
 
         let _ = Command::new("docker").args(["stop", "nami"]).output();
         let _ = Command::new("docker").args(["rm", "nami"]).output();
+
+        println!("2. Удаление исполняемых файлов...");
+        for bin in ["/usr/local/bin/nami-server", "/usr/local/bin/nami"] {
+            let p = PathBuf::from(bin);
+            if p.exists() {
+                let _ = std::fs::remove_file(&p);
+                println!("   ✓ Удалён {}", bin);
+            }
+        }
+
+        println!("3. Закрытие портов в фаерволе...");
+        if let Ok(st) = Command::new("which").arg("ufw").output() {
+            if st.status.success() {
+                let _ = Command::new("ufw").args(["delete", "allow", "4533/tcp"]).output();
+                println!("   ✓ Порт 4533/tcp удалён из правил UFW");
+            }
+        }
+        if let Ok(st) = Command::new("which").arg("firewall-cmd").output() {
+            if st.status.success() {
+                let _ = Command::new("firewall-cmd").args(["--remove-port=4533/tcp", "--permanent"]).output();
+                let _ = Command::new("firewall-cmd").arg("--reload").output();
+                println!("   ✓ Порт 4533/tcp удалён из правил firewalld");
+            }
+        }
     }
 
     #[cfg(windows)]
@@ -563,25 +689,45 @@ fn uninstall(cfg: &crate::config::Config, purge: bool) -> Res<()> {
         let _ = Command::new("taskkill").args(["/F", "/IM", "nami-server.exe"]).output();
     }
 
-    if purge {
-        println!("Очистка данных (--purge)...");
+    // Вопрос пользователю об удалении данных, если не был передан флаг --purge
+    let should_purge = if purge {
+        true
+    } else {
+        print!("\nЖелаете полностью удалить базу данных, сертификаты и кэш? (/var/lib/nami, nami.db) [y/N]: ");
+        io::stdout().flush()?;
+        let mut resp = String::new();
+        io::stdin().read_line(&mut resp)?;
+        resp.trim().eq_ignore_ascii_case("y")
+    };
+
+    if should_purge {
+        println!("\n4. Полная очистка данных библиотеки и кэша...");
         if cfg.db_path.exists() {
-            if let Err(e) = std::fs::remove_file(&cfg.db_path) {
-                println!("Предупреждение: не удалось удалить БД {}: {}", cfg.db_path.display(), e);
-            } else {
-                println!("✓ Удалена БД: {}", cfg.db_path.display());
-            }
+            let _ = std::fs::remove_file(&cfg.db_path);
+            println!("   ✓ Удалена база данных: {}", cfg.db_path.display());
         }
         let cache = cfg.cache_dir();
         if cache.exists() {
             let _ = std::fs::remove_dir_all(&cache);
-            println!("✓ Очищен кэш: {}", cache.display());
+            println!("   ✓ Очищен кэш транскодов: {}", cache.display());
         }
+        if cfg.data_dir.exists() && cfg.data_dir != PathBuf::from(".") {
+            let _ = std::fs::remove_dir_all(&cfg.data_dir);
+            println!("   ✓ Удалён каталог данных: {}", cfg.data_dir.display());
+        }
+        #[cfg(unix)]
+        {
+            let _ = Command::new("userdel").args(["-r", "nami"]).output();
+        }
+        println!("   ✓ Все данные успешно вычищены.");
     } else {
-        println!("Данные сохранены. Передайте флаг --purge для полной очистки БД и кэша.");
+        println!("\n• База данных и папки с музыкой сохранены на диске.");
     }
 
-    println!("✓ Сервер Nami успешно удалён.");
+    println!("\n{}", "=".repeat(60));
+    println!("✓ Сервер Nami успешно удалён из системы.");
+    println!("{}", "=".repeat(60));
+
     Ok(())
 }
 
@@ -675,4 +821,454 @@ fn domain_setup(cfg: &crate::config::Config, domain_arg: Option<&str>) -> Res<()
 
     Ok(())
 }
+
+/// Сопряжение нового устройства с генерацией ASCII QR-кода и 8-значного кода в консоль
+fn pair_cmd(cfg: &crate::config::Config, user_filter: Option<&str>) -> Res<()> {
+    println!("=== 📱 Сопряжение устройства с сервером Nami ===\n");
+    let conn = crate::db::open(&cfg.db_path)?;
+
+    let user_id = if let Some(u) = user_filter {
+        let uid: Option<i64> = conn
+            .query_row("SELECT id FROM users WHERE username = ?1", [u.trim()], |r| r.get(0))
+            .ok();
+        if uid.is_none() {
+            return Err(format!("Пользователь «{u}» не найден в базе данных").into());
+        }
+        uid
+    } else {
+        None
+    };
+
+    let code = crate::auth::create_code(&conn, user_id)?;
+
+    // Читаем отпечаток сертификата, если есть
+    let fp_path = cfg.data_dir.join("cert.fp");
+    let fp = std::fs::read_to_string(&fp_path).ok().map(|s| s.trim().to_string());
+
+    let mut hosts = Vec::new();
+    if !cfg.external_url.trim().is_empty() {
+        let ext = cfg.external_url.trim()
+            .trim_start_matches("https://")
+            .trim_start_matches("http://");
+        let ext_host = ext.split('/').next().unwrap_or("").split(':').next().unwrap_or("").trim();
+        if !ext_host.is_empty() {
+            hosts.push(ext_host.to_string());
+        }
+    }
+    for ip in crate::auth::local_ips() {
+        let s = ip.to_string();
+        if !hosts.contains(&s) {
+            hosts.push(s);
+        }
+    }
+    if hosts.is_empty() {
+        hosts.push("localhost".to_string());
+    }
+
+    let primary_host = hosts.first().unwrap().clone();
+    let hosts_str = hosts.join(",");
+
+    let fp_part = match &fp {
+        Some(f) => format!("&fp=sha256:{f}"),
+        None => String::new(),
+    };
+    let ext_part = if cfg.external_url.trim().is_empty() {
+        String::new()
+    } else {
+        format!("&ext={}", crate::lyrics::urlencode(cfg.external_url.trim()))
+    };
+
+    let uri = format!(
+        "nami://pair?v=1&host={primary_host}&hosts={hosts_str}&port={}{fp_part}{ext_part}&code={code}",
+        cfg.port
+    );
+
+    // Рендерим QR в консоль
+    if let Ok(qr) = qrcode::QrCode::new(uri.as_bytes()) {
+        println!("{}", render_terminal_qr(&qr));
+    }
+
+    println!("{}", "=".repeat(60));
+    println!("  КОД СОПРЯЖЕНИЯ:    [  {}  ]", code);
+    println!("{}", "=".repeat(60));
+    println!("  Срок действия:     10 минут (одноразовый)");
+    if let Some(u) = user_filter {
+        println!("  Привязка к:        пользователь «{}» (ID: {:?})", u, user_id);
+    }
+    println!("\n  Как подключиться в приложении Nami на смартфоне:");
+    println!("  1. Откройте: Настройки → Подключить сервер");
+    println!("  2. Наведите камеру на QR-код выше");
+    println!("  3. Или введите 8-значный код во вкладке «Вручную»");
+    println!("\n  Веб-страница сопряжения в браузере:");
+    println!("  https://{}:{}/setup", primary_host, cfg.port);
+    println!("{}", "=".repeat(60));
+
+    Ok(())
+}
+
+fn render_terminal_qr(code: &qrcode::QrCode) -> String {
+    let width = code.width();
+    let colors = code.to_colors();
+    let border = 2;
+    let mut out = String::new();
+
+    for _ in 0..border {
+        out.push_str(&"  ".repeat(width + border * 2));
+        out.push('\n');
+    }
+
+    for y in 0..width {
+        out.push_str(&"  ".repeat(border));
+        for x in 0..width {
+            match colors[y * width + x] {
+                qrcode::Color::Dark => out.push_str("██"),
+                qrcode::Color::Light => out.push_str("  "),
+            }
+        }
+        out.push_str(&"  ".repeat(border));
+        out.push('\n');
+    }
+
+    for _ in 0..border {
+        out.push_str(&"  ".repeat(width + border * 2));
+        out.push('\n');
+    }
+
+    out
+}
+
+/// Управление пользователями
+fn users_cmd(cfg: &crate::config::Config, action: Option<UsersAction>) -> Res<()> {
+    let conn = crate::db::open(&cfg.db_path)?;
+    use std::io::{self, Write};
+
+    match action.unwrap_or(UsersAction::List) {
+        UsersAction::List => {
+            println!("=== 👥 Пользователи сервера Nami ===\n");
+            let users = crate::users::list(&conn)?;
+            if users.is_empty() {
+                println!("Пользователей пока нет. Создайте первого командой: nami users add <имя>");
+                return Ok(());
+            }
+            println!("{:<5} {:<20} {:<10} {:<20}", "ID", "Логин", "Роль", "Создан");
+            println!("{}", "-".repeat(58));
+            for u in users {
+                let date_str = format_ts(u.created_at);
+                println!("{:<5} {:<20} {:<10} {:<20}", u.id, u.username, u.role, date_str);
+            }
+            println!("\nВсего пользователей: {}", crate::users::count(&conn));
+        }
+        UsersAction::Add { username, password, role } => {
+            let pass = match password {
+                Some(p) if !p.trim().is_empty() => p.trim().to_string(),
+                _ => {
+                    print!("Введите пароль для '{}' (минимум 8 символов): ", username);
+                    io::stdout().flush()?;
+                    let mut p = String::new();
+                    io::stdin().read_line(&mut p)?;
+                    p.trim().to_string()
+                }
+            };
+            if pass.chars().count() < 8 {
+                return Err("Пароль должен содержать минимум 8 символов".into());
+            }
+            let valid_role = if matches!(role.as_str(), "owner" | "user" | "guest") {
+                role.as_str()
+            } else {
+                "user"
+            };
+            let id = crate::users::create(&conn, &username, &pass, valid_role, 0)
+                .map_err(|e| format!("Не удалось создать пользователя: {e}"))?;
+            println!("✓ Пользователь '{}' (ID: {}) успешно создан с ролью '{}'", username, id, valid_role);
+        }
+        UsersAction::Passwd { username, password } => {
+            let user_id: Option<i64> = conn
+                .query_row("SELECT id FROM users WHERE username = ?1", [username.trim()], |r| r.get(0))
+                .ok();
+            let Some(uid) = user_id else {
+                return Err(format!("Пользователь «{}» не найден", username).into());
+            };
+            let pass = match password {
+                Some(p) if !p.trim().is_empty() => p.trim().to_string(),
+                _ => {
+                    print!("Введите новый пароль для '{}' (минимум 8 символов): ", username);
+                    io::stdout().flush()?;
+                    let mut p = String::new();
+                    io::stdin().read_line(&mut p)?;
+                    p.trim().to_string()
+                }
+            };
+            if pass.chars().count() < 8 {
+                return Err("Пароль должен содержать минимум 8 символов".into());
+            }
+            crate::users::reset_password(&conn, uid, &pass)
+                .map_err(|e| format!("Ошибка смены пароля: {e}"))?;
+            println!("✓ Пароль для пользователя '{}' успешно обновлён. Старые сессии завершены.", username);
+        }
+        UsersAction::Delete { username } => {
+            let n = conn.execute("DELETE FROM users WHERE username = ?1", [username.trim()])?;
+            if n == 0 {
+                return Err(format!("Пользователь «{}» не найден", username).into());
+            }
+            println!("✓ Пользователь '{}' успешно удалён из базы данных", username);
+        }
+        UsersAction::Invite { role, ttl_days } => {
+            let valid_role = if matches!(role.as_str(), "user" | "guest") {
+                role.as_str()
+            } else {
+                "user"
+            };
+            let ttl = ttl_days.map(|d| d * 86400);
+            let inv = crate::users::create_invite(&conn, 1, valid_role, 0, ttl)?;
+            let base = if !cfg.external_url.trim().is_empty() {
+                cfg.external_url.trim().trim_end_matches('/').to_string()
+            } else {
+                let ip = crate::auth::local_ips().first().map(|ip| ip.to_string()).unwrap_or_else(|| "localhost".into());
+                format!("https://{}:{}", ip, cfg.port)
+            };
+            println!("=== 🎟️ Пригласительная ссылка (инвайт) ===\n");
+            println!("  Токен инвайта:    {}", inv.token);
+            println!("  Роль:             {}", inv.role);
+            println!("  Действителен до:  {}", format_ts(inv.expires_at));
+            println!("  Ссылка для входа: {}/setup?invite={}", base, inv.token);
+        }
+    }
+    Ok(())
+}
+
+/// Управление сопряжёнными устройствами
+fn devices_cmd(cfg: &crate::config::Config, action: Option<DevicesAction>) -> Res<()> {
+    let conn = crate::db::open(&cfg.db_path)?;
+
+    match action.unwrap_or(DevicesAction::List) {
+        DevicesAction::List => {
+            println!("=== 📱 Сопряжённые устройства Nami ===\n");
+            let mut stmt = conn.prepare(
+                "SELECT id, name, created_at, last_seen_at FROM devices ORDER BY id"
+            )?;
+            let rows = stmt.query_map([], |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, i64>(2)?,
+                    r.get::<_, Option<i64>>(3)?,
+                ))
+            })?.collect::<rusqlite::Result<Vec<_>>>()?;
+
+            if rows.is_empty() {
+                println!("Сопряжённых устройств пока нет.");
+                println!("Для подключения смартфона выполните: nami pair");
+                return Ok(());
+            }
+
+            println!("{:<5} {:<25} {:<20} {:<20}", "ID", "Имя устройства", "Подключено", "Посл. активность");
+            println!("{}", "-".repeat(72));
+            for (id, name, created_at, last_seen) in rows {
+                let seen_str = last_seen.map(format_ts).unwrap_or_else(|| "никогда".into());
+                println!("{:<5} {:<25} {:<20} {:<20}", id, name, format_ts(created_at), seen_str);
+            }
+            println!("\nДля отзыва сопряжения выполните: nami devices revoke <ID>");
+        }
+        DevicesAction::Revoke { id } => {
+            let n = conn.execute("DELETE FROM devices WHERE id = ?1", [id])?;
+            if n == 0 {
+                return Err(format!("Устройство с ID {} не найдено", id).into());
+            }
+            println!("✓ Сопряжение устройства #{id} успешно отозвано. Доступ к серверу закрыт.");
+        }
+    }
+    Ok(())
+}
+
+/// Здоровье и управление библиотекой
+fn library_cmd(cfg: &crate::config::Config, action: Option<LibraryAction>) -> Res<()> {
+    match action.unwrap_or(LibraryAction::Health) {
+        LibraryAction::Health => {
+            println!("=== 📊 Здоровье библиотеки Nami ===\n");
+            let conn = crate::db::open(&cfg.db_path)?;
+            let h = crate::library::health(&conn, &crate::users::Ident::default())?;
+
+            println!("  Всего треков в библиотеке:     {}", h.tracks);
+            println!("  Файлов с ошибками чтения:      {}", h.broken.count);
+            println!("  Файлов без исполнителя:        {}", h.without_artist.count);
+            println!("  Файлов без названия альбома:   {}", h.without_album.count);
+            println!("  Файлов без указания года:      {}", h.without_year.count);
+            println!("  Групп предполагаемых дублей:   {}", h.duplicate_groups.len());
+
+            if h.broken.count > 0 {
+                println!("\n  Примеры битых файлов:");
+                for b in h.broken.items.iter().take(5) {
+                    println!("    ✗ {} ({})", b.path, b.error);
+                }
+            }
+
+            if !h.duplicate_groups.is_empty() {
+                println!("\n  Примеры обнаруженных дубликатов:");
+                for group in h.duplicate_groups.iter().take(3) {
+                    println!("    Дубликат «{}» ({} копий):", group[0].title, group.len());
+                    for tr in group {
+                        println!("      • {}", tr.path);
+                    }
+                }
+            }
+
+            println!("\n✓ Анализ здоровья библиотеки завершён.");
+        }
+        LibraryAction::Scan { path, deep } => {
+            scan(cfg, &path, deep)?;
+        }
+        LibraryAction::Dirs => {
+            println!("=== 📁 Музыкальные папки в конфигурации ===\n");
+            if cfg.music_dirs.is_empty() {
+                println!("Папки не настроены. Добавьте первую: nami library add-dir /путь/к/музыке");
+            } else {
+                for (i, d) in cfg.music_dirs.iter().enumerate() {
+                    let exists = if d.exists() { "✓ доступна" } else { "✗ не найдена" };
+                    println!("  {}. {} ({})", i + 1, d.display(), exists);
+                }
+            }
+        }
+        LibraryAction::AddDir { path } => {
+            let abs_path = if path.is_absolute() {
+                path
+            } else {
+                std::env::current_dir()?.join(path)
+            };
+            if !abs_path.exists() {
+                return Err(format!("Путь '{}' не существует на диске", abs_path.display()).into());
+            }
+            let cfg_path = std::path::Path::new("config.toml");
+            let text = std::fs::read_to_string(cfg_path).unwrap_or_default();
+            let path_str = abs_path.to_string_lossy().to_string();
+            let updated = append_music_dir(&text, &path_str);
+            std::fs::write(cfg_path, updated)?;
+            println!("✓ Папка '{}' добавлена в config.toml", abs_path.display());
+            println!("Для добавления треков запустите сканирование: nami scan");
+        }
+    }
+    Ok(())
+}
+
+/// Просмотр и редактирование конфигурации
+fn config_cmd(cfg: &crate::config::Config, action: Option<ConfigAction>) -> Res<()> {
+    match action.unwrap_or(ConfigAction::Show) {
+        ConfigAction::Show => {
+            println!("=== ⚙️ Конфигурация Nami-сервера ===\n");
+            println!("  Порт (port):               {}", cfg.port);
+            println!("  TLS шифрование (tls):      {}", if cfg.tls { "включено" } else { "выключено" });
+            println!("  Внешний URL (external_url):{}", if cfg.external_url.is_empty() { " не задан" } else { &cfg.external_url });
+            println!("  База данных (db_path):     {}", cfg.db_path.display());
+            println!("  Каталог данных (data_dir): {}", cfg.data_dir.display());
+            println!("  Кэш транскодов (MB):       {}", cfg.transcode_cache_mb);
+            println!("  Автосканирование (watch):  {}", if cfg.watch { "включено" } else { "выключено" });
+            println!("  Музыкальные папки (music_dirs):");
+            if cfg.music_dirs.is_empty() {
+                println!("    (не заданы)");
+            } else {
+                for d in &cfg.music_dirs {
+                    println!("    • {}", d.display());
+                }
+            }
+        }
+        ConfigAction::Set { key, value } => {
+            let cfg_path = std::path::Path::new("config.toml");
+            let text = std::fs::read_to_string(cfg_path).unwrap_or_default();
+            let updated = set_config_key(&text, &key, &value);
+            std::fs::write(cfg_path, updated)?;
+            println!("✓ Параметр '{}' успешно обновлён на '{}' в config.toml", key, value);
+            println!("Перезапустите сервер для применения настроек: sudo systemctl restart nami");
+        }
+    }
+    Ok(())
+}
+
+fn format_ts(ts: i64) -> String {
+    let secs = ts;
+    let days = secs / 86400;
+    let time = secs % 86400;
+    let hours = time / 3600;
+    let minutes = (time % 3600) / 60;
+    let seconds = time % 60;
+    let mut year = 1970;
+    let mut d = days;
+    loop {
+        let leap = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+        let days_in_year = if leap { 366 } else { 365 };
+        if d < days_in_year {
+            break;
+        }
+        d -= days_in_year;
+        year += 1;
+    }
+    let leap = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+    let days_in_months = [31, if leap { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let mut month = 1;
+    for &dim in &days_in_months {
+        if d < dim {
+            break;
+        }
+        d -= dim;
+        month += 1;
+    }
+    let day = d + 1;
+    format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02}", year, month, day, hours, minutes, seconds)
+}
+
+fn set_config_key(content: &str, key: &str, value: &str) -> String {
+    let mut lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+    let mut found = false;
+    let key_prefix = format!("{key} =");
+    let key_prefix_sp = format!("{key}=");
+
+    for line in lines.iter_mut() {
+        let trimmed = line.trim();
+        if trimmed.starts_with(&key_prefix) || trimmed.starts_with(&key_prefix_sp) {
+            *line = if value.parse::<i64>().is_ok() || value.parse::<bool>().is_ok() {
+                format!("{key} = {value}")
+            } else {
+                format!("{key} = \"{value}\"")
+            };
+            found = true;
+            break;
+        }
+    }
+
+    if !found {
+        if value.parse::<i64>().is_ok() || value.parse::<bool>().is_ok() {
+            lines.push(format!("{key} = {value}"));
+        } else {
+            lines.push(format!("{key} = \"{value}\""));
+        }
+    }
+
+    lines.join("\n") + "\n"
+}
+
+fn append_music_dir(content: &str, new_dir: &str) -> String {
+    let escaped = new_dir.replace('\\', "\\\\").replace('"', "");
+    let mut lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+    let mut found = false;
+
+    for line in lines.iter_mut() {
+        if line.trim().starts_with("music_dirs") {
+            if line.contains(']') {
+                let before = line.trim_end_matches([' ', ']', '\n']);
+                if before.ends_with('[') {
+                    *line = format!("{before}\"{escaped}\"]");
+                } else {
+                    *line = format!("{before}, \"{escaped}\"]");
+                }
+            }
+            found = true;
+            break;
+        }
+    }
+
+    if !found {
+        lines.push(format!("music_dirs = [\"{escaped}\"]"));
+    }
+
+    lines.join("\n") + "\n"
+}
+
 

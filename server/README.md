@@ -468,6 +468,60 @@ cloudflared tunnel run --url http://localhost:4533 nami
 
 When TLS is terminated by Tailscale Serve, Caddy or Cloudflare, running the Nami process itself with `NAMI_TLS=false` is expected.
 
+## CLI commands
+
+Nami Server can be completely managed directly from the command line without using a web browser:
+
+### Mobile app pairing
+```bash
+# Generate a one-time 8-digit code and print an ASCII QR code in the terminal
+nami pair
+
+# Pair for a specific user
+nami pair --user alice
+```
+
+### Automated domain and HTTPS setup
+```bash
+# Verify DNS, open ports 80/443, configure Caddy with Let's Encrypt and update config.toml
+nami domain music.example.com
+```
+
+### User management (`nami users`)
+```bash
+nami users list                     # List registered users
+nami users add <username>           # Add user (prompts for password or generates one)
+nami users passwd <username>        # Change user password
+nami users delete <username>        # Delete user
+nami users invite --ttl-days 7      # Generate an invite link
+```
+
+### Paired devices (`nami devices`)
+```bash
+nami devices list                   # List paired devices
+nami devices revoke <device_id>     # Revoke device pairing
+```
+
+### Library management (`nami library`)
+```bash
+nami library health                 # Library health audit (broken files, duplicates, missing tags)
+nami library scan                   # Trigger library scan
+nami library dirs                   # List configured music directories
+nami library add-dir /path/to/music # Add music directory to configuration
+```
+
+### Configuration (`nami config`)
+```bash
+nami config show                    # Show active config.toml
+nami config set <key> <value>       # Update setting in config.toml
+```
+
+### Server uninstallation (`nami uninstall`)
+```bash
+nami uninstall                      # Stop service, remove binary, interactively confirm DB removal
+nami uninstall --purge              # Completely purge all data (/var/lib/nami) without prompt
+```
+
 ## Security notes
 
 - Human passwords are stored as Argon2id hashes.
