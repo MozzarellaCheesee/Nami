@@ -24,6 +24,11 @@ import javax.net.ssl.X509TrustManager
 object NamiServerClient {
     private const val TAG = "NamiServerClient"
     private const val TIMEOUT_MS = 5_000
+    @Volatile private var unauthorizedHandler: ((String) -> Unit)? = null
+
+    fun setUnauthorizedHandler(handler: ((String) -> Unit)?) {
+        unauthorizedHandler = handler
+    }
 
     /**
      * Куда и с чем ходить. `bases` - все известные адреса сервера (локальный, Tailscale,
@@ -49,12 +54,27 @@ object NamiServerClient {
             .firstOrNull { health(it, certSha256) }
 
     /** Выбирает адрес именно сопряжённого сервера, а не любой NAMI с публичным health. */
-    fun reachableBase(cfg: Config): String? = cfg.bases
-        .map { it.trim().trimEnd('/') }.filter { it.isNotEmpty() }
-        .firstOrNull { base ->
-            request("GET", "$base/api/tracks?limit=1&offset=0", null, cfg.token, cfg.certSha256)
-                ?.first == 200
+    fun reachableBase(cfg: Config): String? {
+        val (base, unauthorized) = selectAuthorizedBase(cfg.bases) {
+            request("GET", "$it/api/tracks?limit=1&offset=0", null, cfg.token, cfg.certSha256)?.first
         }
+        if (base == null && unauthorized) unauthorizedHandler?.invoke(cfg.token)
+        return base
+    }
+
+    internal fun selectAuthorizedBase(
+        candidates: List<String>,
+        probe: (String) -> Int?,
+    ): Pair<String?, Boolean> {
+        var unauthorized = false
+        candidates.map { it.trim().trimEnd('/') }.filter { it.isNotEmpty() }.forEach { base ->
+            when (probe(base)) {
+                200 -> return base to false
+                401 -> unauthorized = true
+            }
+        }
+        return null to unauthorized
+    }
 
     /**
      * POST /api/auth/qr/confirm - меняет challenge из QR на постоянный токен устройства.

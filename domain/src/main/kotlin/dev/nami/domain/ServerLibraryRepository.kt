@@ -45,6 +45,9 @@ interface ServerLibraryRepository {
     /** Удалить трек и его сохранённую обложку из офлайн-кеша. */
     fun removeFromCache(serverTrackId: Long)
 
+    /** Удалить серверные записи из общей Room-библиотеки после выхода или отзыва устройства. */
+    suspend fun clearMirroredTracks() {}
+
     /** Залить локальный файл на сервер (`POST /api/tracks/upload`). Возвращает
      * человекочитаемый итог («Загружен» / «Уже есть на сервере» / null при ошибке). */
     suspend fun uploadLocalTrack(path: String): String?
