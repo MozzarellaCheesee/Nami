@@ -166,8 +166,7 @@ class ServerLibraryRepositoryImpl @Inject constructor(
     }
 
     override fun isServerActive(): Boolean =
-        settingsRepository.namiServerPreferred.value &&
-            settingsRepository.namiServerToken.value != null &&
+        !settingsRepository.namiServerToken.value.isNullOrBlank() &&
             settingsRepository.namiServerUrl.value.isNotBlank()
 
     private fun activeConfig(): NamiServerClient.Config? {
@@ -202,7 +201,13 @@ class ServerLibraryRepositoryImpl @Inject constructor(
         withContext(Dispatchers.IO) {
             val cfg = activeConfig() ?: return@withContext null
             val dest = fileFor(serverTrackId)
-            if (dest.exists() && dest.length() > 0) return@withContext dest
+            val artDest = artworkFileFor(serverTrackId)
+            if (dest.exists() && dest.length() > 0) {
+                if (!artDest.exists() || artDest.length() == 0L) {
+                    runCatching { NamiServerClient.downloadArtwork(cfg, serverTrackId, artDest) }
+                }
+                return@withContext dest
+            }
             val tmp = File(dest.parentFile, "${dest.name}.part")
             val ok = NamiServerClient.downloadTrack(cfg, serverTrackId, tmp)
             if (!ok || tmp.length() == 0L) {
@@ -213,11 +218,18 @@ class ServerLibraryRepositoryImpl @Inject constructor(
                 tmp.delete()
                 return@withContext null
             }
+            // Параллельно подтягиваем и сохраняем обложку трека для офлайн-режима
+            if (!artDest.exists() || artDest.length() == 0L) {
+                runCatching { NamiServerClient.downloadArtwork(cfg, serverTrackId, artDest) }
+            }
             dest
         }
 
     override fun cachedFile(serverTrackId: Long): File? =
         fileFor(serverTrackId).takeIf { it.exists() && it.length() > 0 }
+
+    override fun cachedArtwork(serverTrackId: Long): File? =
+        artworkFileFor(serverTrackId).takeIf { it.exists() && it.length() > 0 }
 
     override fun cachedTrackIds(): Set<Long> =
         cacheDir.listFiles { f -> f.isFile && f.name.endsWith(".audio") }
@@ -227,6 +239,7 @@ class ServerLibraryRepositoryImpl @Inject constructor(
 
     override fun removeFromCache(serverTrackId: Long) {
         fileFor(serverTrackId).delete()
+        artworkFileFor(serverTrackId).delete()
     }
 
     override suspend fun uploadLocalTrack(path: String): String? = withContext(Dispatchers.IO) {
@@ -255,4 +268,5 @@ class ServerLibraryRepositoryImpl @Inject constructor(
 
     // Расширение не по формату (сервер отдаёт что попросили) - ExoPlayer определяет по содержимому.
     private fun fileFor(id: Long) = File(cacheDir, "$id.audio")
+    private fun artworkFileFor(id: Long) = File(cacheDir, "$id.artwork")
 }

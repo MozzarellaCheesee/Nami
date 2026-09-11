@@ -29,14 +29,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import coil3.compose.AsyncImage
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.designsystem.NamiRadius
 import dev.nami.core.model.TrackId
@@ -86,14 +89,18 @@ class FriendsActivityViewModel @Inject constructor(
         }
     }
 
+    fun artworkUrl(trackId: Long): String? = serverAudioRepository.serverArtworkUrl(trackId)
+
     fun playFriendTrack(item: FriendNowPlaying) {
         viewModelScope.launch {
             val streamUrl = serverAudioRepository.serverStreamUrl(item.trackId) ?: return@launch
+            val artUrl = serverAudioRepository.serverArtworkUrl(item.trackId)
             val track = PlayableTrack(
                 id = TrackId("server_${item.trackId}"),
                 title = item.title,
                 artistName = item.artist,
                 path = streamUrl,
+                artworkPath = artUrl,
                 durationMs = 0L,
             )
             playerRepository.play(listOf(track), startIndex = 0, startMs = item.positionMs)
@@ -178,8 +185,10 @@ fun FriendsActivityScreen(
                         .padding(horizontal = 16.dp),
                 ) {
                     items(viewModel.friends, key = { it.userId }) { friend ->
+                        val artUrl = remember(friend.trackId) { viewModel.artworkUrl(friend.trackId) }
                         FriendActivityCard(
                             friend = friend,
+                            artworkUrl = artUrl,
                             onPlay = { viewModel.playFriendTrack(friend) },
                         )
                         Spacer(modifier = Modifier.height(8.dp))
@@ -193,6 +202,7 @@ fun FriendsActivityScreen(
 @Composable
 private fun FriendActivityCard(
     friend: FriendNowPlaying,
+    artworkUrl: String?,
     onPlay: () -> Unit,
 ) {
     val initial = friend.username.take(1).uppercase()
@@ -205,18 +215,30 @@ private fun FriendActivityCard(
             .clickable(onClick = onPlay)
             .padding(16.dp),
     ) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .clip(CircleShape)
-                .background(NamiColors.Shu),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = initial,
-                style = MaterialTheme.typography.titleMedium,
-                color = NamiColors.Paper100,
+        if (!artworkUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = artworkUrl,
+                contentDescription = friend.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(NamiColors.Ink700),
             )
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(NamiColors.Shu),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = initial,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = NamiColors.Paper100,
+                )
+            }
         }
         Spacer(modifier = Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {

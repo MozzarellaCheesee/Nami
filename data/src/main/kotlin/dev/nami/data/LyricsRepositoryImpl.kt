@@ -1,5 +1,7 @@
 package dev.nami.data
 
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.nami.core.model.Lyrics
 import dev.nami.core.model.LyricLine
 import dev.nami.core.model.WordTiming
@@ -14,12 +16,29 @@ import java.io.File
 import javax.inject.Inject
 
 class LyricsRepositoryImpl @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val settingsRepository: SettingsRepository,
 ) : LyricsRepository {
 
-    private fun lrcFile(path: String) = File(lyricsSibling(path, ".lrc"))
+    private fun resolveSiblingFile(path: String, newExtension: String): File {
+        val isRemoteOrVirtual = path.startsWith("http://") ||
+            path.startsWith("https://") ||
+            path.startsWith("server_") ||
+            path.startsWith("jam_") ||
+            (!path.contains(File.separator) && !path.contains("/"))
 
-    private fun sibling(path: String, newExtension: String): String = lyricsSibling(path, newExtension)
+        return if (isRemoteOrVirtual) {
+            val safeName = path.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+            val cacheDir = File(context.cacheDir, "lyrics_cache").apply { mkdirs() }
+            File(cacheDir, safeName + newExtension)
+        } else {
+            File(lyricsSibling(path, newExtension))
+        }
+    }
+
+    private fun lrcFile(path: String) = resolveSiblingFile(path, ".lrc")
+
+    private fun sibling(path: String, newExtension: String): String = resolveSiblingFile(path, newExtension).absolutePath
 
     override fun lyricsForPath(path: String): Flow<Lyrics?> = flow {
         emit(
@@ -52,7 +71,7 @@ class LyricsRepositoryImpl @Inject constructor(
         }
 
     private fun serverLyrics(title: String, artistName: String?, durationMs: Long): Lyrics? {
-        if (!settingsRepository.namiServerPreferred.value) return null
+        if (!settingsRepository.namiLyricsFromServer.value) return null
         val token = settingsRepository.namiServerToken.value ?: return null
         val cert = settingsRepository.namiServerCertSha256.value
         // Адресов может быть несколько (локальный, Tailscale, домен) - берём первый живой

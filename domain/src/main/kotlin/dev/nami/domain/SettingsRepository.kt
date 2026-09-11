@@ -21,6 +21,14 @@ enum class VkBitrate { MAX, ECONOMY }
 /** Источник метаданных для тегирования скачанных треков из ВК. */
 enum class VkTagSource { VK, SPOTIFY, ASK }
 
+/** Приоритет источника воспроизведения при подключённом сервере NAMI. */
+enum class PlaybackSourcePreference {
+    /** Если аудиофайл есть на устройстве — воспроизводить локально (Bit-perfect, без задержек и трафика). */
+    LOCAL_FIRST,
+    /** Всегда стримить аудиопоток с сервера NAMI, если трек найден на сервере. */
+    SERVER_STREAM,
+}
+
 /** Per-device profile from План.md §16/§20: its own EQ and a volume ceiling, applied automatically
  * when the routed output changes. Crossfeed/ReplayGain-mode aren't per-profile here - crossfeed
  * doesn't exist as a processor in this codebase yet, and ReplayGain mode is a single global
@@ -267,6 +275,14 @@ interface SettingsRepository {
      * Off по умолчанию: подключение сервера само по себе не меняет поведение, пока не включат. */
     val namiServerPreferred: StateFlow<Boolean>
     fun setNamiServerPreferred(value: Boolean)
+
+    /** Приоритет источника звука: локальные файлы (Bit-perfect) или стриминг с сервера NAMI. */
+    val playbackSourcePreference: StateFlow<PlaybackSourcePreference>
+    fun setPlaybackSourcePreference(preference: PlaybackSourcePreference)
+
+    /** Брать лирику (поиск, тайминги, перевод) с сервера NAMI. */
+    val namiLyricsFromServer: StateFlow<Boolean>
+    fun setNamiLyricsFromServer(enabled: Boolean)
 
     /** Трансляция на Яндекс Станцию (протокол Glagol). Off по умолчанию по тем же причинам, что и
      * AirPlay, плюс требует входа в личный Яндекс ID - неофициальный API, Яндекс вправе сломать

@@ -6,6 +6,7 @@ import androidx.core.content.edit
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.nami.domain.OutputDeviceType
 import dev.nami.domain.OutputProfile
+import dev.nami.domain.PlaybackSourcePreference
 import dev.nami.domain.Session
 import dev.nami.domain.SettingsRepository
 import dev.nami.domain.ShuffleMode
@@ -108,6 +109,8 @@ private const val KEY_NAMI_SERVER_URL = "nami_server_url"
 private const val KEY_NAMI_SERVER_CERT = "nami_server_cert_sha256"
 private const val KEY_NAMI_SERVER_TOKEN = "nami_server_token"
 private const val KEY_NAMI_SERVER_PREFERRED = "nami_server_preferred"
+private const val KEY_PLAYBACK_SOURCE_PREFERENCE = "playback_source_preference"
+private const val KEY_NAMI_LYRICS_FROM_SERVER = "nami_lyrics_from_server"
 private const val KEY_HOME_BLOCKS = "home_blocks" // JSON array [{type, enabled}], see readHomeBlocks
 private const val KEY_NOW_PLAYING_SHOW_TECH_INFO = "now_playing_show_tech_info"
 // Устаревший общий ключ на обе кнопки - остался только как дефолт для двух ключей ниже.
@@ -502,6 +505,29 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
     override fun setNamiServerPreferred(value: Boolean) {
         prefs.edit { putBoolean(KEY_NAMI_SERVER_PREFERRED, value) }
         _namiServerPreferred.value = value
+    }
+
+    private val _playbackSourcePreference = MutableStateFlow(
+        runCatching {
+            PlaybackSourcePreference.valueOf(
+                prefs.getString(KEY_PLAYBACK_SOURCE_PREFERENCE, PlaybackSourcePreference.LOCAL_FIRST.name)
+                    ?: PlaybackSourcePreference.LOCAL_FIRST.name
+            )
+        }.getOrDefault(PlaybackSourcePreference.LOCAL_FIRST)
+    )
+    override val playbackSourcePreference: StateFlow<PlaybackSourcePreference> = _playbackSourcePreference
+    override fun setPlaybackSourcePreference(preference: PlaybackSourcePreference) {
+        prefs.edit { putString(KEY_PLAYBACK_SOURCE_PREFERENCE, preference.name) }
+        _playbackSourcePreference.value = preference
+    }
+
+    private val _namiLyricsFromServer = MutableStateFlow(
+        prefs.getBoolean(KEY_NAMI_LYRICS_FROM_SERVER, prefs.getBoolean(KEY_NAMI_SERVER_PREFERRED, true))
+    )
+    override val namiLyricsFromServer: StateFlow<Boolean> = _namiLyricsFromServer
+    override fun setNamiLyricsFromServer(value: Boolean) {
+        prefs.edit { putBoolean(KEY_NAMI_LYRICS_FROM_SERVER, value) }
+        _namiLyricsFromServer.value = value
     }
 
     // Comma-joined track ids - they're UUID-shaped (no commas of their own), same "plain

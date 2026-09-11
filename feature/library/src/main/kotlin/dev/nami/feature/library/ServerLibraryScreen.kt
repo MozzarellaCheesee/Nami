@@ -8,8 +8,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CloudDownload
@@ -22,12 +25,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import coil3.compose.AsyncImage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -106,17 +113,22 @@ class ServerLibraryViewModel @Inject constructor(
         }
     }
 
+    fun artworkUrl(trackId: Long): String? = serverAudioRepository.serverArtworkUrl(trackId)
+
     fun playTrack(track: ServerTrackMeta) {
         viewModelScope.launch {
             val cachedFile = serverLibraryRepository.cachedFile(track.id)
             val streamUrl = cachedFile?.let { android.net.Uri.fromFile(it).toString() }
                 ?: serverAudioRepository.serverStreamUrl(track.id)
                 ?: return@launch
+            val artUrl = serverLibraryRepository.cachedArtwork(track.id)?.let { android.net.Uri.fromFile(it).toString() }
+                ?: serverAudioRepository.serverArtworkUrl(track.id)
             val playable = PlayableTrack(
                 id = TrackId("server_${track.id}"),
                 title = track.title,
                 artistName = track.artist.ifBlank { null },
                 path = streamUrl,
+                artworkPath = artUrl,
                 durationMs = track.durationMs,
             )
             playerRepository.play(listOf(playable), startIndex = 0, startMs = 0L)
@@ -130,11 +142,14 @@ class ServerLibraryViewModel @Inject constructor(
                 val cachedFile = serverLibraryRepository.cachedFile(track.id)
                 val streamUrl = cachedFile?.let { android.net.Uri.fromFile(it).toString() }
                     ?: serverAudioRepository.serverStreamUrl(track.id).orEmpty()
+                val artUrl = serverLibraryRepository.cachedArtwork(track.id)?.let { android.net.Uri.fromFile(it).toString() }
+                    ?: serverAudioRepository.serverArtworkUrl(track.id)
                 PlayableTrack(
                     id = TrackId("server_${track.id}"),
                     title = track.title,
                     artistName = track.artist.ifBlank { null },
                     path = streamUrl,
+                    artworkPath = artUrl,
                     durationMs = track.durationMs,
                 )
             }
@@ -189,6 +204,17 @@ fun ServerLibraryScreen(
                             .padding(horizontal = 16.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        val artUrl = remember(track.id) { viewModel.artworkUrl(track.id) }
+                        AsyncImage(
+                            model = artUrl,
+                            contentDescription = track.title,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(NamiColors.Ink700),
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(track.title, color = NamiColors.Paper100, style = MaterialTheme.typography.bodyLarge)
                             Text(

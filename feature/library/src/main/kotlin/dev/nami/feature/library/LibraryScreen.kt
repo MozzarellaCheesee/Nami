@@ -230,36 +230,44 @@ fun LibraryScreen(
                     }
                 }
                 when (uiState.selectedTab) {
-                    LibraryTab.TRACKS -> TrackListContent(
-                        tracks = tracks,
-                        listState = trackListState,
-                        selectionMode = selectionMode,
-                        selectedTrackIds = uiState.selectedTrackIds,
-                        recentAlbums = recentAlbums,
-                        featuredArtists = featuredArtists,
-                        onTrackClick = onTrackClick,
-                        onAlbumClick = onAlbumClick,
-                        onShowAllAlbums = { viewModel.selectTab(LibraryTab.ALBUMS) },
-                        onArtistClick = onArtistClick,
-                        onShowAllArtists = { viewModel.selectTab(LibraryTab.ARTISTS) },
-                        onAddToPlaylist = { trackId -> addToPlaylistTrackId = trackId },
-                        onLikeTrack = { trackId -> viewModel.likeTrack(trackId) },
-                        onAddToQueueTrack = { track -> viewModel.addToQueue(track) },
-                        onDelete = { trackId -> viewModel.deleteTrack(trackId) },
-                        onToggleSelection = { trackId -> viewModel.toggleTrackSelection(trackId) },
-                        onSetSelection = { ids -> viewModel.setSelectedTracks(ids) },
-                        onRenameTrack = { track -> renameTrack = track },
-                        onEditNoteTrack = { track -> noteTrack = track },
-                        onEditTagsTrack = { track -> editTagsTrackId = track.id },
-                        onShowTrackInfo = onShowTrackInfo,
-                        onStartRadio = onStartRadio,
-                        onShareCard = onShareCard,
-                        onUploadToServer = if (viewModel.isServerActive()) {
-                            { track -> viewModel.uploadTrackToServer(track) }
-                        } else null,
-                        nowPlaying = nowPlaying,
-                        sort = uiState.sort,
-                    )
+                    LibraryTab.TRACKS -> {
+                        val serverTracksAll by viewModel.serverTracks.collectAsState()
+                        val uniqueServerTracks = remember(serverTracksAll) {
+                            serverTracksAll.filter { !viewModel.isLocallyAvailable(it) }
+                        }
+                        TrackListContent(
+                            tracks = tracks,
+                            serverTracks = uniqueServerTracks,
+                            onPlayServerTrack = viewModel::playServerTrack,
+                            listState = trackListState,
+                            selectionMode = selectionMode,
+                            selectedTrackIds = uiState.selectedTrackIds,
+                            recentAlbums = recentAlbums,
+                            featuredArtists = featuredArtists,
+                            onTrackClick = onTrackClick,
+                            onAlbumClick = onAlbumClick,
+                            onShowAllAlbums = { viewModel.selectTab(LibraryTab.ALBUMS) },
+                            onArtistClick = onArtistClick,
+                            onShowAllArtists = { viewModel.selectTab(LibraryTab.ARTISTS) },
+                            onAddToPlaylist = { trackId -> addToPlaylistTrackId = trackId },
+                            onLikeTrack = { trackId -> viewModel.likeTrack(trackId) },
+                            onAddToQueueTrack = { track -> viewModel.addToQueue(track) },
+                            onDelete = { trackId -> viewModel.deleteTrack(trackId) },
+                            onToggleSelection = { trackId -> viewModel.toggleTrackSelection(trackId) },
+                            onSetSelection = { ids -> viewModel.setSelectedTracks(ids) },
+                            onRenameTrack = { track -> renameTrack = track },
+                            onEditNoteTrack = { track -> noteTrack = track },
+                            onEditTagsTrack = { track -> editTagsTrackId = track.id },
+                            onShowTrackInfo = onShowTrackInfo,
+                            onStartRadio = onStartRadio,
+                            onShareCard = onShareCard,
+                            onUploadToServer = if (viewModel.isServerActive()) {
+                                { track -> viewModel.uploadTrackToServer(track) }
+                            } else null,
+                            nowPlaying = nowPlaying,
+                            sort = uiState.sort,
+                        )
+                    }
                     LibraryTab.ALBUMS -> AlbumGridContent(
                         viewModel = viewModel,
                         gridState = albumGridState,
@@ -655,6 +663,8 @@ private const val AUTO_SCROLL_MAX_PX_PER_TICK = 20f
 @Composable
 private fun TrackListContent(
     tracks: LazyPagingItems<Track>,
+    serverTracks: List<dev.nami.domain.ServerTrackMeta>,
+    onPlayServerTrack: (dev.nami.domain.ServerTrackMeta) -> Unit,
     listState: LazyListState,
     selectionMode: Boolean,
     selectedTrackIds: Set<TrackId>,
@@ -788,11 +798,6 @@ private fun TrackListContent(
                     TrackListItem(
                         track = track,
                         onClick = {
-                            // The row's own clickable still sees the pointer-up that follows a
-                            // long-press-with-no-movement (the parent gesture above only
-                            // consumes movement, not a plain release) and would otherwise fire
-                            // its own click right after this row was just made the drag anchor
-                            // - toggling it straight back off. Swallow that one ghost click.
                             if (track.id != dragAnchorId) {
                                 if (selectionMode) onToggleSelection(track.id) else onTrackClick(track.id)
                             }
@@ -801,9 +806,6 @@ private fun TrackListContent(
                         isSelected = track.id in selectedTrackIds,
                         onAddToPlaylist = if (selectionMode) null else { { onAddToPlaylist(track.id) } },
                         onLikeTrack = if (selectionMode) null else { { onLikeTrack(track.id) } },
-                        // Only shown while something's actually playing - queueing behind
-                        // nothing playing doesn't map to anything meaningful for the user to
-                        // picture happening.
                         onAddToQueue = if (selectionMode || nowPlaying == null) null else { { onAddToQueueTrack(track) } },
                         onDelete = if (selectionMode) null else { { onDelete(track.id) } },
                         onRename = if (selectionMode) null else { { onRenameTrack(track) } },
@@ -820,9 +822,57 @@ private fun TrackListContent(
                     )
                 }
             }
+
+            if (serverTracks.isNotEmpty()) {
+                item {
+                    Text(
+                        text = "На сервере",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = NamiColors.Paper70,
+                        modifier = Modifier.padding(start = 20.dp, top = 24.dp, bottom = 8.dp)
+                    )
+                }
+                items(serverTracks, key = { "server_${it.id}" }) { track ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onPlayServerTrack(track) }
+                            .padding(horizontal = 20.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.CloudUpload,
+                            contentDescription = "Server track",
+                            tint = NamiColors.Paper70,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        androidx.compose.foundation.layout.Spacer(Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = track.title,
+                                color = NamiColors.Paper100,
+                                style = MaterialTheme.typography.bodyLarge,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = track.artist,
+                                color = NamiColors.Paper70,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                        }
+                        Text(
+                            text = formatDuration(track.durationMs),
+                            color = NamiColors.Paper40,
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+                }
+            }
         }
 
-        // Боковой алфавит нужен только там, где список реально алфавитный.
         if (sort == dev.nami.domain.TrackSort.TITLE || sort == dev.nami.domain.TrackSort.ARTIST) {
             val scope = rememberCoroutineScope()
             val headerCount = (if (recentAlbums.isNotEmpty()) 1 else 0) + (if (featuredArtists.isNotEmpty()) 1 else 0)

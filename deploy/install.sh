@@ -18,6 +18,12 @@ SERVICE_NAME="nami"
 SYSTEMD_UNIT="/etc/systemd/system/${SERVICE_NAME}.service"
 PORT=4533
 
+# Проверяем, является ли запуск обновлением уже установленного сервера
+IS_UPDATE=false
+if [ -f "${INSTALL_DIR}/nami-server" ] || [ -f "${INSTALL_DIR}/nami" ] || [ -f "${SYSTEMD_UNIT}" ] || [ -d "${DATA_DIR}" ] || (command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet "${SERVICE_NAME}" 2>/dev/null); then
+    IS_UPDATE=true
+fi
+
 # Цвета для терминала
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -71,6 +77,11 @@ case "$ARCH" in
         ;;
 esac
 log_info "Определена платформа: Linux ${TARGET_ARCH}"
+if [ "$IS_UPDATE" = true ]; then
+    log_ok "Обнаружен ранее установленный Nami Server. Режим: ОБНОВЛЕНИЕ (данные и база сохраняются)."
+else
+    log_info "Режим: ПЕРВИЧНАЯ УСТАНОВКА Nami Server."
+fi
 
 # 4. Проверка прав root / sudo
 SUDO=""
@@ -446,34 +457,53 @@ fi
 
 # 13. Итоговое сообщение
 echo
-echo -e "${BOLD}${GREEN}======================================================================${NC}"
-echo -e "${BOLD}${GREEN}  🎉 Nami Server успешно установлен и запущен!${NC}"
-echo -e "${BOLD}${GREEN}======================================================================${NC}"
-echo
-echo -e "  ${BOLD}ШАГ 1. Первичная защищённая настройка в браузере (HTTPS):${NC}"
-echo -e "         👉 ${BOLD}${CYAN}https://${PRIMARY_IP}:${PORT}/setup${NC}"
-echo -e "         (или локально: ${CYAN}https://localhost:${PORT}/setup${NC})"
-echo -e "         ${YELLOW}Примечание: Браузер предупредит о самоподписанном сертификате.${NC}"
-echo -e "         ${YELLOW}Нажмите «Дополнительно» → «Перейти на сайт» (все пароли шифруются TLS).${NC}"
-echo
-echo -e "  ${BOLD}ШАГ 2. В мастере укажите:${NC}"
-echo -e "         • Папку с вашей музыкальной коллекцией (например: /home/music);"
-echo -e "         • Логин и пароль администратора (от 8 символов);"
-echo -e "         • Нажмите «Сохранить конфигурацию»."
-echo
-echo -e "  ${BOLD}ШАГ 3. Примените настройки (перезапуск):${NC}"
-echo -e "         ${BOLD}sudo systemctl restart nami${NC}"
-echo
-echo -e "  ${BOLD}ШАГ 4. Сопряжение с Android-клиентом:${NC}"
-echo -e "         • Снова откройте ${CYAN}https://${PRIMARY_IP}:${PORT}/setup${NC}"
-echo -e "         • На странице отобразится ${BOLD}QR-код${NC} и 8-значный код."
-echo -e "         • В приложении Nami на смартфоне откройте:"
-echo -e "           ${BOLD}Настройки → Подключить сервер → Сканировать QR${NC}"
-echo
-echo -e "${BOLD}Полезные команды управления:${NC}"
-echo -e "  ${CYAN}nami status${NC}           - Проверка статуса сервера и здоровья API"
-echo -e "  ${CYAN}nami logs${NC}             - Просмотр журнала последних логов"
-echo -e "  ${CYAN}nami doctor${NC}           - Комплексная диагностика (порты, ffmpeg, БД)"
-echo -e "  ${CYAN}sudo systemctl status nami${NC} - Статус службы systemd"
-echo -e "${BOLD}${GREEN}======================================================================${NC}"
+if [ "$IS_UPDATE" = true ]; then
+    echo -e "${BOLD}${GREEN}======================================================================${NC}"
+    echo -e "${BOLD}${GREEN}  🔄 Nami Server успешно обновлён и перезапущен!${NC}"
+    echo -e "${BOLD}${GREEN}======================================================================${NC}"
+    echo
+    echo -e "  Служба ${BOLD}${SERVICE_NAME}${NC} обновлена до последней версии и работает."
+    echo -e "  Все пользовательские данные и база данных сохранены в ${CYAN}${DATA_DIR}${NC}."
+    echo
+    echo -e "  ${BOLD}Веб-интерфейс сервера:${NC}"
+    echo -e "         👉 ${BOLD}${CYAN}https://${PRIMARY_IP}:${PORT}${NC} (или https://localhost:${PORT})"
+    echo
+    echo -e "${BOLD}Команды управления:${NC}"
+    echo -e "  ${CYAN}nami status${NC}           - Проверка статуса сервера и здоровья API"
+    echo -e "  ${CYAN}nami logs${NC}             - Просмотр журнала последних логов"
+    echo -e "  ${CYAN}nami doctor${NC}           - Комплексная диагностика (порты, ffmpeg, БД)"
+    echo -e "  ${CYAN}sudo systemctl status nami${NC} - Статус службы systemd"
+    echo -e "${BOLD}${GREEN}======================================================================${NC}"
+else
+    echo -e "${BOLD}${GREEN}======================================================================${NC}"
+    echo -e "${BOLD}${GREEN}  🎉 Nami Server успешно установлен и запущен!${NC}"
+    echo -e "${BOLD}${GREEN}======================================================================${NC}"
+    echo
+    echo -e "  ${BOLD}ШАГ 1. Первичная защищённая настройка в браузере (HTTPS):${NC}"
+    echo -e "         👉 ${BOLD}${CYAN}https://${PRIMARY_IP}:${PORT}/setup${NC}"
+    echo -e "         (или локально: ${CYAN}https://localhost:${PORT}/setup${NC})"
+    echo -e "         ${YELLOW}Примечание: Браузер предупредит о самоподписанном сертификате.${NC}"
+    echo -e "         ${YELLOW}Нажмите «Дополнительно» → «Перейти на сайт» (все пароли шифруются TLS).${NC}"
+    echo
+    echo -e "  ${BOLD}ШАГ 2. В мастере укажите:${NC}"
+    echo -e "         • Папку с вашей музыкальной коллекцией (например: /home/music);"
+    echo -e "         • Логин и пароль администратора (от 8 символов);"
+    echo -e "         • Нажмите «Сохранить конфигурацию»."
+    echo
+    echo -e "  ${BOLD}ШАГ 3. Примените настройки (перезапуск):${NC}"
+    echo -e "         ${BOLD}sudo systemctl restart nami${NC}"
+    echo
+    echo -e "  ${BOLD}ШАГ 4. Сопряжение с Android-клиентом:${NC}"
+    echo -e "         • Снова откройте ${CYAN}https://${PRIMARY_IP}:${PORT}/setup${NC}"
+    echo -e "         • На странице отобразится ${BOLD}QR-код${NC} и 8-значный код."
+    echo -e "         • В приложении Nami на смартфоне откройте:"
+    echo -e "           ${BOLD}Настройки → Подключить сервер → Сканировать QR${NC}"
+    echo
+    echo -e "${BOLD}Полезные команды управления:${NC}"
+    echo -e "  ${CYAN}nami status${NC}           - Проверка статуса сервера и здоровья API"
+    echo -e "  ${CYAN}nami logs${NC}             - Просмотр журнала последних логов"
+    echo -e "  ${CYAN}nami doctor${NC}           - Комплексная диагностика (порты, ffmpeg, БД)"
+    echo -e "  ${CYAN}sudo systemctl status nami${NC} - Статус службы systemd"
+    echo -e "${BOLD}${GREEN}======================================================================${NC}"
+fi
 echo

@@ -367,6 +367,34 @@ object NamiServerClient {
     }
 
     /**
+     * Скачать обложку трека с сервера в файл. GET /api/tracks/{id}/artwork?token=...
+     * Возвращает true при успехе.
+     */
+    fun downloadArtwork(cfg: Config, trackId: Long, destFile: java.io.File): Boolean {
+        val base = reachableBase(cfg.bases, cfg.certSha256) ?: return false
+        return runCatching {
+            val url = "$base/api/tracks/$trackId/artwork?token=${cfg.token}"
+            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 15_000
+                readTimeout = 30_000
+                if (this is HttpsURLConnection && cfg.certSha256 != null && hostIsIpLiteral(url)) {
+                    sslSocketFactory = pinnedFactory(cfg.certSha256)
+                    setHostnameVerifier { _, _ -> true }
+                }
+            }
+            if (conn.responseCode != 200) return false
+            conn.inputStream.use { input ->
+                destFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            conn.disconnect()
+            true
+        }.onFailure { Log.w(TAG, "downloadArtwork: ${it.message}") }.getOrElse { false }
+    }
+
+    /**
      * GET /api/sync?since={timestamp} - pull изменений с сервера.
      * Возвращает JSON: { "changes": [...], "current_ts": Long }.
      */

@@ -137,6 +137,31 @@ impl Config {
             Err(e) => return Err(format!("не читается {}: {e}", path.display()).into()),
         };
 
+        // Если конфиг загружен из директории (например /var/lib/nami/config.toml),
+        // привязываем относительные пути к директории конфига
+        if let Some(parent) = path.parent() {
+            if parent != std::path::Path::new("") {
+                if cfg.db_path.is_relative() {
+                    cfg.db_path = parent.join(&cfg.db_path);
+                }
+                if cfg.data_dir.is_relative() && cfg.data_dir == std::path::Path::new(".") {
+                    cfg.data_dir = parent.to_path_buf();
+                }
+            }
+        }
+
+        // Если конфиг в текущей папке без файла БД, но существует системная база /var/lib/nami/nami.db, используем её
+        if cfg.db_path.is_relative() && !cfg.db_path.exists() {
+            let var_lib = PathBuf::from("/var/lib/nami");
+            let var_db = var_lib.join(&cfg.db_path);
+            if var_db.exists() {
+                cfg.db_path = var_db;
+                if cfg.data_dir == std::path::Path::new(".") {
+                    cfg.data_dir = var_lib;
+                }
+            }
+        }
+
         if let Ok(v) = std::env::var("NAMI_PORT") {
             cfg.port = v.parse().map_err(|_| format!("NAMI_PORT: не число: {v}"))?;
         }

@@ -13,6 +13,7 @@ import dev.nami.core.model.TrackId
 import dev.nami.domain.LibraryRepository
 import dev.nami.domain.LoopRange
 import dev.nami.domain.PlayableTrack
+import dev.nami.domain.PlaybackSourcePreference
 import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerQueue
 import dev.nami.domain.PlayerRepository
@@ -73,6 +74,9 @@ class PlayerRepositoryImpl @Inject constructor(
     override suspend fun setActiveLoop(loop: LoopRange?) {
         _activeLoop.value = loop
     }
+
+    private val _playbackSource = MutableStateFlow(dev.nami.domain.TrackPlaybackSource.LOCAL)
+    override val playbackSource: StateFlow<dev.nami.domain.TrackPlaybackSource> = _playbackSource
 
     private val _sleepTimerRemainingMs = MutableStateFlow<Long?>(null)
     override val sleepTimerRemainingMs: StateFlow<Long?> = _sleepTimerRemainingMs
@@ -142,6 +146,7 @@ class PlayerRepositoryImpl @Inject constructor(
                 controller?.let { c ->
                     publishState(c)
                     publishQueue(c)
+                    updatePlaybackSource(c)
                     _repeatMode.value = c.repeatMode.toDomainRepeatMode()
                 }
                 controller?.addListener(
@@ -149,7 +154,15 @@ class PlayerRepositoryImpl @Inject constructor(
                         override fun onEvents(player: Player, events: Player.Events) {
                             publishState(player)
                             publishQueue(player)
+                            updatePlaybackSource(player)
                             _repeatMode.value = player.repeatMode.toDomainRepeatMode()
+                        }
+
+                        override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                            val uriStr = controller?.currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
+                            if (uriStr.startsWith("http://") || uriStr.startsWith("https://")) {
+                                _playbackSource.value = dev.nami.domain.TrackPlaybackSource.UNAVAILABLE
+                            }
                         }
 
                         override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -174,6 +187,7 @@ class PlayerRepositoryImpl @Inject constructor(
                             if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
                                 _autoAdvanceSignal.value++
                             }
+                            controller?.let(::updatePlaybackSource)
                             // An A-B range only makes sense for the track it was drawn on --
                             // carrying it into the next track would silently loop the wrong
                             // section (or one past that track's own duration).
@@ -290,13 +304,57 @@ class PlayerRepositoryImpl @Inject constructor(
         format = mediaMetadata.extras?.getString("format"),
     )
 
-    private fun PlayableTrack.toMediaItemInfo(): MediaItemInfo = MediaItemInfo(
-        mediaId = id.value,
-        title = title,
-        artist = artistName,
-        artworkPath = artworkPath,
-        format = format,
-    )
+    private fun PlayableTrack.toMediaItemInfo(): MediaItemInfo {
+        val serverArt = if (artworkPath.isNullOrBlank() && serverAudioRepository.isServerActive()) {
+            val sId = id.value.removePrefix("server_").removePrefix("jam_").toLongOrNull()
+            sId?.let { serverAudioRepository.serverArtworkUrl(it) }
+        } else null
+        return MediaItemInfo(
+            mediaId = id.value,
+            title = title,
+            artist = artistName,
+            artworkPath = artworkPath ?: serverArt,
+            format = format,
+        )
+    }
+
+    private fun updatePlaybackSource(player: Player) {
+        val item = player.currentMediaItem
+        if (item == null) {
+            _playbackSource.value = dev.nami.domain.TrackPlaybackSource.LOCAL
+            return
+        }
+        val uriStr = item.localConfiguration?.uri?.toString().orEmpty()
+        val mediaId = item.mediaId
+
+        val source = when {
+            // Офлайн-кеш приложения
+            uriStr.contains("ServerCache") || uriStr.endsWith(".audio") -> {
+                dev.nami.domain.TrackPlaybackSource.CACHE
+            }
+            // Потоковый стриминг с сервера
+            uriStr.startsWith("http://") || uriStr.startsWith("https://") -> {
+                if (player.playerError != null || !serverAudioRepository.isServerActive()) {
+                    dev.nami.domain.TrackPlaybackSource.UNAVAILABLE
+                } else {
+                    dev.nami.domain.TrackPlaybackSource.SERVER
+                }
+            }
+            // Трек из джема или серверной библиотеки
+            mediaId.startsWith("server_") || mediaId.startsWith("jam_") -> {
+                if (player.playerError != null || !serverAudioRepository.isServerActive()) {
+                    dev.nami.domain.TrackPlaybackSource.UNAVAILABLE
+                } else {
+                    dev.nami.domain.TrackPlaybackSource.SERVER
+                }
+            }
+            // Локальный файл
+            else -> {
+                dev.nami.domain.TrackPlaybackSource.LOCAL
+            }
+        }
+        _playbackSource.value = source
+    }
 
     // Хвост группы C "CUE-поддержка" - ClippingConfiguration is ExoPlayer's own built-in answer
     // to "play just this slice of a file": position/duration it reports are already relative to
@@ -311,31 +369,62 @@ class PlayerRepositoryImpl @Inject constructor(
     // building/rebuilding the WHOLE queue, so that blocked play() on decoding every artwork file
     // in the queue before playback could even start. Fixing the actual Uri bug is both correct
     // and free - no eager I/O added.
-    private fun PlayableTrack.toMediaItem(): MediaItem = MediaItem.Builder()
-        .setMediaId(id.value)
-        // Стрим с сервера, если он подключён и трек ему известен; иначе локальный файл.
-        // mediaId остаётся локальным - на нём завязаны скробблинг, история, восстановление.
-        .setUri(serverUrlByMediaId[id.value] ?: path)
-        .apply {
-            val start = cueStartMs
-            if (start != null) {
-                setClippingConfiguration(
-                    MediaItem.ClippingConfiguration.Builder()
-                        .setStartPositionMs(start)
-                        .apply { cueEndMs?.let { setEndPositionMs(it) } }
-                        .build(),
-                )
+    private fun PlayableTrack.toMediaItem(): MediaItem {
+        val pref = settingsRepository.playbackSourcePreference.value
+        val localExists = path.isNotBlank() && java.io.File(path).exists()
+        val serverStreamUrl = serverUrlByMediaId[id.value]
+
+        // При LOCAL_FIRST играем напрямую локальный файл (Bit-perfect, 0 трафика),
+        // а серверный стрим используем, только если локального файла нет на устройстве.
+        // При SERVER_STREAM отдаём предпочтение стриму с сервера.
+        val finalUri = when (pref) {
+            PlaybackSourcePreference.LOCAL_FIRST -> {
+                if (localExists) path else (serverStreamUrl ?: path)
+            }
+            PlaybackSourcePreference.SERVER_STREAM -> {
+                serverStreamUrl ?: path
             }
         }
-        .setMediaMetadata(
-            MediaMetadata.Builder()
-                .setTitle(title)
-                .setArtist(artistName)
-                .apply { artworkPath?.let { setArtworkUri(android.net.Uri.fromFile(java.io.File(it))) } }
-                .setExtras(android.os.Bundle().apply { putString("format", format) })
-                .build(),
-        )
-        .build()
+
+        val serverArt = if (artworkPath.isNullOrBlank() && serverAudioRepository.isServerActive()) {
+            val sId = id.value.removePrefix("server_").removePrefix("jam_").toLongOrNull()
+            sId?.let { serverAudioRepository.serverArtworkUrl(it) }
+        } else null
+        val effectiveArtwork = artworkPath ?: serverArt
+
+        return MediaItem.Builder()
+            .setMediaId(id.value)
+            .setUri(finalUri)
+            .apply {
+                val start = cueStartMs
+                if (start != null) {
+                    setClippingConfiguration(
+                        MediaItem.ClippingConfiguration.Builder()
+                            .setStartPositionMs(start)
+                            .apply { cueEndMs?.let { setEndPositionMs(it) } }
+                            .build(),
+                    )
+                }
+            }
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(title)
+                    .setArtist(artistName)
+                    .apply {
+                        effectiveArtwork?.let { p ->
+                            val uri = if (p.startsWith("http://") || p.startsWith("https://") || p.startsWith("file://")) {
+                                android.net.Uri.parse(p)
+                            } else {
+                                android.net.Uri.fromFile(java.io.File(p))
+                            }
+                            setArtworkUri(uri)
+                        }
+                    }
+                    .setExtras(android.os.Bundle().apply { putString("format", format) })
+                    .build(),
+            )
+            .build()
+    }
 
     // Cold start only - fires once, right after the controller connects, and only if the player
     // actually has nothing loaded (a live/backgrounded-but-alive service already has its own real
@@ -401,11 +490,13 @@ class PlayerRepositoryImpl @Inject constructor(
         val anchorId = tracks.getOrNull(startIndex)?.id?.value
         val newStartIndex = ordered.indexOfFirst { it.id.value == anchorId }.coerceAtLeast(0)
         resolveServerUrls(ordered)
+        ordered.forEach { trackInfoByMediaId[it.id.value] = it.toMediaItemInfo() }
         val items = ordered.map { it.toMediaItem() }
         controller?.apply {
             setMediaItems(items, newStartIndex, startMs)
             prepare()
             play()
+            updatePlaybackSource(this)
         }
     }
 

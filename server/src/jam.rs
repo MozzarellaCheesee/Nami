@@ -31,8 +31,12 @@ const BUFFER: usize = 16;
 pub struct Session {
     /// Ключ библиотеки: участвовать можно только внутри одной (см. `library_key`).
     library: i64,
+    host_ident: i64,
     /// Общая очередь - её может пополнить любой участник.
     queue: Vec<i64>,
+    pub current_track: Option<i64>,
+    pub position_ms: i64,
+    pub at: i64,
     tx: broadcast::Sender<String>,
 }
 
@@ -119,6 +123,21 @@ impl Membership {
     }
 }
 
+pub fn cleanup_host(st: &Shared, m: &mut Membership, ident: &Ident) {
+    if let Some(code) = m.code.take() {
+        let db = st.db.lock().unwrap();
+        let mut reg = st.jams.0.lock().unwrap();
+        let is_host = reg.get(&code).map_or(false, |s| s.host_ident == ident.state_key());
+        if is_host {
+            if let Some(s) = reg.remove(&code) {
+                let _ = s.tx.send(serde_json::json!({"type": "jam_closed", "reason": "host_left"}).to_string());
+                record_end(&db, &code);
+            }
+        }
+        sweep(&mut reg, &db);
+    }
+}
+
 /// Ключ библиотеки участника. В режиме раздельных библиотек это её id, в общем
 /// режиме - 0 (библиотека одна на всех). Ровно это и делает раздельные библиотеки
 /// закрытыми друг для друга, отдельной ветки под режим не нужно.
@@ -178,7 +197,18 @@ pub fn handle(st: &Shared, ident: &Ident, m: &mut Membership, text: &str) -> Opt
                 let mut reg = st.jams.0.lock().unwrap();
                 sweep(&mut reg, &db);
                 let (tx, rx) = broadcast::channel(BUFFER);
-                reg.insert(code.clone(), Session { library, queue: Vec::new(), tx });
+                reg.insert(
+                    code.clone(),
+                    Session {
+                        library,
+                        host_ident: ident.state_key(),
+                        queue: Vec::new(),
+                        current_track: None,
+                        position_ms: 0,
+                        at: 0,
+                        tx,
+                    },
+                );
                 rx
             };
             m.code = Some(code.clone());
@@ -200,6 +230,9 @@ pub fn handle(st: &Shared, ident: &Ident, m: &mut Membership, text: &str) -> Opt
             m.rx = Some(s.tx.subscribe());
             m.code = Some(code.clone());
             let queue = s.queue.clone();
+            let current_track = s.current_track;
+            let position_ms = s.position_ms;
+            let at = s.at;
             // receiver_count включает только что оформленную подписку.
             let members = s.tx.receiver_count() as i64;
             let _ = db.execute(
@@ -207,15 +240,29 @@ pub fn handle(st: &Shared, ident: &Ident, m: &mut Membership, text: &str) -> Opt
                 rusqlite::params![code, members],
             );
             Some(
-                serde_json::json!({ "type": "jam_joined", "code": code, "queue": queue })
-                    .to_string(),
+                serde_json::json!({
+                    "type": "jam_joined",
+                    "code": code,
+                    "queue": queue,
+                    "current_track_id": current_track,
+                    "position_ms": position_ms,
+                    "at": at,
+                })
+                .to_string(),
             )
         }
         "jam_leave" => {
             m.rx = None;
-            if m.code.take().is_some() {
+            if let Some(code) = m.code.take() {
                 let db = st.db.lock().unwrap();
                 let mut reg = st.jams.0.lock().unwrap();
+                let is_host = reg.get(&code).map_or(false, |s| s.host_ident == ident.state_key());
+                if is_host {
+                    if let Some(s) = reg.remove(&code) {
+                        let _ = s.tx.send(serde_json::json!({"type": "jam_closed", "reason": "host_left"}).to_string());
+                        record_end(&db, &code);
+                    }
+                }
                 sweep(&mut reg, &db);
             }
             Some(serde_json::json!({ "type": "jam_left" }).to_string())
@@ -229,6 +276,15 @@ pub fn handle(st: &Shared, ident: &Ident, m: &mut Membership, text: &str) -> Opt
             if !users::can_see_track(&st.db.lock().unwrap(), ident, track_id) {
                 return err("трек вам не виден");
             }
+            let at = msg.at.unwrap_or_else(|| crate::db::now() * 1000);
+            {
+                let mut reg = st.jams.0.lock().unwrap();
+                if let Some(s) = reg.get_mut(&code) {
+                    s.current_track = Some(track_id);
+                    s.position_ms = msg.position_ms;
+                    s.at = at;
+                }
+            }
             broadcast_to(
                 st,
                 &code,
@@ -237,7 +293,7 @@ pub fn handle(st: &Shared, ident: &Ident, m: &mut Membership, text: &str) -> Opt
                     "code": code,
                     "track_id": track_id,
                     "position_ms": msg.position_ms,
-                    "at": msg.at.unwrap_or_else(|| crate::db::now() * 1000),
+                    "at": at,
                     "by": ident.user_id,
                 }),
             );

@@ -63,6 +63,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
+import coil3.compose.AsyncImage
+import dev.nami.domain.PlaybackState
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -688,6 +692,9 @@ private fun JamSheetActiveSession(
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     var showQrDialog by remember { mutableStateOf(false) }
+    val uploadStatus by viewModel.uploadStatus.collectAsState()
+    val nowPlaying by viewModel.nowPlaying.collectAsState()
+    val playbackState by viewModel.playbackState.collectAsState()
 
     val allHosts by viewModel.allHostUrls.collectAsState()
     val externalHost = allHosts.firstOrNull { !viewModel.isLocalHost(it) }
@@ -955,6 +962,34 @@ private fun JamSheetActiveSession(
             }
         }
 
+        // Upload Status Card (On-the-fly streaming sync)
+        uploadStatus?.let { statusText ->
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = NamiColors.Shu.copy(alpha = 0.15f)),
+                shape = RoundedCornerShape(NamiRadius.Card),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = NamiColors.Shu,
+                    )
+                    Text(
+                        text = statusText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = NamiColors.Paper100,
+                    )
+                }
+            }
+        }
+
         // Current Track Card
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -962,41 +997,85 @@ private fun JamSheetActiveSession(
             shape = RoundedCornerShape(NamiRadius.Card),
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "Текущий трек",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = NamiColors.Paper40,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .background(NamiColors.Ink700, RoundedCornerShape(NamiRadius.Chip)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.MusicNote,
-                            contentDescription = null,
-                            tint = NamiColors.Shu,
-                            modifier = Modifier.size(22.dp),
+                    Text(
+                        text = "Текущий трек",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = NamiColors.Paper40,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (nowPlaying != null) {
+                        val isPlaying = (playbackState as? PlaybackState.Playing)?.isPlaying == true
+                        Text(
+                            text = if (isPlaying) "Воспроизведение" else "Пауза",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isPlaying) NamiColors.Wakaba else NamiColors.Paper40,
                         )
                     }
-                    Column {
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    if (nowPlaying?.artworkPath != null) {
+                        AsyncImage(
+                            model = nowPlaying?.artworkPath,
+                            contentDescription = nowPlaying?.title,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(52.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(NamiColors.Ink700),
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(52.dp)
+                                .background(NamiColors.Ink700, RoundedCornerShape(8.dp)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.MusicNote,
+                                contentDescription = null,
+                                tint = NamiColors.Shu,
+                                modifier = Modifier.size(26.dp),
+                            )
+                        }
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = session.currentTrackId?.let { "Трек #$it" } ?: "Нет текущего трека",
+                            text = nowPlaying?.title
+                                ?: session.currentTrackId?.let { "Трек #$it" }
+                                ?: "Нет текущего трека",
                             style = MaterialTheme.typography.titleMedium,
                             color = NamiColors.Paper100,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
-                        if (session.currentTrackId != null && session.positionMs > 0) {
-                            val seconds = (session.positionMs / 1000) % 60
-                            val minutes = (session.positionMs / 1000) / 60
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = nowPlaying?.artistName
+                                ?: if (session.isHost) "Включите трек в плеере для трансляции" else "Ожидание воспроизведения от организатора",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = NamiColors.Paper70,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        val posMs = (playbackState as? PlaybackState.Playing)?.positionMs ?: session.positionMs
+                        val durMs = (playbackState as? PlaybackState.Playing)?.durationMs ?: 0L
+                        if (durMs > 0L) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            val curSec = (posMs / 1000) % 60
+                            val curMin = (posMs / 1000) / 60
+                            val totalSec = (durMs / 1000) % 60
+                            val totalMin = (durMs / 1000) / 60
                             Text(
-                                text = String.format("%02d:%02d", minutes, seconds),
-                                style = MaterialTheme.typography.bodySmall,
+                                text = String.format("%02d:%02d / %02d:%02d", curMin, curSec, totalMin, totalSec),
+                                style = MaterialTheme.typography.labelSmall,
                                 color = NamiColors.Paper40,
                             )
                         }

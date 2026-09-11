@@ -1446,11 +1446,11 @@ async fn ws_loop(
             // Клиент закрыл сокет или прислал что-то своё - читаем, чтобы заметить разрыв.
             incoming = socket.recv() => {
                 match incoming {
-                    None | Some(Err(_)) | Some(Ok(Message::Close(_))) => return,
+                    None | Some(Err(_)) | Some(Ok(Message::Close(_))) => break,
                     Some(Ok(Message::Text(t))) => {
                         if let Some(reply) = crate::jam::handle(&st, &ident, &mut jam, &t) {
                             if socket.send(Message::Text(reply.into())).await.is_err() {
-                                return;
+                                break;
                             }
                         }
                         continue;
@@ -1465,15 +1465,16 @@ async fn ws_loop(
                     continue;
                 }
                 if socket.send(Message::Text(text.into())).await.is_err() {
-                    return;
+                    break;
                 }
             }
             // Медленный клиент отстал от кольцевого буфера. Событий он не увидит,
             // но и не должен: догонит их обычным GET /api/sync?since=.
             Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
-            Err(_) => return,
+            Err(_) => break,
         }
     }
+    crate::jam::cleanup_host(&st, &mut jam, &ident);
 }
 
 // ---------------------------------------------------------------- пользователи

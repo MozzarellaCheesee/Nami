@@ -5,7 +5,12 @@ import dagger.hilt.android.HiltAndroidApp
 import dev.nami.app.widget.updateAllNamiWidgets
 import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerRepository
+import dev.nami.domain.SettingsRepository
 import dev.nami.domain.TrashRepository
+import coil3.ImageLoader
+import coil3.PlatformContext
+import coil3.SingletonImageLoader
+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -15,10 +20,22 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltAndroidApp
-class NamiApplication : Application() {
+class NamiApplication : Application(), SingletonImageLoader.Factory {
 
     @Inject lateinit var trashRepository: TrashRepository
     @Inject lateinit var playerRepository: PlayerRepository
+    @Inject lateinit var settingsRepository: SettingsRepository
+
+    override fun newImageLoader(context: PlatformContext): ImageLoader {
+        val okHttpClient = dev.nami.player.net.createPinnedOkHttpClient {
+            settingsRepository.namiServerCertSha256.value
+        }
+        return ImageLoader.Builder(context)
+            .components {
+                add(OkHttpNetworkFetcherFactory(callFactory = { okHttpClient }))
+            }
+            .build()
+    }
 
     override fun onCreate() {
         super.onCreate()

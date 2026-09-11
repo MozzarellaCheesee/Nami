@@ -53,6 +53,7 @@ class LibraryViewModelTest {
         override suspend fun listTracks(limit: Int, offset: Int): List<dev.nami.domain.ServerTrackMeta>? = null
         override suspend fun downloadTrack(serverTrackId: Long): java.io.File? = null
         override fun cachedFile(serverTrackId: Long): java.io.File? = null
+        override fun cachedArtwork(serverTrackId: Long): java.io.File? = null
         override fun cachedTrackIds(): Set<Long> = emptySet()
         override fun removeFromCache(serverTrackId: Long) {}
         override suspend fun uploadLocalTrack(path: String): String? = null
@@ -100,6 +101,7 @@ class LibraryViewModelTest {
             override val autoAdvanceSignal: StateFlow<Int> = MutableStateFlow(0)
             override val shuffleEnabled: StateFlow<Boolean> = MutableStateFlow(false)
             override val repeatMode: StateFlow<dev.nami.domain.RepeatMode> = MutableStateFlow(dev.nami.domain.RepeatMode.OFF)
+        override val playbackSource: StateFlow<dev.nami.domain.TrackPlaybackSource> = MutableStateFlow(dev.nami.domain.TrackPlaybackSource.LOCAL)
         override suspend fun play(tracks: List<PlayableTrack>, startIndex: Int, startMs: Long) {}
         override suspend fun awaitReady() {}
         override suspend fun toggle() {}
@@ -811,6 +813,10 @@ private object NoOpSettingsRepository : dev.nami.domain.SettingsRepository {
     override fun setLastAppliedSessionName(name: String?) {}
     override val scrobblingEnabled = MutableStateFlow(false)
     override fun setScrobblingEnabled(value: Boolean) {}
+    override val lastFmScrobblingEnabled = MutableStateFlow(false)
+    override fun setLastFmScrobblingEnabled(value: Boolean) {}
+    override val lastFmSessionKey = MutableStateFlow<String?>(null)
+    override fun setLastFmSessionKey(sessionKey: String?) {}
     override val airPlayEnabled = MutableStateFlow(false)
     override fun setAirPlayEnabled(value: Boolean) {}
     override val namiServerUrl = MutableStateFlow("")
@@ -821,6 +827,10 @@ private object NoOpSettingsRepository : dev.nami.domain.SettingsRepository {
     override fun setNamiServerToken(token: String?) {}
     override val namiServerPreferred = MutableStateFlow(false)
     override fun setNamiServerPreferred(value: Boolean) {}
+    override val playbackSourcePreference = MutableStateFlow(dev.nami.domain.PlaybackSourcePreference.LOCAL_FIRST)
+    override fun setPlaybackSourcePreference(preference: dev.nami.domain.PlaybackSourcePreference) {}
+    override val namiLyricsFromServer = MutableStateFlow(true)
+    override fun setNamiLyricsFromServer(enabled: Boolean) {}
     override val yandexStationEnabled = MutableStateFlow(false)
     override fun setYandexStationEnabled(value: Boolean) {}
     override val yandexOAuthToken = MutableStateFlow<String?>(null)
