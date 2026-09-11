@@ -347,7 +347,7 @@ $SUDO install -m 755 "${TMP_DIR}/nami-server" "${INSTALL_DIR}/nami-server"
 $SUDO ln -sf "${INSTALL_DIR}/nami-server" "${INSTALL_DIR}/nami"
 log_ok "Установлен: ${INSTALL_DIR}/nami-server (симлинк ${INSTALL_DIR}/nami)"
 
-# 8. Создание системного пользователя nami
+# 8. Создание системного пользователя nami и настройка sudoers
 if ! id -u nami >/dev/null 2>&1; then
     log_info "Создание системного пользователя 'nami'..."
     $SUDO useradd -r -s /usr/sbin/nologin -d "$DATA_DIR" -M nami 2>/dev/null || \
@@ -356,6 +356,15 @@ if ! id -u nami >/dev/null 2>&1; then
     log_ok "Пользователь 'nami' создан."
 else
     log_info "Системный пользователь 'nami' уже существует."
+fi
+
+# Настройка sudoers для nami, чтобы веб-мастер /setup мог настраивать Nginx, Caddy, Certbot и фаервол
+if [ -d /etc/sudoers.d ]; then
+    log_info "Настройка прав sudoers для пользователя nami..."
+    cat << 'EOF' | $SUDO tee /etc/sudoers.d/nami > /dev/null
+nami ALL=(ALL) NOPASSWD: ALL
+EOF
+    $SUDO chmod 0440 /etc/sudoers.d/nami
 fi
 
 # 9. Настройка директории данных и каталога конфигурации caddy
@@ -389,13 +398,6 @@ LimitNOFILE=65536
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 StandardOutput=journal
 StandardError=journal
-
-# Sandboxing & Permissions
-ProtectSystem=full
-ProtectHome=read-only
-ReadWritePaths=${DATA_DIR} /etc/caddy
-PrivateTmp=true
-NoNewPrivileges=true
 
 [Install]
 WantedBy=multi-user.target
