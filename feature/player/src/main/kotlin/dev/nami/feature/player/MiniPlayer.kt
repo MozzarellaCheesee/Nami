@@ -71,6 +71,7 @@ fun MiniPlayer(
     val state by viewModel.playbackState.collectAsState()
     val queue by viewModel.queue.collectAsState()
     val blindMode by viewModel.blindModeActive.collectAsState()
+    val playbackSource by viewModel.playbackSource.collectAsState()
     val playing = state as? PlaybackState.Playing
     val density = LocalDensity.current
     val expandThresholdPx = with(density) { EXPAND_THRESHOLD_DP.dp.toPx() }
@@ -177,7 +178,11 @@ fun MiniPlayer(
             // Слепое прослушивание (группа D) - иначе MiniPlayer сразу палит то, что экран
             // BlindListenScreen специально прячет.
             val masked = if (blindMode && track != null) track.copy(title = "???", artistName = null, artworkPath = null) else track
-            MiniPlayerTrackBlock(track = masked)
+            MiniPlayerTrackBlock(
+                track = masked,
+                playbackSource = playbackSource,
+                showSourceIcon = !blindMode && track != null,
+            )
         }
         val jamSession by viewModel.jamSession.collectAsState()
         if (jamSession != null) {
@@ -238,7 +243,12 @@ fun MiniPlayer(
 }
 
 @Composable
-private fun MiniPlayerTrackBlock(track: QueueTrack?, modifier: Modifier = Modifier) {
+private fun MiniPlayerTrackBlock(
+    track: QueueTrack?,
+    playbackSource: dev.nami.domain.TrackPlaybackSource = dev.nami.domain.TrackPlaybackSource.LOCAL,
+    showSourceIcon: Boolean = false,
+    modifier: Modifier = Modifier,
+) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         val artworkModifier = Modifier
             .size(ARTWORK_SIZE_DP.dp)
@@ -260,13 +270,24 @@ private fun MiniPlayerTrackBlock(track: QueueTrack?, modifier: Modifier = Modifi
                 maxLines = 1,
                 modifier = Modifier.fillMaxWidth().basicMarquee(iterations = Int.MAX_VALUE),
             )
-            track?.artistName?.let { artistName ->
-                Text(
-                    text = artistName,
-                    color = NamiColors.Paper70,
-                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(5.dp),
+            ) {
+                if (showSourceIcon) {
+                    PlaybackSourceIcon(
+                        source = playbackSource,
+                        size = 11.dp,
+                    )
+                }
+                track?.artistName?.let { artistName ->
+                    Text(
+                        text = artistName,
+                        color = NamiColors.Paper70,
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                    )
+                }
             }
         }
     }

@@ -9,7 +9,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.nami.core.model.TrackId
 import dev.nami.domain.JamRepository
 import dev.nami.domain.JamSession
+import dev.nami.domain.LibraryRepository
 import dev.nami.domain.PlayableTrack
+import dev.nami.domain.PlaybackState
 import dev.nami.domain.PlayerRepository
 import dev.nami.domain.ServerAudioRepository
 import dev.nami.domain.SettingsRepository
@@ -22,7 +24,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -57,6 +63,7 @@ private data class TrackMeta(
     val artist: String?,
     val durationMs: Long,
     val format: String?,
+    val artworkUrl: String? = null,
 )
 
 @Singleton
@@ -66,6 +73,7 @@ class JamRepositoryImpl @Inject constructor(
     private val playerRepository: PlayerRepository,
     private val serverAudioRepository: ServerAudioRepository,
     private val syncRepository: SyncRepository,
+    private val libraryRepository: LibraryRepository,
 ) : JamRepository {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -79,8 +87,36 @@ class JamRepositoryImpl @Inject constructor(
     private val _connected = MutableStateFlow(false)
     override val connected: StateFlow<Boolean> = _connected
 
+    private val _uploadStatus = MutableStateFlow<String?>(null)
+    override val uploadStatus: StateFlow<String?> = _uploadStatus
+
     private val _activeHostUrl = MutableStateFlow<String?>(null)
     override val activeHostUrl: StateFlow<String?> = _activeHostUrl
+
+    @Volatile private var lastBroadcastTrackId: TrackId? = null
+    @Volatile private var lastBroadcastServerId: Long? = null
+    @Volatile private var lastBroadcastPositionMs: Long = 0L
+    private var hostSyncJob: Job? = null
+    private var lookaheadJob: Job? = null
+    private var uploadJob: Job? = null
+
+    init {
+        scope.launch {
+            _session.collectLatest { s ->
+                hostSyncJob?.cancel()
+                lookaheadJob?.cancel()
+                uploadJob?.cancel()
+                if (s != null && s.isHost) {
+                    startHostPlaybackSync()
+                    startQueueLookahead()
+                } else {
+                    _uploadStatus.value = null
+                    lastBroadcastTrackId = null
+                    lastBroadcastServerId = null
+                }
+            }
+        }
+    }
 
     override val isServerConfigured: StateFlow<Boolean> =
         combine(settingsRepository.namiServerToken, settingsRepository.namiServerUrl) { token, url ->
@@ -238,6 +274,15 @@ class JamRepositoryImpl @Inject constructor(
         _error.value = null
         reconnectJob?.cancel()
         reconnectJob = null
+        hostSyncJob?.cancel()
+        hostSyncJob = null
+        lookaheadJob?.cancel()
+        lookaheadJob = null
+        uploadJob?.cancel()
+        uploadJob = null
+        lastBroadcastTrackId = null
+        lastBroadcastServerId = null
+        _uploadStatus.value = null
         previousSession = null
         clearPendingActions()
         unregisterNsdJam()
@@ -254,6 +299,11 @@ class JamRepositoryImpl @Inject constructor(
     }
 
     override fun play(serverTrackId: Long, positionMs: Long) {
+        _session.value = _session.value?.copy(
+            currentTrackId = serverTrackId,
+            positionMs = positionMs,
+            lastSyncAt = System.currentTimeMillis(),
+        )
         val json = JSONObject().apply {
             put("type", "jam_play")
             put("track_id", serverTrackId)
@@ -264,7 +314,7 @@ class JamRepositoryImpl @Inject constructor(
     }
 
     override fun seek(positionMs: Long) {
-        val currentTrackId = _session.value?.currentTrackId ?: return
+        val currentTrackId = _session.value?.currentTrackId ?: lastBroadcastServerId ?: return
         play(currentTrackId, positionMs)
     }
 
@@ -278,6 +328,131 @@ class JamRepositoryImpl @Inject constructor(
 
     override fun clearError() {
         _error.value = null
+    }
+
+    private fun startHostPlaybackSync() {
+        hostSyncJob?.cancel()
+        hostSyncJob = scope.launch {
+            playerRepository.state.collectLatest { pState ->
+                val s = _session.value
+                if (s == null || !s.isHost) return@collectLatest
+                if (pState is PlaybackState.Playing) {
+                    val currentTrackId = pState.trackId
+                    if (currentTrackId != lastBroadcastTrackId) {
+                        lastBroadcastTrackId = currentTrackId
+                        lastBroadcastPositionMs = pState.positionMs
+                        syncHostPlayingTrack(currentTrackId, pState.positionMs)
+                    } else if (lastBroadcastServerId != null && kotlin.math.abs(pState.positionMs - lastBroadcastPositionMs) > 4000L) {
+                        lastBroadcastPositionMs = pState.positionMs
+                        play(lastBroadcastServerId!!, pState.positionMs)
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun syncHostPlayingTrack(trackId: TrackId, positionMs: Long) = withContext(Dispatchers.IO) {
+        val s = _session.value
+        if (s == null || !s.isHost) return@withContext
+
+        // 1. Если трек уже серверный (например "jam_123" или "server_123")
+        val rawId = trackId.value
+        val directServerId = when {
+            rawId.startsWith("jam_") -> rawId.removePrefix("jam_").toLongOrNull()
+            rawId.startsWith("server_") -> rawId.removePrefix("server_").toLongOrNull()
+            else -> null
+        }
+
+        if (directServerId != null) {
+            lastBroadcastServerId = directServerId
+            play(directServerId, positionMs)
+            return@withContext
+        }
+
+        // 2. Локальный трек: достаём метаданные из локальной библиотеки
+        val localTrack = runCatching { libraryRepository.track(trackId).firstOrNull() }.getOrNull()
+        if (localTrack == null) {
+            Log.w(TAG, "Cannot sync track for Jam: local track $trackId not found")
+            return@withContext
+        }
+
+        // 3. Проверяем, есть ли уже этот трек на сервере по совпадению метаданных
+        val matchedId = runCatching {
+            serverAudioRepository.serverTrackId(localTrack.artistName, localTrack.title, localTrack.durationMs)
+        }.getOrNull()
+
+        if (matchedId != null) {
+            lastBroadcastServerId = matchedId
+            _uploadStatus.value = null
+            play(matchedId, positionMs)
+            return@withContext
+        }
+
+        // 4. Трека нет на сервере: авто-выгрузка для гостей Джема на лету
+        val cfg = activeConfig()
+        if (cfg == null) {
+            _uploadStatus.value = "Сервер недоступен для отправки трека гостям"
+            return@withContext
+        }
+
+        val localFile = java.io.File(localTrack.path)
+        if (!localFile.exists() || localFile.length() == 0L) {
+            Log.w(TAG, "Local track file does not exist: ${localTrack.path}")
+            return@withContext
+        }
+
+        uploadJob?.cancel()
+        uploadJob = scope.launch(Dispatchers.IO) {
+            try {
+                _uploadStatus.value = "Отправка трека «${localTrack.title}» гостям…"
+                val uploadResult = NamiServerClient.uploadTrack(cfg, localFile)
+                val newTrackId = uploadResult?.optLong("track_id", -1L)?.takeIf { it > 0 }
+                    ?: uploadResult?.optJSONObject("duplicate_of")?.optLong("id", -1L)?.takeIf { it > 0 }
+
+                if (newTrackId != null) {
+                    lastBroadcastServerId = newTrackId
+                    _uploadStatus.value = null
+                    val currentPos = (playerRepository.state.value as? PlaybackState.Playing)?.positionMs ?: positionMs
+                    play(newTrackId, currentPos)
+                } else {
+                    _uploadStatus.value = "Не удалось отправить трек гостям"
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to upload track for Jam: ${e.message}", e)
+                _uploadStatus.value = null
+            }
+        }
+    }
+
+    private fun startQueueLookahead() {
+        lookaheadJob?.cancel()
+        lookaheadJob = scope.launch(Dispatchers.IO) {
+            playerRepository.queue.collectLatest { q ->
+                val s = _session.value
+                if (s == null || !s.isHost) return@collectLatest
+
+                val upcoming = q.upcoming.firstOrNull()?.track ?: return@collectLatest
+                val upcomingId = upcoming.id.value
+                if (upcomingId.startsWith("jam_") || upcomingId.startsWith("server_")) return@collectLatest
+
+                val cfg = activeConfig() ?: return@collectLatest
+                val track = runCatching { libraryRepository.track(upcoming.id).firstOrNull() }.getOrNull() ?: return@collectLatest
+
+                val matched = runCatching {
+                    serverAudioRepository.serverTrackId(track.artistName, track.title, track.durationMs)
+                }.getOrNull()
+
+                if (matched == null) {
+                    val file = java.io.File(track.path)
+                    if (file.exists() && file.length() > 0L) {
+                        Log.d(TAG, "Pre-uploading upcoming track for Jam: ${track.title}")
+                        runCatching {
+                            NamiServerClient.uploadTrack(cfg, file)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private fun send(json: JSONObject): Boolean {
@@ -517,6 +692,15 @@ class JamRepositoryImpl @Inject constructor(
                     if (host != null) {
                         registerNsdJam(code, host)
                     }
+                    // Если плеер уже воспроизводит трек, сразу синхронизируем его
+                    val pState = playerRepository.state.value
+                    if (pState is PlaybackState.Playing) {
+                        lastBroadcastTrackId = pState.trackId
+                        lastBroadcastPositionMs = pState.positionMs
+                        scope.launch {
+                            syncHostPlayingTrack(pState.trackId, pState.positionMs)
+                        }
+                    }
                 }
                 "jam_joined" -> {
                     val code = json.optString("code")
@@ -527,21 +711,45 @@ class JamRepositoryImpl @Inject constructor(
                             queue.add(queueArr.optLong(i))
                         }
                     }
+                    val currentTrackId = if (json.has("current_track_id") && !json.isNull("current_track_id")) {
+                        json.optLong("current_track_id").takeIf { it > 0 }
+                    } else null
+                    val positionMs = json.optLong("position_ms", 0L)
+                    val at = json.optLong("at", System.currentTimeMillis())
+
                     val isHost = previousSession?.takeIf { it.code == code }?.isHost ?: false
                     previousSession = null
                     _session.value = JamSession(
                         code = code,
                         isHost = isHost,
                         queue = queue,
-                        currentTrackId = null,
-                        positionMs = 0L,
-                        lastSyncAt = 0L,
+                        currentTrackId = currentTrackId,
+                        positionMs = positionMs,
+                        lastSyncAt = at,
                         playedBy = null,
                     )
+                    if (!isHost && currentTrackId != null) {
+                        val latency = (System.currentTimeMillis() - at).coerceAtLeast(0L)
+                        val adjustedPositionMs = (positionMs + latency).coerceAtLeast(0L)
+                        scope.launch {
+                            handleJamPlay(currentTrackId, adjustedPositionMs)
+                        }
+                    }
                 }
                 "jam_left" -> {
                     _session.value = null
                     unregisterNsdJam()
+                }
+                "jam_closed" -> {
+                    _session.value = null
+                    hostSyncJob?.cancel()
+                    lookaheadJob?.cancel()
+                    uploadJob?.cancel()
+                    lastBroadcastTrackId = null
+                    lastBroadcastServerId = null
+                    _uploadStatus.value = null
+                    unregisterNsdJam()
+                    _error.value = "Организатор завершил Джем"
                 }
                 "jam_play" -> {
                     val trackId = json.optLong("track_id")
@@ -556,8 +764,10 @@ class JamRepositoryImpl @Inject constructor(
                     )
                     val latency = (System.currentTimeMillis() - at).coerceAtLeast(0L)
                     val adjustedPositionMs = (positionMs + latency).coerceAtLeast(0L)
-                    scope.launch {
-                        handleJamPlay(trackId, adjustedPositionMs)
+                    if (_session.value?.isHost == false) {
+                        scope.launch {
+                            handleJamPlay(trackId, adjustedPositionMs)
+                        }
                     }
                 }
                 "jam_queue" -> {
@@ -592,7 +802,7 @@ class JamRepositoryImpl @Inject constructor(
         val gToken = guestToken
 
         val meta = if (gHost != null) {
-            val tokenParam = if (gToken != null) "?token=$gToken" else "?jam_code=${_session.value?.code.orEmpty()}"
+            val tokenParam = if (gToken != null) "?token=$gToken" else ""
             val sUrl = "$gHost/api/tracks/$trackId/stream/auto$tokenParam"
 
             var tTitle = "Трек #$trackId"
@@ -624,7 +834,8 @@ class JamRepositoryImpl @Inject constructor(
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to load guest track detail: ${e.message}")
             }
-            TrackMeta(sUrl, tTitle, tArtist, tDuration, tFormat)
+            val artUrl = "$gHost/api/tracks/$trackId/artwork$tokenParam"
+            TrackMeta(sUrl, tTitle, tArtist, tDuration, tFormat, artUrl)
         } else {
             val cfg = activeConfig()
             val sUrl = serverAudioRepository.serverStreamUrl(trackId)
@@ -644,7 +855,9 @@ class JamRepositoryImpl @Inject constructor(
             val tFormat = trackObj?.optString("format")?.ifBlank { null }
                 ?: detail?.optString("format")?.ifBlank { null }
 
-            TrackMeta(sUrl, tTitle, tArtist, tDuration, tFormat)
+            val artUrl = serverAudioRepository.serverArtworkUrl(trackId)
+                ?: cfg?.let { "${it.baseUrl}/api/tracks/$trackId/artwork?token=${it.token}" }
+            TrackMeta(sUrl, tTitle, tArtist, tDuration, tFormat, artUrl)
         }
 
         val playable = PlayableTrack(
@@ -652,6 +865,7 @@ class JamRepositoryImpl @Inject constructor(
             title = meta.title,
             artistName = meta.artist,
             path = meta.streamUrl,
+            artworkPath = meta.artworkUrl,
             format = meta.format,
             durationMs = meta.durationMs,
         )

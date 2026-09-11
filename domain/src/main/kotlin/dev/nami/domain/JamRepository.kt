@@ -38,6 +38,9 @@ interface JamRepository {
     /** Whether the WebSocket is currently connected. */
     val connected: StateFlow<Boolean>
 
+    /** Текущий статус выгрузки трека на сервер для гостей Джема (null, если нет активной выгрузки). */
+    val uploadStatus: StateFlow<String?>
+
     /** Whether the Nami server is configured and ready for Jam (token and URL are set). */
     val isServerConfigured: StateFlow<Boolean>
 

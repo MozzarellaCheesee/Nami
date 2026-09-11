@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
@@ -67,7 +68,39 @@ class NowPlayingViewModel @Inject constructor(
     private val serverAudioRepository: dev.nami.domain.ServerAudioRepository? = null,
     // Состояние Jam (совместного прослушивания) для отображения кнопки и активного статуса в плеере.
     private val jamRepository: dev.nami.domain.JamRepository? = null,
+    // Работа с библиотекой сервера, в т.ч. скачивание треков
+    private val serverLibraryRepository: dev.nami.domain.ServerLibraryRepository? = null,
 ) : ViewModel() {
+
+    private val downloadTrigger = MutableStateFlow(0)
+
+    val isServerTrack: StateFlow<Boolean> = playerRepository.state
+        .map { state ->
+            val id = (state as? PlaybackState.Playing)?.trackId?.value
+            id?.startsWith("server_") == true || id?.startsWith("jam_") == true
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val isDownloaded: StateFlow<Boolean> = combine(playerRepository.state, downloadTrigger) { state, _ ->
+        val id = (state as? PlaybackState.Playing)?.trackId?.value ?: return@combine false
+        if (id.startsWith("server_") || id.startsWith("jam_")) {
+            val serverId = id.substringAfter("_").toLongOrNull() ?: return@combine false
+            serverLibraryRepository?.cachedTrackIds()?.contains(serverId) == true
+        } else {
+            false
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    fun downloadCurrentTrack() {
+        val id = (playerRepository.state.value as? PlaybackState.Playing)?.trackId?.value ?: return
+        if (id.startsWith("server_") || id.startsWith("jam_")) {
+            val serverId = id.substringAfter("_").toLongOrNull() ?: return
+            viewModelScope.launch(Dispatchers.IO) {
+                serverLibraryRepository?.downloadTrack(serverId)
+                downloadTrigger.value += 1
+            }
+        }
+    }
 
     /** Состояние активной Jam-сессии для индикации в плеере, мини-плеере и меню "Ещё". */
     val jamSession: StateFlow<dev.nami.domain.JamSession?> =
@@ -124,6 +157,7 @@ class NowPlayingViewModel @Inject constructor(
 
     val playbackState: StateFlow<PlaybackState> = playerRepository.state
     val queue: StateFlow<PlayerQueue> = playerRepository.queue
+    val playbackSource: StateFlow<dev.nami.domain.TrackPlaybackSource> = playerRepository.playbackSource
     val autoAdvanceSignal: StateFlow<Int> = playerRepository.autoAdvanceSignal
     val shuffleEnabled: StateFlow<Boolean> = playerRepository.shuffleEnabled
     val repeatMode: StateFlow<RepeatMode> = playerRepository.repeatMode
@@ -337,14 +371,21 @@ class NowPlayingViewModel @Inject constructor(
     val waveform: StateFlow<List<Float>?> = _waveform.asStateFlow()
 
     init {
-        currentTrackDetails
-            .distinctUntilChanged { a, b -> a?.path == b?.path }
-            .onEach { track -> loadWaveform(track) }
+        combine(currentTrackDetails, playerRepository.queue) { track, q ->
+            track to q.nowPlaying
+        }
+            .distinctUntilChanged { a, b ->
+                val pathA = a.first?.path ?: a.second?.id?.value
+                val pathB = b.first?.path ?: b.second?.id?.value
+                pathA == pathB
+            }
+            .onEach { (track, nowPlaying) -> loadWaveform(track, nowPlaying) }
             .launchIn(viewModelScope)
     }
 
-    private fun loadWaveform(track: Track?) {
-        val path = track?.path
+    private fun loadWaveform(track: Track?, nowPlaying: dev.nami.domain.QueueTrack? = null) {
+        val qTrack = nowPlaying ?: playerRepository.queue.value.nowPlaying
+        val path = track?.path ?: qTrack?.id?.value
         if (path == null) {
             _waveform.value = null
             return
@@ -354,13 +395,6 @@ class NowPlayingViewModel @Inject constructor(
             _waveform.value = memoryCached
             return
         }
-        // Disk read is ~120 bytes - reading it synchronously (right here, before ever touching
-        // _waveform) is cheap enough to not need a dispatcher hop, and it's the whole fix: the
-        // old code always set _waveform.value = null first and read the disk cache inside a
-        // launched coroutine, so even an already-scanned-last-session track visibly flashed the
-        // placeholder for one frame (the Compose recomposition on the null) before the disk value
-        // came back on the next coroutine step. Checking synchronously first means a disk hit
-        // never sets null at all.
         val diskCached = waveformDiskCache.read(path)
         if (diskCached != null) {
             rememberWaveform(path, diskCached)
@@ -368,15 +402,17 @@ class NowPlayingViewModel @Inject constructor(
         }
         _waveform.value = null
         viewModelScope.launch {
+            val title = track?.title ?: qTrack?.title
+            val artist = track?.artistName ?: qTrack?.artistName
+            val dur = track?.durationMs ?: (playerRepository.state.value as? PlaybackState.Playing)?.durationMs ?: 0L
             // Сначала с сервера (он уже посчитал при сканировании библиотеки), при промахе -
             // локальный полный декод.
             val fromServer =
-                if (track != null && serverAudioRepository?.isServerActive() == true) {
-                    serverAudioRepository.serverWaveform(track.artistName, track.title, track.durationMs)
+                if (title != null && serverAudioRepository?.isServerActive() == true) {
+                    serverAudioRepository.serverWaveform(artist, title, dur)
                 } else null
-            val bars = fromServer
-                ?: withContext(Dispatchers.Default) { WaveformScanner.scan(path) }
-                ?: return@launch
+            val localBars = if (track != null) withContext(Dispatchers.Default) { WaveformScanner.scan(track.path) } else null
+            val bars = fromServer ?: localBars ?: return@launch
             rememberWaveform(path, bars)
             withContext(Dispatchers.IO) { waveformDiskCache.write(path, bars) }
         }

@@ -24,8 +24,7 @@ class ServerAudioRepositoryImpl @Inject constructor(
     private val analysisCache = ConcurrentHashMap<String, ServerAnalysis>()
 
     override fun isServerActive(): Boolean =
-        settingsRepository.namiServerPreferred.value &&
-            settingsRepository.namiServerToken.value != null &&
+        !settingsRepository.namiServerToken.value.isNullOrBlank() &&
             settingsRepository.namiServerUrl.value.isNotBlank()
 
     /** Конфигурация с первым доступным адресом из списка; null - сервера нет/недоступен. */
@@ -79,6 +78,16 @@ class ServerAudioRepositoryImpl @Inject constructor(
     override fun serverStreamUrl(serverTrackId: Long): String? {
         val cfg = activeConfig() ?: return null
         return streamUrlOn(cfg.baseUrl, cfg.token, serverTrackId)
+    }
+
+    override fun serverArtworkUrl(serverTrackId: Long): String? {
+        val cfg = activeConfig() ?: return null
+        // 1. Если обложка уже сохранена в локальном офлайн-кеше - отдаём прямой файл
+        serverLibraryRepository.cachedArtwork(serverTrackId)?.let {
+            return android.net.Uri.fromFile(it).toString()
+        }
+        // 2. Иначе отдаём сетевой URL ручки обложки с сервера с токеном
+        return "${cfg.baseUrl}/api/tracks/$serverTrackId/artwork?token=${cfg.token}"
     }
 
     /** URL потока. `https://<IP>` с самоподписанным сертификатом ExoPlayer тянет через

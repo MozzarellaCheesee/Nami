@@ -141,6 +141,12 @@ class SettingsViewModel @Inject constructor(
     val namiServerToken: StateFlow<String?> = appSettingsRepository.namiServerToken
     val namiServerPreferred: StateFlow<Boolean> = appSettingsRepository.namiServerPreferred
     fun setNamiServerPreferred(value: Boolean) = appSettingsRepository.setNamiServerPreferred(value)
+
+    val playbackSourcePreference: StateFlow<dev.nami.domain.PlaybackSourcePreference> = appSettingsRepository.playbackSourcePreference
+    fun setPlaybackSourcePreference(preference: dev.nami.domain.PlaybackSourcePreference) = appSettingsRepository.setPlaybackSourcePreference(preference)
+
+    val namiLyricsFromServer: StateFlow<Boolean> = appSettingsRepository.namiLyricsFromServer
+    fun setNamiLyricsFromServer(value: Boolean) = appSettingsRepository.setNamiLyricsFromServer(value)
     fun unpairNamiServer() {
         appSettingsRepository.setNamiServerToken(null)
         appSettingsRepository.setNamiServerCertSha256(null)

@@ -24,6 +24,18 @@ data class PlayableTrack(
 
 enum class QueueOrigin { MANUAL, CONTEXT }
 
+/** Источник воспроизведения текущего трека (Дизайн.md §4.13). */
+enum class TrackPlaybackSource {
+    /** Локальный файл на устройстве (воспроизведение Bit-perfect напрямую с накопителя). */
+    LOCAL,
+    /** Офлайн-кеш приложения, предварительно скачанный с сервера. */
+    CACHE,
+    /** Потоковый стриминг с сервера NAMI по сети. */
+    SERVER,
+    /** Сервер недоступен / ошибка сети для удалённого трека. */
+    UNAVAILABLE,
+}
+
 /** OFF: play through the queue once and stop. ALL: loop the whole queue. ONE: loop just the
  * current track. Maps 1:1 to ExoPlayer's own REPEAT_MODE_* constants. */
 enum class RepeatMode { OFF, ALL, ONE }
@@ -61,6 +73,8 @@ data class PlayerQueue(
 interface PlayerRepository {
     val state: StateFlow<PlaybackState>
     val queue: StateFlow<PlayerQueue>
+    /** Текущий источник воспроизведения трека (локальный / кеш / сервер / недоступен). */
+    val playbackSource: StateFlow<TrackPlaybackSource>
     /** Виджеты (группа E) вызывают toggle/skipNext/etc. из свежего процесса (Android часто убивает
      * фоновый процесс приложения, тап по виджету поднимает его заново) - MediaController
      * подключается к сервису асинхронно, и сразу после холодного старта ещё не готов, из-за чего

@@ -10,26 +10,44 @@ import com.google.zxing.DecodeHintType
 import com.google.zxing.MultiFormatReader
 import com.google.zxing.RGBLuminanceSource
 import com.google.zxing.common.HybridBinarizer
+import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.nami.domain.JamRepository
 import dev.nami.domain.JamSession
+import dev.nami.domain.PlayableTrack
+import dev.nami.domain.PlaybackState
+import dev.nami.domain.PlayerRepository
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import java.util.EnumMap
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class JamViewModel @Inject constructor(
     private val jamRepository: JamRepository,
+    private val playerRepository: PlayerRepository,
 ) : ViewModel() {
 
     val session: StateFlow<JamSession?> = jamRepository.session
     val error: StateFlow<String?> = jamRepository.error
     val connected: StateFlow<Boolean> = jamRepository.connected
+    val uploadStatus: StateFlow<String?> = jamRepository.uploadStatus
     val isServerConfigured: StateFlow<Boolean> = jamRepository.isServerConfigured
     val activeHostUrl: StateFlow<String?> = jamRepository.activeHostUrl
     val allHostUrls: StateFlow<List<String>> = jamRepository.allHostUrls
     val recentHosts: StateFlow<List<String>> = jamRepository.recentHosts
     val discoveredRooms: StateFlow<List<dev.nami.domain.DiscoveredJamRoom>> = jamRepository.discoveredRooms
+
+    val nowPlaying: StateFlow<dev.nami.domain.QueueTrack?> = playerRepository.queue
+        .map { it.nowPlaying }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, playerRepository.queue.value.nowPlaying)
+
+    val playbackState: StateFlow<PlaybackState> = playerRepository.state
+
+    fun togglePlay() { viewModelScope.launch { playerRepository.toggle() } }
 
     fun startDiscovery() = jamRepository.startDiscovery()
     fun stopDiscovery() = jamRepository.stopDiscovery()

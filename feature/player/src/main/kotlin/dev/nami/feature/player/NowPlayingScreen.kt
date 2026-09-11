@@ -46,6 +46,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.CloudDownload
+import androidx.compose.material.icons.outlined.FileDownloadDone
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -140,6 +142,7 @@ fun NowPlayingScreen(
     val state by viewModel.playbackState.collectAsState()
     val queue by viewModel.queue.collectAsState()
     val trackDetails by viewModel.currentTrackDetails.collectAsState()
+    val playbackSource by viewModel.playbackSource.collectAsState()
     val playing = state as? PlaybackState.Playing
     val density = LocalDensity.current
     val dismissThresholdPx = with(density) { DISMISS_THRESHOLD_DP.dp.toPx() }
@@ -188,6 +191,8 @@ fun NowPlayingScreen(
     // Real, not a stub: backed by the Любимые треки system playlist (PlaylistRepository.
     // isTrackLiked/toggleLike) - see LikedPlaylistCover for the playlist's own heart cover.
     val isFavorite by viewModel.isCurrentTrackLiked.collectAsState()
+    val isServerTrack by viewModel.isServerTrack.collectAsState()
+    val isDownloaded by viewModel.isDownloaded.collectAsState()
     // Real, not a stub: viewModel.shuffleEnabled reflects the live queue's actual order (see
     // PlayerRepository.setShuffleEnabled) - toggling this really reorders/restores the queue.
     val shuffleEnabled by viewModel.shuffleEnabled.collectAsState()
@@ -446,7 +451,7 @@ fun NowPlayingScreen(
                 onDismiss = { showOverflowMenu = false },
                 header = {
                     if (track != null) {
-                        NowPlayingOverflowHeader(track = track)
+                        NowPlayingOverflowHeader(track = track, playbackSource = playbackSource)
                         VolumeSlider(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp))
                     }
                 },
@@ -730,6 +735,20 @@ fun NowPlayingScreen(
                         maxLines = 1,
                         modifier = Modifier.weight(1f).basicMarquee(iterations = Int.MAX_VALUE),
                     )
+                    if (isServerTrack) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.size(32.dp).fullBlockClickable(shape = CircleShape) { 
+                                if (!isDownloaded) viewModel.downloadCurrentTrack()
+                            },
+                        ) {
+                            Icon(
+                                imageVector = if (isDownloaded) Icons.Outlined.FileDownloadDone else Icons.Outlined.CloudDownload,
+                                contentDescription = if (isDownloaded) "Скачано" else "Скачать",
+                                tint = if (isDownloaded) NamiColors.Shu else NamiColors.Paper100,
+                            )
+                        }
+                    }
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier.size(32.dp).fullBlockClickable(shape = CircleShape) { viewModel.toggleLikeCurrentTrack() },
@@ -751,8 +770,20 @@ fun NowPlayingScreen(
                         )
                     }
                 }
-                queue.nowPlaying?.artistName?.let { artistName ->
-                    Text(text = artistName, color = NamiColors.Paper70)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(top = 2.dp),
+                ) {
+                    if (queue.nowPlaying != null) {
+                        PlaybackSourceIcon(
+                            source = playbackSource,
+                            size = 12.dp,
+                        )
+                    }
+                    queue.nowPlaying?.artistName?.let { artistName ->
+                        Text(text = artistName, color = NamiColors.Paper70)
+                    }
                 }
                 }
 
@@ -895,33 +926,33 @@ fun NowPlayingScreen(
                 }
 
                 dev.nami.domain.NowPlayingBlock.TECH_INFO -> {
-                // Format badge sits below the transport controls per Дизайн.md §4.3 (mockup order:
-                // controls, then format badge row, then the pill row) - was above the scrubber before.
-                // Detail string (bitrate/sample-rate-bit-depth/size) needs the full Track (byte size,
-                // duration), not just QueueTrack's format string - falls back to just the format badge
-                // until currentTrackDetails' lookup resolves, and stays format-only if it never does.
-                if (showTechInfo) queue.nowPlaying?.format?.let { format ->
-                    // BPM/key (BpmKeyAnalyzer) land here live once a background scan finishes, sometimes
-                    // well after the badge is already on screen - an instant text swap would read as the
-                    // chip randomly resizing/changing under the user. animateContentSize smooths the
-                    // width change, AnimatedContent crossfades the text itself instead of a hard cut.
-                    Box(
-                        modifier = Modifier
-                            .padding(top = 40.dp)
-                            .background(NamiColors.Ai.copy(alpha = 0.14f), RoundedCornerShape(4.dp))
-                            .animateContentSize(animationSpec = tween(200)),
+                // Source badge and format badge sit below transport controls per Дизайн.md §4.3 and §4.13
+                if (showTechInfo && queue.nowPlaying != null) {
+                    Row(
+                        modifier = Modifier.padding(top = 40.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        AnimatedContent(
-                            targetState = formatBadgeDetail(format, trackDetails),
-                            transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(150)) },
-                            label = "format-badge",
-                        ) { text ->
-                            Text(
-                                text = text,
-                                color = NamiColors.Ai,
-                                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            )
+                        PlaybackSourceBadge(source = playbackSource)
+                        queue.nowPlaying?.format?.let { format ->
+                            Box(
+                                modifier = Modifier
+                                    .background(NamiColors.Ai.copy(alpha = 0.14f), RoundedCornerShape(4.dp))
+                                    .animateContentSize(animationSpec = tween(200)),
+                            ) {
+                                AnimatedContent(
+                                    targetState = formatBadgeDetail(format, trackDetails),
+                                    transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(150)) },
+                                    label = "format-badge",
+                                ) { text ->
+                                    Text(
+                                        text = text,
+                                        color = NamiColors.Ai,
+                                        style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -1308,7 +1339,10 @@ private fun shareTrackText(context: android.content.Context, track: dev.nami.cor
 /** Header for the "..." sheet's richer layout (cover + "Сейчас играет" + title/artist), same
  * idea as a platform media output sheet's now-playing summary above its own action list. */
 @Composable
-private fun NowPlayingOverflowHeader(track: dev.nami.core.model.Track) {
+private fun NowPlayingOverflowHeader(
+    track: dev.nami.core.model.Track,
+    playbackSource: dev.nami.domain.TrackPlaybackSource,
+) {
     Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         if (track.albumArtworkPath != null) {
             AsyncImage(
@@ -1320,8 +1354,15 @@ private fun NowPlayingOverflowHeader(track: dev.nami.core.model.Track) {
         } else {
             Box(modifier = Modifier.size(48.dp).background(NamiColors.Ink700, RoundedCornerShape(8.dp)))
         }
-        Column(modifier = Modifier.padding(start = 14.dp)) {
-            Text("Сейчас играет", color = NamiColors.Paper40, style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
+        Column(modifier = Modifier.padding(start = 14.dp).weight(1f)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Сейчас играет", color = NamiColors.Paper40, style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
+                PlaybackSourceBadge(source = playbackSource)
+            }
             Text(track.title, color = NamiColors.Paper100, style = androidx.compose.material3.MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             track.artistName?.let { Text(it, color = NamiColors.Paper70, style = androidx.compose.material3.MaterialTheme.typography.bodySmall, maxLines = 1) }
         }

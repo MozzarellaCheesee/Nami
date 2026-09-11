@@ -42,6 +42,12 @@ interface ServerAudioRepository {
     fun serverStreamUrl(serverTrackId: Long): String?
 
     /**
+     * URL обложки трека с сервера (`GET /api/tracks/{id}/artwork?token=...`).
+     * Null - сервера нет либо сервер не настроен.
+     */
+    fun serverArtworkUrl(serverTrackId: Long): String?
+
+    /**
      * Один `POST /api/tracks/match` на всю очередь -> список URL потока той же длины и
      * порядка. Элемент null - трек серверу не известен ЛИБО адрес - `https://<IP>` с
      * самоподписанным сертификатом (ExoPlayer его не проверит без своего датасорса).

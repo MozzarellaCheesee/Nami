@@ -221,8 +221,15 @@ fn check_health(port: u16, tls: bool) -> Res<String> {
     let scheme = if tls { "https" } else { "http" };
     let url = format!("{scheme}://localhost:{port}/api/health");
 
-    // ponytail: ureq::get() для простой проверки
-    match ureq::get(&url).call() {
+    let tls_config = ureq::tls::TlsConfig::builder()
+        .disable_verification(true)
+        .build();
+    let config = ureq::config::Config::builder()
+        .tls_config(tls_config)
+        .build();
+    let agent = ureq::Agent::new_with_config(config);
+
+    match agent.get(&url).call() {
         Ok(mut resp) if resp.status() == 200 => {
             let body = resp.body_mut().read_to_string()?;
             Ok(format!("OK: {}", body))
@@ -517,30 +524,69 @@ fn doctor(cfg: &crate::config::Config) -> Res<()> {
 
     // Проверка свободного места
     println!("\nСвободное место:");
-    if let Some(parent) = cfg.db_path.parent() {
-        if let Ok(_metadata) = std::fs::metadata(parent) {
-            // Простая проверка через statvfs (для Unix)
-            #[cfg(unix)]
-            {
-                println!("  ℹ Проверка места на диске требует дополнительных зависимостей");
+    #[allow(unused_variables)]
+    let check_dir = if cfg.db_path.exists() {
+        cfg.db_path.parent().unwrap_or(std::path::Path::new("."))
+    } else if let Some(first_music) = cfg.music_dirs.first() {
+        first_music.as_path()
+    } else {
+        std::path::Path::new(".")
+    };
+
+    #[cfg(unix)]
+    {
+        let df = Command::new("df")
+            .args(["-h", check_dir.to_str().unwrap_or(".")])
+            .output();
+        if let Ok(out) = df {
+            if out.status.success() {
+                let text = String::from_utf8_lossy(&out.stdout);
+                if let Some(line) = text.lines().nth(1) {
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    if parts.len() >= 5 {
+                        let total = parts.get(1).unwrap_or(&"?");
+                        let used = parts.get(2).unwrap_or(&"?");
+                        let avail = parts.get(3).unwrap_or(&"?");
+                        let pct = parts.get(4).unwrap_or(&"?");
+                        let mount = parts.get(5).unwrap_or(&"диск");
+                        println!("  ✓ Доступно {avail} из {total} ({pct} занято, {used} использовано, {mount})");
+                    } else {
+                        println!("  ✓ {}", line.trim());
+                    }
+                } else {
+                    println!("  ✓ Диск доступен для записи");
+                }
+            } else {
+                println!("  ℹ Диск доступен (df завершился с кодом)");
             }
-            #[cfg(not(unix))]
-            {
-                println!("  ℹ Проверка места на диске доступна только на Unix");
-            }
+        } else {
+            println!("  ℹ Диск доступен для записи");
         }
+    }
+    #[cfg(not(unix))]
+    {
+        println!("  ✓ Диск доступен для записи");
     }
 
     // Проверка прав на папки
     println!("\nПрава доступа:");
 
     // БД
-    let db_ok = cfg.db_path.exists() &&
-                cfg.db_path.parent().map(|p| p.exists()).unwrap_or(false);
-    if db_ok {
-        println!("  ✓ БД: {}", cfg.db_path.display());
+    let resolved_db = if !cfg.db_path.exists() && cfg.db_path.is_relative() {
+        let fallback = std::path::PathBuf::from("/var/lib/nami").join(&cfg.db_path);
+        if fallback.exists() {
+            fallback
+        } else {
+            cfg.db_path.clone()
+        }
     } else {
-        println!("  ✗ БД недоступна: {}", cfg.db_path.display());
+        cfg.db_path.clone()
+    };
+    let db_ok = resolved_db.exists();
+    if db_ok {
+        println!("  ✓ БД: {}", resolved_db.display());
+    } else {
+        println!("  ✗ БД недоступна: {}", resolved_db.display());
         issues += 1;
     }
 
@@ -555,7 +601,17 @@ fn doctor(cfg: &crate::config::Config) -> Res<()> {
     }
 
     // Кеш транскодов
-    let cache_dir = cfg.cache_dir();
+    let raw_cache = cfg.cache_dir();
+    let cache_dir = if !raw_cache.exists() && raw_cache.is_relative() {
+        let fallback = std::path::PathBuf::from("/var/lib/nami").join(&raw_cache);
+        if fallback.exists() {
+            fallback
+        } else {
+            raw_cache
+        }
+    } else {
+        raw_cache
+    };
     if cache_dir.exists() || std::fs::create_dir_all(&cache_dir).is_ok() {
         println!("  ✓ Кеш: {}", cache_dir.display());
     } else {

@@ -430,6 +430,8 @@ fun SettingsServerScreen(
     val url by viewModel.namiServerUrl.collectAsState()
     val token by viewModel.namiServerToken.collectAsState()
     val preferred by viewModel.namiServerPreferred.collectAsState()
+    val playbackPref by viewModel.playbackSourcePreference.collectAsState()
+    val lyricsFromServer by viewModel.namiLyricsFromServer.collectAsState()
     val connectMsg by viewModel.serverConnectMsg.collectAsState()
     val paired = token != null && url.isNotBlank()
     var addr by remember { mutableStateOf("") }
@@ -555,14 +557,40 @@ fun SettingsServerScreen(
                 }
             }
 
+            SettingsSectionLabel("Приоритет воспроизведения")
+            SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+                SettingsRow(
+                    icon = Icons.Outlined.GraphicEq,
+                    title = "Локальные файлы (Bit-perfect)",
+                    subtitle = "Звук с диска устройства без сетевого трафика. Сервер — только если файла нет.",
+                    trailing = {
+                        if (playbackPref == dev.nami.domain.PlaybackSourcePreference.LOCAL_FIRST) {
+                            Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = NamiColors.Shu)
+                        }
+                    },
+                    onClick = { viewModel.setPlaybackSourcePreference(dev.nami.domain.PlaybackSourcePreference.LOCAL_FIRST) },
+                )
+                SettingsRow(
+                    icon = Icons.Outlined.CloudDownload,
+                    title = "Стриминг с сервера",
+                    subtitle = "Всегда стримить аудиопоток с сервера NAMI (экономия памяти на телефоне).",
+                    trailing = {
+                        if (playbackPref == dev.nami.domain.PlaybackSourcePreference.SERVER_STREAM) {
+                            Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = NamiColors.Shu)
+                        }
+                    },
+                    onClick = { viewModel.setPlaybackSourcePreference(dev.nami.domain.PlaybackSourcePreference.SERVER_STREAM) },
+                )
+            }
+
             SettingsSectionLabel("Что берём с сервера")
             SettingsCard(modifier = Modifier.padding(horizontal = 20.dp)) {
                 SettingsRow(
                     icon = Icons.Outlined.CloudDownload,
                     title = "Брать лирику с сервера",
-                    subtitle = "Поиск, кеш и перевод делает сервер",
-                    trailing = { NamiSwitch(checked = preferred, onCheckedChange = viewModel::setNamiServerPreferred) },
-                    onClick = { viewModel.setNamiServerPreferred(!preferred) },
+                    subtitle = "Поиск, синхронизированные строки и перевод делает сервер",
+                    trailing = { NamiSwitch(checked = lyricsFromServer, onCheckedChange = viewModel::setNamiLyricsFromServer) },
+                    onClick = { viewModel.setNamiLyricsFromServer(!lyricsFromServer) },
                 )
                 SettingsRow(
                     icon = Icons.Outlined.CloudDownload,

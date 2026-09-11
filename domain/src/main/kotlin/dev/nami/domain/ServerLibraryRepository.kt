@@ -29,10 +29,13 @@ interface ServerLibraryRepository {
     /** Уже скачанный файл трека, если он есть в офлайн-кеше. */
     fun cachedFile(serverTrackId: Long): File?
 
+    /** Файл сохранённой обложки в офлайн-кеше, если есть. */
+    fun cachedArtwork(serverTrackId: Long): File?
+
     /** Все id треков, лежащих в офлайн-кеше. */
     fun cachedTrackIds(): Set<Long>
 
-    /** Удалить трек из офлайн-кеша. */
+    /** Удалить трек и его сохранённую обложку из офлайн-кеша. */
     fun removeFromCache(serverTrackId: Long)
 
     /** Залить локальный файл на сервер (`POST /api/tracks/upload`). Возвращает

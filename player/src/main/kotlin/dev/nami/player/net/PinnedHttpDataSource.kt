@@ -20,9 +20,9 @@ import javax.net.ssl.X509TrustManager
  * работает как раньше), а при её провале сверяет SHA-256 leaf-сертификата с закреплённым
  * отпечатком (`certSha256Provider` читает его из настроек в момент рукопожатия).
  */
-fun pinnedOkHttpDataSourceFactory(
+fun createPinnedOkHttpClient(
     certSha256Provider: () -> String?,
-): OkHttpDataSource.Factory {
+): OkHttpClient {
     val systemTm = systemTrustManager()
     val pinningTm = object : X509TrustManager {
         override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
@@ -45,14 +45,19 @@ fun pinnedOkHttpDataSourceFactory(
     val sslContext = SSLContext.getInstance("TLS").apply {
         init(null, arrayOf<javax.net.ssl.TrustManager>(pinningTm), null)
     }
-    val client = OkHttpClient.Builder()
+    return OkHttpClient.Builder()
         .sslSocketFactory(sslContext.socketFactory, pinningTm)
         // Имя хоста не проверяем: у самоподписанного сертификата сервера SAN - это IP/localhost,
         // а доверие уже дал совпавший отпечаток. Для внешнего домена сертификат от CA прошёл
         // системную проверку выше, подмена нереальна.
         .hostnameVerifier { _, _ -> true }
         .build()
-    return OkHttpDataSource.Factory(client)
+}
+
+fun pinnedOkHttpDataSourceFactory(
+    certSha256Provider: () -> String?,
+): OkHttpDataSource.Factory {
+    return OkHttpDataSource.Factory(createPinnedOkHttpClient(certSha256Provider))
 }
 
 private fun systemTrustManager(): X509TrustManager {

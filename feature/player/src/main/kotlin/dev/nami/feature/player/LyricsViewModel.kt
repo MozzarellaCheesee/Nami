@@ -110,15 +110,37 @@ class LyricsViewModel @Inject constructor(
     private val trackAndLyrics: StateFlow<TrackAndLyrics?> = playerRepository.state
         .filterIsInstance<PlaybackState.Playing>()
         .flatMapLatest { playing ->
-            libraryRepository.track(playing.trackId).filterNotNull().flatMapLatest { track ->
-                reloadSignal.flatMapLatest { _ ->
-                    combine(
-                        lyricsRepository.lyricsForPath(track.path),
-                        lyricsRepository.translationForPath(track.path),
-                        lyricsRepository.romajiForPath(track.path),
-                        lyricsRepository.wordTimingsForPath(track.path),
-                    ) { lyrics, translation, romaji, wordTimings ->
-                        TrackAndLyrics(track.id, track.path, track.title, track.artistName, track.durationMs, lyrics, translation, romaji, wordTimings)
+            libraryRepository.track(playing.trackId).flatMapLatest { localTrack ->
+                val track = localTrack ?: run {
+                    val qNow = playerRepository.queue.value.nowPlaying
+                    if (qNow != null && qNow.id == playing.trackId) {
+                        dev.nami.core.model.Track(
+                            id = qNow.id,
+                            title = qNow.title,
+                            artistId = null,
+                            albumId = null,
+                            durationMs = playing.durationMs,
+                            path = qNow.id.value,
+                            format = qNow.format ?: "flac",
+                            sizeBytes = 0L,
+                            dateAdded = 0L,
+                            artistName = qNow.artistName,
+                            albumArtworkPath = qNow.artworkPath,
+                        )
+                    } else null
+                }
+                if (track == null) {
+                    kotlinx.coroutines.flow.flowOf(null)
+                } else {
+                    reloadSignal.flatMapLatest { _ ->
+                        combine(
+                            lyricsRepository.lyricsForPath(track.path),
+                            lyricsRepository.translationForPath(track.path),
+                            lyricsRepository.romajiForPath(track.path),
+                            lyricsRepository.wordTimingsForPath(track.path),
+                        ) { lyrics, translation, romaji, wordTimings ->
+                            TrackAndLyrics(track.id, track.path, track.title, track.artistName, track.durationMs, lyrics, translation, romaji, wordTimings)
+                        }
                     }
                 }
             }
