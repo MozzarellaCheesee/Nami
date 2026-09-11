@@ -162,9 +162,13 @@ pub fn check_domain(input: &str) -> DomainCheck {
     }
 }
 
-/// Выполняет полную автоматическую настройку домена: фаервол, Caddy reverse proxy, Let's Encrypt и config.toml
-/// Выполняет полную автоматическую настройку домена: фаервол, Caddy reverse proxy, Let's Encrypt и config.toml
-pub fn setup_domain(input: &str, nami_port: u16, config_path: &Path) -> Result<DomainSetupReport, String> {
+/// Выполняет полную автоматическую настройку домена: фаервол, Caddy/Nginx reverse proxy, Let's Encrypt и config.toml
+pub fn setup_domain(
+    input: &str,
+    nami_port: u16,
+    config_path: &Path,
+    restart_service: bool,
+) -> Result<DomainSetupReport, String> {
     let _ = nami_port;
     let check = check_domain(input);
     if !check.ok {
@@ -256,9 +260,9 @@ pub fn setup_domain(input: &str, nami_port: u16, config_path: &Path) -> Result<D
         }
     }
 
-    // 7. Перезапуск nami, если работает
+    // 7. Перезапуск nami, если работает и запрошено (например, при вызове из CLI)
     #[cfg(unix)]
-    {
+    if restart_service {
         let _ = Command::new("sh").arg("-c").arg(format!("{sudo}systemctl restart nami")).output();
         steps.push("✓ Служба nami перезапущена для применения внешнего адреса".into());
     }
