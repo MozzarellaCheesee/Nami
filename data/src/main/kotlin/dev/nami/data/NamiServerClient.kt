@@ -533,7 +533,7 @@ object NamiServerClient {
         val text = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
         conn.disconnect()
         code to text
-    }.onFailure { Log.w(TAG, "$method $url: ${it.message}") }.getOrNull()
+    }.onFailure { Log.w(TAG, "$method $url failed", it) }.getOrNull()
 
     fun hostIsIpLiteral(url: String): Boolean {
         val host = runCatching { URL(url).host }.getOrNull().orEmpty()
