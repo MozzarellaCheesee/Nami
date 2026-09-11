@@ -111,6 +111,32 @@ interface TrackDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAll(tracks: List<TrackEntity>)
 
+    @Query(
+        """
+        UPDATE tracks SET title=:title, artistId=:artistId, albumId=:albumId,
+            trackNo=:trackNo, durationMs=:durationMs, format=:format,
+            sizeBytes=:sizeBytes, artworkPath=:artworkPath, deletedAt=NULL
+        WHERE id=:id AND path LIKE 'nami-server://%'
+        """,
+    )
+    suspend fun updateServerTrack(
+        id: String,
+        title: String,
+        artistId: String?,
+        albumId: String?,
+        trackNo: Int?,
+        durationMs: Long,
+        format: String,
+        sizeBytes: Long,
+        artworkPath: String?,
+    )
+
+    @Query("DELETE FROM tracks WHERE path LIKE 'nami-server://%'")
+    suspend fun deleteAllServerTracks()
+
+    @Query("DELETE FROM tracks WHERE path LIKE 'nami-server://%' AND id NOT IN (:ids)")
+    suspend fun deleteServerTracksExcept(ids: List<String>)
+
     @Query("SELECT COUNT(*) FROM tracks")
     suspend fun count(): Int
 
@@ -190,7 +216,7 @@ interface TrackDao {
 
     /** Треки без отпечатка - вход для сканера дублей (П.md §23.19). Порция ограничена, потому
      * что каждая строка тут означает полное декодирование файла. */
-    @Query("SELECT id, path FROM tracks WHERE deletedAt IS NULL AND audioFingerprint IS NULL LIMIT :limit")
+    @Query("SELECT id, path FROM tracks WHERE deletedAt IS NULL AND audioFingerprint IS NULL AND path NOT LIKE 'nami-server://%' LIMIT :limit")
     suspend fun tracksWithoutFingerprint(limit: Int): List<TrackPathRow>
 
     @Query("SELECT id, audioFingerprint AS fingerprint FROM tracks WHERE deletedAt IS NULL AND audioFingerprint IS NOT NULL")
@@ -206,7 +232,7 @@ interface TrackDao {
     @Query("UPDATE tracks SET audioFingerprint = :fingerprint WHERE id = :id")
     suspend fun setAudioFingerprint(id: String, fingerprint: Long?)
 
-    @Query("SELECT COUNT(*) FROM tracks WHERE deletedAt IS NULL AND audioFingerprint IS NULL")
+    @Query("SELECT COUNT(*) FROM tracks WHERE deletedAt IS NULL AND audioFingerprint IS NULL AND path NOT LIKE 'nami-server://%'")
     suspend fun countWithoutFingerprint(): Int
 
     @Query("UPDATE tracks SET deletedAt = :deletedAt, path = :path WHERE id = :id")

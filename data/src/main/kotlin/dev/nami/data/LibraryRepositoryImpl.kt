@@ -88,9 +88,10 @@ class LibraryRepositoryImpl @Inject constructor(
         val tracks = trackDao.allOrderedWithArtwork().map { it.toDomain() }
         fun Track.ref() = dev.nami.domain.HealthTrackRef(id, title)
 
+        val localTracks = tracks.filterNot { it.path.startsWith("nami-server://") }
         val withoutArtwork = tracks.filter { it.albumArtworkPath == null }.map { it.ref() }
-        val withoutLyrics = tracks.filter { lyricsRepository.lyricsForPath(it.path).first() == null }.map { it.ref() }
-        val missingFiles = tracks.filter { !File(it.path).exists() }.map { it.ref() }
+        val withoutLyrics = localTracks.filter { lyricsRepository.lyricsForPath(it.path).first() == null }.map { it.ref() }
+        val missingFiles = localTracks.filter { !File(it.path).exists() }.map { it.ref() }
 
         val yearById = albumDao.allIdsAndYears().associate { it.id to it.year }
         val albumsWithoutYear = albumDao.allForIndexing()

@@ -478,16 +478,12 @@ class JamRepositoryImpl @Inject constructor(
     }
 
     private suspend fun probeReachableHost(hosts: List<String>, code: String): Pair<String, String>? = withContext(Dispatchers.IO) {
-        val client = okHttpClient ?: OkHttpClient.Builder()
-            .connectTimeout(3, TimeUnit.SECONDS)
-            .readTimeout(3, TimeUnit.SECONDS)
-            .build()
-
         val jsonReq = JSONObject().apply { put("code", code) }
         val mediaType = "application/json; charset=utf-8".toMediaType()
 
         for (host in hosts) {
             val cleanHost = host.trim().trimEnd('/')
+            val client = createOkHttpClient(cleanHost, settingsRepository.namiServerCertSha256.value)
             val token = runCatching {
                 val reqBody = jsonReq.toString().toRequestBody(mediaType)
                 val authReq = Request.Builder()
@@ -520,10 +516,11 @@ class JamRepositoryImpl @Inject constructor(
         }
 
         val probed = probeReachableHost(hosts, code)
-        val targetHost = probed?.first ?: hosts.first()
-        val targetToken = probed?.second
-
-        connectAsGuestWithToken(targetHost, targetToken, code)
+        if (probed == null) {
+            _error.value = "Не удалось получить доступ к трекам Джема"
+            return@withContext
+        }
+        connectAsGuestWithToken(probed.first, probed.second, code)
     }
 
     private fun connectAsGuestWithToken(cleanHost: String, token: String?, code: String) {
