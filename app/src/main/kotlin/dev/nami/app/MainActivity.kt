@@ -95,11 +95,10 @@ class MainActivity : ComponentActivity() {
     }
 
     /** Сопряжение с self-hosted сервером: QR мастера настройки открывается как
-     * `nami://auth?challenge=...&fp=sha256:...&port=...&hosts=ip1,ip2`. Пробуем адреса по
-     * очереди, на первом живом меняем challenge на токен устройства и сохраняем в настройки. */
+     * `nami://auth?...` или `nami://pair?...`. Пробуем адреса по очереди и сохраняем токен в настройки. */
     private fun handlePairingIntent(intent: Intent) {
         val data = intent.data ?: return
-        if (data.scheme != "nami" || data.host != "auth") return
+        if (data.scheme != "nami" || (data.host != "auth" && data.host != "pair")) return
         lifecycleScope.launch {
             val cfg = withContext(Dispatchers.IO) {
                 NamiServerClient.pairFromAuthUri(data.toString(), Build.MODEL ?: "Android")
