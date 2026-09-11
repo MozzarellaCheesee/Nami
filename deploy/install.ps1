@@ -74,16 +74,31 @@ if (-not (Test-Path $InstallDir)) {
 }
 Write-Host "      Папка установки: $InstallDir" -ForegroundColor Gray
 
-# 3. Проверка FFmpeg
+# 3. Проверка и автоматическая установка FFmpeg
 Write-Host "[2/6] Проверка медиа-библиотеки FFmpeg..." -ForegroundColor Cyan
 $ffmpegCmd = Get-Command ffmpeg -ErrorAction SilentlyContinue
 if ($ffmpegCmd) {
     Write-Host "      ✓ FFmpeg обнаружен в системе: $($ffmpegCmd.Source)" -ForegroundColor Green
 } else {
-    Write-Host "      ⚠️  FFmpeg не найден в переменной окружения PATH." -ForegroundColor Yellow
-    Write-Host "         Сервер будет работать в режиме Bit-perfect passthrough (без перекодирования)." -ForegroundColor DarkYellow
-    Write-Host "         Для включения транскодинга на лету (Opus/AAC) установите FFmpeg:" -ForegroundColor DarkYellow
-    Write-Host "           winget install Gyan.FFmpeg" -ForegroundColor White
+    Write-Host "      FFmpeg не найден. Попытка автоматической установки через winget..." -ForegroundColor Yellow
+    $wingetCmd = Get-Command winget -ErrorAction SilentlyContinue
+    $installed = $false
+    if ($wingetCmd) {
+        try {
+            Start-Process winget -ArgumentList "install -e --id Gyan.FFmpeg --accept-source-agreements --accept-package-agreements --silent" -Wait -NoNewWindow
+            $ffmpegCmd = Get-Command ffmpeg -ErrorAction SilentlyContinue
+            if ($ffmpegCmd) {
+                Write-Host "      ✓ FFmpeg успешно установлен в систему: $($ffmpegCmd.Source)" -ForegroundColor Green
+                $installed = $true
+            }
+        } catch {
+            Write-Warning "Не удалось автоматически установить FFmpeg через winget."
+        }
+    }
+    if (-not $installed) {
+        Write-Host "      ⚠️  FFmpeg не установлен. Для включения транскодинга на лету выполните:" -ForegroundColor DarkYellow
+        Write-Host "           winget install Gyan.FFmpeg" -ForegroundColor White
+    }
 }
 
 # 4. Скачивание или сборка бинарника
