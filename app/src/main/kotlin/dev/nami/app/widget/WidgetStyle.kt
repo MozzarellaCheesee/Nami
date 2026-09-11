@@ -50,18 +50,29 @@ fun widgetCorner(dp: Int = WIDGET_CORNER_RADIUS_DP) = GlanceModifier.cornerRadiu
  * path. BitmapFactory.decodeFile() only understands bare paths and silently returns null for a
  * URI string with a scheme - this was the actual "обложка не выводилась" bug, not a missing
  * file. Uri.parse(path).path strips the scheme back to the real path decodeFile needs. */
-fun loadArtBitmap(path: String?, targetPx: Int = 256): Bitmap? {
+fun loadArtBitmap(context: android.content.Context? = null, path: String?, targetPx: Int = 256): Bitmap? {
     if (path == null) return null
-    val filePath = if (path.contains("://")) android.net.Uri.parse(path).path else path
-    if (filePath == null) return null
     return try {
-        val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(filePath, opts)
-        if (opts.outWidth <= 0) return null
-        var sample = 1
-        while (opts.outWidth / sample > targetPx * 2) sample *= 2
-        BitmapFactory.decodeFile(filePath, BitmapFactory.Options().apply { inSampleSize = sample })
-    } catch (e: Exception) {
+        if (path.startsWith("content://") && context != null) {
+            val uri = android.net.Uri.parse(path)
+            val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
+            if (opts.outWidth <= 0) return null
+            var sample = 1
+            while (opts.outWidth / sample > targetPx * 2) sample *= 2
+            val loadOpts = BitmapFactory.Options().apply { inSampleSize = sample; inPreferredConfig = Bitmap.Config.RGB_565 }
+            context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, loadOpts) }
+        } else {
+            val filePath = if (path.contains("://")) android.net.Uri.parse(path).path else path
+            if (filePath == null) return null
+            val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(filePath, opts)
+            if (opts.outWidth <= 0) return null
+            var sample = 1
+            while (opts.outWidth / sample > targetPx * 2) sample *= 2
+            BitmapFactory.decodeFile(filePath, BitmapFactory.Options().apply { inSampleSize = sample; inPreferredConfig = Bitmap.Config.RGB_565 })
+        }
+    } catch (_: Exception) {
         null
     }
 }
@@ -73,9 +84,8 @@ class TogglePlaybackAction : ActionCallback {
                 val repo = widgetPlayerRepository(context)
                 repo.awaitReady()
                 repo.toggle()
-            }
+            }.onFailure { android.util.Log.e("NamiWidget", "TogglePlayback failed", it) }
         }
-        delay(120)
         updateAllNamiWidgets(context)
     }
 }
@@ -87,9 +97,8 @@ class SkipNextAction : ActionCallback {
                 val repo = widgetPlayerRepository(context)
                 repo.awaitReady()
                 repo.skipNext()
-            }
+            }.onFailure { android.util.Log.e("NamiWidget", "SkipNext failed", it) }
         }
-        delay(120)
         updateAllNamiWidgets(context)
     }
 }
@@ -101,9 +110,8 @@ class SkipPreviousAction : ActionCallback {
                 val repo = widgetPlayerRepository(context)
                 repo.awaitReady()
                 repo.skipToPreviousTrack()
-            }
+            }.onFailure { android.util.Log.e("NamiWidget", "SkipPrevious failed", it) }
         }
-        delay(120)
         updateAllNamiWidgets(context)
     }
 }
@@ -116,9 +124,8 @@ class ToggleLikeAction : ActionCallback {
                 playerRepo.awaitReady()
                 val trackId = playerRepo.queue.value.nowPlaying?.id ?: return@runCatching
                 widgetPlaylistRepository(context).toggleLike(trackId)
-            }
+            }.onFailure { android.util.Log.e("NamiWidget", "ToggleLike failed", it) }
         }
-        delay(60)
         updateAllNamiWidgets(context)
     }
 }
@@ -131,9 +138,8 @@ class ToggleShuffleAction : ActionCallback {
                 playerRepo.awaitReady()
                 val current = playerRepo.shuffleEnabled.value
                 playerRepo.setShuffleEnabled(!current)
-            }
+            }.onFailure { android.util.Log.e("NamiWidget", "ToggleShuffle failed", it) }
         }
-        delay(100)
         updateAllNamiWidgets(context)
     }
 }

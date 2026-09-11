@@ -32,9 +32,12 @@ import androidx.glance.layout.size
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import dev.nami.app.R
 import dev.nami.domain.PlaybackState
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 
 /** Квадратный виджет плеера: фоновая обложка, название, артист, прогресс и транспорт.
  * Адаптируется под квадратные (2x2, 3x3, 4x4) и растянутые (3x2, 4x2) размеры. */
@@ -44,16 +47,31 @@ class NamiWidgetSquarePlayer : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val repo = widgetPlayerRepository(context)
+        val playlistRepo = widgetPlaylistRepository(context)
         repo.awaitReady()
-        val nowPlaying = repo.queue.value.nowPlaying
-        val playing = repo.state.value as? PlaybackState.Playing
-        val art = loadArtBitmap(nowPlaying?.artworkPath)
-        val progress = if (playing != null && playing.durationMs > 0) (playing.positionMs.toFloat() / playing.durationMs).coerceIn(0f, 1f) else 0f
-        val isLiked = nowPlaying?.let { widgetPlaylistRepository(context).isTrackLiked(it.id).first() } ?: false
-        val isShuffle = repo.shuffleEnabled.value
         val openPlayerAction = actionStartActivity(openPlayerIntent(context))
 
         provideContent {
+            val queue by repo.queue.collectAsState()
+            val state by repo.state.collectAsState()
+            val isShuffle by repo.shuffleEnabled.collectAsState()
+            val nowPlaying = queue.nowPlaying
+            val playing = state as? PlaybackState.Playing
+            val isPlaying = playing?.isPlaying == true
+            val progress = remember(state) {
+                if (playing != null && playing.durationMs > 0) {
+                    (playing.positionMs.toFloat() / playing.durationMs).coerceIn(0f, 1f)
+                } else {
+                    0f
+                }
+            }
+            val isLiked by remember(nowPlaying?.id) {
+                if (nowPlaying != null) playlistRepo.isTrackLiked(nowPlaying.id) else flowOf(false)
+            }.collectAsState(initial = false)
+            val art = remember(nowPlaying?.artworkPath) {
+                loadArtBitmap(context, nowPlaying?.artworkPath)
+            }
+
             val size = LocalSize.current
             val isCompactHeight = size.height < 155.dp
             val isSmallWidth = size.width < 180.dp

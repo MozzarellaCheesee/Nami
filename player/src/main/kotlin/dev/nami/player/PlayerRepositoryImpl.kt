@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.pow
@@ -138,6 +139,11 @@ class PlayerRepositoryImpl @Inject constructor(
         future.addListener(
             {
                 controller = future.get()
+                controller?.let { c ->
+                    publishState(c)
+                    publishQueue(c)
+                    _repeatMode.value = c.repeatMode.toDomainRepeatMode()
+                }
                 controller?.addListener(
                     object : Player.Listener {
                         override fun onEvents(player: Player, events: Player.Events) {
@@ -398,7 +404,13 @@ class PlayerRepositoryImpl @Inject constructor(
     }
 
     override suspend fun awaitReady() {
-        awaitController()
+        withContext(Dispatchers.Main) {
+            val c = awaitController()
+            c?.let {
+                publishState(it)
+                publishQueue(it)
+            }
+        }
     }
 
     override suspend fun toggle() {
@@ -412,11 +424,15 @@ class PlayerRepositoryImpl @Inject constructor(
                 pausedAtMs = null
                 play()
             }
+            publishState(this)
         }
     }
 
     override suspend fun seek(ms: Long) {
-        awaitController()?.seekTo(ms)
+        awaitController()?.apply {
+            seekTo(ms)
+            publishState(this)
+        }
     }
 
     override suspend fun skipNext() {
@@ -431,15 +447,25 @@ class PlayerRepositoryImpl @Inject constructor(
                 scope.launch { libraryRepository.incrementSkipCount(TrackId(mediaId)) }
             }
             player.seekToNext()
+            publishState(player)
+            publishQueue(player)
         }
     }
 
     override suspend fun skipPrevious() {
-        awaitController()?.seekToPrevious()
+        awaitController()?.apply {
+            seekToPrevious()
+            publishState(this)
+            publishQueue(this)
+        }
     }
 
     override suspend fun skipToPreviousTrack() {
-        awaitController()?.seekToPreviousMediaItem()
+        awaitController()?.let { player ->
+            player.seekToPreviousMediaItem()
+            publishState(player)
+            publishQueue(player)
+        }
     }
 
     override suspend fun stop() {
