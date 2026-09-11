@@ -504,6 +504,8 @@ struct MatchItem {
     title: String,
     artist: Option<String>,
     duration_ms: Option<i64>,
+    #[serde(default)]
+    file_hash: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -511,10 +513,11 @@ struct MatchBody {
     tracks: Vec<MatchItem>,
 }
 
-/// Сопоставление треков клиента с библиотекой сервера по (исполнитель, название,
+/// Сопоставление треков клиента с библиотекой сервера по хешу файла или (исполнитель, название,
 /// длительность ±2 с) - та же эвристика, что при дедупликации загрузок. Ответ -
 /// массив `matches` той же длины и порядка, элемент = id трека сервера или null.
-/// Нужно клиенту, чтобы стримить/брать анализ с сервера для локально известного трека.
+/// Нужно клиенту, чтобы стримить/брать анализ с сервера для локально известного трека,
+/// а также проверять наличие треков перед пакетной выгрузкой.
 async fn tracks_match(
     State(st): State<Shared>,
     Extension(ident): Extension<Ident>,
@@ -525,6 +528,8 @@ async fn tracks_match(
     }
     let db = st.db.lock().unwrap();
     let (clause, vis) = users::visibility(&db, &ident);
+    let sql_hash = format!("SELECT id FROM tracks WHERE 1=1{clause} AND file_hash=? LIMIT 1");
+    let mut stmt_hash = db.prepare(&sql_hash)?;
     let sql = format!(
         "SELECT id FROM tracks WHERE 1=1{clause}
            AND lower(title)=lower(?) AND lower(COALESCE(artist,''))=lower(COALESCE(?,''))
@@ -534,6 +539,16 @@ async fn tracks_match(
     let mut stmt = db.prepare(&sql)?;
     let mut matches: Vec<Option<i64>> = Vec::with_capacity(b.tracks.len());
     for t in &b.tracks {
+        if let Some(ref h) = t.file_hash {
+            if !h.trim().is_empty() {
+                let mut params_h = vis.clone();
+                params_h.push(rusqlite::types::Value::Text(h.clone()));
+                if let Ok(id) = stmt_hash.query_row(rusqlite::params_from_iter(params_h), |r| r.get::<_, i64>(0)) {
+                    matches.push(Some(id));
+                    continue;
+                }
+            }
+        }
         let mut params = vis.clone();
         params.push(rusqlite::types::Value::Text(t.title.clone()));
         params.push(match &t.artist {

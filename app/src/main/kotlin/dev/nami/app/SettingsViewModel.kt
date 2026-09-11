@@ -36,7 +36,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             val all = libraryRepository.allTracksOrdered()
             if (all.isEmpty()) return@launch
-            serverLibraryRepository.uploadTracksBackground(all.map { it.path })
+            serverLibraryRepository.uploadTracksBackground(all)
         }
     }
 
