@@ -214,21 +214,28 @@ class SettingsViewModel @Inject constructor(
         }
         viewModelScope.launch {
             _serverConnectMsg.value = "Подключение…"
-            val err = withContext(Dispatchers.IO) {
-                val cert = bases.firstNotNullOfOrNull { dev.nami.data.NamiServerClient.fetchCertSha256(it) }
-                val working = dev.nami.data.NamiServerClient.reachableBase(bases, cert)
-                    ?: return@withContext "Ни один адрес не отвечает"
-                val token = dev.nami.data.NamiServerClient.pairWithCode(
-                    working, code.trim(), android.os.Build.MODEL ?: "Android", cert,
-                ) ?: return@withContext "Код неверен или уже использован"
-                val ordered = listOf(working) + bases.filter { it != working }
-                appSettingsRepository.setNamiServerUrl(ordered.joinToString("\n"))
-                appSettingsRepository.setNamiServerCertSha256(cert)
-                appSettingsRepository.setNamiServerToken(token)
-                appSettingsRepository.setNamiServerPreferred(true)
-                null
+            try {
+                val err = withContext(Dispatchers.IO) {
+                    val cert = bases.filter { dev.nami.data.NamiServerClient.hostIsIpLiteral(it) }
+                        .firstNotNullOfOrNull { dev.nami.data.NamiServerClient.fetchCertSha256(it) }
+                    val working = dev.nami.data.NamiServerClient.reachableBase(bases, cert)
+                        ?: return@withContext "Ни один адрес не отвечает"
+                    val workingCert = if (dev.nami.data.NamiServerClient.hostIsIpLiteral(working)) cert else null
+                    val token = dev.nami.data.NamiServerClient.pairWithCode(
+                        working, code.trim(), android.os.Build.MODEL ?: "Android", workingCert,
+                    ) ?: return@withContext "Код неверен или уже использован"
+                    val ordered = listOf(working) + bases.filter { it != working }
+                    appSettingsRepository.setNamiServerUrl(ordered.joinToString("\n"))
+                    appSettingsRepository.setNamiServerCertSha256(workingCert)
+                    appSettingsRepository.setNamiServerToken(token)
+                    appSettingsRepository.setNamiServerPreferred(true)
+                    null
+                }
+                _serverConnectMsg.value = err ?: "Подключено"
+            } catch (e: Throwable) {
+                android.util.Log.e("SettingsViewModel", "connectNamiServer error", e)
+                _serverConnectMsg.value = "Ошибка: ${e.message ?: e.javaClass.simpleName}"
             }
-            _serverConnectMsg.value = err ?: "Подключено"
         }
     }
 
@@ -236,17 +243,22 @@ class SettingsViewModel @Inject constructor(
     fun connectNamiServerFromScan(rawUri: String) {
         viewModelScope.launch {
             _serverConnectMsg.value = "Подключение…"
-            val ok = withContext(Dispatchers.IO) {
-                val cfg = dev.nami.data.NamiServerClient.pairFromAuthUri(
-                    rawUri, android.os.Build.MODEL ?: "Android",
-                ) ?: return@withContext false
-                appSettingsRepository.setNamiServerUrl(cfg.bases.joinToString("\n"))
-                appSettingsRepository.setNamiServerCertSha256(cfg.certSha256)
-                appSettingsRepository.setNamiServerToken(cfg.token)
-                appSettingsRepository.setNamiServerPreferred(true)
-                true
+            try {
+                val ok = withContext(Dispatchers.IO) {
+                    val cfg = dev.nami.data.NamiServerClient.pairFromAuthUri(
+                        rawUri, android.os.Build.MODEL ?: "Android",
+                    ) ?: return@withContext false
+                    appSettingsRepository.setNamiServerUrl(cfg.bases.joinToString("\n"))
+                    appSettingsRepository.setNamiServerCertSha256(cfg.certSha256)
+                    appSettingsRepository.setNamiServerToken(cfg.token)
+                    appSettingsRepository.setNamiServerPreferred(true)
+                    true
+                }
+                _serverConnectMsg.value = if (ok) "Подключено" else "QR не подошёл или сервер недоступен"
+            } catch (e: Throwable) {
+                android.util.Log.e("SettingsViewModel", "connectNamiServerFromScan error", e)
+                _serverConnectMsg.value = "Ошибка: ${e.message ?: e.javaClass.simpleName}"
             }
-            _serverConnectMsg.value = if (ok) "Подключено" else "QR не подошёл или сервер недоступен"
         }
     }
     val nowPlayingShowTechInfo: StateFlow<Boolean> = appSettingsRepository.nowPlayingShowTechInfo
