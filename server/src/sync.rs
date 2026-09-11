@@ -10,7 +10,7 @@
 //!
 //! Вместо этого состояние хранится по одной строке на ПОЛЕ (`entity`, `id`, `field`,
 //! `value`, `updated_at`). Тогда per-field LWW - это одна строчка `ON CONFLICT ... WHERE
-//! excluded.updated_at > state.updated_at`, отдача изменений - один индексный запрос
+//! excluded.updated_at >= state.updated_at`, отдача изменений - один индексный запрос
 //! по `updated_at` сразу по всем сущностям, а новое поле у плейлиста не требует миграции.
 //!
 //! Расплата: сервер не понимает семантику полей (он и не должен - типизированная схема
@@ -119,8 +119,8 @@ pub fn pull(conn: &Connection, user_id: i64, since: i64, cursor: i64) -> rusqlit
 }
 
 /// Применяет изменения клиента. LWW по полю: побеждает более поздняя метка,
-/// при равных метках остаётся уже записанное (иначе повторная отправка одного и того
-/// же пакета бесконечно переписывала бы строки).
+/// При равной секундной метке меняющееся значение принимается: Android хранит миллисекунды,
+/// а старый wire-формат — секунды, поэтому две быстрые правки иначе терялись.
 pub fn push(conn: &mut Connection, user_id: i64, changes: &[Change]) -> rusqlite::Result<PushReport> {
     let t = now();
     let mut rep = PushReport { now: t, ..Default::default() };
@@ -131,7 +131,8 @@ pub fn push(conn: &mut Connection, user_id: i64, changes: &[Change]) -> rusqlite
              VALUES (?6,?1,?2,?3,?4,?5)
              ON CONFLICT(user_id, entity, id, field) DO UPDATE SET
                 value = excluded.value, updated_at = excluded.updated_at
-             WHERE excluded.updated_at > state.updated_at",
+             WHERE excluded.updated_at > state.updated_at
+                OR (excluded.updated_at = state.updated_at AND excluded.value != state.value)",
         )?;
         for c in changes {
             if !ENTITIES.contains(&c.entity.as_str())
@@ -408,6 +409,16 @@ mod tests {
         set_position(&c, 1, &Position { track_id: 7, position_ms: 10, updated_at: t }).unwrap();
         assert_eq!(positions(&c, None, 0).unwrap()[0].position_ms, 5000);
         assert!(pull(&c, 0, 0, 0).unwrap().changes.is_empty(), "позиции нет в sync-потоке");
+    }
+
+    #[test]
+    fn последняя_правка_в_той_же_секунде_не_теряется() {
+        let mut c = db();
+        let t = now();
+        push(&mut c, 0, &[ch("p1", "name", "первое", t)]).unwrap();
+        let r = push(&mut c, 0, &[ch("p1", "name", "второе", t)]).unwrap();
+        assert_eq!(r.applied, 1);
+        assert_eq!(pull(&c, 0, 0, 0).unwrap().changes[0].value, serde_json::json!("второе"));
     }
 
     #[test]

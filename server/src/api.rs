@@ -116,7 +116,7 @@ pub fn router(state: Shared) -> Router {
         .route("/api/sync", get(sync_pull).post(sync_push))
         .route("/api/position", get(position_get).post(position_post))
         .route("/api/auth/devices", get(devices))
-        .route("/api/auth/devices/{id}", delete(revoke_device))
+        .route("/api/auth/devices/{id}", delete(revoke_device).put(bind_device))
         .route("/api/auth/logout", post(logout))
         .route("/api/auth/pair-code", post(generate_pair_code))
         .route("/api/me", get(me).patch(patch_me))
@@ -1093,29 +1093,69 @@ async fn qr_confirm(
 struct Device {
     id: i64,
     name: String,
+    user_id: Option<i64>,
+    username: Option<String>,
     created_at: i64,
     last_seen_at: Option<i64>,
 }
 
-async fn devices(State(st): State<Shared>) -> ApiResult<Json<Vec<Device>>> {
+async fn devices(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+) -> ApiResult<Json<Vec<Device>>> {
     let db = st.db.lock().unwrap();
-    let mut stmt =
-        db.prepare("SELECT id, name, created_at, last_seen_at FROM devices ORDER BY created_at")?;
+    need_owner(&db, &ident)?;
+    let mut stmt = db.prepare(
+        "SELECT d.id, d.name, d.user_id, u.username, d.created_at, d.last_seen_at
+         FROM devices d LEFT JOIN users u ON u.id=d.user_id
+         WHERE d.name NOT LIKE 'Jam Guest (%)' ORDER BY d.created_at",
+    )?;
     let rows = stmt
         .query_map([], |r| {
             Ok(Device {
                 id: r.get(0)?,
                 name: r.get(1)?,
-                created_at: r.get(2)?,
-                last_seen_at: r.get(3)?,
+                user_id: r.get(2)?,
+                username: r.get(3)?,
+                created_at: r.get(4)?,
+                last_seen_at: r.get(5)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(Json(rows))
 }
 
-async fn revoke_device(State(st): State<Shared>, Path(id): Path<i64>) -> ApiResult<StatusCode> {
-    let n = st.db.lock().unwrap().execute("DELETE FROM devices WHERE id=?1", [id])?;
+async fn revoke_device(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Path(id): Path<i64>,
+) -> ApiResult<StatusCode> {
+    let db = st.db.lock().unwrap();
+    need_owner(&db, &ident)?;
+    let n = db.execute("DELETE FROM devices WHERE id=?1", [id])?;
+    Ok(if n == 1 { StatusCode::NO_CONTENT } else { StatusCode::NOT_FOUND })
+}
+
+#[derive(Deserialize)]
+struct BindDeviceReq {
+    user_id: Option<i64>,
+}
+
+async fn bind_device(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Path(id): Path<i64>,
+    Json(body): Json<BindDeviceReq>,
+) -> ApiResult<StatusCode> {
+    let db = st.db.lock().unwrap();
+    need_owner(&db, &ident)?;
+    if body.user_id.is_some_and(|user_id| users::get(&db, user_id).is_none()) {
+        return Err(ApiError(StatusCode::BAD_REQUEST, "нет такого пользователя".into()));
+    }
+    let n = db.execute(
+        "UPDATE devices SET user_id=?2 WHERE id=?1 AND name NOT LIKE 'Jam Guest (%)'",
+        rusqlite::params![id, body.user_id],
+    )?;
     Ok(if n == 1 { StatusCode::NO_CONTENT } else { StatusCode::NOT_FOUND })
 }
 
@@ -1137,7 +1177,7 @@ async fn setup_page(
     Query(q): Query<SetupQuery>,
     req: Request,
 ) -> ApiResult<Html<String>> {
-    let code = {
+    let (code, owner) = {
         let db = st.db.lock().unwrap();
         let paired: i64 = db.query_row("SELECT COUNT(*) FROM devices", [], |r| r.get(0))?;
         let ident = q.token.as_deref().and_then(|t| identify(&db, t));
@@ -1151,17 +1191,36 @@ async fn setup_page(
         }
         // Новое устройство достаётся тому, кто печатает код: свои плейлисты, своя
         // видимость библиотеки. В одиночном режиме владельца нет - и привязки тоже.
-        auth::create_code(&db, ident.and_then(|i| i.user_id))?
+        let owner = ident.as_ref().is_some_and(|i| need_owner(&db, i).is_ok());
+        (auth::create_code(&db, ident.and_then(|i| i.user_id))?, owner)
     };
     let host_header = req.headers().get(header::HOST).and_then(|v| v.to_str().ok());
     let (_uri, qr, warning) = build_pair_uri_and_qr(&st, &code, host_header)?;
 
+    let token = serde_json::to_string(&q.token.unwrap_or_default()).unwrap();
+    let device_admin = if owner {
+        format!(
+            "<section><h2>Устройства и аккаунты</h2><div id=devices>Загрузка…</div></section>\
+             <script>const token={token};async function load(){{\
+             const h={{Authorization:'Bearer '+token}};\
+             const [dr,ur]=await Promise.all([fetch('/api/auth/devices',{{headers:h}}),fetch('/api/users',{{headers:h}})]);\
+             if(!dr.ok||!ur.ok){{document.getElementById('devices').textContent='Не удалось загрузить';return}}\
+             const ds=await dr.json(),us=await ur.json(),root=document.getElementById('devices');root.textContent='';\
+             for(const d of ds){{const row=document.createElement('p'),name=document.createElement('b'),sel=document.createElement('select');\
+             name.textContent=d.name+' ';const none=document.createElement('option');none.value='';none.textContent='Не привязано';sel.append(none);\
+             for(const u of us){{const o=document.createElement('option');o.value=u.id;o.textContent=u.username+' — библиотека '+u.library_id;o.selected=u.id===d.user_id;sel.append(o)}}\
+             sel.onchange=async()=>{{sel.disabled=true;await fetch('/api/auth/devices/'+d.id,{{method:'PUT',headers:{{...h,'Content-Type':'application/json'}},body:JSON.stringify({{user_id:sel.value?Number(sel.value):null}})}});sel.disabled=false}};\
+             row.append(name,sel);root.append(row)}}}}load();</script>"
+        )
+    } else {
+        String::new()
+    };
     Ok(Html(format!(
         "<!doctype html><meta charset=utf-8><title>NAMI - сопряжение</title>\
          <style>body{{font:16px system-ui;max-width:520px;margin:40px auto;text-align:center}}\
-         code{{font-size:28px;letter-spacing:4px}}.warn{{color:#b00}}</style>\
+         code{{font-size:28px;letter-spacing:4px}}.warn{{color:#b00}}section{{margin-top:40px}}select{{font:inherit}}</style>\
          <h1>Сопряжение устройства</h1>{qr}<p>Код: <code>{code}</code></p>\
-         <p>Действует 10 минут, одно устройство.</p>{warning}"
+         <p>Действует 10 минут, одно устройство.</p>{warning}{device_admin}"
     )))
 }
 
@@ -1390,6 +1449,10 @@ async fn jam_guest_auth(
     let now = crate::db::now();
     {
         let db = st.db.lock().unwrap();
+        db.execute(
+            "DELETE FROM devices WHERE name LIKE 'Jam Guest (%)' AND last_seen_at < ?1",
+            [now - 86_400],
+        )?;
         db.execute(
             "INSERT INTO devices (name, token_hash, paired_at, last_seen_at) VALUES (?1, ?2, ?3, ?3)",
             rusqlite::params![format!("Jam Guest ({})", code_upper), token_hash, now],

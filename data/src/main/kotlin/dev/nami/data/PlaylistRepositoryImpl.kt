@@ -92,6 +92,7 @@ class PlaylistRepositoryImpl @Inject constructor(
     }
 
     override suspend fun addTrack(playlistId: PlaylistId, trackId: TrackId) {
+        SyncTombstones.cancel(context, "playlist_track", "${playlistId.value}:${trackId.value}")
         val position = playlistTrackDao.nextPosition(playlistId.value)
         playlistTrackDao.insert(
             PlaylistTrackEntity(
@@ -105,6 +106,7 @@ class PlaylistRepositoryImpl @Inject constructor(
     }
 
     override suspend fun removeTrack(playlistId: PlaylistId, trackId: TrackId) {
+        SyncTombstones.add(context, "playlist_track", "${playlistId.value}:${trackId.value}")
         playlistTrackDao.remove(playlistId.value, trackId.value)
     }
 

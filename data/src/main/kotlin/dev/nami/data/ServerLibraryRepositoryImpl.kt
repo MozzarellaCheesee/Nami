@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -168,9 +169,24 @@ class ServerLibraryRepositoryImpl @Inject constructor(
     }
 
     /** Офлайн-кеш серверных треков - в приватном хранилище приложения. */
-    private val cacheDir: File by lazy {
+    private val cacheRoot: File by lazy {
         File(context.getExternalFilesDir(null) ?: context.filesDir, "ServerCache").apply { mkdirs() }
     }
+    private val cacheDir: File
+        get() {
+            val identity = listOf(
+                settingsRepository.namiServerToken.value.orEmpty(),
+                settingsRepository.namiServerCertSha256.value.orEmpty(),
+                settingsRepository.namiServerUrl.value.split('\n', ',').map { it.trim() }.sorted().joinToString("|"),
+            ).joinToString("\n")
+            val key = MessageDigest.getInstance("SHA-256").digest(identity.toByteArray())
+                .take(12).joinToString("") { "%02x".format(it) }
+            val scoped = File(cacheRoot, key).apply { mkdirs() }
+            // Старые версии держали один общий кеш. Однократно переносим его текущему аккаунту.
+            cacheRoot.listFiles { file -> file.isFile && (file.name.endsWith(".audio") || file.name.endsWith(".artwork")) }
+                ?.forEach { legacy -> legacy.renameTo(File(scoped, legacy.name)) }
+            return scoped
+        }
 
     override fun isServerActive(): Boolean =
         !settingsRepository.namiServerToken.value.isNullOrBlank() &&

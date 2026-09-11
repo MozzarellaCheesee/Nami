@@ -137,6 +137,8 @@ class JamRepositoryImpl @Inject constructor(
             url.split('\n', ',').map { it.trim().trimEnd('/') }.filter { it.isNotEmpty() }
         }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
+    override val serverCertSha256: StateFlow<String?> = settingsRepository.namiServerCertSha256
+
     private val prefs = context.getSharedPreferences("nami_jam_prefs", Context.MODE_PRIVATE)
     private val _recentHosts = MutableStateFlow<List<String>>(loadRecentHosts())
     override val recentHosts: StateFlow<List<String>> = _recentHosts
@@ -173,6 +175,7 @@ class JamRepositoryImpl @Inject constructor(
     @Volatile private var currentBaseUrl: String? = null
     @Volatile private var guestServerUrl: String? = null
     @Volatile private var guestToken: String? = null
+    @Volatile private var guestCertSha256: String? = null
     @Volatile private var nsdRegistrationListener: NsdManager.RegistrationListener? = null
 
     override fun createRoom() {
@@ -200,9 +203,15 @@ class JamRepositoryImpl @Inject constructor(
         intentionalClose = false
 
         var parsedCode = code.trim()
+        var inviteCert: String? = settingsRepository.namiServerCertSha256.value
         val candidateHosts = mutableListOf<String>()
         if (!hostUrl.isNullOrBlank()) {
-            candidateHosts.addAll(hostUrl.split(',', '\n').map { it.trim().trimEnd('/') }.filter { it.isNotEmpty() })
+            hostUrl.split(',', '\n').forEach { raw ->
+                val clean = raw.trim()
+                if ("#nami-fp=" in clean) inviteCert = Uri.decode(clean.substringAfter("#nami-fp="))
+                clean.substringBefore("#nami-fp=").trimEnd('/').takeIf { it.isNotEmpty() }
+                    ?.let(candidateHosts::add)
+            }
         }
 
         // 1. Ссылки вида nami://jam?code=ABC234&host=...&hosts=host1,host2
@@ -212,6 +221,7 @@ class JamRepositoryImpl @Inject constructor(
                 uri.getQueryParameter("code")?.let { parsedCode = it }
                 uri.getQueryParameter("host")?.let { candidateHosts.add(it.trim().trimEnd('/')) }
                 uri.getQueryParameter("hosts")?.split(',')?.forEach { candidateHosts.add(it.trim().trimEnd('/')) }
+                inviteCert = uri.getQueryParameter("fp")?.takeIf { it.isNotBlank() }
             }
         } else if (parsedCode.startsWith("http://", ignoreCase = true) || parsedCode.startsWith("https://", ignoreCase = true)) {
             // 2. Веб-ссылки вида http(s)://host:port/jam?code=ABC234 или /jam/ABC234
@@ -250,7 +260,7 @@ class JamRepositoryImpl @Inject constructor(
         scope.launch {
             if (uniqueCandidates.isNotEmpty()) {
                 Log.d(TAG, "Connecting to Jam as guest with code $trimmedCode and candidates $uniqueCandidates")
-                connectAsGuest(uniqueCandidates, trimmedCode)
+                connectAsGuest(uniqueCandidates, trimmedCode, inviteCert)
             } else if (isServerConfigured.value) {
                 Log.d(TAG, "Connecting to Jam via configured server with code $trimmedCode")
                 connectWebSocket(onOpened = {
@@ -264,14 +274,17 @@ class JamRepositoryImpl @Inject constructor(
                 val discovered = discoverJamHostOnWifi(trimmedCode)
                 if (discovered != null) {
                     Log.d(TAG, "Discovered Jam host on Wi-Fi: $discovered")
-                    connectAsGuest(listOf(discovered), trimmedCode)
+                    val cert = discovered.substringAfter("#nami-fp=", "")
+                        .takeIf { it.isNotBlank() }?.let { Uri.decode(it) }
+                    connectAsGuest(listOf(discovered.substringBefore("#nami-fp=")), trimmedCode, cert)
                 } else {
                     // Пробуем проверить недавние серверы хостов
                     val recent = recentHosts.value
-                    val fromRecent = if (recent.isNotEmpty()) probeReachableHost(recent, trimmedCode) else null
+                    val cert = settingsRepository.namiServerCertSha256.value
+                    val fromRecent = if (recent.isNotEmpty()) probeReachableHost(recent, trimmedCode, cert) else null
                     if (fromRecent != null) {
                         Log.d(TAG, "Found Jam room on recent host: ${fromRecent.first}")
-                        connectAsGuestWithToken(fromRecent.first, fromRecent.second, trimmedCode)
+                        connectAsGuestWithToken(fromRecent.first, fromRecent.second, trimmedCode, cert)
                     } else {
                         _error.value = "Комната не найдена в локальной сети. Если организатор не в вашем Wi-Fi, вставьте ссылку на комнату или укажите адрес сервера."
                     }
@@ -307,6 +320,7 @@ class JamRepositoryImpl @Inject constructor(
         _activeHostUrl.value = null
         guestServerUrl = null
         guestToken = null
+        guestCertSha256 = null
     }
 
     override fun play(serverTrackId: Long, positionMs: Long) {
@@ -477,13 +491,17 @@ class JamRepositoryImpl @Inject constructor(
         return ws.send(text)
     }
 
-    private suspend fun probeReachableHost(hosts: List<String>, code: String): Pair<String, String>? = withContext(Dispatchers.IO) {
+    private suspend fun probeReachableHost(
+        hosts: List<String>,
+        code: String,
+        certSha256: String?,
+    ): Pair<String, String>? = withContext(Dispatchers.IO) {
         val jsonReq = JSONObject().apply { put("code", code) }
         val mediaType = "application/json; charset=utf-8".toMediaType()
 
         for (host in hosts) {
             val cleanHost = host.trim().trimEnd('/')
-            val client = createOkHttpClient(cleanHost, settingsRepository.namiServerCertSha256.value)
+            val client = createOkHttpClient(cleanHost, certSha256)
             val token = runCatching {
                 val reqBody = jsonReq.toString().toRequestBody(mediaType)
                 val authReq = Request.Builder()
@@ -506,28 +524,29 @@ class JamRepositoryImpl @Inject constructor(
         null
     }
 
-    private suspend fun connectAsGuest(hostUrl: String, code: String) =
-        connectAsGuest(listOf(hostUrl), code)
+    private suspend fun connectAsGuest(hostUrl: String, code: String, certSha256: String? = null) =
+        connectAsGuest(listOf(hostUrl), code, certSha256)
 
-    private suspend fun connectAsGuest(hosts: List<String>, code: String) = withContext(Dispatchers.IO) {
+    private suspend fun connectAsGuest(hosts: List<String>, code: String, certSha256: String? = null) = withContext(Dispatchers.IO) {
         if (hosts.isEmpty()) {
             _error.value = "Не указан адрес сервера"
             return@withContext
         }
 
-        val probed = probeReachableHost(hosts, code)
+        val probed = probeReachableHost(hosts, code, certSha256)
         if (probed == null) {
             _error.value = "Не удалось получить доступ к трекам Джема"
             return@withContext
         }
-        connectAsGuestWithToken(probed.first, probed.second, code)
+        connectAsGuestWithToken(probed.first, probed.second, code, certSha256)
     }
 
-    private fun connectAsGuestWithToken(cleanHost: String, token: String?, code: String) {
+    private fun connectAsGuestWithToken(cleanHost: String, token: String?, code: String, certSha256: String?) {
         saveRecentHost(cleanHost)
         guestServerUrl = cleanHost
         _activeHostUrl.value = cleanHost
         guestToken = token
+        guestCertSha256 = certSha256
 
         val wsBase = when {
             cleanHost.startsWith("https://", ignoreCase = true) -> "wss://" + cleanHost.substring("https://".length)
@@ -540,7 +559,7 @@ class JamRepositoryImpl @Inject constructor(
             "$wsBase/api/ws?jam_code=$code"
         }
 
-        startWebSocketConnection(wsBase, wsUrl, null, onOpened = {
+        startWebSocketConnection(wsBase, wsUrl, certSha256, onOpened = {
             send(JSONObject().apply {
                 put("type", "jam_join")
                 put("code", code)
@@ -574,7 +593,9 @@ class JamRepositoryImpl @Inject constructor(
             return@withContext
         }
 
-        val reachable = NamiServerClient.reachableBase(bases, cert) ?: bases.first()
+        val reachable = NamiServerClient.reachableBase(
+            NamiServerClient.Config(bases.first(), token, cert, bases),
+        ) ?: bases.first()
         currentBaseUrl = reachable
         _activeHostUrl.value = reachable
         val wsBase = when {
@@ -828,7 +849,7 @@ class JamRepositoryImpl @Inject constructor(
             try {
                 val detailUrl = "$gHost/api/tracks/$trackId$tokenParam"
                 val req = Request.Builder().url(detailUrl).build()
-                val client = okHttpClient ?: OkHttpClient()
+                val client = okHttpClient ?: createOkHttpClient(gHost, guestCertSha256)
                 client.newCall(req).execute().use { resp ->
                     if (resp.isSuccessful) {
                         val body = resp.body?.string().orEmpty()
@@ -902,6 +923,8 @@ class JamRepositoryImpl @Inject constructor(
                 setPort(port)
                 setAttribute("code", code)
                 setAttribute("host", host)
+                settingsRepository.namiServerCertSha256.value?.takeIf { it.isNotBlank() }
+                    ?.let { setAttribute("fp", it) }
             }
             val listener = object : NsdManager.RegistrationListener {
                 override fun onServiceRegistered(serviceInfo: NsdServiceInfo?) {
@@ -945,8 +968,10 @@ class JamRepositoryImpl @Inject constructor(
                             override fun onServiceResolved(resolved: NsdServiceInfo) {
                                 val attrCode = resolved.attributes["code"]?.let { String(it) }
                                 val attrHost = resolved.attributes["host"]?.let { String(it) }
+                                val attrCert = resolved.attributes["fp"]?.let { String(it) }
                                 if (attrCode.equals(code, ignoreCase = true) && !attrHost.isNullOrBlank()) {
-                                    if (continuation.isActive) continuation.resume(attrHost)
+                                    val tagged = if (attrCert.isNullOrBlank()) attrHost else "$attrHost#nami-fp=$attrCert"
+                                    if (continuation.isActive) continuation.resume(tagged)
                                 } else if (serviceInfo.serviceName.contains(code, ignoreCase = true)) {
                                     val host = "http://${resolved.host.hostAddress}:${resolved.port}"
                                     if (continuation.isActive) continuation.resume(host)
@@ -1012,11 +1037,14 @@ class JamRepositoryImpl @Inject constructor(
                                 ?: resolved.serviceName.removePrefix("NamiJam-")
                             val attrHost = resolved.attributes["host"]?.let { String(it) }
                                 ?: runCatching { "http://${resolved.host.hostAddress}:${resolved.port}" }.getOrNull()
+                            val attrCert = resolved.attributes["fp"]?.let { String(it) }
                             val cleanCode = attrCode.trim().uppercase()
                             if (cleanCode.length in 4..8) {
                                 val room = dev.nami.domain.DiscoveredJamRoom(
                                     code = cleanCode,
-                                    hostUrl = attrHost,
+                                    hostUrl = attrHost?.let { host ->
+                                        if (attrCert.isNullOrBlank()) host else "$host#nami-fp=$attrCert"
+                                    },
                                     source = dev.nami.domain.JamDiscoverySource.LOCAL_WIFI,
                                     title = "Комната $cleanCode",
                                     description = "Локальная сеть Wi-Fi",
@@ -1123,7 +1151,9 @@ class JamRepositoryImpl @Inject constructor(
         val bases = settingsRepository.namiServerUrl.value
             .split('\n', ',').map { it.trim().trimEnd('/') }.filter { it.isNotEmpty() }
         if (bases.isEmpty()) return null
-        val base = currentBaseUrl ?: NamiServerClient.reachableBase(bases, cert) ?: bases.first()
+        val base = currentBaseUrl ?: NamiServerClient.reachableBase(
+            NamiServerClient.Config(bases.first(), token, cert, bases),
+        ) ?: bases.first()
         return NamiServerClient.Config(base, token, cert, bases)
     }
 
