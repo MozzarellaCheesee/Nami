@@ -100,6 +100,13 @@ class JamRepositoryImpl @Inject constructor(
     private val _recentHosts = MutableStateFlow<List<String>>(loadRecentHosts())
     override val recentHosts: StateFlow<List<String>> = _recentHosts
 
+    private val _discoveredRooms = MutableStateFlow<List<dev.nami.domain.DiscoveredJamRoom>>(emptyList())
+    override val discoveredRooms: StateFlow<List<dev.nami.domain.DiscoveredJamRoom>> = _discoveredRooms
+
+    private val foundRoomsMap = java.util.concurrent.ConcurrentHashMap<String, dev.nami.domain.DiscoveredJamRoom>()
+    private var discoveryJob: Job? = null
+    @Volatile private var nsdDiscoveryListener: NsdManager.DiscoveryListener? = null
+
     private fun loadRecentHosts(): List<String> {
         val raw = prefs.getString("recent_hosts", null) ?: return emptyList()
         return raw.split(";").map { it.trim().trimEnd('/') }.filter { it.isNotEmpty() }
@@ -728,6 +735,139 @@ class JamRepositoryImpl @Inject constructor(
             } catch (e: Exception) {
                 if (continuation.isActive) continuation.resume(null)
             }
+        }
+    }
+
+    override fun startDiscovery() {
+        stopDiscovery()
+        foundRoomsMap.clear()
+        _discoveredRooms.value = emptyList()
+
+        startNsdScanning()
+
+        discoveryJob = scope.launch {
+            while (true) {
+                queryActiveRoomsOnServers()
+                delay(7000L)
+            }
+        }
+    }
+
+    override fun stopDiscovery() {
+        discoveryJob?.cancel()
+        discoveryJob = null
+        stopNsdScanning()
+    }
+
+    private fun startNsdScanning() {
+        val nsdManager = context.getSystemService(Context.NSD_SERVICE) as? NsdManager ?: return
+        stopNsdScanning()
+        val listener = object : NsdManager.DiscoveryListener {
+            override fun onDiscoveryStarted(regType: String) {
+                Log.d(TAG, "NSD Jam discovery started: $regType")
+            }
+
+            override fun onServiceFound(serviceInfo: NsdServiceInfo) {
+                if (serviceInfo.serviceType.contains("_nami-jam") || serviceInfo.serviceName.startsWith("NamiJam-")) {
+                    nsdManager.resolveService(serviceInfo, object : NsdManager.ResolveListener {
+                        override fun onResolveFailed(info: NsdServiceInfo?, errorCode: Int) {}
+
+                        override fun onServiceResolved(resolved: NsdServiceInfo) {
+                            val attrCode = resolved.attributes["code"]?.let { String(it) }
+                                ?: resolved.serviceName.removePrefix("NamiJam-")
+                            val attrHost = resolved.attributes["host"]?.let { String(it) }
+                                ?: runCatching { "http://${resolved.host.hostAddress}:${resolved.port}" }.getOrNull()
+                            val cleanCode = attrCode.trim().uppercase()
+                            if (cleanCode.length in 4..8) {
+                                val room = dev.nami.domain.DiscoveredJamRoom(
+                                    code = cleanCode,
+                                    hostUrl = attrHost,
+                                    source = dev.nami.domain.JamDiscoverySource.LOCAL_WIFI,
+                                    title = "Комната $cleanCode",
+                                    description = "Локальная сеть Wi-Fi",
+                                )
+                                foundRoomsMap[cleanCode] = room
+                                _discoveredRooms.value = foundRoomsMap.values.toList()
+                            }
+                        }
+                    })
+                }
+            }
+
+            override fun onServiceLost(serviceInfo: NsdServiceInfo) {
+                val code = serviceInfo.serviceName.removePrefix("NamiJam-").trim().uppercase()
+                if (foundRoomsMap[code]?.source == dev.nami.domain.JamDiscoverySource.LOCAL_WIFI) {
+                    foundRoomsMap.remove(code)
+                    _discoveredRooms.value = foundRoomsMap.values.toList()
+                }
+            }
+
+            override fun onDiscoveryStopped(serviceType: String) {}
+            override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {}
+            override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {}
+        }
+        nsdDiscoveryListener = listener
+        try {
+            nsdManager.discoverServices(NSD_SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, listener)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to start NSD discovery: ${e.message}")
+        }
+    }
+
+    private fun stopNsdScanning() {
+        val listener = nsdDiscoveryListener ?: return
+        val nsdManager = context.getSystemService(Context.NSD_SERVICE) as? NsdManager ?: return
+        try {
+            nsdManager.stopServiceDiscovery(listener)
+        } catch (_: Exception) {}
+        nsdDiscoveryListener = null
+    }
+
+    private suspend fun queryActiveRoomsOnServers() {
+        val servers = (allHostUrls.value + recentHosts.value).distinct().filter { it.isNotBlank() }
+        if (servers.isEmpty()) return
+
+        for (srv in servers) {
+            val base = srv.trimEnd('/')
+            val cert = settingsRepository.namiServerCertSha256.value
+            val client = createOkHttpClient(base, cert)
+            val url = "$base/api/jam/active"
+            val req = Request.Builder().url(url).get().build()
+            try {
+                withTimeoutOrNull(2500L) {
+                    withContext(Dispatchers.IO) {
+                        client.newCall(req).execute().use { resp ->
+                            if (resp.isSuccessful) {
+                                val body = resp.body?.string() ?: return@use
+                                val json = JSONObject(body)
+                                val arr = json.optJSONArray("rooms")
+                                if (arr != null) {
+                                    var updated = false
+                                    for (i in 0 until arr.length()) {
+                                        val code = arr.optString(i)?.trim()?.uppercase() ?: continue
+                                        if (code.isNotBlank()) {
+                                            val existing = foundRoomsMap[code]
+                                            if (existing == null) {
+                                                foundRoomsMap[code] = dev.nami.domain.DiscoveredJamRoom(
+                                                    code = code,
+                                                    hostUrl = base,
+                                                    source = dev.nami.domain.JamDiscoverySource.RECENT_SERVER,
+                                                    title = "Комната $code",
+                                                    description = base,
+                                                )
+                                                updated = true
+                                            }
+                                        }
+                                    }
+                                    if (updated) {
+                                        _discoveredRooms.value = foundRoomsMap.values.toList()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
         }
     }
 

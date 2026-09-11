@@ -1,10 +1,20 @@
 package dev.nami.feature.player
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import androidx.lifecycle.ViewModel
+import com.google.zxing.BinaryBitmap
+import com.google.zxing.DecodeHintType
+import com.google.zxing.MultiFormatReader
+import com.google.zxing.RGBLuminanceSource
+import com.google.zxing.common.HybridBinarizer
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.nami.domain.JamRepository
 import dev.nami.domain.JamSession
 import kotlinx.coroutines.flow.StateFlow
+import java.util.EnumMap
 import javax.inject.Inject
 
 @HiltViewModel
@@ -19,6 +29,10 @@ class JamViewModel @Inject constructor(
     val activeHostUrl: StateFlow<String?> = jamRepository.activeHostUrl
     val allHostUrls: StateFlow<List<String>> = jamRepository.allHostUrls
     val recentHosts: StateFlow<List<String>> = jamRepository.recentHosts
+    val discoveredRooms: StateFlow<List<dev.nami.domain.DiscoveredJamRoom>> = jamRepository.discoveredRooms
+
+    fun startDiscovery() = jamRepository.startDiscovery()
+    fun stopDiscovery() = jamRepository.stopDiscovery()
 
     fun createRoom() = jamRepository.createRoom()
     fun joinRoom(code: String, hostUrl: String? = null) = jamRepository.joinRoom(code, hostUrl)
@@ -98,5 +112,58 @@ class JamViewModel @Inject constructor(
         }
 
         return null
+    }
+
+    /**
+     * Декодирует QR-код из изображения (выбранного из галереи или скриншота).
+     */
+    fun decodeQrFromUri(context: Context, uri: Uri): String? {
+        return try {
+            val inputStream = context.contentResolver.openInputStream(uri) ?: return null
+            val bitmap = BitmapFactory.decodeStream(inputStream)
+            inputStream.close()
+            if (bitmap != null) decodeQrFromBitmap(bitmap) else null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun decodeQrFromBitmap(bitmap: Bitmap): String? {
+        return try {
+            val width = bitmap.width
+            val height = bitmap.height
+            val pixels = IntArray(width * height)
+            bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+            val source = RGBLuminanceSource(width, height, pixels)
+            val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
+            val hints = EnumMap<DecodeHintType, Any>(DecodeHintType::class.java).apply {
+                put(DecodeHintType.POSSIBLE_FORMATS, listOf(com.google.zxing.BarcodeFormat.QR_CODE))
+                put(DecodeHintType.TRY_HARDER, true)
+            }
+            val result = MultiFormatReader().decode(binaryBitmap, hints)
+            result.text
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Пытается подключиться к комнате по сырому тексту из QR-кода.
+     * Возвращает true, если код или ссылка были распознаны.
+     */
+    fun joinFromQrText(text: String): Boolean {
+        val invite = parseJamInvite(text)
+        return if (invite != null) {
+            joinRoom(invite.first, invite.second)
+            true
+        } else {
+            val clean = text.trim().uppercase().filter { it in "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" }
+            if (clean.length == 6) {
+                joinRoom(clean, null)
+                true
+            } else {
+                false
+            }
+        }
     }
 }

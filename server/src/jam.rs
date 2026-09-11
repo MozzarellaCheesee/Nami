@@ -56,6 +56,11 @@ impl Registry {
         self.0.lock().unwrap().contains_key(code)
     }
 
+    /// Список кодов всех активных в памяти сессий.
+    pub fn active_codes(&self) -> Vec<String> {
+        self.0.lock().unwrap().keys().cloned().collect()
+    }
+
     /// Журнал джемов библиотеки, свежие сверху.
     pub fn history(conn: &Connection, library_id: i64, limit: i64) -> rusqlite::Result<Vec<JamRecord>> {
         let mut stmt = conn.prepare(

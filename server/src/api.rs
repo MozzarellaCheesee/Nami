@@ -143,6 +143,8 @@ pub fn router(state: Shared) -> Router {
         .route("/setup", get(setup_page))
         // Гостевая авторизация в Jam без аккаунта
         .route("/api/jam/guest-auth", post(jam_guest_auth))
+        // Список активных комнат прямо сейчас
+        .route("/api/jam/active", get(jam_active_rooms))
         // Веб-страница приглашения в Jam для браузера и мессенджеров
         .route("/jam", get(jam_web_page))
         .route("/jam/{code}", get(jam_web_page_code))
@@ -2243,3 +2245,14 @@ fn render_jam_web_page(st: &Shared, code: &str, req: &Request) -> Response {
     };
     Html(crate::jam::page(code, &server_base)).into_response()
 }
+
+#[derive(Serialize)]
+struct JamActiveRoomsResp {
+    rooms: Vec<String>,
+}
+
+async fn jam_active_rooms(State(st): State<Shared>) -> Response {
+    let rooms = st.jams.active_codes();
+    Json(JamActiveRoomsResp { rooms }).into_response()
+}
+

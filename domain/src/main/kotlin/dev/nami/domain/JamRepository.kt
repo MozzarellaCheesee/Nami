@@ -13,6 +13,21 @@ data class JamSession(
     val playedBy: Long?,            // user_id who triggered current play
 )
 
+/** Discovered Jam room from Wi-Fi local network, recent servers, or clipboard. */
+enum class JamDiscoverySource {
+    LOCAL_WIFI,
+    RECENT_SERVER,
+    CLIPBOARD,
+}
+
+data class DiscoveredJamRoom(
+    val code: String,
+    val hostUrl: String?,
+    val source: JamDiscoverySource,
+    val title: String = "Комната $code",
+    val description: String? = null,
+)
+
 interface JamRepository {
     /** Current session or null if not in a Jam. */
     val session: StateFlow<JamSession?>
@@ -34,6 +49,15 @@ interface JamRepository {
 
     /** Recently used Jam host addresses for guest fallback. */
     val recentHosts: StateFlow<List<String>>
+
+    /** Discovered nearby or available Jam rooms (from Wi-Fi NSD, recent host servers, clipboard). */
+    val discoveredRooms: StateFlow<List<DiscoveredJamRoom>>
+
+    /** Start/refresh scanning for active Jam rooms on Wi-Fi and recent servers. */
+    fun startDiscovery()
+
+    /** Stop active scanning. */
+    fun stopDiscovery()
 
     /** Create a new Jam room. On success, [session] will emit with isHost=true. */
     fun createRoom()
