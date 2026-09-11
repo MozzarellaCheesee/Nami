@@ -188,11 +188,16 @@ input:focus { outline: none; border-color: #666; }
     <input type="text" id="extCloudflareUrl" placeholder="https://music.example.com">
   </div>
   <div id="extDomain" class="ext-detail" style="display:none">
-    Поднимите обратный прокси с TLS (Caddy получает и обновляет сертификат сам),
-    NAMI за ним слушает по HTTP. В этом сценарии TLS-сертификат NAMI не нужен -
-    имеет смысл <code>NAMI_TLS=false</code>.<br>
-    Введите ваш домен:
-    <input type="text" id="extDomainUrl" placeholder="https://music.example.com">
+    <p style="margin-bottom:10px; line-height: 1.5;">
+      Введите ваш домен (A-запись должна указывать на IP этого сервера). Nami автоматически откроет порты 80/443, настроит Reverse Proxy Caddy и активирует бесплатный SSL-сертификат Let's Encrypt!
+    </p>
+    <label>Доменное имя:</label>
+    <input type="text" id="extDomainUrl" placeholder="music.example.com">
+    <div style="display:flex; gap:10px; margin-bottom:12px; flex-wrap:wrap;">
+      <button type="button" class="btn btn-secondary" onclick="checkDomain()">Проверить DNS</button>
+      <button type="button" class="btn btn-primary" onclick="autoSetupDomain()">⚡ Настроить автоматически</button>
+    </div>
+    <div id="domainStatus" class="status" style="display:none"></div>
   </div>
 
   <div class="btn-group">
@@ -301,8 +306,63 @@ function externalUrl() {
   switch (extMode()) {
     case 'tailscale': return document.getElementById('extTailscaleUrl').value.trim()
     case 'cloudflare': return document.getElementById('extCloudflareUrl').value.trim()
-    case 'domain': return document.getElementById('extDomainUrl').value.trim()
+    case 'domain': {
+      let d = document.getElementById('extDomainUrl').value.trim()
+      if (d && !d.startsWith('http://') && !d.startsWith('https://')) {
+        d = 'https://' + d
+      }
+      return d
+    }
     default: return ''
+  }
+}
+
+async function checkDomain() {
+  const dom = document.getElementById('extDomainUrl').value.trim()
+  if (!dom) { alert('Введите доменное имя'); return }
+  const statusEl = document.getElementById('domainStatus')
+  statusEl.className = 'status'
+  statusEl.style.display = 'block'
+  statusEl.textContent = 'Проверка DNS-записей домена...'
+
+  try {
+    const res = await fetch('/setup/api/check-domain?domain=' + encodeURIComponent(dom))
+    const data = await res.json()
+    statusEl.className = 'status ' + (data.ok && data.matches ? 'success' : 'error')
+    statusEl.textContent = data.message
+  } catch (e) {
+    statusEl.className = 'status error'
+    statusEl.textContent = 'Ошибка проверки: ' + e.message
+  }
+}
+
+async function autoSetupDomain() {
+  const dom = document.getElementById('extDomainUrl').value.trim()
+  if (!dom) { alert('Введите доменное имя'); return }
+  const port = parseInt(document.getElementById('port').value) || 4533
+  const statusEl = document.getElementById('domainStatus')
+  statusEl.className = 'status'
+  statusEl.style.display = 'block'
+  statusEl.textContent = 'Настройка портов, Caddy и выпуск SSL Let\'s Encrypt...'
+
+  try {
+    const res = await fetch('/setup/api/setup-domain', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ domain: dom, port: port })
+    })
+    const data = await res.json()
+    if (res.ok && data.ok) {
+      statusEl.className = 'status success'
+      statusEl.innerHTML = `<strong>${data.message}</strong><br>` + (data.steps || []).join('<br>')
+      document.getElementById('extDomainUrl').value = data.url
+    } else {
+      statusEl.className = 'status error'
+      statusEl.textContent = data.message || 'Ошибка настройки домена'
+    }
+  } catch (e) {
+    statusEl.className = 'status error'
+    statusEl.textContent = 'Ошибка связи с сервером: ' + e.message
   }
 }
 

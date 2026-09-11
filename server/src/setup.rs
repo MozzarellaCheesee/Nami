@@ -27,6 +27,8 @@ pub fn routes() -> Router {
         .route("/setup", get(page))
         .route("/", get(redirect_to_setup))
         .route("/setup/api/validate-path", get(validate_path))
+        .route("/setup/api/check-domain", get(check_domain_handler))
+        .route("/setup/api/setup-domain", post(setup_domain_handler))
         .route("/setup/api/save", post(save_config))
 }
 
@@ -36,6 +38,33 @@ async fn redirect_to_setup() -> Response {
 
 async fn page() -> Html<&'static str> {
     Html(include_str!("../web/setup.html"))
+}
+
+#[derive(Deserialize)]
+struct DomainQuery {
+    domain: String,
+}
+
+async fn check_domain_handler(Query(q): Query<DomainQuery>) -> Json<crate::domain::DomainCheck> {
+    Json(crate::domain::check_domain(&q.domain))
+}
+
+#[derive(Deserialize)]
+struct SetupDomainReq {
+    domain: String,
+    port: Option<u16>,
+}
+
+async fn setup_domain_handler(Json(req): Json<SetupDomainReq>) -> Response {
+    let port = req.port.unwrap_or(4533);
+    match crate::domain::setup_domain(&req.domain, port, Path::new("config.toml")) {
+        Ok(rep) => Json(serde_json::to_value(rep).unwrap_or_default()).into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "ok": false, "message": e })),
+        )
+            .into_response(),
+    }
 }
 
 #[derive(Deserialize)]

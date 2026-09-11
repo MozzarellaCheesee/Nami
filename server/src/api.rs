@@ -1165,8 +1165,14 @@ async fn setup_page(
                 .to_string(),
         ),
     };
+    let ext_part = if st.cfg.external_url.trim().is_empty() {
+        String::new()
+    } else {
+        format!("&ext={}", crate::lyrics::urlencode(st.cfg.external_url.trim()))
+    };
+
     let uri = format!(
-        "nami://pair?v=1&host={primary_host}&hosts={hosts_param}&port={}{fp_part}&code={code}",
+        "nami://pair?v=1&host={primary_host}&hosts={hosts_param}&port={}{fp_part}{ext_part}&code={code}",
         st.cfg.port
     );
     let qr = qrcode::QrCode::new(uri.as_bytes())
