@@ -16,8 +16,8 @@ class ServerAudioRepositoryImpl @Inject constructor(
     private val serverLibraryRepository: dev.nami.domain.ServerLibraryRepository,
 ) : ServerAudioRepository {
 
-    /** key = "artist|title|durSec" -> id сервера (или null - «искали, не нашли»). */
-    private val idCache = ConcurrentHashMap<String, Long?>()
+    /** key = "artist|title|durSec" -> id сервера (или NOT_FOUND если искали и не нашли). */
+    private val idCache = ConcurrentHashMap<String, Long>()
 
     /** Тот же ключ -> анализ трека с сервера. Чтобы параллельные проверки (ReplayGain и
      * BPM/тональность идут разными корутинами) не дёргали `/api/tracks/{id}` дважды. */
@@ -47,13 +47,13 @@ class ServerAudioRepositoryImpl @Inject constructor(
 
     override suspend fun serverTrackId(artist: String?, title: String, durationMs: Long): Long? {
         val key = cacheKey(artist, title, durationMs)
-        idCache[key]?.let { return it }
-        if (idCache.containsKey(key)) return null // уже искали, не нашли
+        val cached = idCache[key]
+        if (cached != null) return if (cached == NOT_FOUND) null else cached
         return withContext(Dispatchers.IO) {
             val cfg = activeConfig() ?: return@withContext null
             val id = NamiServerClient.matchTrackIds(cfg, listOf(Triple(artist, title, durationMs)))
                 ?.firstOrNull()
-            idCache[key] = id
+            idCache[key] = id ?: NOT_FOUND
             id
         }
     }
@@ -94,7 +94,7 @@ class ServerAudioRepositoryImpl @Inject constructor(
             ids.forEachIndexed { i, id ->
                 if (i < tracks.size) {
                     val (artist, title, dur) = tracks[i]
-                    idCache[cacheKey(artist, title, dur)] = id
+                    idCache[cacheKey(artist, title, dur)] = id ?: NOT_FOUND
                 }
             }
             ids.map { id ->
@@ -124,6 +124,8 @@ class ServerAudioRepositoryImpl @Inject constructor(
     }
 
     companion object {
+        private const val NOT_FOUND = -1L
+
         /** Разбор полей анализа из ответа `GET /api/tracks/{id}` - отдельно, чтобы тестировать. */
         fun parseAnalysis(o: JSONObject): ServerAnalysis? {
             fun f(name: String): Float? = if (o.has(name) && !o.isNull(name)) o.optDouble(name).toFloat() else null
