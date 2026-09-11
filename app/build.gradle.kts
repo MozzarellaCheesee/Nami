@@ -69,6 +69,9 @@ android {
         resources {
             excludes += "META-INF/*.md"
         }
+        jniLibs {
+            pickFirsts += listOf("**/libc++_shared.so")
+        }
     }
 }
 kotlin { jvmToolchain(21) }
