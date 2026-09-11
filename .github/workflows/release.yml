@@ -12,89 +12,6 @@ permissions:
 
 jobs:
   # ============================================================================
-  # 1. Android Client Build (app-release.apk)
-  # ============================================================================
-  build-android:
-    name: Build Android APK
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-          cache: 'gradle'
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Prepare Signing Keystore
-        shell: bash
-        env:
-          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: |
-          mkdir -p secrets
-          if [ -n "$SIGNING_KEYSTORE_BASE64" ]; then
-            echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > secrets/nami.jks
-            echo "nami.keystore.storePassword=$KEYSTORE_PASSWORD" >> local.properties
-            echo "nami.keystore.keyAlias=$KEY_ALIAS" >> local.properties
-            echo "nami.keystore.keyPassword=$KEY_PASSWORD" >> local.properties
-          elif [ -f "secrets/nami.jks" ]; then
-            echo "Using repository bundled keystore"
-            echo "nami.keystore.storePassword=AstolfoServant13_" >> local.properties
-            echo "nami.keystore.keyAlias=namimusic" >> local.properties
-            echo "nami.keystore.keyPassword=AstolfoServant13_" >> local.properties
-          else
-            echo "No keystore configured in secrets, generating self-signed keystore for CI"
-            keytool -genkeypair -v -keystore secrets/nami.jks -alias namimusic -keyalg RSA -keysize 2048 -validity 10000 -storepass AstolfoServant13_ -keypass AstolfoServant13_ -dname "CN=Nami, OU=Nami Music, O=Nami, L=Tokyo, S=Tokyo, C=JP"
-            echo "nami.keystore.storePassword=AstolfoServant13_" >> local.properties
-            echo "nami.keystore.keyAlias=namimusic" >> local.properties
-            echo "nami.keystore.keyPassword=AstolfoServant13_" >> local.properties
-          fi
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
-      - name: Build Release APK
-        shell: bash
-        env:
-          GRADLE_OPTS: "-Dorg.gradle.jvmargs='-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+UseG1GC' -Dfile.encoding=UTF-8"
-        run: |
-          NDK_DIR="${ANDROID_HOME:-/usr/local/lib/android/sdk}/ndk"
-          NDK_VER=$(ls -1 "$NDK_DIR" 2>/dev/null | sort -V | tail -n 1)
-          if [ -n "$NDK_VER" ]; then
-            echo "Using installed Android NDK: $NDK_VER"
-            ./gradlew :app:assembleRelease -Pnami.ndk.version="$NDK_VER" --no-daemon --stacktrace
-          else
-            ./gradlew :app:assembleRelease --no-daemon --stacktrace
-          fi
-
-      - name: Locate and rename APK
-        shell: bash
-        run: |
-          APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
-          if [ -z "$APK_PATH" ]; then
-            echo "Error: APK not found" >&2
-            exit 1
-          fi
-          cp "$APK_PATH" app-release.apk
-
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-release
-          path: app-release.apk
-          if-no-files-found: error
-
-  # ============================================================================
   # 2. Linux Server Build (x86_64, aarch64)
   # ============================================================================
   build-server-linux:
@@ -230,7 +147,6 @@ jobs:
   publish-release:
     name: Publish GitHub Release
     needs:
-      - build-android
       - build-server-linux
       - build-server-windows
       - build-docker
@@ -248,7 +164,6 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          find release-artifacts -type f -name "app-release.apk" -exec cp {} dist/ \;
           find release-artifacts -type f -name "nami-server-linux-x86_64.tar.gz" -exec cp {} dist/ \;
           find release-artifacts -type f -name "nami-server-linux-aarch64.tar.gz" -exec cp {} dist/ \;
           find release-artifacts -type f -name "nami-server-windows-x86_64.zip" -exec cp {} dist/ \;
@@ -264,11 +179,9 @@ jobs:
           cat << EOF > release_body.md
           ## 🌊 Nami Release ${TAG}
 
-          Полнофункциональный релиз единой музыкальной экосистемы Nami (Android-плеер + персональный сервер на Rust).
+          Релиз персонального сервера Nami на Rust.
 
           ### 📦 Артефакты релиза:
-          * **Android Приложение:**
-            * \`app-release.apk\` — Hi-Res / Bit-perfect аудиоплеер для Android (Compose, USB DAC, ReplayGain, Jam).
           * **Сервер Nami (Self-Hosted):**
             * \`nami-server-linux-x86_64.tar.gz\` — бинарник для Linux x86_64 (Ubuntu, Debian, Arch, Fedora).
             * \`nami-server-linux-aarch64.tar.gz\` — бинарник для Linux ARM64 (Raspberry Pi 4/5, Oracle Cloud ARM, Apple Silicon VPS).
@@ -299,7 +212,6 @@ jobs:
           name: "Nami ${{ github.ref_name }}"
           body_path: release_body.md
           files: |
-            dist/app-release.apk
             dist/nami-server-linux-x86_64.tar.gz
             dist/nami-server-linux-aarch64.tar.gz
             dist/nami-server-windows-x86_64.zip
