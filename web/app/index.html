@@ -213,6 +213,30 @@
   </main>
 </div>
 
+<!-- Регистрация по одноразовому инвайту -->
+<div id="inviteView" class="hidden">
+  <main style="max-width:380px;margin-top:60px;">
+    <div class="card stack" style="text-align:center;">
+      <h1 style="letter-spacing:3px;font-size:24px;">NAMI</h1>
+      <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">Создание аккаунта по приглашению</p>
+      <div>
+        <label style="text-align:left;">Имя пользователя</label>
+        <input id="inviteUser" placeholder="Пользователь" autocomplete="username">
+      </div>
+      <div>
+        <label style="text-align:left;">Пароль (от 8 символов)</label>
+        <input id="invitePass" type="password" placeholder="Пароль" autocomplete="new-password">
+      </div>
+      <div>
+        <label style="text-align:left;">Повторите пароль</label>
+        <input id="invitePassAgain" type="password" placeholder="Пароль ещё раз" autocomplete="new-password">
+      </div>
+      <button class="primary" style="width:100%;margin-top:8px;" onclick="acceptInvite()">Создать аккаунт</button>
+      <div id="inviteError" class="alert error hidden"></div>
+    </div>
+  </main>
+</div>
+
 <!-- Основное приложение -->
 <div id="appView" class="hidden">
   <header>
@@ -559,6 +583,7 @@
 
 <script>
 const T = () => localStorage.getItem('nami_token');
+const inviteToken = () => new URLSearchParams(location.hash.slice(1)).get('invite');
 let ALL_TRACKS = [], CURRENT_USER = null, ACTIVE_TRACK_ID = null;
 
 async function api(path, opts = {}) {
@@ -584,6 +609,13 @@ async function api(path, opts = {}) {
 function show(id) { document.getElementById(id).classList.remove('hidden'); }
 function hide(id) { document.getElementById(id).classList.add('hidden'); }
 
+function showAuthView() {
+  hide('appView');
+  hide('loginView');
+  hide('inviteView');
+  show(inviteToken() ? 'inviteView' : 'loginView');
+}
+
 // --- Авторизация ---
 async function doLogin() {
   const err = document.getElementById('loginError');
@@ -607,10 +639,35 @@ async function doLogin() {
   }
 }
 
+async function acceptInvite() {
+  const err = document.getElementById('inviteError');
+  err.classList.add('hidden');
+  if (invitePass.value.length < 8 || invitePass.value !== invitePassAgain.value) {
+    err.textContent = invitePass.value.length < 8 ? 'Пароль должен быть от 8 символов' : 'Пароли не совпадают';
+    err.classList.remove('hidden');
+    return;
+  }
+  try {
+    const res = await fetch('/api/invites/' + encodeURIComponent(inviteToken()) + '/accept', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: inviteUser.value.trim(), password: invitePass.value })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.token) throw new Error(data.error || 'Не удалось принять приглашение');
+    localStorage.setItem('nami_token', data.token);
+    history.replaceState(null, '', location.pathname + location.search);
+    hide('inviteView');
+    initApp();
+  } catch (e) {
+    err.textContent = e.message;
+    err.classList.remove('hidden');
+  }
+}
+
 function logout() {
   localStorage.removeItem('nami_token');
-  hide('appView');
-  show('loginView');
+  showAuthView();
 }
 
 // --- Переключение вкладок ---
@@ -1564,7 +1621,7 @@ function escapeHtml(s) {
 }
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
-if (T()) initApp(); else show('loginView');
+if (inviteToken()) showAuthView(); else if (T()) initApp(); else showAuthView();
 </script>
 </body>
 </html>

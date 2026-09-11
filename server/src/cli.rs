@@ -1087,7 +1087,7 @@ fn users_cmd(cfg: &crate::config::Config, action: Option<UsersAction>) -> Res<()
             println!("  Токен инвайта:    {}", inv.token);
             println!("  Роль:             {}", inv.role);
             println!("  Действителен до:  {}", format_ts(inv.expires_at));
-            println!("  Ссылка для входа: {}/setup?invite={}", base, inv.token);
+            println!("  Ссылка для регистрации: {}/#invite={}", base, inv.token);
         }
     }
     Ok(())
@@ -1327,5 +1327,4 @@ fn append_music_dir(content: &str, new_dir: &str) -> String {
 
     lines.join("\n") + "\n"
 }
-
 
