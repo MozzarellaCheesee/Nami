@@ -94,9 +94,11 @@ class LibraryViewModel @Inject constructor(
             }
         }
         refreshServerTracks()
-        jamRepository?.serverChanges
-            .onEach { entities -> if ("tracks" in entities) refreshServerTracks() }
-            .launchIn(viewModelScope)
+        jamRepository?.serverChanges?.let { changes ->
+            changes
+                .onEach { entities -> if ("tracks" in entities) refreshServerTracks() }
+                .launchIn(viewModelScope)
+        }
     }
 
     fun refreshServerTracks() {
