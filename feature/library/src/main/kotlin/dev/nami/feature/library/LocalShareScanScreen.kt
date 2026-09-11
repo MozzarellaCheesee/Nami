@@ -31,10 +31,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.compose.ui.viewinterop.AndroidView
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.ResultPoint
 import com.journeyapps.barcodescanner.BarcodeCallback
 import com.journeyapps.barcodescanner.BarcodeResult
-import com.google.zxing.ResultPoint
 import com.journeyapps.barcodescanner.BarcodeView
+import com.journeyapps.barcodescanner.DefaultDecoderFactory
 import dev.nami.core.designsystem.NamiColors
 
 /** Группа G "сеть" - своя обёртка вокруг zxing-android-embedded's BarcodeView (не готовая
@@ -58,6 +60,8 @@ fun LocalShareScanScreen(onBack: () -> Unit, onResult: (String) -> Unit) {
             AndroidView(
                 factory = { ctx ->
                     BarcodeView(ctx).apply {
+                        decoderFactory = DefaultDecoderFactory(listOf(BarcodeFormat.QR_CODE))
+                        cameraSettings.isAutoFocusEnabled = true
                         decodeContinuous(object : BarcodeCallback {
                             override fun barcodeResult(result: BarcodeResult) {
                                 val text = result.text ?: return

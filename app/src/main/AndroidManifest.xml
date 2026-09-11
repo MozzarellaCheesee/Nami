@@ -73,12 +73,18 @@
             </intent-filter>
 
             <!-- Сопряжение с self-hosted сервером: QR-код мастера настройки открывается как
-                 nami://auth?challenge=...&fp=sha256:...&port=...&hosts=ip1,ip2 -->
+                 nami://auth?challenge=... или nami://pair?code=... -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="nami" android:host="auth" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="nami" android:host="pair" />
             </intent-filter>
 
             <!-- Подключение к сессии совместного прослушивания (Jam):

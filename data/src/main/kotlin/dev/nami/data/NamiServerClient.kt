@@ -163,15 +163,30 @@ object NamiServerClient {
     }
 
     /**
-     * Разбирает `nami://auth?challenge=...&fp=sha256:...&port=...&hosts=ip1,ip2` (из QR
-     * мастера настройки), пробует адреса по очереди и на первом живом меняет challenge на
-     * токен устройства. Возвращает готовую конфигурацию или null.
+     * Разбирает `nami://auth?challenge=...` или `nami://pair?code=...` (из QR мастера
+     * настройки сервера), пробует адреса по очереди и обменивает на токен устройства.
+     * Возвращает готовую конфигурацию или null.
      */
     fun pairFromAuthUri(uriString: String, deviceName: String): Config? {
         val uri = runCatching { android.net.Uri.parse(uriString) }.getOrNull() ?: return null
-        if (uri.scheme != "nami" || uri.host != "auth") return null
+        if (uri.scheme != "nami") return null
+
+        // 1. Формат nami://pair?v=1&host=...&port=...&fp=...&code=...
+        if (uri.host == "pair") {
+            val host = uri.getQueryParameter("host") ?: return null
+            val port = uri.getQueryParameter("port")?.toIntOrNull() ?: 4533
+            val fp = uri.getQueryParameter("fp")?.removePrefix("sha256:")
+            val code = uri.getQueryParameter("code") ?: return null
+            val scheme = if (fp != null) "https" else "http"
+            val base = "$scheme://$host:$port"
+            val token = pairWithCode(base, code, deviceName, fp) ?: return null
+            return Config(base, token, fp, listOf(base))
+        }
+
+        // 2. Формат nami://auth?challenge=...&fp=sha256:...&port=...&hosts=ip1,ip2
+        if (uri.host != "auth") return null
         val challenge = uri.getQueryParameter("challenge") ?: return null
-        val fp = uri.getQueryParameter("fp")
+        val fp = uri.getQueryParameter("fp")?.removePrefix("sha256:")
         val port = uri.getQueryParameter("port")?.toIntOrNull() ?: 4533
         val hosts = uri.getQueryParameter("hosts")
             ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
