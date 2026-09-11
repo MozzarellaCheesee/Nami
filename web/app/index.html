@@ -3,126 +3,580 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#0a0a0a">
+<meta name="theme-color" content="#0a0b0d">
 <link rel="manifest" href="/manifest.json">
-<title>NAMI</title>
+<title>NAMI — Музыкальный сервер</title>
 <style>
+  :root {
+    --bg: #0a0b0d;
+    --card: #131418;
+    --card-border: #22242c;
+    --header-bg: #101115;
+    --text-primary: #ededed;
+    --text-secondary: #9a9ca6;
+    --text-muted: #5e606b;
+    --accent: #c24a34;
+    --accent-hover: #db563e;
+    --blue: #2f65e2;
+    --blue-hover: #3d74f5;
+    --green: #2ecc71;
+    --red: #e74c3c;
+    --warning: #f39c12;
+    --input-bg: #18191f;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font: 15px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; background: #0a0a0a; color: #e6e6e6; }
-  a { color: #7db3ff; }
-  header { position: sticky; top: 0; display: flex; align-items: center; gap: 12px;
-    padding: 12px 16px; background: #111; border-bottom: 1px solid #222; z-index: 5; }
-  header h1 { font-size: 18px; letter-spacing: 2px; }
-  header .grow { flex: 1; }
-  button { font: inherit; background: #1f1f1f; color: #e6e6e6; border: 1px solid #333;
-    border-radius: 8px; padding: 8px 12px; cursor: pointer; }
-  button:hover { background: #2a2a2a; }
-  button.primary { background: #2d5bd7; border-color: #2d5bd7; }
-  input, select { font: inherit; background: #161616; color: #e6e6e6; border: 1px solid #333;
-    border-radius: 8px; padding: 9px 11px; width: 100%; }
-  main { max-width: 900px; margin: 0 auto; padding: 16px; padding-bottom: 96px; }
-  .card { background: #131313; border: 1px solid #222; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
-  .card h2 { font-size: 15px; margin-bottom: 12px; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
-  .row { display: flex; align-items: center; gap: 12px; padding: 8px; border-radius: 8px; cursor: pointer; }
-  .row:hover { background: #1b1b1b; }
-  .row.playing { background: #1a2540; }
-  .row img { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; background: #222; flex: none; }
-  .row .meta { min-width: 0; flex: 1; }
-  .row .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .row .s { font-size: 13px; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .stack > * + * { margin-top: 10px; }
-  #player { position: fixed; left: 0; right: 0; bottom: 0; background: #111; border-top: 1px solid #222; padding: 10px 16px; }
-  #player .np { font-size: 13px; color: #aaa; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #player audio { width: 100%; }
-  .msg { font-size: 13px; color: #8fd18f; min-height: 18px; }
-  .msg.err { color: #e88; }
+  body {
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    min-height: 100vh;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  
+  header {
+    position: sticky; top: 0; display: flex; align-items: center; gap: 12px;
+    padding: 12px 20px; background: var(--header-bg); border-bottom: 1px solid var(--card-border);
+    z-index: 100;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18px; letter-spacing: 2px; color: var(--text-primary); }
+  .logo svg { width: 26px; height: 26px; fill: var(--accent); }
+  .nav-tabs { display: flex; gap: 6px; margin-left: 16px; overflow-x: auto; }
+  .nav-btn {
+    background: transparent; border: 1px solid transparent; color: var(--text-secondary);
+    padding: 7px 14px; border-radius: var(--radius-md); font-weight: 500; cursor: pointer;
+    white-space: nowrap; transition: all 0.15s ease;
+  }
+  .nav-btn:hover { background: #1c1e26; color: var(--text-primary); }
+  .nav-btn.active { background: #22242e; color: var(--text-primary); border-color: var(--card-border); }
+  .user-badge {
+    display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary);
+    background: #181920; padding: 5px 12px; border-radius: 20px; border: 1px solid var(--card-border);
+  }
+  .role-tag {
+    font-size: 10px; text-transform: uppercase; font-weight: 700; padding: 2px 6px;
+    border-radius: 4px; background: #252834; color: #a4b3cf; letter-spacing: 0.5px;
+  }
+  .role-tag.owner { background: #4a211b; color: #f38f7f; }
+
+  main { max-width: 1060px; margin: 0 auto; padding: 20px 16px 120px 16px; }
+  
+  .card {
+    background: var(--card); border: 1px solid var(--card-border); border-radius: var(--radius-lg);
+    padding: 20px; margin-bottom: 18px;
+  }
+  .card-header {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;
+  }
+  .card h2 {
+    font-size: 16px; font-weight: 700; color: var(--text-primary);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .card-desc { font-size: 13px; color: var(--text-secondary); margin-bottom: 14px; }
+  
+  button, .btn {
+    font: inherit; background: #20222a; color: var(--text-primary); border: 1px solid #2d303b;
+    border-radius: var(--radius-md); padding: 8px 14px; cursor: pointer; display: inline-flex;
+    align-items: center; justify-content: center; gap: 6px; transition: all 0.15s ease; font-weight: 500;
+  }
+  button:hover, .btn:hover { background: #2b2e3a; border-color: #3f4352; }
+  button.primary, .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover, .btn.primary:hover { background: var(--accent-hover); }
+  button.blue, .btn.blue { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.blue:hover, .btn.blue:hover { background: var(--blue-hover); }
+  button.danger, .btn.danger { background: #3b1717; border-color: #5c2424; color: #ff8888; }
+  button.danger:hover, .btn.danger:hover { background: #4d1d1d; }
+  button.sm, .btn.sm { padding: 4px 9px; font-size: 12px; border-radius: var(--radius-sm); }
+  
+  input, select, textarea {
+    font: inherit; background: var(--input-bg); color: var(--text-primary);
+    border: 1px solid var(--card-border); border-radius: var(--radius-md);
+    padding: 9px 12px; width: 100%; transition: border-color 0.15s ease;
+  }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+  label { display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 5px; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .stack > * + * { margin-top: 12px; }
+  .grow { flex: 1; }
+
+  /* Таблицы */
+  .table-wrap { width: 100%; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
+  th { padding: 10px 12px; border-bottom: 1px solid var(--card-border); color: var(--text-muted); font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; }
+  td { padding: 10px 12px; border-bottom: 1px solid #1a1c22; color: var(--text-secondary); vertical-align: middle; }
+  tr:hover td { background: #17181f; color: var(--text-primary); }
+
+  /* Треки */
+  .track-row {
+    display: flex; align-items: center; gap: 14px; padding: 10px 12px;
+    border-radius: var(--radius-md); cursor: pointer; transition: background 0.12s ease;
+  }
+  .track-row:hover { background: #1a1c24; }
+  .track-row.playing { background: #261f22; border: 1px solid #4a211b; }
+  .track-row img {
+    width: 44px; height: 44px; border-radius: var(--radius-sm); object-fit: cover;
+    background: #1c1d24; flex: none;
+  }
+  .track-row .meta { min-width: 0; flex: 1; }
+  .track-row .title { font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .track-row .sub { font-size: 12px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .track-row .dur { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+  /* Дропзона загрузки файлов */
+  .dropzone {
+    border: 2px dashed var(--card-border); border-radius: var(--radius-lg); padding: 32px 20px;
+    text-align: center; cursor: pointer; transition: all 0.2s ease; background: #101115;
+  }
+  .dropzone:hover, .dropzone.dragover { border-color: var(--accent); background: #171415; }
+  .dropzone svg { width: 36px; height: 36px; fill: var(--text-muted); margin-bottom: 8px; }
+
+  /* Статистика / метрики */
+  .stat-badge {
+    background: #181920; border: 1px solid var(--card-border); border-radius: var(--radius-md);
+    padding: 12px 16px; display: flex; flex-direction: column; gap: 4px;
+  }
+  .stat-label { font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 700; letter-spacing: 0.5px; }
+  .stat-value { font-size: 20px; font-weight: 800; color: var(--text-primary); }
+
+  /* Модальное окно */
+  .modal-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.75);
+    display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px;
+    backdrop-filter: blur(4px);
+  }
+  .modal-box {
+    background: var(--card); border: 1px solid #333644; border-radius: var(--radius-lg);
+    width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; padding: 24px;
+    box-shadow: 0 12px 36px rgba(0,0,0,0.6);
+  }
+  .modal-box h3 { font-size: 18px; margin-bottom: 16px; }
+
+  /* Плеер */
+  #player {
+    position: fixed; left: 0; right: 0; bottom: 0; background: var(--header-bg);
+    border-top: 1px solid var(--card-border); padding: 12px 24px; display: flex;
+    align-items: center; gap: 16px; z-index: 100;
+  }
+  #player .np-meta { min-width: 180px; max-width: 260px; overflow: hidden; }
+  #player .np-title { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #player .np-artist { font-size: 12px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #player audio { flex: 1; height: 38px; }
+
+  /* Сообщения */
+  .alert {
+    padding: 10px 14px; border-radius: var(--radius-md); font-size: 13px; margin-top: 10px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .alert.info { background: #13213d; color: #7cb2f8; border: 1px solid #1e3a70; }
+  .alert.success { background: #132b1d; color: #64db8c; border: 1px solid #1c522f; }
+  .alert.error { background: #351414; color: #f57d7d; border: 1px solid #632222; }
+
   .hidden { display: none !important; }
-  @media (max-width: 560px) { .grid2 { grid-template-columns: 1fr; } }
+  @media (max-width: 768px) {
+    .grid2, .grid3, .grid4 { grid-template-columns: 1fr; }
+    .nav-tabs { margin-left: 0; }
+    header { flex-wrap: wrap; }
+    #player { flex-direction: column; padding: 10px 14px; gap: 8px; }
+    #player audio { width: 100%; }
+  }
 </style>
 </head>
 <body>
 
-<div id="login" class="hidden">
-  <main>
-    <div class="card stack" style="max-width:360px;margin:60px auto;">
-      <h1 style="letter-spacing:3px;text-align:center;">NAMI</h1>
-      <input id="lu" placeholder="Пользователь" autocomplete="username">
-      <input id="lp" type="password" placeholder="Пароль" autocomplete="current-password">
-      <button class="primary" onclick="doLogin()">Войти</button>
-      <div id="loginMsg" class="msg err"></div>
+<!-- Экран входа -->
+<div id="loginView" class="hidden">
+  <main style="max-width:380px;margin-top:60px;">
+    <div class="card stack" style="text-align:center;">
+      <div style="margin-bottom:8px;">
+        <svg style="width:48px;height:48px;fill:var(--accent);" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9v-2h2v2zm0-4H9V7h2v5z"/></svg>
+      </div>
+      <h1 style="letter-spacing:3px;font-size:24px;">NAMI</h1>
+      <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">Вход в музыкальный сервер</p>
+      
+      <div>
+        <label style="text-align:left;">Имя пользователя</label>
+        <input id="loginUser" placeholder="Пользователь" autocomplete="username">
+      </div>
+      <div>
+        <label style="text-align:left;">Пароль</label>
+        <input id="loginPass" type="password" placeholder="Пароль" autocomplete="current-password">
+      </div>
+      <button class="primary" style="width:100%;margin-top:8px;" onclick="doLogin()">Войти в сервер</button>
+      <div id="loginError" class="alert error hidden"></div>
     </div>
   </main>
 </div>
 
-<div id="app" class="hidden">
+<!-- Основное приложение -->
+<div id="appView" class="hidden">
   <header>
-    <h1>NAMI</h1>
+    <div class="logo">
+      <svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+      <span>NAMI</span>
+    </div>
+    
+    <div class="nav-tabs">
+      <button class="nav-btn active" id="btnTabTracks" onclick="switchTab('tracks')">🎵 Треки</button>
+      <button class="nav-btn" id="btnTabMyLib" onclick="switchTab('myLib')">📁 Моя библиотека</button>
+      <button class="nav-btn" id="btnTabProfile" onclick="switchTab('profile')">👤 Профиль</button>
+      <button class="nav-btn hidden" id="btnTabAdmin" onclick="switchTab('admin')">⚙️ Администрирование</button>
+    </div>
+
     <div class="grow"></div>
-    <button id="tabLib" onclick="showTab('lib')">Библиотека</button>
-    <button id="tabSettings" onclick="showTab('settings')">Настройки</button>
-    <button onclick="logout()">Выйти</button>
+
+    <div class="user-badge">
+      <span id="headerUsername">user</span>
+      <span class="role-tag" id="headerRole">user</span>
+    </div>
+
+    <button class="sm" onclick="logout()">Выйти</button>
   </header>
+
   <main>
-    <section id="lib">
+    <!-- Вкладка: Треки & Плеер -->
+    <section id="tabTracks">
       <div class="card">
-        <input id="q" placeholder="Поиск по названию и исполнителю" oninput="renderTracks()">
+        <div style="display:flex;gap:12px;align-items:center;">
+          <input id="searchTracks" placeholder="🔍 Поиск по названию, артисту или альбому..." oninput="filterTracks()">
+          <span style="font-size:13px;color:var(--text-secondary);white-space:nowrap;">Найдено: <b id="tracksCount">0</b></span>
+        </div>
       </div>
+
       <div class="card">
-        <h2>Треки (<span id="count">0</span>)</h2>
-        <div id="tracks"></div>
+        <div class="card-header">
+          <h2>Список треков</h2>
+          <button class="sm blue" onclick="switchTab('myLib')">+ Загрузить музыку</button>
+        </div>
+        <div id="tracksList"></div>
       </div>
     </section>
 
-    <section id="settings" class="hidden">
-      <div class="card stack">
-        <h2>Аккаунт</h2>
-        <div class="grid2">
-          <input id="pwOld" type="password" placeholder="Текущий пароль">
-          <input id="pwNew" type="password" placeholder="Новый пароль (8+)">
+    <!-- Вкладка: Моя библиотека -->
+    <section id="tabMyLib" class="hidden">
+      <!-- Сводка библиотеки -->
+      <div class="card">
+        <div class="card-header">
+          <h2>Управление личной библиотекой</h2>
+          <span class="role-tag" id="myLibModeTag">separate</span>
         </div>
-        <button onclick="changePw()">Сменить пароль</button>
-        <div class="grid2">
-          <input id="lbToken" placeholder="Токен ListenBrainz">
-          <button onclick="saveLb()">Сохранить токен</button>
+        <div class="grid3" style="margin-top:10px;">
+          <div class="stat-badge">
+            <span class="stat-label">Режим</span>
+            <span class="stat-value" id="myLibModeName" style="font-size:16px;">Персональная</span>
+          </div>
+          <div class="stat-badge">
+            <span class="stat-label">ID библиотеки</span>
+            <span class="stat-value" id="myLibId">0</span>
+          </div>
+          <div class="stat-badge">
+            <span class="stat-label">Доступно треков</span>
+            <span class="stat-value" id="myLibTracks">0</span>
+          </div>
         </div>
-        <div id="acctMsg" class="msg"></div>
       </div>
 
-      <div id="ownerBox" class="card stack hidden">
-        <h2>Владелец</h2>
-        <div class="grid2">
-          <select id="mode"><option value="shared">Общая библиотека</option><option value="separate">Раздельные</option></select>
-          <button onclick="saveMode()">Сменить режим (чистит tracks)</button>
+      <!-- Папки библиотеки -->
+      <div class="card stack" id="myLibDirsBox">
+        <div class="card-header">
+          <div>
+            <h2>Папки вашей музыки</h2>
+            <div class="card-desc">Директории на сервере, из которых индексируются аудиофайлы для вашего аккаунта.</div>
+          </div>
+          <button class="primary sm" onclick="scanMyLib()">🔄 Пересканировать мою библиотеку</button>
         </div>
-        <button onclick="rescan()">Пересканировать библиотеку</button>
-        <div class="grid2">
-          <select id="invRole"><option value="user">user</option><option value="guest">guest</option></select>
-          <button onclick="makeInvite()">Создать инвайт</button>
+
+        <div id="myLibDirsList" class="stack"></div>
+
+        <div style="display:flex;gap:10px;margin-top:10px;">
+          <input id="newDirPath" placeholder="Например: /music/username или D:\Music\MyTracks">
+          <button class="blue" style="white-space:nowrap;" onclick="addMyDir()">+ Добавить папку</button>
         </div>
-        <div id="inviteOut" class="msg"></div>
-        <div id="users"></div>
-        <div id="ownerMsg" class="msg"></div>
+        <div id="myLibDirsMsg" class="alert hidden"></div>
+      </div>
+
+      <!-- Доступные папки (в Shared режиме) -->
+      <div class="card stack hidden" id="myLibSharedBox">
+        <h2>Разрешённые папки</h2>
+        <div class="card-desc">Сервер работает в режиме общей библиотеки. Вам открыт доступ к следующим папкам:</div>
+        <div id="myLibSharedList"></div>
+      </div>
+
+      <!-- Загрузка аудиофайлов -->
+      <div class="card stack">
+        <h2>Загрузка музыки в вашу библиотеку</h2>
+        <div class="card-desc">Загруженные файлы сохраняются в вашу персональную папку на сервере и мгновенно становятся доступны для прослушивания.</div>
+
+        <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+          <svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+          <div style="font-weight:600;font-size:15px;color:var(--text-primary);">Перетащите аудиофайлы сюда или нажмите для выбора</div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">Поддерживаются FLAC, MP3, OPUS, OGG, WAV, M4A, AAC</div>
+          <input type="file" id="fileInput" multiple accept="audio/*" style="display:none;" onchange="handleFileSelect(event)">
+        </div>
+
+        <div id="uploadProgressBox" class="stack hidden" style="margin-top:14px;"></div>
+      </div>
+    </section>
+
+    <!-- Вкладка: Профиль пользователя -->
+    <section id="tabProfile" class="hidden">
+      <!-- Смена пароля -->
+      <div class="card stack">
+        <h2>Безопасность аккаунта</h2>
+        <div class="card-desc">Смена основного пароля для входа в веб-панель и приложение Nami.</div>
+        
+        <div class="grid2">
+          <div>
+            <label>Текущий пароль</label>
+            <input id="profOldPw" type="password" placeholder="Введите текущий пароль">
+          </div>
+          <div>
+            <label>Новый пароль (от 8 символов)</label>
+            <input id="profNewPw" type="password" placeholder="Придумайте новый пароль">
+          </div>
+        </div>
+        <div>
+          <button class="primary" onclick="changeMyPassword()">Сохранить новый пароль</button>
+        </div>
+        <div id="profPwMsg" class="alert hidden"></div>
+      </div>
+
+      <!-- OpenSubsonic API -->
+      <div class="card stack">
+        <div class="card-header">
+          <div>
+            <h2>OpenSubsonic API</h2>
+            <div class="card-desc">Позволяет подключаться через сторонние Subsonic-плееры (Symfonium, DSub, Ultrasonic, Tempo, Amperfy).</div>
+          </div>
+          <span class="role-tag" id="subsonicStatusTag">Не настроен</span>
+        </div>
+
+        <div class="alert info">
+          Адрес сервера для сторонних приложений: <code id="subsonicUrl">https://&lt;сервер&gt;:4533/rest</code>
+        </div>
+
+        <div class="grid2">
+          <div>
+            <label>Пароль Subsonic (отдельный от основного)</label>
+            <input id="subsonicPassInput" type="password" placeholder="Задайте пароль для Subsonic">
+          </div>
+          <div style="display:flex;align-items:flex-end;gap:8px;">
+            <button class="blue" onclick="saveSubsonicPassword()">Сохранить пароль</button>
+            <button class="danger" onclick="revokeSubsonicPassword()">Отозвать доступ</button>
+          </div>
+        </div>
+        <div id="subsonicMsg" class="alert hidden"></div>
+      </div>
+
+      <!-- ListenBrainz -->
+      <div class="card stack">
+        <h2>Скробблинг ListenBrainz</h2>
+        <div class="card-desc">Автоматическая отправка истории прослушиваний в ваш профиль ListenBrainz.</div>
+        
+        <div class="grid2">
+          <div>
+            <label>Пользовательский User Token</label>
+            <input id="lbTokenInput" placeholder="Токен из настроек профиля listenbrainz.org">
+          </div>
+          <div style="display:flex;align-items:flex-end;">
+            <button class="primary" onclick="saveListenbrainzToken()">Сохранить токен</button>
+          </div>
+        </div>
+        <div id="lbMsg" class="alert hidden"></div>
+      </div>
+
+      <!-- Приватность -->
+      <div class="card stack">
+        <h2>Приватность</h2>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;color:var(--text-primary);">
+          <input type="checkbox" id="nowPlayingVisibleCb" style="width:auto;" onchange="toggleNowPlayingVisible(this.checked)">
+          <span>Показывать другим участникам сервера, что я сейчас слушаю</span>
+        </label>
+      </div>
+    </section>
+
+    <!-- Вкладка: Администрирование (только owner) -->
+    <section id="tabAdmin" class="hidden">
+      <!-- Сводка сервера -->
+      <div class="card">
+        <div class="card-header">
+          <h2>Статус и ресурсы сервера</h2>
+          <button class="sm" onclick="loadAdminOverview()">Обновить метрики</button>
+        </div>
+        <div class="grid4" id="adminMetricsGrid">
+          <div class="stat-badge">
+            <span class="stat-label">Процессор (Ядра)</span>
+            <span class="stat-value" id="mCpu">-</span>
+          </div>
+          <div class="stat-badge">
+            <span class="stat-label">Память RAM</span>
+            <span class="stat-value" id="mRam" style="font-size:16px;">-</span>
+          </div>
+          <div class="stat-badge">
+            <span class="stat-label">Всего треков</span>
+            <span class="stat-value" id="mTracks">-</span>
+          </div>
+          <div class="stat-badge">
+            <span class="stat-label">Пользователей</span>
+            <span class="stat-value" id="mUsers">-</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Управление пользователями -->
+      <div class="card stack">
+        <div class="card-header">
+          <div>
+            <h2>Пользователи сервера</h2>
+            <div class="card-desc">Управление учётными записями, ролями и привязкой библиотек.</div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="primary sm" onclick="openAddUserModal()">+ Новый пользователь</button>
+            <button class="blue sm" onclick="openInviteModal()">+ Создать инвайт</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table id="usersTable">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Пользователь</th>
+                <th>Роль</th>
+                <th>Библиотека</th>
+                <th>Subsonic</th>
+                <th>Создан</th>
+                <th>Действия</th>
+              </tr>
+            </thead>
+            <tbody id="usersTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Управление сопряжёнными устройствами -->
+      <div class="card stack">
+        <div class="card-header">
+          <div>
+            <h2>Сопряжённые устройства</h2>
+            <div class="card-desc">Смартфоны и клиенты, сопряжённые с сервером Nami.</div>
+          </div>
+          <button class="primary sm" onclick="openPairModal()">📱 Сопряжение нового устройства</button>
+        </div>
+
+        <div class="table-wrap">
+          <table id="devicesTable">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Имя устройства</th>
+                <th>Пользователь</th>
+                <th>Сопряжено</th>
+                <th>Последняя активность</th>
+                <th>Действия</th>
+              </tr>
+            </thead>
+            <tbody id="devicesTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Управление библиотеками и режимом -->
+      <div class="card stack">
+        <div class="card-header">
+          <div>
+            <h2>Режим и библиотеки</h2>
+            <div class="card-desc">Переключение между общей библиотекой (Shared) и раздельными библиотеками (Separate).</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select id="adminModeSelect" style="width:auto;">
+              <option value="shared">Общая библиотека (Shared)</option>
+              <option value="separate">Раздельные библиотеки (Separate)</option>
+            </select>
+            <button class="blue sm" onclick="changeLibraryMode()">Применить режим</button>
+          </div>
+        </div>
+
+        <div class="card-header" style="margin-top:14px;">
+          <h3>Список библиотек</h3>
+          <button class="sm" onclick="openAddLibraryModal()">+ Добавить библиотеку</button>
+        </div>
+
+        <div class="table-wrap">
+          <table id="librariesTable">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Название</th>
+                <th>Папки</th>
+                <th>Треков</th>
+                <th>Участников</th>
+                <th>Действия</th>
+              </tr>
+            </thead>
+            <tbody id="librariesTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Обслуживание и сканирование -->
+      <div class="card stack">
+        <h2>Обслуживание сервера</h2>
+        <div class="card-desc">Пакетные операции над всей музыкальной базой.</div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:10px;">
+          <button class="primary" onclick="adminScanAll()">🔄 Полное пересканирование</button>
+          <button class="blue" onclick="adminEnrich()">✨ Обогатить MusicBrainz</button>
+          <button class="blue" onclick="adminAnalyze()">🎚️ Анализ звука (ReplayGain/BPM/Key)</button>
+          <button onclick="adminCheckHealth()">🩺 Аудит здоровья библиотеки</button>
+        </div>
+
+        <div id="adminActionMsg" class="alert hidden"></div>
+        <div id="adminHealthReport" class="stack hidden" style="margin-top:14px;"></div>
       </div>
     </section>
   </main>
+
+  <!-- Фиксированный плеер -->
   <div id="player">
-    <div class="np" id="np">Ничего не играет</div>
-    <audio id="audio" controls></audio>
+    <div class="np-meta">
+      <div class="np-title" id="playerTitle">Ничего не играет</div>
+      <div class="np-artist" id="playerArtist">Выберите трек для воспроизведения</div>
+    </div>
+    <audio id="audioEl" controls></audio>
   </div>
+</div>
+
+<!-- Модальные окна -->
+<div id="modalOverlay" class="modal-overlay hidden" onclick="closeModalOnBg(event)">
+  <div class="modal-box" id="modalBox"></div>
 </div>
 
 <script>
 const T = () => localStorage.getItem('nami_token');
-let ALL = [], me = null, CUR = null;
+let ALL_TRACKS = [], CURRENT_USER = null, ACTIVE_TRACK_ID = null;
 
 async function api(path, opts = {}) {
   const r = await fetch('/api' + path, {
     ...opts,
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + T(), ...(opts.headers || {}) },
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + T(),
+      ...(opts.headers || {})
+    },
   });
-  if (r.status === 401) { logout(); throw new Error('нужен вход'); }
-  if (!r.ok) throw new Error((await r.text()) || ('HTTP ' + r.status));
+  if (r.status === 401) { logout(); throw new Error('Сессия истекла, войдите заново'); }
+  if (!r.ok) {
+    const txt = await r.text();
+    let msg = txt;
+    try { const j = JSON.parse(txt); if (j.error) msg = j.error; } catch (_) {}
+    throw new Error(msg || ('HTTP ' + r.status));
+  }
   const ct = r.headers.get('content-type') || '';
   return ct.includes('json') ? r.json() : r.text();
 }
@@ -130,124 +584,987 @@ async function api(path, opts = {}) {
 function show(id) { document.getElementById(id).classList.remove('hidden'); }
 function hide(id) { document.getElementById(id).classList.add('hidden'); }
 
+// --- Авторизация ---
 async function doLogin() {
-  const msg = document.getElementById('loginMsg');
-  msg.textContent = '';
+  const err = document.getElementById('loginError');
+  err.classList.add('hidden');
   try {
-    const d = await (await fetch('/api/auth/login', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: lu.value, password: lp.value }),
-    })).json();
-    if (!d.token) throw new Error(d.error || 'неверный логин или пароль');
-    localStorage.setItem('nami_token', d.token);
-    start();
-  } catch (e) { msg.textContent = e.message; }
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: loginUser.value.trim(),
+        password: loginPass.value
+      })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.token) throw new Error(data.error || 'Неверный логин или пароль');
+    localStorage.setItem('nami_token', data.token);
+    initApp();
+  } catch (e) {
+    err.textContent = e.message;
+    err.classList.remove('hidden');
+  }
 }
 
 function logout() {
   localStorage.removeItem('nami_token');
-  hide('app'); show('login');
+  hide('appView');
+  show('loginView');
 }
 
-function showTab(t) {
-  document.getElementById('lib').classList.toggle('hidden', t !== 'lib');
-  document.getElementById('settings').classList.toggle('hidden', t !== 'settings');
+// --- Переключение вкладок ---
+function switchTab(tab) {
+  const tabs = ['tracks', 'myLib', 'profile', 'admin'];
+  tabs.forEach(t => {
+    const btn = document.getElementById('btnTab' + t.charAt(0).toUpperCase() + t.slice(1));
+    const sec = document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1));
+    if (btn) btn.classList.toggle('active', t === tab);
+    if (sec) sec.classList.toggle('hidden', t !== tab);
+  });
+  if (tab === 'myLib') loadMyLibrary();
+  if (tab === 'profile') loadProfile();
+  if (tab === 'admin') loadAdminData();
 }
 
-async function start() {
-  hide('login'); show('app');
-  me = await api('/me');
-  if (me.user && me.user.role === 'owner') {
-    show('ownerBox');
-    document.getElementById('mode').value = me.library_mode || 'shared';
-    loadUsers();
+// --- Инициализация приложения ---
+async function initApp() {
+  hide('loginView');
+  show('appView');
+
+  try {
+    const meData = await api('/me');
+    CURRENT_USER = meData.user;
+    if (!CURRENT_USER) { logout(); return; }
+
+    document.getElementById('headerUsername').textContent = CURRENT_USER.username;
+    const roleTag = document.getElementById('headerRole');
+    roleTag.textContent = CURRENT_USER.role;
+    roleTag.className = 'role-tag ' + CURRENT_USER.role;
+
+    // Показываем вкладку администратора только владельцу
+    if (CURRENT_USER.role === 'owner') {
+      show('btnTabAdmin');
+    } else {
+      hide('btnTabAdmin');
+    }
+
+    // Загрузка треков
+    ALL_TRACKS = await api('/tracks?limit=1000');
+    renderTracks(ALL_TRACKS);
+  } catch (e) {
+    console.error(e);
   }
-  ALL = await api('/tracks?limit=1000');
-  renderTracks();
 }
 
-function renderTracks() {
-  const q = (document.getElementById('q').value || '').toLowerCase();
-  const list = ALL.filter(t =>
-    !q || (t.title || '').toLowerCase().includes(q) || (t.artist || '').toLowerCase().includes(q));
-  document.getElementById('count').textContent = list.length;
-  const box = document.getElementById('tracks');
+// --- Треки и воспроизведение ---
+function filterTracks() {
+  const q = (document.getElementById('searchTracks').value || '').toLowerCase().trim();
+  const list = ALL_TRACKS.filter(t =>
+    !q ||
+    (t.title || '').toLowerCase().includes(q) ||
+    (t.artist || '').toLowerCase().includes(q) ||
+    (t.album || '').toLowerCase().includes(q)
+  );
+  renderTracks(list);
+}
+
+function renderTracks(list) {
+  document.getElementById('tracksCount').textContent = list.length;
+  const box = document.getElementById('tracksList');
   box.innerHTML = '';
+  if (list.length === 0) {
+    box.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-muted);">Треков не найдено</div>';
+    return;
+  }
   for (const t of list) {
     const row = document.createElement('div');
-    row.className = 'row' + (CUR === t.id ? ' playing' : '');
-    row.onclick = () => play(t);
+    row.className = 'track-row' + (ACTIVE_TRACK_ID === t.id ? ' playing' : '');
+    row.onclick = () => playTrack(t);
+    
     const img = new Image();
     img.src = '/api/tracks/' + t.id + '/artwork?token=' + T();
-    img.onerror = () => { img.style.visibility = 'hidden'; };
+    img.onerror = () => { img.style.display = 'none'; };
     row.appendChild(img);
+
     const meta = document.createElement('div');
     meta.className = 'meta';
-    meta.innerHTML = '<div class="t"></div><div class="s"></div>';
-    meta.querySelector('.t').textContent = t.title || '(без названия)';
-    meta.querySelector('.s').textContent = [t.artist, t.album].filter(Boolean).join(' — ');
+    meta.innerHTML = `<div class="title">${escapeHtml(t.title || 'Без названия')}</div>
+                      <div class="sub">${escapeHtml([t.artist, t.album].filter(Boolean).join(' — ') || 'Неизвестный исполнитель')}</div>`;
     row.appendChild(meta);
+
+    if (t.duration_ms) {
+      const dur = document.createElement('div');
+      dur.className = 'dur';
+      dur.textContent = formatDuration(t.duration_ms);
+      row.appendChild(dur);
+    }
+
     box.appendChild(row);
   }
 }
 
-function play(t) {
-  CUR = t.id;
-  const a = document.getElementById('audio');
-  a.src = '/api/tracks/' + t.id + '/stream?token=' + T();
-  a.play();
-  document.getElementById('np').textContent = (t.title || '') + ' — ' + (t.artist || '');
-  renderTracks();
+function playTrack(t) {
+  ACTIVE_TRACK_ID = t.id;
+  const audio = document.getElementById('audioEl');
+  audio.src = '/api/tracks/' + t.id + '/stream?token=' + T();
+  audio.play().catch(() => {});
+  document.getElementById('playerTitle').textContent = t.title || 'Без названия';
+  document.getElementById('playerArtist').textContent = [t.artist, t.album].filter(Boolean).join(' — ');
+  filterTracks();
 }
 
-async function changePw() {
-  const m = document.getElementById('acctMsg'); m.className = 'msg'; m.textContent = '';
+function formatDuration(ms) {
+  const sec = Math.floor(ms / 1000);
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+// --- Управление личной библиотекой ---
+async function loadMyLibrary() {
+  const msg = document.getElementById('myLibDirsMsg');
+  msg.className = 'alert hidden';
   try {
-    await api('/me/password', { method: 'PUT', body: JSON.stringify({ old: pwOld.value, new: pwNew.value }) });
-    m.textContent = 'Пароль изменён, войдите заново.'; setTimeout(logout, 1500);
-  } catch (e) { m.className = 'msg err'; m.textContent = e.message; }
+    const info = await api('/me/library');
+    document.getElementById('myLibModeTag').textContent = info.mode;
+    document.getElementById('myLibModeName').textContent = info.mode === 'separate' ? 'Персональная' : 'Общая (Shared)';
+    document.getElementById('myLibId').textContent = info.library_id;
+    document.getElementById('myLibTracks').textContent = info.tracks_count;
+
+    if (info.mode === 'separate' || info.library_id > 0 || (CURRENT_USER && CURRENT_USER.role === 'owner')) {
+      show('myLibDirsBox');
+      hide('myLibSharedBox');
+      renderMyDirs(info.dirs || []);
+    } else {
+      hide('myLibDirsBox');
+      show('myLibSharedBox');
+      renderSharedFolders(info.folders || []);
+    }
+  } catch (e) {
+    console.error(e);
+  }
 }
-async function saveLb() {
-  const m = document.getElementById('acctMsg'); m.className = 'msg'; m.textContent = '';
+
+function renderMyDirs(dirs) {
+  const box = document.getElementById('myLibDirsList');
+  box.innerHTML = '';
+  if (dirs.length === 0) {
+    box.innerHTML = '<div style="font-size:13px;color:var(--text-muted);padding:8px 0;">Папки ещё не добавлены. Добавьте путь к папке с вашей музыкой на сервере ниже.</div>';
+    return;
+  }
+  dirs.forEach((d, idx) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#181920;border-radius:var(--radius-md);border:1px solid var(--card-border);';
+    row.innerHTML = `<span style="font-family:monospace;font-size:13px;">${escapeHtml(d)}</span>
+                     <button class="danger sm" onclick="removeMyDir(${idx})">Удалить</button>`;
+    box.appendChild(row);
+  });
+}
+
+function renderSharedFolders(folders) {
+  const box = document.getElementById('myLibSharedList');
+  box.innerHTML = '';
+  if (folders.length === 0) {
+    box.innerHTML = '<div style="font-size:13px;color:var(--text-muted);">Вам доступна вся общая музыка сервера (ограничений по папкам нет).</div>';
+    return;
+  }
+  folders.forEach(f => {
+    const el = document.createElement('div');
+    el.style.cssText = 'padding:6px 10px;background:#181920;border-radius:var(--radius-md);font-family:monospace;font-size:13px;margin-bottom:6px;';
+    el.textContent = f;
+    box.appendChild(el);
+  });
+}
+
+async function addMyDir() {
+  const inp = document.getElementById('newDirPath');
+  const val = inp.value.trim();
+  if (!val) return;
+  const msg = document.getElementById('myLibDirsMsg');
   try {
-    await api('/me/listenbrainz-token', { method: 'PUT', body: JSON.stringify({ token: lbToken.value }) });
-    m.textContent = 'Токен сохранён.';
-  } catch (e) { m.className = 'msg err'; m.textContent = e.message; }
+    const info = await api('/me/library');
+    const dirs = info.dirs || [];
+    if (!dirs.includes(val)) dirs.push(val);
+    await api('/me/library/dirs', {
+      method: 'PUT',
+      body: JSON.stringify({ dirs })
+    });
+    inp.value = '';
+    msg.className = 'alert success';
+    msg.textContent = 'Папка добавлена! Нажмите «Пересканировать», чтобы обновить треки.';
+    loadMyLibrary();
+  } catch (e) {
+    msg.className = 'alert error';
+    msg.textContent = e.message;
+  }
 }
-async function saveMode() {
-  const m = document.getElementById('ownerMsg'); m.className = 'msg'; m.textContent = '';
-  try { const d = await api('/library-mode', { method: 'PUT', body: JSON.stringify({ mode: mode.value }) });
-    m.textContent = d.note || 'Готово.'; } catch (e) { m.className = 'msg err'; m.textContent = e.message; }
-}
-async function rescan() {
-  const m = document.getElementById('ownerMsg'); m.className = 'msg'; m.textContent = 'Сканирую…';
-  try { const r = await api('/scan', { method: 'POST' });
-    m.textContent = `Готово: +${r.added} обновлено ${r.updated} удалено ${r.removed}`;
-    ALL = await api('/tracks?limit=1000'); renderTracks();
-  } catch (e) { m.className = 'msg err'; m.textContent = e.message; }
-}
-async function makeInvite() {
-  const out = document.getElementById('inviteOut');
-  try { const d = await api('/invites', { method: 'POST', body: JSON.stringify({ role: invRole.value, library_id: 0, ttl_secs: 604800 }) });
-    out.textContent = 'Инвайт (7 дней): ' + (d.token || JSON.stringify(d));
-  } catch (e) { out.className = 'msg err'; out.textContent = e.message; }
-}
-async function loadUsers() {
+
+async function removeMyDir(index) {
+  if (!confirm('Удалить эту папку из вашей библиотеки?')) return;
   try {
-    const us = await api('/users');
-    document.getElementById('users').innerHTML = us.map(u =>
-      `<div class="row" style="cursor:default"><div class="meta"><div class="t">${u.username} · ${u.role}</div>
-      <div class="s">библиотека ${u.library_id}</div></div>
-      ${u.role !== 'owner' ? `<button onclick="delUser(${u.id})">Удалить</button>` : ''}</div>`).join('');
-  } catch (e) {}
+    const info = await api('/me/library');
+    const dirs = info.dirs || [];
+    dirs.splice(index, 1);
+    await api('/me/library/dirs', {
+      method: 'PUT',
+      body: JSON.stringify({ dirs })
+    });
+    loadMyLibrary();
+  } catch (e) { alert(e.message); }
 }
-async function delUser(id) {
-  if (!confirm('Удалить пользователя и всё его состояние?')) return;
-  try { await api('/users/' + id, { method: 'DELETE' }); loadUsers(); } catch (e) { alert(e.message); }
+
+async function scanMyLib() {
+  const msg = document.getElementById('myLibDirsMsg');
+  msg.className = 'alert info';
+  msg.textContent = 'Сканирование вашей библиотеки запущено, подождите...';
+  try {
+    const rep = await api('/me/library/scan', { method: 'POST' });
+    msg.className = 'alert success';
+    msg.textContent = `Сканирование завершено: проверено ${rep.scanned}, добавлено +${rep.added}, обновлено ${rep.updated}, удалено ${rep.removed}, ошибок ${rep.failed}`;
+    loadMyLibrary();
+    ALL_TRACKS = await api('/tracks?limit=1000');
+    renderTracks(ALL_TRACKS);
+  } catch (e) {
+    msg.className = 'alert error';
+    msg.textContent = e.message;
+  }
+}
+
+// Загрузка файлов
+function handleFileSelect(e) {
+  const files = e.target.files;
+  if (files && files.length > 0) uploadFiles(Array.from(files));
+}
+
+const dropzone = document.getElementById('dropzone');
+dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', (e) => {
+  e.preventDefault(); dropzone.classList.remove('dragover');
+  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+    uploadFiles(Array.from(e.dataTransfer.files));
+  }
+});
+
+async function uploadFiles(files) {
+  const box = document.getElementById('uploadProgressBox');
+  show('uploadProgressBox');
+  box.innerHTML = '<h3>Загрузка аудиофайлов:</h3>';
+
+  for (const file of files) {
+    const item = document.createElement('div');
+    item.style.cssText = 'padding:8px 12px;background:#181920;border-radius:var(--radius-md);display:flex;align-items:center;justify-content:space-between;font-size:13px;';
+    item.innerHTML = `<span>${escapeHtml(file.name)}</span><span class="status" style="color:#7cb2f8;">Загрузка...</span>`;
+    box.appendChild(item);
+    const statusEl = item.querySelector('.status');
+
+    try {
+      const url = '/api/tracks/upload?filename=' + encodeURIComponent(file.name);
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + T(),
+          'Content-Type': 'application/octet-stream',
+        },
+        body: file,
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      statusEl.style.color = 'var(--green)';
+      statusEl.textContent = data.deduplicated ? '✓ Добавлен (дедупликация)' : '✓ Успешно добавлен';
+    } catch (err) {
+      statusEl.style.color = 'var(--red)';
+      statusEl.textContent = 'Ошибка: ' + err.message;
+    }
+  }
+
+  // Обновляем список треков
+  ALL_TRACKS = await api('/tracks?limit=1000');
+  renderTracks(ALL_TRACKS);
+}
+
+// --- Профиль пользователя ---
+async function loadProfile() {
+  try {
+    const me = await api('/me');
+    document.getElementById('nowPlayingVisibleCb').checked = !!me.user.now_playing_visible;
+    const tag = document.getElementById('subsonicStatusTag');
+    tag.textContent = me.user.has_subsonic ? 'Активен' : 'Не настроен';
+    tag.style.background = me.user.has_subsonic ? '#1a3826' : '#2b221a';
+    tag.style.color = me.user.has_subsonic ? '#65d68d' : '#e6a15c';
+
+    // Формируем Subsonic URL
+    const host = window.location.host;
+    document.getElementById('subsonicUrl').textContent = window.location.protocol + '//' + host + '/rest';
+  } catch (e) { console.error(e); }
+}
+
+async function changeMyPassword() {
+  const msg = document.getElementById('profPwMsg');
+  msg.className = 'alert hidden';
+  const oldP = profOldPw.value;
+  const newP = profNewPw.value;
+  if (!newP || newP.length < 8) {
+    msg.className = 'alert error';
+    msg.textContent = 'Новый пароль должен содержать не менее 8 символов';
+    return;
+  }
+  try {
+    await api('/me/password', {
+      method: 'PUT',
+      body: JSON.stringify({ old: oldP, new: newP })
+    });
+    msg.className = 'alert success';
+    msg.textContent = 'Пароль успешно изменён! Сессия обновлена, выполните вход заново.';
+    setTimeout(logout, 1500);
+  } catch (e) {
+    msg.className = 'alert error';
+    msg.textContent = e.message;
+  }
+}
+
+async function saveSubsonicPassword() {
+  const msg = document.getElementById('subsonicMsg');
+  const val = subsonicPassInput.value.trim();
+  if (!val || val.length < 8) {
+    msg.className = 'alert error';
+    msg.textContent = 'Пароль Subsonic должен быть от 8 символов';
+    return;
+  }
+  try {
+    await api('/me/subsonic-password', {
+      method: 'PUT',
+      body: JSON.stringify({ password: val })
+    });
+    subsonicPassInput.value = '';
+    msg.className = 'alert success';
+    msg.textContent = 'Пароль Subsonic сохранён! Вы можете подключаться в приложениях Symfonium/DSub.';
+    loadProfile();
+  } catch (e) {
+    msg.className = 'alert error';
+    msg.textContent = e.message;
+  }
+}
+
+async function revokeSubsonicPassword() {
+  if (!confirm('Отозвать пароль и закрыть доступ по Subsonic-протоколу?')) return;
+  const msg = document.getElementById('subsonicMsg');
+  try {
+    await api('/me/subsonic-password', {
+      method: 'PUT',
+      body: JSON.stringify({ password: '' })
+    });
+    msg.className = 'alert success';
+    msg.textContent = 'Доступ по Subsonic отозван.';
+    loadProfile();
+  } catch (e) {
+    msg.className = 'alert error';
+    msg.textContent = e.message;
+  }
+}
+
+async function saveListenbrainzToken() {
+  const msg = document.getElementById('lbMsg');
+  const val = lbTokenInput.value.trim();
+  try {
+    await api('/me/listenbrainz-token', {
+      method: 'PUT',
+      body: JSON.stringify({ token: val })
+    });
+    msg.className = 'alert success';
+    msg.textContent = val ? 'Токен ListenBrainz сохранён!' : 'Скробблинг отключен.';
+  } catch (e) {
+    msg.className = 'alert error';
+    msg.textContent = e.message;
+  }
+}
+
+async function toggleNowPlayingVisible(val) {
+  try {
+    await api('/me', {
+      method: 'PATCH',
+      body: JSON.stringify({ now_playing_visible: val })
+    });
+  } catch (e) { console.error(e); }
+}
+
+// --- Панель администратора ---
+async function loadAdminData() {
+  loadAdminOverview();
+  loadUsersTable();
+  loadDevicesTable();
+  loadLibrariesTable();
+}
+
+async function loadAdminOverview() {
+  try {
+    const o = await api('/admin/overview');
+    document.getElementById('mCpu').textContent = o.cpu_cores + ' ядер';
+    document.getElementById('mRam').textContent = o.total_memory_mb + ' МБ';
+    document.getElementById('mTracks').textContent = o.total_tracks;
+    document.getElementById('mUsers').textContent = o.total_users;
+    document.getElementById('adminModeSelect').value = o.library_mode;
+  } catch (e) { console.error(e); }
+}
+
+async function loadUsersTable() {
+  const tbody = document.getElementById('usersTableBody');
+  tbody.innerHTML = '';
+  try {
+    const users = await api('/users');
+    users.forEach(u => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${u.id}</td>
+        <td><b>${escapeHtml(u.username)}</b></td>
+        <td><span class="role-tag ${u.role}">${u.role}</span></td>
+        <td>Библиотека ${u.library_id}</td>
+        <td>${u.has_subsonic ? '<span style="color:var(--green);">✓ Да</span>' : '<span style="color:var(--text-muted);">Нет</span>'}</td>
+        <td>${new Date(u.created_at * 1000).toLocaleDateString()}</td>
+        <td>
+          <button class="sm" onclick="openEditUserModal(${u.id}, '${escapeHtml(u.username)}', '${u.role}', ${u.library_id})">Изменить</button>
+          <button class="sm" onclick="openResetUserPwModal(${u.id}, '${escapeHtml(u.username)}')">Пароль</button>
+          <button class="sm" onclick="openUserFoldersModal(${u.id}, '${escapeHtml(u.username)}')">Папки</button>
+          ${u.role !== 'owner' ? `<button class="sm danger" onclick="deleteUser(${u.id}, '${escapeHtml(u.username)}')">Удалить</button>` : ''}
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } catch (e) { console.error(e); }
+}
+
+async function loadDevicesTable() {
+  const tbody = document.getElementById('devicesTableBody');
+  tbody.innerHTML = '';
+  try {
+    const devs = await api('/auth/devices');
+    if (devs.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">Сопряжённых устройств нет</td></tr>';
+      return;
+    }
+    devs.forEach(d => {
+      const tr = document.createElement('tr');
+      const seen = d.last_seen_at ? new Date(d.last_seen_at * 1000).toLocaleString() : 'Никогда';
+      tr.innerHTML = `
+        <td>${d.id}</td>
+        <td><b>${escapeHtml(d.name)}</b></td>
+        <td>${d.user_id ? 'ID ' + d.user_id : 'Одиночный'}</td>
+        <td>${new Date(d.created_at * 1000).toLocaleDateString()}</td>
+        <td>${seen}</td>
+        <td><button class="sm danger" onclick="revokeDevice(${d.id})">Отозвать</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } catch (e) { console.error(e); }
+}
+
+async function revokeDevice(id) {
+  if (!confirm('Отозвать сопряжение для этого устройства?')) return;
+  try {
+    await api('/auth/devices/' + id, { method: 'DELETE' });
+    loadDevicesTable();
+  } catch (e) { alert(e.message); }
+}
+
+async function loadLibrariesTable() {
+  const tbody = document.getElementById('librariesTableBody');
+  tbody.innerHTML = '';
+  try {
+    const libs = await api('/libraries');
+    libs.forEach(l => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${l.id}</td>
+        <td><b>${escapeHtml(l.name)}</b></td>
+        <td><small style="font-family:monospace;">${escapeHtml(l.dirs.join(', ') || 'По умолчанию')}</small></td>
+        <td>${l.tracks_count}</td>
+        <td>${l.users_count}</td>
+        <td>
+          <button class="sm" onclick="openEditLibraryModal(${l.id}, '${escapeHtml(l.name)}', ${JSON.stringify(l.dirs).replace(/"/g, '&quot;')})">Папки</button>
+          ${l.id > 0 ? `<button class="sm danger" onclick="deleteLibrary(${l.id})">Удалить</button>` : ''}
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } catch (e) { console.error(e); }
+}
+
+async function changeLibraryMode() {
+  const sel = document.getElementById('adminModeSelect');
+  const mode = sel.value;
+  if (!confirm(`ВНИМАНИЕ! Смена режима на «${mode}» очистит таблицу треков в базе данных и потребует нового сканирования. Продолжить?`)) return;
+  try {
+    const res = await api('/library-mode', {
+      method: 'PUT',
+      body: JSON.stringify({ mode })
+    });
+    alert(res.note || 'Режим изменён! Запустите сканирование.');
+    loadAdminData();
+  } catch (e) { alert(e.message); }
+}
+
+// Административные действия обслуживания
+async function adminScanAll() {
+  const msg = document.getElementById('adminActionMsg');
+  msg.className = 'alert info';
+  msg.textContent = 'Полное сканирование всех папок запущено...';
+  try {
+    const r = await api('/scan', { method: 'POST' });
+    msg.className = 'alert success';
+    msg.textContent = `Сканирование завершено: проверено ${r.scanned}, добавлено +${r.added}, обновлено ${r.updated}, удалено ${r.removed}, ошибок ${r.failed}`;
+    loadAdminOverview();
+  } catch (e) {
+    msg.className = 'alert error';
+    msg.textContent = e.message;
+  }
+}
+
+async function adminEnrich() {
+  const msg = document.getElementById('adminActionMsg');
+  msg.className = 'alert info';
+  msg.textContent = 'Обогащение метаданных MusicBrainz запущено в фоне...';
+  try {
+    const r = await api('/library/enrich', { method: 'POST' });
+    msg.className = 'alert success';
+    msg.textContent = `MusicBrainz: обработано ${r.processed} треков, обогащено ${r.enriched}`;
+  } catch (e) {
+    msg.className = 'alert error';
+    msg.textContent = e.message;
+  }
+}
+
+async function adminAnalyze() {
+  const msg = document.getElementById('adminActionMsg');
+  msg.className = 'alert info';
+  msg.textContent = 'Аудиоанализ (ReplayGain, BPM, Key, Waveform) запущен...';
+  try {
+    const r = await api('/library/analyze', { method: 'POST' });
+    msg.className = 'alert success';
+    msg.textContent = `Анализ завершён: обработано ${r.analyzed} треков, осталось ${r.remaining}`;
+  } catch (e) {
+    msg.className = 'alert error';
+    msg.textContent = e.message;
+  }
+}
+
+async function adminCheckHealth() {
+  const repBox = document.getElementById('adminHealthReport');
+  show('adminHealthReport');
+  repBox.innerHTML = '<div class="alert info">Проверка здоровья библиотеки...</div>';
+  try {
+    const h = await api('/library/health');
+    let html = `
+      <div class="card stack" style="background:#181920;">
+        <h3>Отчёт о здоровье библиотеки</h3>
+        <div class="grid3">
+          <div class="stat-badge"><span class="stat-label">Всего файлов</span><span class="stat-value">${h.tracks_total}</span></div>
+          <div class="stat-badge"><span class="stat-label">Битых файлов</span><span class="stat-value" style="color:${h.broken_count > 0 ? 'var(--red)' : 'var(--green)'};">${h.broken_count}</span></div>
+          <div class="stat-badge"><span class="stat-label">Без тегов</span><span class="stat-value">${h.missing_tags_count}</span></div>
+        </div>
+    `;
+    if (h.broken_files && h.broken_files.length > 0) {
+      html += `<div><h4 style="color:var(--red);margin-top:10px;">Битые файлы:</h4>`;
+      h.broken_files.forEach(f => {
+        html += `<div style="font-size:12px;font-family:monospace;padding:4px 0;">${escapeHtml(f.path)}: ${escapeHtml(f.error)}</div>`;
+      });
+      html += `</div>`;
+    }
+    html += `</div>`;
+    repBox.innerHTML = html;
+  } catch (e) {
+    repBox.innerHTML = `<div class="alert error">${e.message}</div>`;
+  }
+}
+
+// --- Модальные окна ---
+function openModal(contentHtml) {
+  const box = document.getElementById('modalBox');
+  box.innerHTML = contentHtml;
+  show('modalOverlay');
+}
+
+function closeModal() {
+  hide('modalOverlay');
+}
+
+function closeModalOnBg(e) {
+  if (e.target.id === 'modalOverlay') closeModal();
+}
+
+// Сопряжение устройства (QR + код)
+async function openPairModal() {
+  openModal('<div class="alert info">Генерация кода сопряжения...</div>');
+  try {
+    const res = await api('/auth/pair-code', { method: 'POST', body: JSON.stringify({}) });
+    openModal(`
+      <div style="text-align:center;">
+        <h3>📱 Сопряжение с приложением Nami</h3>
+        <div style="background:#fff;padding:12px;border-radius:12px;display:inline-block;margin:10px 0;">
+          ${res.qr_svg}
+        </div>
+        <div style="font-size:13px;color:var(--text-secondary);margin-top:6px;">Отсканируйте камерой смартфона в приложении Nami</div>
+        <div style="margin:16px 0;">
+          <span style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">Или введите 8-значный код:</span>
+          <code style="font-size:28px;letter-spacing:6px;font-weight:700;color:var(--accent);background:#181920;padding:6px 16px;border-radius:8px;border:1px solid var(--card-border);">${res.code}</code>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">Код действует 10 минут для одного устройства</div>
+        <button class="primary" onclick="closeModal()">Закрыть</button>
+      </div>
+    `);
+  } catch (e) {
+    openModal(`<div class="alert error">${e.message}</div><button onclick="closeModal()">Закрыть</button>`);
+  }
+}
+
+// Добавить пользователя
+function openAddUserModal() {
+  openModal(`
+    <div class="stack">
+      <h3>Добавление пользователя</h3>
+      <div>
+        <label>Имя пользователя (логин)</label>
+        <input id="modalAddUsername" placeholder="Например: alex">
+      </div>
+      <div>
+        <label>Пароль (от 8 символов)</label>
+        <div style="display:flex;gap:8px;">
+          <input id="modalAddPassword" type="password" placeholder="Минимум 8 символов">
+          <button type="button" class="sm" onclick="document.getElementById('modalAddPassword').value = generateRandomPassword(); document.getElementById('modalAddPassword').type='text';">Сгенерировать</button>
+        </div>
+      </div>
+      <div class="grid2">
+        <div>
+          <label>Роль</label>
+          <select id="modalAddRole">
+            <option value="user">Обычный пользователь (user)</option>
+            <option value="owner">Администратор (owner)</option>
+            <option value="guest">Гость (guest)</option>
+          </select>
+        </div>
+        <div>
+          <label>ID библиотеки (0 = общая)</label>
+          <input id="modalAddLibId" type="number" value="0">
+        </div>
+      </div>
+      <div id="modalAddUserErr" class="alert error hidden"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;">
+        <button onclick="closeModal()">Отмена</button>
+        <button class="primary" onclick="submitAddUser()">Создать пользователя</button>
+      </div>
+    </div>
+  `);
+}
+
+function generateRandomPassword() {
+  const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%&*';
+  let pass = '';
+  for (let i = 0; i < 12; i++) pass += chars.charAt(Math.floor(Math.random() * chars.length));
+  return pass;
+}
+
+async function submitAddUser() {
+  const u = modalAddUsername.value.trim();
+  const p = modalAddPassword.value;
+  const r = modalAddRole.value;
+  const l = parseInt(modalAddLibId.value, 10) || 0;
+  const err = document.getElementById('modalAddUserErr');
+  err.classList.add('hidden');
+  try {
+    await api('/users', {
+      method: 'POST',
+      body: JSON.stringify({ username: u, password: p, role: r, library_id: l })
+    });
+    closeModal();
+    loadUsersTable();
+    loadAdminOverview();
+  } catch (e) {
+    err.textContent = e.message;
+    err.classList.remove('hidden');
+  }
+}
+
+// Изменение пользователя
+function openEditUserModal(id, username, role, libId) {
+  openModal(`
+    <div class="stack">
+      <h3>Редактирование: ${escapeHtml(username)}</h3>
+      <div class="grid2">
+        <div>
+          <label>Роль</label>
+          <select id="modalEditRole">
+            <option value="user" ${role === 'user' ? 'selected' : ''}>Обычный пользователь (user)</option>
+            <option value="owner" ${role === 'owner' ? 'selected' : ''}>Администратор (owner)</option>
+            <option value="guest" ${role === 'guest' ? 'selected' : ''}>Гость (guest)</option>
+          </select>
+        </div>
+        <div>
+          <label>ID библиотеки</label>
+          <input id="modalEditLibId" type="number" value="${libId}">
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+        <button onclick="closeModal()">Отмена</button>
+        <button class="primary" onclick="submitEditUser(${id})">Сохранить</button>
+      </div>
+    </div>
+  `);
+}
+
+async function submitEditUser(id) {
+  const role = modalEditRole.value;
+  const library_id = parseInt(modalEditLibId.value, 10) || 0;
+  try {
+    await api('/users/' + id, {
+      method: 'PUT',
+      body: JSON.stringify({ role, library_id })
+    });
+    closeModal();
+    loadUsersTable();
+  } catch (e) { alert(e.message); }
+}
+
+// Сброс пароля пользователя админом
+function openResetUserPwModal(id, username) {
+  openModal(`
+    <div class="stack">
+      <h3>Сброс пароля: ${escapeHtml(username)}</h3>
+      <div class="card-desc">Все активные сессии пользователя будут завершены.</div>
+      <div>
+        <label>Новый пароль (от 8 символов)</label>
+        <div style="display:flex;gap:8px;">
+          <input id="modalResetPwInput" type="password" placeholder="Минимум 8 символов">
+          <button type="button" class="sm" onclick="document.getElementById('modalResetPwInput').value = generateRandomPassword(); document.getElementById('modalResetPwInput').type='text';">Сгенерировать</button>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+        <button onclick="closeModal()">Отмена</button>
+        <button class="danger" onclick="submitResetUserPw(${id})">Сбросить пароль</button>
+      </div>
+    </div>
+  `);
+}
+
+async function submitResetUserPw(id) {
+  const newPw = modalResetPwInput.value;
+  if (!newPw || newPw.length < 8) { alert('Пароль должен быть от 8 символов'); return; }
+  try {
+    await api('/users/' + id + '/password', {
+      method: 'PUT',
+      body: JSON.stringify({ new: newPw })
+    });
+    alert('Пароль успешно сброшен!');
+    closeModal();
+  } catch (e) { alert(e.message); }
+}
+
+// Папки доступа пользователя (Shared режим)
+async function openUserFoldersModal(id, username) {
+  openModal('<div class="alert info">Загрузка папок доступа...</div>');
+  try {
+    const folders = await api('/users/' + id + '/folders');
+    openModal(`
+      <div class="stack">
+        <h3>Папки доступа: ${escapeHtml(username)}</h3>
+        <div class="card-desc">В режиме Shared пользователь видит только файлы из перечисленных папок. Если список пуст — пользователю видны ВСЕ треки.</div>
+        <div id="userFoldersList" class="stack">
+          ${folders.map((f, i) => `
+            <div style="display:flex;gap:6px;align-items:center;">
+              <input class="u-folder-item" value="${escapeHtml(f)}">
+              <button class="danger sm" onclick="this.parentElement.remove()">✕</button>
+            </div>
+          `).join('')}
+        </div>
+        <button class="sm" onclick="addUserFolderRow()">+ Добавить путь к папке</button>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+          <button onclick="closeModal()">Отмена</button>
+          <button class="primary" onclick="submitUserFolders(${id})">Сохранить папки</button>
+        </div>
+      </div>
+    `);
+  } catch (e) { alert(e.message); }
+}
+
+function addUserFolderRow() {
+  const box = document.getElementById('userFoldersList');
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex;gap:6px;align-items:center;';
+  div.innerHTML = `<input class="u-folder-item" placeholder="/music/shared/rock"><button class="danger sm" onclick="this.parentElement.remove()">✕</button>`;
+  box.appendChild(div);
+}
+
+async function submitUserFolders(id) {
+  const items = Array.from(document.querySelectorAll('.u-folder-item'))
+    .map(i => i.value.trim())
+    .filter(Boolean);
+  try {
+    await api('/users/' + id + '/folders', {
+      method: 'PUT',
+      body: JSON.stringify(items)
+    });
+    closeModal();
+  } catch (e) { alert(e.message); }
+}
+
+async function deleteUser(id, username) {
+  if (!confirm(`Удалить пользователя «${username}» и всё его состояние? Это действие необратимо.`)) return;
+  try {
+    await api('/users/' + id, { method: 'DELETE' });
+    loadUsersTable();
+    loadAdminOverview();
+  } catch (e) { alert(e.message); }
+}
+
+// Создание инвайта
+function openInviteModal() {
+  openModal(`
+    <div class="stack">
+      <h3>Создать пригласительную ссылку (Инвайт)</h3>
+      <div class="grid2">
+        <div>
+          <label>Роль нового пользователя</label>
+          <select id="modalInvRole">
+            <option value="user">Обычный пользователь (user)</option>
+            <option value="guest">Гость (guest)</option>
+          </select>
+        </div>
+        <div>
+          <label>Срок действия ссылки</label>
+          <select id="modalInvTtl">
+            <option value="86400">1 день (24 часа)</option>
+            <option value="604800" selected>7 дней (1 неделя)</option>
+            <option value="2592000">30 дней (1 месяц)</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label>ID библиотеки для привязки (0 = общая)</label>
+        <input id="modalInvLibId" type="number" value="0">
+      </div>
+      <div id="modalInvResult" class="stack hidden" style="margin-top:10px;"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+        <button onclick="closeModal()">Закрыть</button>
+        <button class="primary" onclick="submitCreateInvite()">Сгенерировать ссылку</button>
+      </div>
+    </div>
+  `);
+}
+
+async function submitCreateInvite() {
+  const role = modalInvRole.value;
+  const ttl_secs = parseInt(modalInvTtl.value, 10);
+  const library_id = parseInt(modalInvLibId.value, 10) || 0;
+  const resBox = document.getElementById('modalInvResult');
+  try {
+    const res = await api('/invites', {
+      method: 'POST',
+      body: JSON.stringify({ role, ttl_secs, library_id })
+    });
+    show('modalInvResult');
+    const fullUrl = window.location.origin + '/#invite=' + res.token;
+    resBox.innerHTML = `
+      <div class="alert success">Инвайт успешно создан! Действует до ${new Date(res.expires_at * 1000).toLocaleString()}</div>
+      <label>Ссылка для регистрации:</label>
+      <div style="display:flex;gap:6px;">
+        <input readonly value="${fullUrl}" id="invLinkInput" style="font-family:monospace;font-size:12px;">
+        <button class="blue sm" onclick="navigator.clipboard.writeText(document.getElementById('invLinkInput').value); alert('Ссылка скопирована в буфер обмена!');">Копировать</button>
+      </div>
+    `;
+  } catch (e) {
+    show('modalInvResult');
+    resBox.innerHTML = `<div class="alert error">${e.message}</div>`;
+  }
+}
+
+// Библиотеки (добавление / редактирование)
+function openAddLibraryModal() {
+  openModal(`
+    <div class="stack">
+      <h3>Новая персональная библиотека</h3>
+      <div>
+        <label>Название библиотеки</label>
+        <input id="modalLibName" placeholder="Например: Библиотека Артёма">
+      </div>
+      <div>
+        <label>Папки (по одной на строке)</label>
+        <textarea id="modalLibDirs" rows="4" placeholder="/music/artem/rock&#10;/music/artem/electronic"></textarea>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+        <button onclick="closeModal()">Отмена</button>
+        <button class="primary" onclick="submitAddLibrary()">Создать</button>
+      </div>
+    </div>
+  `);
+}
+
+async function submitAddLibrary() {
+  const name = modalLibName.value.trim();
+  const dirs = modalLibDirs.value.split('\n').map(s => s.trim()).filter(Boolean);
+  if (!name) { alert('Введите название библиотеки'); return; }
+  try {
+    await api('/libraries', {
+      method: 'POST',
+      body: JSON.stringify({ name, dirs })
+    });
+    closeModal();
+    loadLibrariesTable();
+    loadAdminOverview();
+  } catch (e) { alert(e.message); }
+}
+
+function openEditLibraryModal(id, name, dirs) {
+  openModal(`
+    <div class="stack">
+      <h3>Редактирование: ${escapeHtml(name)}</h3>
+      ${id > 0 ? `
+        <div>
+          <label>Название</label>
+          <input id="modalEditLibName" value="${escapeHtml(name)}">
+        </div>
+      ` : ''}
+      <div>
+        <label>Папки музыки на сервере (по одной на строке)</label>
+        <textarea id="modalEditLibDirs" rows="5">${escapeHtml((dirs || []).join('\n'))}</textarea>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+        <button onclick="closeModal()">Отмена</button>
+        <button class="primary" onclick="submitEditLibrary(${id})">Сохранить</button>
+      </div>
+    </div>
+  `);
+}
+
+async function submitEditLibrary(id) {
+  const nameInput = document.getElementById('modalEditLibName');
+  const name = nameInput ? nameInput.value.trim() : undefined;
+  const dirs = modalEditLibDirs.value.split('\n').map(s => s.trim()).filter(Boolean);
+  try {
+    await api('/libraries/' + id, {
+      method: 'PUT',
+      body: JSON.stringify({ name, dirs })
+    });
+    closeModal();
+    loadLibrariesTable();
+  } catch (e) { alert(e.message); }
+}
+
+async function deleteLibrary(id) {
+  if (!confirm('Удалить эту библиотеку? Все её треки будут удалены из базы, а участники переведены в основную библиотеку.')) return;
+  try {
+    await api('/libraries/' + id, { method: 'DELETE' });
+    loadLibrariesTable();
+    loadAdminOverview();
+  } catch (e) { alert(e.message); }
+}
+
+// Вспомогательное экранирование
+function escapeHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
-if (T()) start(); else show('login');
+if (T()) initApp(); else show('loginView');
 </script>
 </body>
 </html>

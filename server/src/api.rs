@@ -114,17 +114,24 @@ pub fn router(state: Shared) -> Router {
         .route("/api/auth/devices", get(devices))
         .route("/api/auth/devices/{id}", delete(revoke_device))
         .route("/api/auth/logout", post(logout))
+        .route("/api/auth/pair-code", post(generate_pair_code))
         .route("/api/me", get(me).patch(patch_me))
         .route("/api/me/subsonic-password", axum::routing::put(put_subsonic_password))
         .route("/api/me/password", axum::routing::put(put_my_password))
         .route("/api/me/listenbrainz-token", axum::routing::put(put_listenbrainz_token))
+        .route("/api/me/library", get(my_library))
+        .route("/api/me/library/dirs", axum::routing::put(put_my_library_dirs))
+        .route("/api/me/library/scan", post(scan_my_library))
         .route("/api/scrobble", post(scrobble_handler))
         .route("/api/users", get(list_users).post(create_user))
-        .route("/api/users/{id}", delete(delete_user))
+        .route("/api/users/{id}", delete(delete_user).put(update_user))
         .route("/api/users/{id}/password", axum::routing::put(reset_user_password))
         .route("/api/users/{id}/folders", get(get_folders).put(put_folders))
         .route("/api/invites", post(create_invite))
+        .route("/api/libraries", get(list_libraries).post(create_library))
+        .route("/api/libraries/{id}", axum::routing::put(update_library).delete(delete_library))
         .route("/api/library-mode", get(get_library_mode).put(put_library_mode))
+        .route("/api/admin/overview", get(admin_overview))
         .route("/api/now-playing", get(now_playing))
         .route("/api/jam/history", get(jam_history))
         .route("/api/share", post(create_share))
@@ -1122,13 +1129,28 @@ async fn setup_page(
         // видимость библиотеки. В одиночном режиме владельца нет - и привязки тоже.
         auth::create_code(&db, ident.and_then(|i| i.user_id))?
     };
+    let host_header = req.headers().get(header::HOST).and_then(|v| v.to_str().ok());
+    let (_uri, qr, warning) = build_pair_uri_and_qr(&st, &code, host_header)?;
+
+    Ok(Html(format!(
+        "<!doctype html><meta charset=utf-8><title>NAMI - сопряжение</title>\
+         <style>body{{font:16px system-ui;max-width:520px;margin:40px auto;text-align:center}}\
+         code{{font-size:28px;letter-spacing:4px}}.warn{{color:#b00}}</style>\
+         <h1>Сопряжение устройства</h1>{qr}<p>Код: <code>{code}</code></p>\
+         <p>Действует 10 минут, одно устройство.</p>{warning}"
+    )))
+}
+
+fn build_pair_uri_and_qr(
+    st: &AppState,
+    code: &str,
+    host_header: Option<&str>,
+) -> Result<(String, String, String), ApiError> {
     let mut hosts = Vec::new();
-    if let Some(host_header) = req.headers().get(header::HOST) {
-        if let Ok(host_str) = host_header.to_str() {
-            let h = host_str.split(':').next().unwrap_or(host_str).trim();
-            if !h.is_empty() && h != "localhost" && h != "127.0.0.1" {
-                hosts.push(h.to_string());
-            }
+    if let Some(host_str) = host_header {
+        let h = host_str.split(':').next().unwrap_or(host_str).trim();
+        if !h.is_empty() && h != "localhost" && h != "127.0.0.1" {
+            hosts.push(h.to_string());
         }
     }
 
@@ -1178,16 +1200,54 @@ async fn setup_page(
     let qr = qrcode::QrCode::new(uri.as_bytes())
         .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .render::<qrcode::render::svg::Color>()
-        .min_dimensions(280, 280)
+        .min_dimensions(260, 260)
         .build();
 
-    Ok(Html(format!(
-        "<!doctype html><meta charset=utf-8><title>NAMI - сопряжение</title>\
-         <style>body{{font:16px system-ui;max-width:520px;margin:40px auto;text-align:center}}\
-         code{{font-size:28px;letter-spacing:4px}}.warn{{color:#b00}}</style>\
-         <h1>Сопряжение устройства</h1>{qr}<p>Код: <code>{code}</code></p>\
-         <p>Действует 10 минут, одно устройство.</p>{warning}"
-    )))
+    Ok((uri, qr, warning))
+}
+
+#[derive(Deserialize, Default)]
+struct PairCodeReq {
+    #[serde(default)]
+    user_id: Option<i64>,
+}
+
+#[derive(Serialize)]
+struct PairCodeResp {
+    code: String,
+    auth_uri: String,
+    qr_svg: String,
+    expires_at: i64,
+}
+
+async fn generate_pair_code(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    headers: axum::http::HeaderMap,
+    body: Option<Json<PairCodeReq>>,
+) -> ApiResult<Json<PairCodeResp>> {
+    let db = st.db.lock().unwrap();
+    let req = body.map(|b| b.0).unwrap_or_default();
+    let target_user_id = match req.user_id {
+        Some(uid) => {
+            need_owner(&db, &ident)?;
+            Some(uid)
+        }
+        None => ident.user_id,
+    };
+
+    let code = auth::create_code(&db, target_user_id)?;
+    let expires_at = crate::db::now() + auth::CODE_TTL_SECS;
+
+    let host_header = headers.get(header::HOST).and_then(|v| v.to_str().ok());
+    let (auth_uri, qr_svg, _) = build_pair_uri_and_qr(&st, &code, host_header)?;
+
+    Ok(Json(PairCodeResp {
+        code,
+        auth_uri,
+        qr_svg,
+        expires_at,
+    }))
 }
 
 // ---------------------------------------------------------------- синхронизация
@@ -1613,6 +1673,158 @@ async fn put_listenbrainz_token(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[derive(Serialize)]
+struct MyLibraryResp {
+    mode: users::LibraryMode,
+    library_id: i64,
+    dirs: Vec<String>,
+    folders: Vec<String>,
+    tracks_count: i64,
+}
+
+/// Информация о личной библиотеке текущего пользователя.
+async fn my_library(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+) -> ApiResult<Json<MyLibraryResp>> {
+    let db = st.db.lock().unwrap();
+    let mode = users::library_mode(&db);
+    let user_id = ident.user_id.unwrap_or(0);
+    let user = users::get(&db, user_id);
+    let library_id = user.as_ref().map(|u| u.library_id).unwrap_or(0);
+
+    let dirs = if library_id == 0 {
+        let custom: Option<String> = db
+            .query_row("SELECT dirs FROM libraries WHERE id=0", [], |r| r.get(0))
+            .ok();
+        custom
+            .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
+            .unwrap_or_else(|| {
+                st.cfg
+                    .music_dirs
+                    .iter()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .collect()
+            })
+    } else {
+        db.query_row("SELECT dirs FROM libraries WHERE id=?1", [library_id], |r| {
+            let s: String = r.get(0)?;
+            Ok(serde_json::from_str::<Vec<String>>(&s).unwrap_or_default())
+        })
+        .unwrap_or_default()
+    };
+
+    let folders = if user_id > 0 {
+        users::folder_access(&db, user_id)
+    } else {
+        vec![]
+    };
+
+    let (clause, params) = users::visibility(&db, &ident);
+    let query = format!("SELECT COUNT(*) FROM tracks WHERE 1=1{clause}");
+    let tracks_count: i64 = db
+        .query_row(&query, rusqlite::params_from_iter(params), |r| r.get(0))
+        .unwrap_or(0);
+
+    Ok(Json(MyLibraryResp {
+        mode,
+        library_id,
+        dirs,
+        folders,
+        tracks_count,
+    }))
+}
+
+#[derive(Deserialize)]
+struct UpdateDirsReq {
+    dirs: Vec<String>,
+}
+
+/// Добавление / обновление списка папок своей библиотеки.
+async fn put_my_library_dirs(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Json(body): Json<UpdateDirsReq>,
+) -> ApiResult<StatusCode> {
+    let db = st.db.lock().unwrap();
+    let user_id = ident
+        .user_id
+        .ok_or_else(|| ApiError(StatusCode::BAD_REQUEST, "вход не как пользователь".into()))?;
+    let user = users::get(&db, user_id)
+        .ok_or_else(|| ApiError(StatusCode::NOT_FOUND, "пользователь не найден".into()))?;
+
+    let cleaned_dirs: Vec<String> = body
+        .dirs
+        .into_iter()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    let json_dirs = serde_json::to_string(&cleaned_dirs).unwrap_or_else(|_| "[]".into());
+
+    if user.library_id == 0 {
+        need_owner(&db, &ident)?;
+        db.execute(
+            "INSERT INTO libraries (id, name, dirs) VALUES (0, 'Основная библиотека', ?1)
+             ON CONFLICT(id) DO UPDATE SET dirs=excluded.dirs",
+            [&json_dirs],
+        )?;
+    } else {
+        let lib_name = format!("Библиотека {}", user.username);
+        db.execute(
+            "INSERT INTO libraries (id, name, dirs) VALUES (?1, ?2, ?3)
+             ON CONFLICT(id) DO UPDATE SET dirs=excluded.dirs",
+            rusqlite::params![user.library_id, lib_name, json_dirs],
+        )?;
+    }
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Запуск сканирования персональной библиотеки пользователя.
+async fn scan_my_library(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+) -> ApiResult<Json<scanner::ScanReport>> {
+    let user_id = ident
+        .user_id
+        .ok_or_else(|| ApiError(StatusCode::BAD_REQUEST, "вход не как пользователь".into()))?;
+
+    let rep = tokio::task::spawn_blocking(move || -> crate::Res<scanner::ScanReport> {
+        let mut db = st.db.lock().unwrap();
+        let user = users::get(&db, user_id)
+            .ok_or_else(|| "пользователь не найден".to_string())?;
+        let library_id = user.library_id;
+
+        let mut dirs: Vec<std::path::PathBuf> = if library_id == 0 {
+            let custom: Option<String> = db
+                .query_row("SELECT dirs FROM libraries WHERE id=0", [], |r| r.get(0))
+                .ok();
+            custom
+                .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
+                .map(|v| v.into_iter().map(std::path::PathBuf::from).collect())
+                .unwrap_or_else(|| st.cfg.music_dirs.clone())
+        } else {
+            let row: Option<String> = db
+                .query_row("SELECT dirs FROM libraries WHERE id=?1", [library_id], |r| r.get(0))
+                .ok();
+            row.and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
+                .unwrap_or_default()
+                .into_iter()
+                .map(std::path::PathBuf::from)
+                .collect()
+        };
+
+        dirs.push(st.cfg.upload_dir(library_id));
+        scanner::scan(&mut db, &dirs, library_id)
+    })
+    .await
+    .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(rep))
+}
+
 #[derive(Deserialize)]
 struct ScrobbleBody {
     track_id: i64,
@@ -1702,6 +1914,44 @@ async fn delete_user(
     Ok(if n == 1 { StatusCode::NO_CONTENT } else { StatusCode::NOT_FOUND })
 }
 
+#[derive(Deserialize)]
+struct UpdateUserReq {
+    role: Option<String>,
+    library_id: Option<i64>,
+    now_playing_visible: Option<bool>,
+}
+
+/// Редактирование пользователя владельцем (роль, библиотека, видимость).
+async fn update_user(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Path(id): Path<i64>,
+    Json(req): Json<UpdateUserReq>,
+) -> ApiResult<StatusCode> {
+    let db = st.db.lock().unwrap();
+    need_owner(&db, &ident)?;
+
+    if let Some(role) = req.role {
+        let r = match role.trim() {
+            "owner" => "owner",
+            "guest" => "guest",
+            _ => "user",
+        };
+        db.execute("UPDATE users SET role=?2 WHERE id=?1", rusqlite::params![id, r])?;
+    }
+    if let Some(lib_id) = req.library_id {
+        db.execute("UPDATE users SET library_id=?2 WHERE id=?1", rusqlite::params![id, lib_id])?;
+    }
+    if let Some(npv) = req.now_playing_visible {
+        db.execute(
+            "UPDATE users SET now_playing_visible=?2 WHERE id=?1",
+            rusqlite::params![id, npv as i64],
+        )?;
+    }
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
 async fn get_folders(
     State(st): State<Shared>,
     Extension(ident): Extension<Ident>,
@@ -1778,6 +2028,235 @@ async fn put_library_mode(
         "mode": b.mode,
         "note": "библиотека очищена, запустите POST /api/scan",
     })))
+}
+
+#[derive(Serialize)]
+struct LibraryItem {
+    id: i64,
+    name: String,
+    dirs: Vec<String>,
+    tracks_count: i64,
+    users_count: i64,
+}
+
+/// Список всех библиотек сервера (для владельца).
+async fn list_libraries(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+) -> ApiResult<Json<Vec<LibraryItem>>> {
+    let db = st.db.lock().unwrap();
+    need_owner(&db, &ident)?;
+
+    let mut result = Vec::new();
+
+    // Библиотека 0
+    let custom0: Option<String> = db
+        .query_row("SELECT dirs FROM libraries WHERE id=0", [], |r| r.get(0))
+        .ok();
+    let default_dirs: Vec<String> = custom0
+        .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
+        .unwrap_or_else(|| {
+            st.cfg
+                .music_dirs
+                .iter()
+                .map(|p| p.to_string_lossy().to_string())
+                .collect()
+        });
+
+    let default_tracks: i64 = db
+        .query_row("SELECT COUNT(*) FROM tracks WHERE library_id = 0", [], |r| r.get(0))
+        .unwrap_or(0);
+    let default_users: i64 = db
+        .query_row("SELECT COUNT(*) FROM users WHERE library_id = 0", [], |r| r.get(0))
+        .unwrap_or(0);
+
+    result.push(LibraryItem {
+        id: 0,
+        name: "Основная библиотека (0)".into(),
+        dirs: default_dirs,
+        tracks_count: default_tracks,
+        users_count: default_users,
+    });
+
+    let mut stmt = db.prepare("SELECT id, name, dirs FROM libraries WHERE id > 0 ORDER BY id")?;
+    let rows = stmt.query_map([], |r| {
+        let id: i64 = r.get(0)?;
+        let name: String = r.get(1)?;
+        let dirs_str: String = r.get(2)?;
+        let dirs: Vec<String> = serde_json::from_str(&dirs_str).unwrap_or_default();
+        Ok((id, name, dirs))
+    })?;
+
+    for row in rows {
+        let (id, name, dirs) = row?;
+        let tracks_count: i64 = db
+            .query_row("SELECT COUNT(*) FROM tracks WHERE library_id = ?1", [id], |r| r.get(0))
+            .unwrap_or(0);
+        let users_count: i64 = db
+            .query_row("SELECT COUNT(*) FROM users WHERE library_id = ?1", [id], |r| r.get(0))
+            .unwrap_or(0);
+
+        result.push(LibraryItem {
+            id,
+            name,
+            dirs,
+            tracks_count,
+            users_count,
+        });
+    }
+
+    Ok(Json(result))
+}
+
+#[derive(Deserialize)]
+struct CreateLibraryReq {
+    name: String,
+    #[serde(default)]
+    dirs: Vec<String>,
+}
+
+async fn create_library(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Json(req): Json<CreateLibraryReq>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let db = st.db.lock().unwrap();
+    need_owner(&db, &ident)?;
+    let name = req.name.trim();
+    if name.is_empty() {
+        return Err(ApiError(
+            StatusCode::BAD_REQUEST,
+            "название библиотеки не должно быть пустым".into(),
+        ));
+    }
+    let json_dirs = serde_json::to_string(&req.dirs).unwrap_or_else(|_| "[]".into());
+    db.execute(
+        "INSERT INTO libraries (name, dirs) VALUES (?1, ?2)",
+        rusqlite::params![name, json_dirs],
+    )?;
+    let id = db.last_insert_rowid();
+    Ok(Json(serde_json::json!({ "id": id, "name": name })))
+}
+
+#[derive(Deserialize)]
+struct UpdateLibraryReq {
+    name: Option<String>,
+    dirs: Option<Vec<String>>,
+}
+
+async fn update_library(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Path(id): Path<i64>,
+    Json(req): Json<UpdateLibraryReq>,
+) -> ApiResult<StatusCode> {
+    let db = st.db.lock().unwrap();
+    need_owner(&db, &ident)?;
+
+    if id == 0 {
+        if let Some(dirs) = req.dirs {
+            let json_dirs = serde_json::to_string(&dirs).unwrap_or_else(|_| "[]".into());
+            db.execute(
+                "INSERT INTO libraries (id, name, dirs) VALUES (0, 'Основная библиотека', ?1)
+                 ON CONFLICT(id) DO UPDATE SET dirs=excluded.dirs",
+                [&json_dirs],
+            )?;
+        }
+        return Ok(StatusCode::NO_CONTENT);
+    }
+
+    if let Some(name) = req.name {
+        db.execute(
+            "UPDATE libraries SET name=?2 WHERE id=?1",
+            rusqlite::params![id, name.trim()],
+        )?;
+    }
+    if let Some(dirs) = req.dirs {
+        let json_dirs = serde_json::to_string(&dirs).unwrap_or_else(|_| "[]".into());
+        db.execute(
+            "UPDATE libraries SET dirs=?2 WHERE id=?1",
+            rusqlite::params![id, json_dirs],
+        )?;
+    }
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn delete_library(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Path(id): Path<i64>,
+) -> ApiResult<StatusCode> {
+    let db = st.db.lock().unwrap();
+    need_owner(&db, &ident)?;
+
+    if id == 0 {
+        return Err(ApiError(
+            StatusCode::FORBIDDEN,
+            "основную библиотеку удалить нельзя".into(),
+        ));
+    }
+
+    db.execute("UPDATE users SET library_id=0 WHERE library_id=?1", [id])?;
+    db.execute("DELETE FROM tracks WHERE library_id=?1", [id])?;
+    let n = db.execute("DELETE FROM libraries WHERE id=?1", [id])?;
+
+    Ok(if n == 1 {
+        StatusCode::NO_CONTENT
+    } else {
+        StatusCode::NOT_FOUND
+    })
+}
+
+#[derive(Serialize)]
+struct AdminOverviewResp {
+    cpu_cores: usize,
+    total_memory_mb: u64,
+    available_memory_mb: u64,
+    ffmpeg: bool,
+    fpcalc: bool,
+    library_mode: users::LibraryMode,
+    total_tracks: i64,
+    total_users: i64,
+    total_devices: i64,
+    total_libraries: i64,
+}
+
+async fn admin_overview(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+) -> ApiResult<Json<AdminOverviewResp>> {
+    let db = st.db.lock().unwrap();
+    need_owner(&db, &ident)?;
+
+    let host = host::measure();
+    let library_mode = users::library_mode(&db);
+    let total_tracks: i64 = db
+        .query_row("SELECT COUNT(*) FROM tracks", [], |r| r.get(0))
+        .unwrap_or(0);
+    let total_users: i64 = db
+        .query_row("SELECT COUNT(*) FROM users", [], |r| r.get(0))
+        .unwrap_or(0);
+    let total_devices: i64 = db
+        .query_row("SELECT COUNT(*) FROM devices", [], |r| r.get(0))
+        .unwrap_or(0);
+    let total_libraries: i64 = db
+        .query_row("SELECT COUNT(*) FROM libraries WHERE id > 0", [], |r| r.get(0))
+        .unwrap_or(0)
+        + 1;
+
+    Ok(Json(AdminOverviewResp {
+        cpu_cores: host.cpu_cores,
+        total_memory_mb: host.total_memory_mb,
+        available_memory_mb: host.available_memory_mb,
+        ffmpeg: st.ffmpeg,
+        fpcalc: st.fpcalc,
+        library_mode,
+        total_tracks,
+        total_users,
+        total_devices,
+        total_libraries,
+    }))
 }
 
 async fn now_playing(

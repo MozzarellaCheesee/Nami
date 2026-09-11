@@ -83,6 +83,7 @@ pub struct User {
     pub library_id: i64,
     pub now_playing_visible: bool,
     pub created_at: i64,
+    pub has_subsonic: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -155,7 +156,8 @@ pub fn create(
 
 pub fn get(conn: &Connection, id: i64) -> Option<User> {
     conn.query_row(
-        "SELECT id, username, role, library_id, now_playing_visible, created_at
+        "SELECT id, username, role, library_id, now_playing_visible, created_at,
+         (subsonic_password IS NOT NULL AND subsonic_password != '')
          FROM users WHERE id=?1",
         [id],
         row_to_user,
@@ -171,12 +173,14 @@ fn row_to_user(r: &rusqlite::Row<'_>) -> rusqlite::Result<User> {
         library_id: r.get(3)?,
         now_playing_visible: r.get::<_, i64>(4)? != 0,
         created_at: r.get(5)?,
+        has_subsonic: r.get::<_, i64>(6)? != 0,
     })
 }
 
 pub fn list(conn: &Connection) -> rusqlite::Result<Vec<User>> {
     let mut stmt = conn.prepare(
-        "SELECT id, username, role, library_id, now_playing_visible, created_at
+        "SELECT id, username, role, library_id, now_playing_visible, created_at,
+         (subsonic_password IS NOT NULL AND subsonic_password != '')
          FROM users ORDER BY id",
     )?;
     let v = stmt.query_map([], row_to_user)?.collect::<rusqlite::Result<Vec<_>>>()?;
