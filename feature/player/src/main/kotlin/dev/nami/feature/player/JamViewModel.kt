@@ -38,6 +38,7 @@ class JamViewModel @Inject constructor(
     val isServerConfigured: StateFlow<Boolean> = jamRepository.isServerConfigured
     val activeHostUrl: StateFlow<String?> = jamRepository.activeHostUrl
     val allHostUrls: StateFlow<List<String>> = jamRepository.allHostUrls
+    val serverCertSha256: StateFlow<String?> = jamRepository.serverCertSha256
     val recentHosts: StateFlow<List<String>> = jamRepository.recentHosts
     val discoveredRooms: StateFlow<List<dev.nami.domain.DiscoveredJamRoom>> = jamRepository.discoveredRooms
 

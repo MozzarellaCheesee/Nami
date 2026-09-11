@@ -1,5 +1,7 @@
 package dev.nami.data
 
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.nami.core.database.dao.MomentDao
 import dev.nami.core.database.entity.MomentEntity
 import dev.nami.core.model.TrackId
@@ -10,6 +12,7 @@ import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
 class MomentsRepositoryImpl @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val dao: MomentDao,
 ) : MomentsRepository {
 
@@ -31,6 +34,7 @@ class MomentsRepositoryImpl @Inject constructor(
     }
 
     override suspend fun remove(id: Long) {
+        SyncTombstones.add(context, "moment", id.toString())
         dao.delete(id)
     }
 

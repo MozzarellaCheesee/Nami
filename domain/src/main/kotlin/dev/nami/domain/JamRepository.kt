@@ -56,6 +56,9 @@ interface JamRepository {
     /** All known host URLs for the configured server (local IP, external domain, Tailscale). */
     val allHostUrls: StateFlow<List<String>>
 
+    /** SHA-256 self-signed certificate pin included in Jam invites for LAN HTTPS. */
+    val serverCertSha256: StateFlow<String?>
+
     /** Recently used Jam host addresses for guest fallback. */
     val recentHosts: StateFlow<List<String>>
 

@@ -157,7 +157,8 @@ object NamiServerClient {
 
     /** GET /api/tracks/{id}/waveform - JSON-массив из 120 значений RMS 0..1. */
     fun waveform(cfg: Config, serverTrackId: Long): List<Float>? {
-        val (code, text) = request("GET", "${cfg.baseUrl}/api/tracks/$serverTrackId/waveform", null, cfg.token, cfg.certSha256)
+        val base = reachableBase(cfg) ?: return null
+        val (code, text) = request("GET", "$base/api/tracks/$serverTrackId/waveform", null, cfg.token, cfg.certSha256)
             ?: return null
         if (code != 200) return null
         val arr = runCatching { org.json.JSONArray(text) }.getOrNull() ?: return null
@@ -166,7 +167,8 @@ object NamiServerClient {
 
     /** GET /api/tracks/{id} - метаданные трека, включая поля анализатора. */
     fun trackDetail(cfg: Config, serverTrackId: Long): JSONObject? {
-        val (code, text) = request("GET", "${cfg.baseUrl}/api/tracks/$serverTrackId", null, cfg.token, cfg.certSha256)
+        val base = reachableBase(cfg) ?: return null
+        val (code, text) = request("GET", "$base/api/tracks/$serverTrackId", null, cfg.token, cfg.certSha256)
             ?: return null
         if (code != 200) return null
         return runCatching { JSONObject(text) }.getOrNull()
@@ -174,7 +176,8 @@ object NamiServerClient {
 
     /** GET /api/tracks/{id}/lyrics - серверная лирика (поиск, кеш и перевод на сервере). */
     fun lyrics(cfg: Config, trackId: Long, translate: Boolean = false): Lyrics? {
-        val url = "${cfg.baseUrl}/api/tracks/$trackId/lyrics" + if (translate) "?translate=1" else ""
+        val base = reachableBase(cfg) ?: return null
+        val url = "$base/api/tracks/$trackId/lyrics" + if (translate) "?translate=1" else ""
         val (code, text) = request("GET", url, null, cfg.token, cfg.certSha256) ?: return null
         if (code != 200) return null
         return parseLyrics(text)
@@ -192,7 +195,8 @@ object NamiServerClient {
 
     /** GET /api/now-playing - что слушают пользователи сервера прямо сейчас. */
     fun nowPlaying(cfg: Config): List<FriendNowPlaying>? {
-        val (code, text) = request("GET", "${cfg.baseUrl}/api/now-playing", null, cfg.token, cfg.certSha256)
+        val base = reachableBase(cfg) ?: return null
+        val (code, text) = request("GET", "$base/api/now-playing", null, cfg.token, cfg.certSha256)
             ?: return null
         if (code != 200) return null
         val arr = runCatching { org.json.JSONArray(text) }.getOrNull() ?: return null

@@ -1,5 +1,7 @@
 package dev.nami.data
 
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.nami.core.database.dao.LoopDao
 import dev.nami.core.database.entity.LoopEntity
 import dev.nami.core.model.TrackId
@@ -10,6 +12,7 @@ import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
 class LoopsRepositoryImpl @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val dao: LoopDao,
 ) : LoopsRepository {
 
@@ -30,6 +33,7 @@ class LoopsRepositoryImpl @Inject constructor(
     }
 
     override suspend fun remove(id: Long) {
+        SyncTombstones.add(context, "loop", id.toString())
         dao.delete(id)
     }
 

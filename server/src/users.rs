@@ -393,8 +393,13 @@ pub fn visibility_at(conn: &Connection, ident: &Ident, prefix: &str) -> (String,
         return (" AND 1=0".to_string(), Vec::new());
     }
     let Some(uid) = ident.user_id else {
-        // Одиночный режим (устройство этапов 1-2, пользователей нет) - видно всё.
-        return (String::new(), Vec::new());
+        // Непривязанное устройство видит всё только до создания первого аккаунта.
+        // После этого оно должно войти или пройти pairing от имени пользователя.
+        return if count(conn) == 0 {
+            (String::new(), Vec::new())
+        } else {
+            (" AND 1=0".to_string(), Vec::new())
+        };
     };
     match library_mode(conn) {
         LibraryMode::Separate => {
@@ -445,11 +450,6 @@ pub fn folder_access(conn: &Connection, user_id: i64) -> Vec<String> {
 /// Видит ли пользователь конкретный трек - та же проверка, что и в списке,
 /// но одним запросом (нужна перед отдачей файла).
 pub fn can_see_track(conn: &Connection, ident: &Ident, track_id: i64) -> bool {
-    if ident.user_id.is_none() && ident.device_id.is_some() && !is_jam_guest(conn, ident) {
-        return conn
-            .query_row("SELECT 1 FROM tracks WHERE id=?1", [track_id], |_| Ok(()))
-            .is_ok();
-    }
     let (clause, mut params) = visibility(conn, ident);
     params.insert(0, Value::Integer(track_id));
     conn.query_row(
@@ -598,6 +598,23 @@ mod tests {
         let vb = visible(&c, &Ident { user_id: Some(b), device_id: None });
         assert_eq!(va, vec!["/муз/а/один.mp3"]);
         assert_eq!(vb, vec!["/муз/б/два.mp3"]);
+    }
+
+    #[test]
+    fn непривязанное_устройство_не_видит_библиотеку_после_создания_аккаунта() {
+        let c = db();
+        let track = add_track(&c, "/муз/секрет.mp3", 0);
+        c.execute(
+            "INSERT INTO devices (name, token_hash, created_at) VALUES ('Телефон', 'h', 0)",
+            [],
+        )
+        .unwrap();
+        let ident = Ident { user_id: None, device_id: Some(c.last_insert_rowid()) };
+        assert!(can_see_track(&c, &ident, track));
+
+        create(&c, "хозяин", "пароль12345", "owner", 0).unwrap();
+        assert!(!can_see_track(&c, &ident, track));
+        assert!(visible(&c, &ident).is_empty());
     }
 
     #[test]

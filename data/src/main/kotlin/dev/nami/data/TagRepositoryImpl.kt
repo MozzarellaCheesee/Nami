@@ -1,5 +1,7 @@
 package dev.nami.data
 
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.nami.core.database.dao.TagDao
 import dev.nami.core.database.entity.TagEntity
 import dev.nami.core.database.entity.TrackTagEntity
@@ -15,6 +17,7 @@ import java.util.UUID
 import javax.inject.Inject
 
 class TagRepositoryImpl @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val tagDao: TagDao,
 ) : TagRepository {
 
@@ -28,6 +31,7 @@ class TagRepositoryImpl @Inject constructor(
     }
 
     override suspend fun deleteTag(id: TagId) {
+        SyncTombstones.add(context, "tag", id.value)
         tagDao.delete(id.value)
     }
 
@@ -35,10 +39,12 @@ class TagRepositoryImpl @Inject constructor(
         tagDao.observeForTrack(trackId.value).map { rows -> rows.map { it.toDomain() } }
 
     override suspend fun assignTag(trackId: TrackId, tagId: TagId) {
+        SyncTombstones.cancel(context, "tag_assignment", "${trackId.value}:${tagId.value}")
         tagDao.assign(TrackTagEntity(trackId = trackId.value, tagId = tagId.value, updatedAt = System.currentTimeMillis()))
     }
 
     override suspend fun unassignTag(trackId: TrackId, tagId: TagId) {
+        SyncTombstones.add(context, "tag_assignment", "${trackId.value}:${tagId.value}")
         tagDao.unassign(trackId.value, tagId.value)
     }
 

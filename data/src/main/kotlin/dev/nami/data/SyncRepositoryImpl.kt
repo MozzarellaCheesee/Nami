@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.json.JSONArray
 import org.json.JSONObject
+import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -44,14 +45,18 @@ class SyncRepositoryImpl @Inject constructor(
 ) : SyncRepository {
 
     private val prefs = context.getSharedPreferences("nami_sync_prefs", Context.MODE_PRIVATE)
-    private val _lastSyncTimestamp = MutableStateFlow(prefs.getLong("last_sync_ts", 0L))
+    private val _lastSyncTimestamp = MutableStateFlow(
+        serverConfig()?.let { prefs.getLong("last_sync_ts_${syncScope(it)}", 0L) } ?: 0L,
+    )
     override val lastSyncTimestamp: StateFlow<Long> = _lastSyncTimestamp
 
     override suspend fun pullFromServer(): Boolean {
         val cfg = serverConfig() ?: return false
-        var currentSince = _lastSyncTimestamp.value
+        val scope = syncScope(cfg)
+        var currentSince = prefs.getLong("last_sync_ts_$scope", 0L)
+        _lastSyncTimestamp.value = currentSince
         val positionSince = currentSince
-        var cursor = prefs.getLong("last_sync_cursor", 0L)
+        var cursor = prefs.getLong("last_sync_cursor_$scope", 0L)
         var maxNow = currentSince
         var totalApplied = 0
 
@@ -91,7 +96,10 @@ class SyncRepositoryImpl @Inject constructor(
 
         val finalTs = if (maxNow > 0) maxNow else (System.currentTimeMillis() / 1000)
         _lastSyncTimestamp.value = finalTs
-        prefs.edit().putLong("last_sync_ts", finalTs).putLong("last_sync_cursor", cursor).apply()
+        prefs.edit()
+            .putLong("last_sync_ts_$scope", finalTs)
+            .putLong("last_sync_cursor_$scope", cursor)
+            .apply()
         Log.d(TAG, "pullFromServer: applied $totalApplied changes, new lastSync=$finalTs")
         NamiServerClient.positions(cfg, positionSince)?.optJSONObject(0)?.let { position ->
             val serverTrackId = position.optLong("track_id").takeIf { it > 0 } ?: return@let
@@ -358,7 +366,7 @@ class SyncRepositoryImpl @Inject constructor(
 
     override suspend fun pushToServer(): Boolean {
         val cfg = serverConfig() ?: return false
-        val since = _lastSyncTimestamp.value
+        val since = prefs.getLong("last_sync_ts_${syncScope(cfg)}", 0L)
         val nowSec = System.currentTimeMillis() / 1000L
 
         val changes = JSONArray()
@@ -511,6 +519,33 @@ class SyncRepositoryImpl @Inject constructor(
             })
         }
 
+        // Удалённые строки уже отсутствуют в Room, поэтому берём их из durable outbox.
+        val tombstones = SyncTombstones.read(context)
+        val sentTombstones = mutableListOf<SyncTombstone>()
+        for (t in tombstones) {
+            val serverId = when (t.entity) {
+                "playlist_track" -> {
+                    val playlistId = t.id.substringBefore(':')
+                    val localTrackId = t.id.substringAfter(':', "")
+                    serverIds[localTrackId]?.let { "$playlistId:$it" }
+                }
+                "tag_assignment" -> {
+                    val localTrackId = t.id.substringBefore(':')
+                    val tagId = t.id.substringAfter(':', "")
+                    serverIds[localTrackId]?.let { "$it:$tagId" }
+                }
+                else -> t.id
+            } ?: continue
+            changes.put(JSONObject().apply {
+                put("entity", t.entity)
+                put("id", serverId)
+                put("field", "__deleted")
+                put("value", true)
+                put("updated_at", (t.updatedAt / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec))
+            })
+            sentTombstones += t
+        }
+
         // 6. История прослушиваний
         val historyList = playHistoryDao.since(since * 1000L)
         for (h in historyList) {
@@ -561,6 +596,7 @@ class SyncRepositoryImpl @Inject constructor(
             }
         }
         flushPendingScrobbles(cfg)
+        SyncTombstones.remove(context, sentTombstones)
         return true
     }
 
@@ -606,8 +642,8 @@ class SyncRepositoryImpl @Inject constructor(
     }
 
     override suspend fun sync(): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-        val pullOk = pullFromServer()
         val pushOk = pushToServer()
+        val pullOk = pushOk && pullFromServer()
         pullOk && pushOk
     }
 
@@ -618,5 +654,14 @@ class SyncRepositoryImpl @Inject constructor(
         val token = settingsRepository.namiServerToken.value?.takeIf { it.isNotBlank() } ?: return null
         val cert = settingsRepository.namiServerCertSha256.value
         return NamiServerClient.Config(urls.first(), token, cert, urls)
+    }
+
+    private fun syncScope(cfg: NamiServerClient.Config): String {
+        val identity = listOf(cfg.token, cfg.certSha256.orEmpty(), *cfg.bases.sorted().toTypedArray())
+            .joinToString("\n")
+        return MessageDigest.getInstance("SHA-256")
+            .digest(identity.toByteArray())
+            .take(12)
+            .joinToString("") { "%02x".format(it) }
     }
 }

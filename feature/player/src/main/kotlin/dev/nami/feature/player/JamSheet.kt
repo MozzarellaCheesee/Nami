@@ -697,12 +697,15 @@ private fun JamSheetActiveSession(
     val playbackState by viewModel.playbackState.collectAsState()
 
     val allHosts by viewModel.allHostUrls.collectAsState()
+    val serverCert by viewModel.serverCertSha256.collectAsState()
     val externalHost = allHosts.firstOrNull { !viewModel.isLocalHost(it) }
     val preferredHost = externalHost ?: activeHostUrl
     val hostsList = (listOfNotNull(externalHost) + allHosts + listOfNotNull(activeHostUrl)).distinct()
     val hostsParam = if (hostsList.isNotEmpty()) "&hosts=${java.net.URLEncoder.encode(hostsList.joinToString(","), "UTF-8")}" else ""
     val hostParam = preferredHost?.let { "&host=${java.net.URLEncoder.encode(it, "UTF-8")}" } ?: ""
-    val inviteLink = "nami://jam?code=${session.code}$hostParam$hostsParam"
+    val certParam = serverCert?.takeIf { it.isNotBlank() }
+        ?.let { "&fp=${java.net.URLEncoder.encode(it, "UTF-8")}" }.orEmpty()
+    val inviteLink = "nami://jam?code=${session.code}$hostParam$hostsParam$certParam"
     val webInviteLink = preferredHost?.let { "$it/jam?code=${session.code}" }
 
     if (showQrDialog) {
