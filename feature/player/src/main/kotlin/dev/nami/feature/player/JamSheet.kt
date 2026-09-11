@@ -2,12 +2,16 @@ package dev.nami.feature.player
 
 import android.content.Intent
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,6 +28,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.MusicNote
@@ -46,6 +52,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -109,6 +116,11 @@ fun JamSheet(
     val error by viewModel.error.collectAsState()
     val isServerConfigured by viewModel.isServerConfigured.collectAsState()
     val activeHostUrl by viewModel.activeHostUrl.collectAsState()
+
+    DisposableEffect(Unit) {
+        viewModel.startDiscovery()
+        onDispose { viewModel.stopDiscovery() }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -224,11 +236,135 @@ private fun JamSheetNoSession(
     val clipboardText = remember { clipboardManager.getText()?.text }
     val detectedInvite = remember(clipboardText) { viewModel.parseJamInvite(clipboardText) }
     val recentHosts by viewModel.recentHosts.collectAsState()
+    val discoveredRooms by viewModel.discoveredRooms.collectAsState()
+    val context = LocalContext.current
+
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            val text = viewModel.decodeQrFromUri(context, uri)
+            if (text != null && viewModel.joinFromQrText(text)) {
+                Toast.makeText(context, "Подключение к комнате...", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, "QR-код не найден на изображении", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        // Автоматически обнаруженные комнаты рядом (Wi-Fi или сервер)
+        if (discoveredRooms.isNotEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = NamiColors.Ink800),
+                shape = RoundedCornerShape(NamiRadius.Card),
+                border = BorderStroke(1.dp, NamiColors.Shu.copy(alpha = 0.5f)),
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Groups,
+                                contentDescription = null,
+                                tint = NamiColors.Shu,
+                                modifier = Modifier.size(20.dp),
+                            )
+                            Text(
+                                text = "Доступные комнаты рядом",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = NamiColors.Paper100,
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(NamiColors.Shu.copy(alpha = 0.2f))
+                                .padding(horizontal = 8.dp, vertical = 2.dp),
+                        ) {
+                            Text(
+                                text = "${discoveredRooms.size}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = NamiColors.Shu,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+
+                    discoveredRooms.forEach { room ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(NamiColors.Ink700)
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    Text(
+                                        text = "Комната ${room.code}",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = NamiColors.Paper100,
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(if (room.source == dev.nami.domain.JamDiscoverySource.LOCAL_WIFI) NamiColors.Wakaba.copy(alpha = 0.2f) else NamiColors.Shu.copy(alpha = 0.2f))
+                                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                                    ) {
+                                        Text(
+                                            text = if (room.source == dev.nami.domain.JamDiscoverySource.LOCAL_WIFI) "Wi-Fi" else "Сервер",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (room.source == dev.nami.domain.JamDiscoverySource.LOCAL_WIFI) NamiColors.Wakaba else NamiColors.Shu,
+                                        )
+                                    }
+                                }
+                                room.description?.let { desc ->
+                                    Text(
+                                        text = desc,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = NamiColors.Paper40,
+                                        maxLines = 1,
+                                    )
+                                }
+                            }
+                            Button(
+                                onClick = { onJoinRoom(room.code, room.hostUrl) },
+                                shape = RoundedCornerShape(NamiRadius.Button),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = NamiColors.Shu,
+                                    contentColor = NamiColors.Paper100,
+                                ),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
+                            ) {
+                                Text("Войти", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Карточка быстрого входа из буфера обмена
         if (detectedInvite != null) {
             Card(
@@ -370,6 +506,23 @@ private fun JamSheetNoSession(
                         cursorColor = NamiColors.Shu,
                     ),
                 )
+
+                OutlinedButton(
+                    onClick = { galleryLauncher.launch("image/*") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(NamiRadius.Button),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = NamiColors.Paper100),
+                    border = BorderStroke(1.dp, NamiColors.Ink600),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Image,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = NamiColors.Paper70,
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Выбрать QR-код из галереи (скриншот)", style = MaterialTheme.typography.bodyMedium)
+                }
 
                 // Недавние серверы хостов для быстрого выбора
                 if (recentHosts.isNotEmpty()) {

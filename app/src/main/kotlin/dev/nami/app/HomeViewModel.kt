@@ -88,6 +88,11 @@ class HomeViewModel @Inject constructor(
     val blocks: StateFlow<List<HomeBlockConfig>> = settingsRepository.homeBlocks
 
     val jamSession: StateFlow<dev.nami.domain.JamSession?> = jamRepository.session
+    val discoveredJamRooms: StateFlow<List<dev.nami.domain.DiscoveredJamRoom>> = jamRepository.discoveredRooms
+
+    fun joinJamRoom(code: String, hostUrl: String? = null) = jamRepository.joinRoom(code, hostUrl)
+    fun startJamDiscovery() = jamRepository.startDiscovery()
+    fun stopJamDiscovery() = jamRepository.stopDiscovery()
 
     private val _state = MutableStateFlow(HomeState())
     val state: StateFlow<HomeState> = _state

@@ -104,8 +104,14 @@ fun HomeScreen(
         onDispose { if (nearbyBlockEnabled) viewModel.stopNearbyDiscovery() }
     }
 
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        viewModel.startJamDiscovery()
+        onDispose { viewModel.stopJamDiscovery() }
+    }
+
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
         val jamSession by viewModel.jamSession.collectAsState()
+        val discoveredJamRooms by viewModel.discoveredJamRooms.collectAsState()
         dev.nami.core.designsystem.NamiScreenHeader(
             title = "Главная",
             actions = {
@@ -113,7 +119,7 @@ fun HomeScreen(
                     Icon(
                         imageVector = Icons.Outlined.Groups,
                         contentDescription = "Джем",
-                        tint = if (jamSession != null) NamiColors.Wakaba else NamiColors.Paper70,
+                        tint = if (jamSession != null) NamiColors.Wakaba else if (discoveredJamRooms.isNotEmpty()) NamiColors.Shu else NamiColors.Paper70,
                     )
                 }
                 IconButton(onClick = onConstructorClick) {
@@ -164,6 +170,55 @@ fun HomeScreen(
                                 imageVector = Icons.Outlined.ChevronRight,
                                 contentDescription = null,
                                 tint = NamiColors.Paper40,
+                            )
+                        }
+                    }
+                }
+            } else if (discoveredJamRooms.isNotEmpty()) {
+                val firstRoom = discoveredJamRooms.first()
+                item {
+                    androidx.compose.material3.Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 8.dp)
+                            .clickable(onClick = onOpenJam),
+                        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = NamiColors.Ink800),
+                        shape = RoundedCornerShape(NamiRadius.Card),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, NamiColors.Shu.copy(alpha = 0.5f)),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Groups,
+                                    contentDescription = null,
+                                    tint = NamiColors.Shu,
+                                    modifier = Modifier.size(24.dp),
+                                )
+                                androidx.compose.foundation.layout.Spacer(Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = "Доступен Джем • Комната ${firstRoom.code}",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                        color = NamiColors.Paper100,
+                                    )
+                                    Text(
+                                        text = if (firstRoom.source == dev.nami.domain.JamDiscoverySource.LOCAL_WIFI) "В вашей сети Wi-Fi • Нажмите для входа" else "На сервере NAMI • Нажмите для входа",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = NamiColors.Shu,
+                                    )
+                                }
+                            }
+                            dev.nami.core.designsystem.NamiPill(
+                                text = "Войти",
+                                onClick = {
+                                    viewModel.joinJamRoom(firstRoom.code, firstRoom.hostUrl)
+                                    onOpenJam()
+                                },
                             )
                         }
                     }
