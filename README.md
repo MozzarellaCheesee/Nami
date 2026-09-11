@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/icon-wave.svg" width="112" alt="Nami logo" />
+  <img src="assets/icon-wave.png" width="112" alt="Nami logo" />
 </p>
 
 <h1 align="center">Nami</h1>
