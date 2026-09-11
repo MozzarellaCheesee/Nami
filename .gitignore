@@ -10,6 +10,8 @@ captures/
 .cxx/
 *.apk
 *.aab
+*.zip
+*.tar.gz
 
 # Rust
 native/target/
