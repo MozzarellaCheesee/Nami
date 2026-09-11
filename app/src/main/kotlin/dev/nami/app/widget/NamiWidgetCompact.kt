@@ -28,8 +28,12 @@ import androidx.glance.layout.padding
 import androidx.glance.layout.size
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import dev.nami.app.R
-import kotlinx.coroutines.flow.first
+import dev.nami.domain.PlaybackState
+import kotlinx.coroutines.flow.flowOf
 
 /** Компактный виджет плеера: обложка + название/исполнитель + управление.
  *
@@ -41,14 +45,22 @@ class NamiWidgetCompact : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val repo = widgetPlayerRepository(context)
+        val playlistRepo = widgetPlaylistRepository(context)
         repo.awaitReady()
-        val nowPlaying = repo.queue.value.nowPlaying
-        val isPlaying = isPlayingNow(repo)
-        val isLiked = nowPlaying?.let { widgetPlaylistRepository(context).isTrackLiked(it.id).first() } ?: false
-        val art = loadArtBitmap(nowPlaying?.artworkPath)
         val openPlayerAction = actionStartActivity(openPlayerIntent(context))
 
         provideContent {
+            val queue by repo.queue.collectAsState()
+            val state by repo.state.collectAsState()
+            val nowPlaying = queue.nowPlaying
+            val isPlaying = (state as? PlaybackState.Playing)?.isPlaying == true
+            val isLiked by remember(nowPlaying?.id) {
+                if (nowPlaying != null) playlistRepo.isTrackLiked(nowPlaying.id) else flowOf(false)
+            }.collectAsState(initial = false)
+            val art = remember(nowPlaying?.artworkPath) {
+                loadArtBitmap(context, nowPlaying?.artworkPath)
+            }
+
             val size = LocalSize.current
             val tall = size.height >= 85.dp
             val narrow = size.width < 180.dp

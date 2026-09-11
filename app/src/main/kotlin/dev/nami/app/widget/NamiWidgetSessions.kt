@@ -29,6 +29,8 @@ import androidx.glance.layout.padding
 import androidx.glance.layout.size
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import dev.nami.domain.Session
 
 val SessionNameKey = androidx.glance.action.ActionParameters.Key<String>("session_name")
@@ -67,11 +69,12 @@ class NamiWidgetSessions : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val settings = widgetSettingsRepository(context)
-        val allSessions = settings.sessions.value
-        val activeName = settings.lastAppliedSessionName.value
         val openSettingsAction = actionStartActivity(openSessionsIntent(context))
 
         provideContent {
+            val allSessions by settings.sessions.collectAsState()
+            val activeName by settings.lastAppliedSessionName.collectAsState()
+
             val width = LocalSize.current.width
             val maxPills = when {
                 width >= EXTRA_WIDE.width -> 5
