@@ -252,6 +252,23 @@ $SUDO systemctl daemon-reload
 $SUDO systemctl enable "${SERVICE_NAME}.service"
 $SUDO systemctl restart "${SERVICE_NAME}.service"
 
+# Открытие порта в брандмауэре (UFW / firewalld), если они активны
+if command -v ufw >/dev/null 2>&1; then
+    if ufw status 2>/dev/null | grep -qw "active"; then
+        log_info "Настройка UFW: открытие входящего порта ${PORT}/tcp..."
+        $SUDO ufw allow ${PORT}/tcp >/dev/null 2>&1 || true
+        log_ok "Порт ${PORT}/tcp разрешён в UFW."
+    fi
+fi
+if command -v firewall-cmd >/dev/null 2>&1; then
+    if firewall-cmd --state 2>/dev/null | grep -qw "running"; then
+        log_info "Настройка firewalld: открытие порта ${PORT}/tcp..."
+        $SUDO firewall-cmd --add-port=${PORT}/tcp --permanent >/dev/null 2>&1 || true
+        $SUDO firewall-cmd --reload >/dev/null 2>&1 || true
+        log_ok "Порт ${PORT}/tcp разрешён в firewalld."
+    fi
+fi
+
 # Небольшая пауза для запуска порта
 sleep 2
 
