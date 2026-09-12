@@ -1272,6 +1272,12 @@ async fn revoke_device(
     let db = st.db.lock().unwrap();
     need_owner(&db, &ident)?;
     let n = db.execute("DELETE FROM devices WHERE id=?1", [id])?;
+    drop(db);
+    if n == 1 {
+        st.notify(serde_json::json!({
+            "type":"device_revoked", "device_id":id, "at":crate::db::now()
+        }));
+    }
     Ok(if n == 1 { StatusCode::NO_CONTENT } else { StatusCode::NOT_FOUND })
 }
 
@@ -1644,11 +1650,12 @@ async fn ws(
 /// Событие адресовано этому подключению? Состояние у каждого пользователя своё,
 /// поэтому чужие "changed"/"position" до сокета доходить не должны.
 fn addressed_to(text: &str, ident: &Ident) -> bool {
-    serde_json::from_str::<serde_json::Value>(text)
-        .ok()
-        .and_then(|v| v.get("user_id").and_then(|u| u.as_i64()))
-        .map(|u| u == ident.state_key())
-        .unwrap_or(true)
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(text) else { return true };
+    if let Some(device_id) = v.get("device_id").and_then(|id| id.as_i64()) {
+        return ident.device_id == Some(device_id);
+    }
+    v.get("user_id").and_then(|u| u.as_i64())
+        .map(|u| u == ident.state_key()).unwrap_or(true)
 }
 
 async fn ws_loop(
@@ -1693,9 +1700,14 @@ async fn ws_loop(
                 if !addressed_to(&text, &ident) {
                     continue;
                 }
+                let revoked = serde_json::from_str::<serde_json::Value>(&text).ok().is_some_and(|v| {
+                    v.get("type").and_then(|t| t.as_str()) == Some("device_revoked") &&
+                        v.get("device_id").and_then(|id| id.as_i64()) == ident.device_id
+                });
                 if socket.send(Message::Text(text.into())).await.is_err() {
                     break;
                 }
+                if revoked { break; }
             }
             // Клиент отстал от кольцевого буфера. Одно принудительное событие
             // заставляет его перечитать состояние через обычные HTTP API.

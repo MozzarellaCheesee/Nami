@@ -828,6 +828,19 @@ class JamRepositoryImpl @Inject constructor(
                     _error.value = errorMsg.ifBlank { "Ошибка сервера Jam" }
                     previousSession = null
                 }
+                "device_revoked" -> {
+                    // Сервер адресует событие конкретному device_id. Токен удаляем сразу:
+                    // NamiApplication очистит зеркальные треки и остановит серверный плеер.
+                    intentionalClose = true
+                    reconnectJob?.cancel()
+                    previousSession = null
+                    _session.value = null
+                    _connected.value = false
+                    settingsRepository.setNamiServerToken(null)
+                    _serverChanges.tryEmit(setOf("server_disconnected"))
+                    webSocket?.close(1000, "device revoked")
+                    webSocket = null
+                }
                 "changed" -> {
                     val entities = json.optJSONArray("entities")
                     val names = buildSet {

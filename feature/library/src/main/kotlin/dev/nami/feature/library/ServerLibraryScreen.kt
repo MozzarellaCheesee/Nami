@@ -54,6 +54,7 @@ import dev.nami.domain.ServerLibraryRepository
 import dev.nami.domain.ServerTrackMeta
 import dev.nami.domain.JamRepository
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -83,17 +84,40 @@ class ServerLibraryViewModel @Inject constructor(
         private set
     var artworkFiles by mutableStateOf<Map<Long, String>>(emptyMap())
         private set
+    private var reloadRequested = false
+    private var refreshJob: kotlinx.coroutines.Job? = null
 
     init {
         viewModelScope.launch {
             jamRepository.serverChanges.collect { entities ->
-                if ("tracks" in entities || "albums" in entities || "artists" in entities) load()
+                if ("server_disconnected" in entities) {
+                    refreshJob?.cancel()
+                    tracks = emptyList()
+                    artworkFiles = emptyMap()
+                    cached = emptySet()
+                    downloading = emptySet()
+                    loading = false
+                    error = "Устройство отвязано от сервера"
+                    return@collect
+                }
+                if ("tracks" in entities || "albums" in entities || "artists" in entities ||
+                    entities.any { it.startsWith("artwork:") }
+                ) {
+                    refreshJob?.cancel()
+                    refreshJob = viewModelScope.launch {
+                        delay(150L)
+                        load()
+                    }
+                }
             }
         }
     }
 
     fun load() {
-        if (loading) return
+        if (loading) {
+            reloadRequested = true
+            return
+        }
         viewModelScope.launch {
             loading = true
             error = null
@@ -109,18 +133,23 @@ class ServerLibraryViewModel @Inject constructor(
                     return@launch
                 }
                 tracks = result
+                artworkFiles = artworkFiles.filterKeys { id -> result.any { it.id == id } }
                 val artworkDownloads = Semaphore(4)
                 result.forEach { track ->
                     launch {
                         artworkDownloads.withPermit {
                             serverLibraryRepository.downloadArtwork(track.id)?.let { file ->
-                                artworkFiles = artworkFiles + (track.id to android.net.Uri.fromFile(file).toString())
+                                artworkFiles = artworkFiles + (track.id to artworkModel(file))
                             }
                         }
                     }
                 }
             } finally {
                 loading = false
+                if (reloadRequested) {
+                    reloadRequested = false
+                    load()
+                }
             }
         }
     }
@@ -171,6 +200,10 @@ class ServerLibraryViewModel @Inject constructor(
 
     fun artworkUrl(trackId: Long): String? = artworkFiles[trackId]
 
+    /** Fragment сохраняет file-path, но меняет ключ памяти Coil после замены картинки. */
+    private fun artworkModel(file: java.io.File): String = android.net.Uri.fromFile(file)
+        .buildUpon().fragment(file.lastModified().toString()).build().toString()
+
     fun updateTrack(track: ServerTrackMeta) {
         viewModelScope.launch {
             if (serverLibraryRepository.updateTrack(track)) load()
@@ -182,7 +215,7 @@ class ServerLibraryViewModel @Inject constructor(
         viewModelScope.launch {
             if (serverLibraryRepository.updateArtwork(trackId, uri)) {
                 serverLibraryRepository.cachedArtwork(trackId)?.let { file ->
-                    artworkFiles = artworkFiles + (trackId to android.net.Uri.fromFile(file).toString())
+                    artworkFiles = artworkFiles + (trackId to artworkModel(file))
                 }
             } else error = "Не удалось изменить обложку"
         }
@@ -249,7 +282,7 @@ fun ServerLibraryScreen(
         NamiScreenHeader(title = "Серверная библиотека", onBack = onBack)
 
         when {
-            viewModel.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            viewModel.loading && viewModel.tracks.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = NamiColors.Shu)
             }
             viewModel.error != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
