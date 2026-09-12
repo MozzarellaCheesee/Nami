@@ -7,6 +7,7 @@ use std::process::{Command, Output};
 #[derive(Parser)]
 #[command(name = "nami")]
 #[command(about = "Управление Nami-сервером", long_about = None)]
+#[command(version)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Commands>,
@@ -1327,4 +1328,3 @@ fn append_music_dir(content: &str, new_dir: &str) -> String {
 
     lines.join("\n") + "\n"
 }
-

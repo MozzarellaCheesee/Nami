@@ -252,11 +252,13 @@ WebSocket and the protected pairing page may use a token in the query string whe
 |---|---|---|
 | `GET` | `/api/tracks?limit&offset` | Paginated track list. |
 | `GET` | `/api/tracks/{id}` | Track metadata. |
+| `PATCH` | `/api/tracks/{id}` | Update server track metadata. |
 | `POST` | `/api/tracks/match` | Match client tracks against server tracks. |
 | `GET` | `/api/tracks/{id}/stream` | Original byte-for-byte stream with Range support. |
 | `GET` | `/api/tracks/{id}/stream?profile=...` | Transcoded stream. |
 | `GET` | `/api/tracks/{id}/hls/master.m3u8` | Adaptive HLS master playlist. |
 | `GET` | `/api/tracks/{id}/artwork` | Track artwork. |
+| `PUT` | `/api/tracks/{id}/artwork` | Replace server track artwork. |
 | `GET` | `/api/tracks/{id}/waveform` | Generated waveform data. |
 | `GET` | `/api/tracks/{id}/radio?limit=` | Track-based similarity radio. |
 | `GET` | `/api/transcode/profiles` | Available transcode profiles. |

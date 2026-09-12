@@ -16,17 +16,22 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CloudDownload
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -127,7 +132,50 @@ class ServerLibraryViewModel @Inject constructor(
         }
     }
 
+    fun downloadAll() {
+        val pending = tracks.filterNot { it.id in cached || it.id in downloading }
+        if (pending.isEmpty()) return
+        viewModelScope.launch {
+            downloading = downloading + pending.map { it.id }
+            val completed = mutableSetOf<Long>()
+            val limit = Semaphore(3)
+            try {
+                kotlinx.coroutines.coroutineScope {
+                    pending.forEach { track ->
+                        launch {
+                            limit.withPermit {
+                                if (serverLibraryRepository.downloadTrack(track.id) != null) {
+                                    synchronized(completed) { completed += track.id }
+                                }
+                            }
+                        }
+                    }
+                }
+                cached = cached + completed
+            } finally {
+                downloading = downloading - pending.map { it.id }.toSet()
+            }
+        }
+    }
+
     fun artworkUrl(trackId: Long): String? = artworkFiles[trackId]
+
+    fun updateTrack(track: ServerTrackMeta) {
+        viewModelScope.launch {
+            if (serverLibraryRepository.updateTrack(track)) load()
+            else error = "Не удалось изменить трек"
+        }
+    }
+
+    fun updateArtwork(trackId: Long, uri: String) {
+        viewModelScope.launch {
+            if (serverLibraryRepository.updateArtwork(trackId, uri)) {
+                serverLibraryRepository.cachedArtwork(trackId)?.let { file ->
+                    artworkFiles = artworkFiles + (trackId to android.net.Uri.fromFile(file).toString())
+                }
+            } else error = "Не удалось изменить обложку"
+        }
+    }
 
     fun playTrack(track: ServerTrackMeta) {
         viewModelScope.launch {
@@ -178,6 +226,13 @@ fun ServerLibraryScreen(
     viewModel: ServerLibraryViewModel = androidx.hilt.navigation.compose.hiltViewModel(),
 ) {
     LaunchedEffect(Unit) { viewModel.load() }
+    var editing by remember { mutableStateOf<ServerTrackMeta?>(null) }
+    var artworkTarget by remember { mutableStateOf<Long?>(null) }
+    val artworkPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        val id = artworkTarget
+        artworkTarget = null
+        if (id != null && uri != null) viewModel.updateArtwork(id, uri.toString())
+    }
 
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
         NamiScreenHeader(title = "Серверная библиотека", onBack = onBack)
@@ -207,6 +262,11 @@ fun ServerLibraryScreen(
                         NamiPill(
                             text = "Слушать всё",
                             onClick = { viewModel.playAll(0) },
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        NamiPill(
+                            text = if (viewModel.downloading.isEmpty()) "Скачать всё" else "Скачивание…",
+                            onClick = viewModel::downloadAll,
                         )
                     }
                 }
@@ -239,6 +299,9 @@ fun ServerLibraryScreen(
                         }
                         val isDownloading = track.id in viewModel.downloading
                         val isCached = track.id in viewModel.cached
+                        IconButton(onClick = { editing = track }) {
+                            Icon(Icons.Outlined.Edit, contentDescription = "Изменить серверный трек", tint = NamiColors.Paper70)
+                        }
                         IconButton(onClick = { viewModel.toggleDownload(track) }, enabled = !isDownloading) {
                             when {
                                 isDownloading -> CircularProgressIndicator(
@@ -262,5 +325,39 @@ fun ServerLibraryScreen(
                 }
             }
         }
+    }
+
+    editing?.let { track ->
+        var title by remember(track.id) { mutableStateOf(track.title) }
+        var artist by remember(track.id) { mutableStateOf(track.artist) }
+        var album by remember(track.id) { mutableStateOf(track.album.orEmpty()) }
+        var year by remember(track.id) { mutableStateOf(track.year?.toString().orEmpty()) }
+        var trackNo by remember(track.id) { mutableStateOf(track.trackNo?.toString().orEmpty()) }
+        AlertDialog(
+            onDismissRequest = { editing = null },
+            title = { Text("Изменить трек") },
+            text = {
+                Column {
+                    OutlinedTextField(title, { title = it }, label = { Text("Название") })
+                    OutlinedTextField(artist, { artist = it }, label = { Text("Исполнитель") })
+                    OutlinedTextField(album, { album = it }, label = { Text("Альбом") })
+                    OutlinedTextField(year, { year = it.filter { c -> c.isDigit() } }, label = { Text("Год") })
+                    OutlinedTextField(trackNo, { trackNo = it.filter { c -> c.isDigit() } }, label = { Text("Номер трека") })
+                    NamiPill(text = "Выбрать обложку", modifier = Modifier.padding(top = 12.dp), onClick = {
+                        artworkTarget = track.id
+                        artworkPicker.launch("image/*")
+                    })
+                }
+            },
+            confirmButton = {
+                NamiPill(text = "Сохранить", onClick = {
+                    if (title.isNotBlank()) viewModel.updateTrack(
+                        track.copy(title = title.trim(), artist = artist.trim(), album = album.trim().ifBlank { null }, year = year.toIntOrNull(), trackNo = trackNo.toIntOrNull()),
+                    )
+                    editing = null
+                })
+            },
+            dismissButton = { NamiPill(text = "Отмена", onClick = { editing = null }) },
+        )
     }
 }

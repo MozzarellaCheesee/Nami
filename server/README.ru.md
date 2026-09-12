@@ -254,11 +254,13 @@ WebSocket и защищённая страница сопряжения могу
 |---|---|---|
 | `GET` | `/api/tracks?limit&offset` | Постраничный список треков. |
 | `GET` | `/api/tracks/{id}` | Метаданные трека. |
+| `PATCH` | `/api/tracks/{id}` | Изменить метаданные серверного трека. |
 | `POST` | `/api/tracks/match` | Сопоставить клиентские треки с серверными. |
 | `GET` | `/api/tracks/{id}/stream` | Побайтовая отдача оригинала с Range. |
 | `GET` | `/api/tracks/{id}/stream?profile=...` | Транскодированный поток. |
 | `GET` | `/api/tracks/{id}/hls/master.m3u8` | Master playlist адаптивного HLS. |
 | `GET` | `/api/tracks/{id}/artwork` | Обложка трека. |
+| `PUT` | `/api/tracks/{id}/artwork` | Заменить обложку серверного трека. |
 | `GET` | `/api/tracks/{id}/waveform` | Сгенерированные данные waveform. |
 | `GET` | `/api/tracks/{id}/radio?limit=` | Радио похожих треков. |
 | `GET` | `/api/transcode/profiles` | Доступные профили транскодинга. |

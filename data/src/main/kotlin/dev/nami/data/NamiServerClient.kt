@@ -572,6 +572,40 @@ object NamiServerClient {
         return o.optString("token").takeIf { it.isNotBlank() }?.let { "$base/share/$it" }
     }
 
+    fun updateTrack(cfg: Config, track: dev.nami.domain.ServerTrackMeta): Boolean {
+        val base = reachableBase(cfg) ?: return false
+        val body = JSONObject().apply {
+            put("title", track.title)
+            put("artist", track.artist.takeIf { it.isNotBlank() } ?: JSONObject.NULL)
+            put("album", track.album ?: JSONObject.NULL)
+            put("track_no", track.trackNo ?: JSONObject.NULL)
+            put("year", track.year ?: JSONObject.NULL)
+        }.toString()
+        return request("PATCH", "$base/api/tracks/${track.id}", body, cfg.token, cfg.certSha256)?.first == 204
+    }
+
+    fun uploadArtwork(cfg: Config, trackId: Long, bytes: ByteArray, mime: String): Boolean {
+        val base = reachableBase(cfg) ?: return false
+        return runCatching {
+            val conn = (URL("$base/api/tracks/$trackId/artwork").openConnection() as HttpURLConnection).apply {
+                requestMethod = "PUT"
+                connectTimeout = TIMEOUT_MS
+                readTimeout = TIMEOUT_MS
+                doOutput = true
+                setRequestProperty("Authorization", "Bearer ${cfg.token}")
+                setRequestProperty("Content-Type", mime)
+                if (this is HttpsURLConnection && cfg.certSha256 != null && hostIsIpLiteral(base)) {
+                    sslSocketFactory = pinnedFactory(cfg.certSha256)
+                    setHostnameVerifier { _, _ -> true }
+                }
+            }
+            conn.outputStream.use { it.write(bytes) }
+            val ok = conn.responseCode == 204
+            conn.disconnect()
+            ok
+        }.onFailure { Log.w(TAG, "uploadArtwork: ${it.message}") }.getOrDefault(false)
+    }
+
     // ---------------------------------------------------------------- HTTP
 
     private fun request(

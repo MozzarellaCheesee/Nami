@@ -74,6 +74,34 @@ if (-not (Test-Path $InstallDir)) {
 }
 Write-Host "      Папка установки: $InstallDir" -ForegroundColor Gray
 
+$versionFile = Join-Path $InstallDir "version.txt"
+$binPath = Join-Path $InstallDir "nami-server.exe"
+$currentVersion = $null
+if (Test-Path $binPath) {
+    try { $currentVersion = ((& $binPath --version 2>$null) -split '\s+')[-1].TrimStart('v') } catch {}
+}
+if (-not $currentVersion -and (Test-Path $versionFile)) {
+    $currentVersion = (Get-Content $versionFile -Raw).Trim().TrimStart('v')
+}
+if (-not $currentVersion) {
+    try {
+        $currentVersion = (Invoke-RestMethod -Uri "http://127.0.0.1`:$Port/api/health" -TimeoutSec 2).version
+    } catch {}
+}
+$earlyTargetVersion = $null
+try {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $earlyRelease = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" -Headers @{ "User-Agent" = "Nami-Windows-Installer"; "Accept" = "application/vnd.github+json" }
+    $earlyTargetVersion = $earlyRelease.tag_name.TrimStart('v')
+} catch {}
+if ($currentVersion -and $earlyTargetVersion -and $currentVersion.TrimStart('v') -eq $earlyTargetVersion) {
+    Write-Host "      ✓ Обновления нет: у вас уже установлена последняя версия $currentVersion." -ForegroundColor Green
+    return
+}
+if ($currentVersion -and $earlyTargetVersion) {
+    Write-Host "      Доступно обновление: $currentVersion → $earlyTargetVersion" -ForegroundColor Cyan
+}
+
 # 3. Проверка и автоматическая установка FFmpeg
 Write-Host "[2/6] Проверка медиа-библиотеки FFmpeg..." -ForegroundColor Cyan
 $ffmpegCmd = Get-Command ffmpeg -ErrorAction SilentlyContinue
@@ -103,7 +131,6 @@ if ($ffmpegCmd) {
 
 # 4. Скачивание или сборка бинарника
 Write-Host "[3/6] Получение бинарника Nami Server..." -ForegroundColor Cyan
-$binPath = Join-Path $InstallDir "nami-server.exe"
 $downloadSucceeded = $false
 
 $assetZip = "nami-server-windows-x86_64.zip"
@@ -118,18 +145,21 @@ try {
     $releases = Invoke-RestMethod -Uri $apiUrl -Headers $headers -ErrorAction SilentlyContinue
     
     $downloadUrl = $null
+    $targetVersion = $null
     if ($releases) {
         foreach ($rel in $releases) {
             if ($rel.assets) {
                 $zipAsset = $rel.assets | Where-Object { $_.name -like "*windows-x86_64*.zip" } | Select-Object -First 1
                 if ($zipAsset) {
                     $downloadUrl = $zipAsset.browser_download_url
+                    $targetVersion = $rel.tag_name.TrimStart('v')
                     $isZip = $true
                     break
                 }
                 $exeAsset = $rel.assets | Where-Object { $_.name -like "*windows-x86_64*.exe" } | Select-Object -First 1
                 if ($exeAsset) {
                     $downloadUrl = $exeAsset.browser_download_url
+                    $targetVersion = $rel.tag_name.TrimStart('v')
                     $isZip = $false
                     break
                 }
@@ -139,7 +169,16 @@ try {
     
     if (-not $downloadUrl) {
         $downloadUrl = "https://github.com/$Repo/releases/download/v0.1.1-beta.1/$assetZip"
+        $targetVersion = "0.1.1-beta.1"
         $isZip = $true
+    }
+
+    if ($currentVersion -and $currentVersion.TrimStart('v') -eq $targetVersion) {
+        Write-Host "      ✓ Обновления нет: у вас уже установлена последняя версия $currentVersion." -ForegroundColor Green
+        return
+    }
+    if ($currentVersion) {
+        Write-Host "      Обновление: $currentVersion → $targetVersion" -ForegroundColor Cyan
     }
     
     Write-Host "      Загрузка с: $downloadUrl" -ForegroundColor Gray
@@ -197,6 +236,14 @@ if (-not (Test-Path $binPath)) {
     exit 1
 }
 Write-Host "      ✓ Исполняемый файл готов: $binPath" -ForegroundColor Green
+if ($targetVersion) {
+    Set-Content -LiteralPath $versionFile -Value $targetVersion -Encoding ASCII
+    if ($currentVersion) {
+        Write-Host "      ✓ Сервер обновлён: $currentVersion → $targetVersion" -ForegroundColor Green
+    } else {
+        Write-Host "      ✓ Установлена версия $targetVersion" -ForegroundColor Green
+    }
+}
 
 # 5. Настройка Брандмауэра Windows
 Write-Host "[4/6] Настройка сетевого доступа (Брандмауэр Windows)..." -ForegroundColor Cyan

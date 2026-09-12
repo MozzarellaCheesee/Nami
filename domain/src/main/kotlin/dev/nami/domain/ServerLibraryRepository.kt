@@ -45,6 +45,10 @@ interface ServerLibraryRepository {
     /** Удалить трек и его сохранённую обложку из офлайн-кеша. */
     fun removeFromCache(serverTrackId: Long)
 
+    suspend fun updateTrack(track: ServerTrackMeta): Boolean = false
+
+    suspend fun updateArtwork(serverTrackId: Long, imageUri: String): Boolean = false
+
     /** Удалить серверные записи из общей Room-библиотеки после выхода или отзыва устройства. */
     suspend fun clearMirroredTracks() {}
 

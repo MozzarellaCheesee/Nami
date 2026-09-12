@@ -9,6 +9,20 @@
 
 use std::path::Path;
 
+pub fn save_override(data_dir: &Path, track_id: i64, bytes: &[u8], mime: &str) -> std::io::Result<()> {
+    let dir = data_dir.join("artwork-overrides");
+    std::fs::create_dir_all(&dir)?;
+    std::fs::write(dir.join(format!("{track_id}.image")), bytes)?;
+    std::fs::write(dir.join(format!("{track_id}.mime")), mime)
+}
+
+pub fn load_override(data_dir: &Path, track_id: i64) -> Option<(Vec<u8>, String)> {
+    let dir = data_dir.join("artwork-overrides");
+    let bytes = std::fs::read(dir.join(format!("{track_id}.image"))).ok()?;
+    let mime = std::fs::read_to_string(dir.join(format!("{track_id}.mime"))).unwrap_or_else(|_| "image/jpeg".into());
+    Some((bytes, mime))
+}
+
 /// Имена файлов-обложек рядом с треком, в порядке предпочтения.
 const SIDECAR_NAMES: &[&str] = &["cover", "folder", "front", "AlbumArt", "album"];
 const SIDECAR_EXTS: &[&str] = &["jpg", "jpeg", "png", "webp"];
@@ -79,6 +93,16 @@ mod tests {
         let track = dir.join("x.mp3");
         std::fs::write(&track, b"x").unwrap();
         assert!(load(track.to_str().unwrap()).is_none());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn пользовательская_обложка_имеет_приоритет_и_сохраняет_mime() {
+        let dir = std::env::temp_dir().join(format!("nami-art-override-{}", crate::db::now()));
+        save_override(&dir, 7, b"picture", "image/webp").unwrap();
+        let (bytes, mime) = load_override(&dir, 7).unwrap();
+        assert_eq!(bytes, b"picture");
+        assert_eq!(mime, "image/webp");
         std::fs::remove_dir_all(&dir).ok();
     }
 }
