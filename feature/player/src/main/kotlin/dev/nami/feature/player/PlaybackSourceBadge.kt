@@ -80,7 +80,15 @@ fun PlaybackSourceBadge(
                     targetState = label,
                     transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(120)) },
                     label = "playback-source-label",
-                ) { text -> Text(text, color = textColor, style = MaterialTheme.typography.labelSmall) }
+                ) { text ->
+                    Text(
+                        text,
+                        color = textColor,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                }
             }
         }
     }
@@ -134,7 +142,13 @@ fun ServerPresenceBadge(
                 modifier = Modifier.size(13.dp),
             )
             if (showLabel) {
-                Text(label, color = color, style = MaterialTheme.typography.labelSmall)
+                Text(
+                    label,
+                    color = color,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                    softWrap = false,
+                )
             }
         }
     }

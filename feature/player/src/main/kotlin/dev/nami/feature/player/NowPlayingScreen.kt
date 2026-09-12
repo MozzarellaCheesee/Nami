@@ -1,7 +1,6 @@
 package dev.nami.feature.player
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
@@ -929,8 +928,14 @@ fun NowPlayingScreen(
                 dev.nami.domain.NowPlayingBlock.TECH_INFO -> {
                 // Source badge and format badge sit below transport controls per Дизайн.md §4.3 and §4.13
                 if (showTechInfo && queue.nowPlaying != null) {
+                    // Строка обязана быть ровно в одну строку. Раньше длинная подпись формата
+                    // ("FLAC · 24 бит · 96 кГц · 1411 кбит/с · 42.3 МБ · 128 BPM") переносилась на
+                    // вторую-третью строку, блок вырастал, и Column отдавал нижнему ряду кнопок
+                    // ("Очередь"/"Текст") меньше высоты, чем его 48.dp - кнопки сжимались. Экран
+                    // плеера не скроллится, поэтому лишней высоты взять негде: длинный текст
+                    // уезжает бегущей строкой, как и название трека выше.
                     Row(
-                        modifier = Modifier.padding(top = 40.dp),
+                        modifier = Modifier.fillMaxWidth().padding(top = 40.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -938,9 +943,12 @@ fun NowPlayingScreen(
                         ServerPresenceBadge(onServer = onServer, showLabel = true)
                         queue.nowPlaying?.format?.let { format ->
                             Box(
+                                // weight, а не wrapContentWidth: подпись забирает остаток ширины
+                                // после плашек и дальше сама решает, что не влезло, вместо того
+                                // чтобы распирать ряд и переноситься.
                                 modifier = Modifier
-                                    .background(NamiColors.Ai.copy(alpha = 0.14f), RoundedCornerShape(4.dp))
-                                    .animateContentSize(animationSpec = tween(200)),
+                                    .weight(1f)
+                                    .background(NamiColors.Ai.copy(alpha = 0.14f), RoundedCornerShape(4.dp)),
                             ) {
                                 AnimatedContent(
                                     targetState = formatBadgeDetail(format, trackDetails),
@@ -951,7 +959,11 @@ fun NowPlayingScreen(
                                         text = text,
                                         color = NamiColors.Ai,
                                         style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        modifier = Modifier
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            .basicMarquee(iterations = Int.MAX_VALUE),
                                     )
                                 }
                             }
