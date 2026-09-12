@@ -542,4 +542,65 @@ mod tests {
         registry.unregister(&ident);
         assert!(!registry.can_access_track(&ident, 7));
     }
+
+    #[test]
+    fn гостевое_устройство_создаётся_по_актуальной_схеме() {
+        let c = Connection::open_in_memory().unwrap();
+        c.execute_batch(crate::db::SCHEMA).unwrap();
+        let token = crate::api::create_jam_guest(&c, "ABC234").unwrap();
+        crate::auth::verify(&c, &token).expect("гостевой токен должен работать");
+    }
+
+    #[tokio::test]
+    async fn гость_получает_трек_хоста_только_пока_жив_джем() {
+        let c = Connection::open_in_memory().unwrap();
+        c.execute_batch(crate::db::SCHEMA).unwrap();
+        c.execute("INSERT INTO tracks (id, path, title) VALUES (7, '/music/a.mp3', 'A')", [])
+            .unwrap();
+        let (events, _) = broadcast::channel(4);
+        let (positions, _) = broadcast::channel(4);
+        let st = std::sync::Arc::new(crate::api::AppState {
+            db: Mutex::new(c),
+            cfg: crate::config::Config::default(),
+            fingerprint: None,
+            rate: crate::auth::RateLimiter::default(),
+            qr_challenges: crate::auth::QrChallenges::default(),
+            ffmpeg: false,
+            fpcalc: false,
+            events,
+            positions,
+            jams: Registry::default(),
+            metrics: crate::metrics::Metrics::new(),
+        });
+        let host = Ident { user_id: Some(1), device_id: Some(999) };
+        let mut host_membership = Membership::default();
+        let created = handle(&st, &host, &mut host_membership, r#"{"type":"jam_create"}"#).unwrap();
+        let code = serde_json::from_str::<serde_json::Value>(&created).unwrap()["code"]
+            .as_str().unwrap().to_string();
+
+        let token = crate::api::create_jam_guest(&st.db.lock().unwrap(), &code).unwrap();
+        let guest = crate::api::identify(&st.db.lock().unwrap(), &token).unwrap();
+        let mut guest_membership = Membership::default();
+        handle(
+            &st,
+            &guest,
+            &mut guest_membership,
+            &serde_json::json!({"type":"jam_join", "code":code}).to_string(),
+        )
+        .unwrap();
+        let play_reply = handle(
+            &st,
+            &host,
+            &mut host_membership,
+            r#"{"type":"jam_play","track_id":7,"position_ms":1000}"#,
+        );
+
+        assert!(play_reply.is_none(), "jam_play отклонён: {play_reply:?}");
+        assert!(st.jams.1.lock().unwrap().contains_key(&(guest.user_id, guest.device_id)));
+        assert!(st.jams.can_access_track(&guest, 7));
+        cleanup_host(&st, &mut host_membership, &host);
+        assert!(!st.jams.can_access_track(&guest, 7));
+        assert!(guest_membership.recv().await.unwrap().contains("jam_play"));
+        assert!(guest_membership.recv().await.unwrap().contains("jam_closed"));
+    }
 }

@@ -341,6 +341,28 @@ class ServerLibraryRepositoryImpl @Inject constructor(
         artworkFileFor(serverTrackId).delete()
     }
 
+    override suspend fun updateTrack(track: ServerTrackMeta): Boolean = withContext(Dispatchers.IO) {
+        val cfg = activeConfig() ?: return@withContext false
+        if (!NamiServerClient.updateTrack(cfg, track)) return@withContext false
+        listTracks()
+        true
+    }
+
+    override suspend fun updateArtwork(serverTrackId: Long, imageUri: String): Boolean = withContext(Dispatchers.IO) {
+        val cfg = activeConfig() ?: return@withContext false
+        val uri = android.net.Uri.parse(imageUri)
+        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@withContext false
+        val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
+        if (!NamiServerClient.uploadArtwork(cfg, serverTrackId, bytes, mime)) return@withContext false
+        artworkFileFor(serverTrackId).delete()
+        downloadArtwork(serverTrackId)?.let { file ->
+            val id = "server_$serverTrackId"
+            trackDao.setArtworkPath(id, file.absolutePath)
+            trackDao.findById(id)?.albumId?.let { albumDao.setArtworkPath(it, file.absolutePath) }
+        }
+        true
+    }
+
     override suspend fun uploadLocalTrack(path: String): String? = withContext(Dispatchers.IO) {
         val cfg = activeConfig() ?: return@withContext null
         val file = File(path)

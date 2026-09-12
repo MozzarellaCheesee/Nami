@@ -95,6 +95,27 @@ if [ "$(id -u)" -ne 0 ]; then
     fi
 fi
 
+# Проверяем версию до установки пакетов, скачивания и перезапуска службы.
+EARLY_REQUESTED_VERSION="${1:-${VERSION:-}}"
+EARLY_CURRENT_VERSION=""
+if [ -x "${INSTALL_DIR}/nami-server" ]; then
+    EARLY_CURRENT_VERSION="$(${INSTALL_DIR}/nami-server --version 2>/dev/null | awk '{print $NF}' || true)"
+fi
+if [ -z "$EARLY_CURRENT_VERSION" ] && [ -f "${DATA_DIR}/version" ]; then
+    EARLY_CURRENT_VERSION="$($SUDO cat "${DATA_DIR}/version" 2>/dev/null | tr -d '[:space:]' || true)"
+elif [ -z "$EARLY_CURRENT_VERSION" ] && command -v curl >/dev/null 2>&1; then
+    HEALTH_JSON="$(curl -kfsS --connect-timeout 2 "https://127.0.0.1:${PORT}/api/health" 2>/dev/null || curl -fsS --connect-timeout 2 "http://127.0.0.1:${PORT}/api/health" 2>/dev/null || true)"
+    EARLY_CURRENT_VERSION="$(printf '%s' "$HEALTH_JSON" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')"
+fi
+EARLY_TARGET_VERSION="$EARLY_REQUESTED_VERSION"
+if [ -z "$EARLY_TARGET_VERSION" ] && command -v curl >/dev/null 2>&1; then
+    EARLY_TARGET_VERSION="$(curl -fsSL -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" 2>/dev/null | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n1 || true)"
+fi
+if [ -n "$EARLY_CURRENT_VERSION" ] && [ -n "$EARLY_TARGET_VERSION" ] && [ "${EARLY_CURRENT_VERSION#v}" = "${EARLY_TARGET_VERSION#v}" ]; then
+    log_ok "Обновления нет: у вас уже установлена последняя версия ${EARLY_CURRENT_VERSION#v}."
+    exit 0
+fi
+
 # 5. Автоматическая установка всех необходимых системных компонентов
 echo
 HAS_NGINX=false
@@ -271,7 +292,8 @@ trap cleanup EXIT
 BINARY_FOUND=false
 ASSET_NAME="nami-server-linux-${TARGET_ARCH}.tar.gz"
 DOWNLOAD_SUCCESS=false
-SPECIFIED_VERSION="${1:-${VERSION:-}}"
+SPECIFIED_VERSION="$EARLY_REQUESTED_VERSION"
+CURRENT_VERSION="$EARLY_CURRENT_VERSION"
 
 log_info "Поиск релиза в репозитории ${GITHUB_REPO}..."
 
@@ -303,6 +325,15 @@ fi
 # 3. Финальный fallback на текущую актуальную бета-версию
 if [ -z "$DOWNLOAD_URL" ]; then
     DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/download/v0.1.2-beta.1/${ASSET_NAME}"
+fi
+
+TARGET_VERSION="${SPECIFIED_VERSION:-$(printf '%s' "$DOWNLOAD_URL" | sed -n 's#.*/releases/download/\([^/]*\)/.*#\1#p')}"
+if [ -n "$CURRENT_VERSION" ] && [ "${CURRENT_VERSION#v}" = "${TARGET_VERSION#v}" ]; then
+    log_ok "Обновления нет: у вас уже установлена последняя версия ${CURRENT_VERSION#v}."
+    exit 0
+fi
+if [ -n "$CURRENT_VERSION" ]; then
+    log_info "Будет выполнено обновление: ${CURRENT_VERSION#v} → ${TARGET_VERSION#v}."
 fi
 
 log_info "Попытка скачивания бинарного архива: ${ASSET_NAME}..."
@@ -357,6 +388,11 @@ log_info "Установка nami-server в ${INSTALL_DIR}..."
 $SUDO install -m 755 "${TMP_DIR}/nami-server" "${INSTALL_DIR}/nami-server"
 $SUDO ln -sf "${INSTALL_DIR}/nami-server" "${INSTALL_DIR}/nami"
 log_ok "Установлен: ${INSTALL_DIR}/nami-server (симлинк ${INSTALL_DIR}/nami)"
+if [ -n "$CURRENT_VERSION" ]; then
+    log_ok "Сервер обновлён: ${CURRENT_VERSION#v} → ${TARGET_VERSION#v}."
+else
+    log_ok "Установлена версия ${TARGET_VERSION#v}."
+fi
 
 # 8. Создание системного пользователя nami и настройка sudoers
 if ! id -u nami >/dev/null 2>&1; then
@@ -383,6 +419,7 @@ log_info "Настройка директории данных ${DATA_DIR}..."
 $SUDO mkdir -p "$DATA_DIR"
 $SUDO chown -R nami:nami "$DATA_DIR"
 $SUDO chmod 750 "$DATA_DIR"
+printf '%s\n' "${TARGET_VERSION#v}" | $SUDO tee "${DATA_DIR}/version" >/dev/null
 
 $SUDO mkdir -p /etc/caddy
 $SUDO chown -R nami:nami /etc/caddy 2>/dev/null || true
@@ -462,7 +499,7 @@ if [ "$IS_UPDATE" = true ]; then
     echo -e "${BOLD}${GREEN}  🔄 Nami Server успешно обновлён и перезапущен!${NC}"
     echo -e "${BOLD}${GREEN}======================================================================${NC}"
     echo
-    echo -e "  Служба ${BOLD}${SERVICE_NAME}${NC} обновлена до последней версии и работает."
+    echo -e "  Служба ${BOLD}${SERVICE_NAME}${NC} обновлена: ${CURRENT_VERSION#v} → ${TARGET_VERSION#v}."
     echo -e "  Все пользовательские данные и база данных сохранены в ${CYAN}${DATA_DIR}${NC}."
     echo
     echo -e "  ${BOLD}Веб-интерфейс сервера:${NC}"

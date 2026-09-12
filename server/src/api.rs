@@ -90,11 +90,11 @@ pub fn router(state: Shared) -> Router {
     let protected = Router::new()
         .route("/api/host-capabilities", get(host_capabilities))
         .route("/api/tracks", get(tracks))
-        .route("/api/tracks/{id}", get(track))
+        .route("/api/tracks/{id}", get(track).patch(patch_track))
         .route("/api/tracks/{id}/stream", get(stream))
         .route("/api/tracks/{id}/stream/auto", get(stream_auto))
         .route("/api/tracks/match", post(tracks_match))
-        .route("/api/tracks/{id}/artwork", get(artwork_handler))
+        .route("/api/tracks/{id}/artwork", get(artwork_handler).put(put_artwork))
         .route("/api/tracks/{id}/waveform", get(waveform_handler))
         .route("/api/tracks/{id}/radio", get(radio_handler))
         .route("/api/tracks/{id}/hls/master.m3u8", get(hls_master))
@@ -391,6 +391,41 @@ async fn track(
 }
 
 #[derive(Deserialize)]
+struct TrackPatch {
+    title: String,
+    artist: Option<String>,
+    album: Option<String>,
+    track_no: Option<i64>,
+    year: Option<i64>,
+}
+
+async fn patch_track(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Path(id): Path<i64>,
+    Json(p): Json<TrackPatch>,
+) -> ApiResult<StatusCode> {
+    if p.title.trim().is_empty() {
+        return Err(ApiError(StatusCode::BAD_REQUEST, "название не может быть пустым".into()));
+    }
+    let db = st.db.lock().unwrap();
+    if !users::can_see_track(&db, &ident, id) {
+        return Err(ApiError(StatusCode::NOT_FOUND, "нет такого трека".into()));
+    }
+    db.execute(
+        "UPDATE tracks SET title=?2, artist=?3, album=?4, track_no=?5, year=?6 WHERE id=?1",
+        rusqlite::params![id, p.title.trim(), clean_text(p.artist), clean_text(p.album), p.track_no, p.year],
+    )?;
+    drop(db);
+    st.notify(serde_json::json!({"type":"changed","entities":["tracks"],"at":crate::db::now()}));
+    Ok(StatusCode::NO_CONTENT)
+}
+
+fn clean_text(value: Option<String>) -> Option<String> {
+    value.map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+}
+
+#[derive(Deserialize)]
 struct StreamQuery {
     /// Имя профиля транскодинга. Без него - passthrough, байт-в-байт.
     profile: Option<String>,
@@ -452,16 +487,11 @@ async fn stream_auto(
         }
     };
 
-    let profile = if is_cellular {
-        if !st.ffmpeg {
-            return ApiError(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "транскодинг недоступен (ffmpeg не найден в PATH)".into(),
-            )
-            .into_response();
-        }
+    let profile = if is_cellular && st.ffmpeg {
         Some("mobile")
     } else {
+        // Поток должен играть и без FFmpeg. На слабом self-host сервере отдаём
+        // оригинал вместо 503; это особенно важно для приглашённых в Jam.
         None
     };
 
@@ -478,10 +508,37 @@ async fn artwork_handler(
     serve_artwork(st, id, &ident).await
 }
 
+async fn put_artwork(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Path(id): Path<i64>,
+    req: Request,
+) -> Response {
+    if !users::can_see_track(&st.db.lock().unwrap(), &ident, id) {
+        return ApiError(StatusCode::NOT_FOUND, "нет такого трека".into()).into_response();
+    }
+    let mime = req.headers().get(header::CONTENT_TYPE).and_then(|v| v.to_str().ok()).unwrap_or("image/jpeg").to_string();
+    if !mime.starts_with("image/") {
+        return ApiError(StatusCode::BAD_REQUEST, "ожидается изображение".into()).into_response();
+    }
+    let bytes = match axum::body::to_bytes(req.into_body(), 10 * 1024 * 1024).await {
+        Ok(b) if !b.is_empty() => b,
+        _ => return ApiError(StatusCode::BAD_REQUEST, "пустая или слишком большая обложка".into()).into_response(),
+    };
+    if let Err(e) = crate::artwork::save_override(&st.cfg.data_dir, id, &bytes, &mime) {
+        return ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response();
+    }
+    st.notify(serde_json::json!({"type":"changed","entities":["tracks"],"at":crate::db::now()}));
+    StatusCode::NO_CONTENT.into_response()
+}
+
 /// Общая отдача обложки: и для `/api/tracks/{id}/artwork`, и для Subsonic `getCoverArt`.
 pub async fn serve_artwork(st: Shared, id: i64, ident: &Ident) -> Response {
     if !can_access_track(&st, ident, id) {
         return ApiError(StatusCode::NOT_FOUND, "нет такого трека".into()).into_response();
+    }
+    if let Some((bytes, mime)) = crate::artwork::load_override(&st.cfg.data_dir, id) {
+        return ([(header::CONTENT_TYPE, mime), (header::CACHE_CONTROL, "no-cache".into())], bytes).into_response();
     }
     let path: Option<String> = {
         let db = st.db.lock().unwrap();
@@ -1450,24 +1507,25 @@ async fn jam_guest_auth(
     if !st.jams.contains(&code_upper) {
         return Err(ApiError(StatusCode::NOT_FOUND, "нет такой сессии джема".into()));
     }
-    let raw_token = format!("jam_{}", auth::random_hex(24));
-    let token_hash = auth::hash_token(&raw_token);
-    let now = crate::db::now();
-    {
-        let db = st.db.lock().unwrap();
-        db.execute(
-            "DELETE FROM devices WHERE name LIKE 'Jam Guest (%)' AND last_seen_at < ?1",
-            [now - 86_400],
-        )?;
-        db.execute(
-            "INSERT INTO devices (name, token_hash, paired_at, last_seen_at) VALUES (?1, ?2, ?3, ?3)",
-            rusqlite::params![format!("Jam Guest ({})", code_upper), token_hash, now],
-        )?;
-    }
+    let raw_token = create_jam_guest(&st.db.lock().unwrap(), &code_upper)?;
     Ok(Json(JamGuestAuthResp {
         token: raw_token,
         code: code_upper,
     }))
+}
+
+pub(crate) fn create_jam_guest(db: &Connection, code: &str) -> rusqlite::Result<String> {
+    let raw_token = format!("jam_{}", auth::random_hex(24));
+    let now = crate::db::now();
+    db.execute(
+        "DELETE FROM devices WHERE name LIKE 'Jam Guest (%)' AND last_seen_at < ?1",
+        [now - 86_400],
+    )?;
+    db.execute(
+        "INSERT INTO devices (name, token_hash, created_at, last_seen_at) VALUES (?1, ?2, ?3, ?3)",
+        rusqlite::params![format!("Jam Guest ({code})"), auth::hash_token(&raw_token), now],
+    )?;
+    Ok(raw_token)
 }
 
 /// WebSocket с событиями изменений. Не заменяет `GET /api/sync?since=`, а ускоряет его:
@@ -2433,7 +2491,6 @@ async fn upload(
     Query(q): Query<UploadQuery>,
     body: axum::body::Body,
 ) -> ApiResult<Json<Uploaded>> {
-    let state_key = ident.state_key();
     let library_id = {
         let db = st.db.lock().unwrap();
         match users::library_mode(&db) {
@@ -2515,7 +2572,6 @@ async fn upload(
             if u.duplicate_of.is_none() {
                 st.notify(serde_json::json!({
                     "type": "changed",
-                    "user_id": state_key,
                     "entities": ["tracks"],
                     "at": crate::db::now(),
                 }));

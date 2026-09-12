@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.firstOrNull
@@ -177,6 +178,14 @@ class JamRepositoryImpl @Inject constructor(
     @Volatile private var guestToken: String? = null
     @Volatile private var guestCertSha256: String? = null
     @Volatile private var nsdRegistrationListener: NsdManager.RegistrationListener? = null
+
+    init {
+        scope.launch {
+            isServerConfigured.collect { configured ->
+                if (configured && webSocket == null && !isConnecting) connectServerEvents()
+            }
+        }
+    }
 
     override fun createRoom() {
         clearError()
@@ -678,6 +687,12 @@ class JamRepositoryImpl @Inject constructor(
         }
         if (!intentionalClose && previousSession != null) {
             scheduleReconnect()
+        } else if (!intentionalClose && isServerConfigured.value && guestServerUrl == null) {
+            reconnectJob?.cancel()
+            reconnectJob = scope.launch {
+                delay(RECONNECT_DELAY_MS)
+                connectServerEvents()
+            }
         }
     }
 
@@ -690,7 +705,7 @@ class JamRepositoryImpl @Inject constructor(
             Log.d(TAG, "Attempting reconnect to Jam session ${sessionToRestore.code}")
             val host = guestServerUrl
             if (host != null) {
-                connectAsGuest(host, sessionToRestore.code)
+                connectAsGuest(host, sessionToRestore.code, guestCertSha256)
             } else {
                 connectWebSocket(onOpened = {
                     send(JSONObject().apply {
@@ -969,8 +984,9 @@ class JamRepositoryImpl @Inject constructor(
                                 val attrCode = resolved.attributes["code"]?.let { String(it) }
                                 val attrHost = resolved.attributes["host"]?.let { String(it) }
                                 val attrCert = resolved.attributes["fp"]?.let { String(it) }
-                                if (attrCode.equals(code, ignoreCase = true) && !attrHost.isNullOrBlank()) {
-                                    val tagged = if (attrCert.isNullOrBlank()) attrHost else "$attrHost#nami-fp=$attrCert"
+                                if (attrCode.equals(code, ignoreCase = true)) {
+                                    val host = resolvedJamHost(resolved, attrHost)
+                                    val tagged = if (attrCert.isNullOrBlank()) host else "$host#nami-fp=$attrCert"
                                     if (continuation.isActive) continuation.resume(tagged)
                                 } else if (serviceInfo.serviceName.contains(code, ignoreCase = true)) {
                                     val host = "http://${resolved.host.hostAddress}:${resolved.port}"
@@ -1036,15 +1052,13 @@ class JamRepositoryImpl @Inject constructor(
                             val attrCode = resolved.attributes["code"]?.let { String(it) }
                                 ?: resolved.serviceName.removePrefix("NamiJam-")
                             val attrHost = resolved.attributes["host"]?.let { String(it) }
-                                ?: runCatching { "http://${resolved.host.hostAddress}:${resolved.port}" }.getOrNull()
+                            val localHost = resolvedJamHost(resolved, attrHost)
                             val attrCert = resolved.attributes["fp"]?.let { String(it) }
                             val cleanCode = attrCode.trim().uppercase()
                             if (cleanCode.length in 4..8) {
                                 val room = dev.nami.domain.DiscoveredJamRoom(
                                     code = cleanCode,
-                                    hostUrl = attrHost?.let { host ->
-                                        if (attrCert.isNullOrBlank()) host else "$host#nami-fp=$attrCert"
-                                    },
+                                    hostUrl = if (attrCert.isNullOrBlank()) localHost else "$localHost#nami-fp=$attrCert",
                                     source = dev.nami.domain.JamDiscoverySource.LOCAL_WIFI,
                                     title = "Комната $cleanCode",
                                     description = "Локальная сеть Wi-Fi",
@@ -1075,6 +1089,13 @@ class JamRepositoryImpl @Inject constructor(
         } catch (e: Exception) {
             Log.w(TAG, "Failed to start NSD discovery: ${e.message}")
         }
+    }
+
+    private fun resolvedJamHost(resolved: NsdServiceInfo, advertised: String?): String {
+        val scheme = if (advertised?.startsWith("https://", ignoreCase = true) == true) "https" else "http"
+        val address = resolved.host.hostAddress.orEmpty().substringBefore('%')
+        val host = if (':' in address) "[$address]" else address
+        return "$scheme://$host:${resolved.port}"
     }
 
     private fun stopNsdScanning() {
