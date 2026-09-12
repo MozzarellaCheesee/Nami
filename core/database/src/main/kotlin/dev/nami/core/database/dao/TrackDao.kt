@@ -108,6 +108,14 @@ interface TrackDao {
     )
     suspend fun findDuplicate(title: String, artistId: String?, albumId: String?, durationMs: Long): TrackEntity?
 
+    /** Дедуп до копирования файла: повторное сканирование отслеживаемой папки видит тот же
+     * SAF-документ и пропускает его, не вычитывая гигабайты ради findDuplicate. */
+    @Query("SELECT id FROM tracks WHERE sourceUri = :sourceUri AND deletedAt IS NULL LIMIT 1")
+    suspend fun findIdBySourceUri(sourceUri: String): String?
+
+    @Query("UPDATE tracks SET sourceUri = :sourceUri WHERE id = :id")
+    suspend fun setSourceUri(id: String, sourceUri: String)
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAll(tracks: List<TrackEntity>)
 

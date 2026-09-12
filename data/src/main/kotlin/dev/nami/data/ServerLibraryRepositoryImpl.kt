@@ -20,6 +20,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -55,6 +57,15 @@ class ServerLibraryRepositoryImpl @Inject constructor(
     override val uploadProgress: StateFlow<String?> = _uploadProgress
 
     init {
+        // Появился токен - сразу тянем список треков. Раньше это делал только LibraryViewModel
+        // в своём init, поэтому после входа в аккаунт зеркала серверной библиотеки не появлялись
+        // до перезапуска приложения: ViewModel уже была создана, когда сервера ещё не было.
+        scope.launch {
+            settingsRepository.namiServerToken
+                .map { !it.isNullOrBlank() }
+                .distinctUntilChanged()
+                .collect { hasToken -> if (hasToken) runCatching { listTracks() } }
+        }
         scope.launch {
             cacheDir.listFiles()?.forEach { file ->
                 val id = file.nameWithoutExtension.toLongOrNull() ?: return@forEach

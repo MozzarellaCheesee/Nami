@@ -238,4 +238,41 @@ class LibraryRepositoryImplTest {
         assertNotNull(album.artworkPath)
         check(coverFile.exists())
     }
+
+    @Test
+    fun `rescanning a watched folder does not reimport the same document`() = runTest {
+        // Теги меняются между проходами: findDuplicate такой трек дублем не признает, так что
+        // повтор отсекается именно по sourceUri, до копирования файла.
+        var pass = 0
+        val fakeBridge = object : NativeBridge {
+            override suspend fun readTags(path: String) = TagResult(
+                title = "Track ${++pass}", artist = null, album = null, albumArtist = null,
+                trackNo = null, discNo = null, genre = null, year = null,
+                durationMs = 1000, artwork = null, artworkMime = null,
+            )
+        }
+        val repo = LibraryRepositoryImpl(
+            context, db.trackDao(), db.artistDao(), db.albumDao(), fakeBridge,
+            MetadataResolver(db.artistDao(), db.albumDao()), ArtworkStore(context), TrashFileStore(context),
+            FolderImportScanner(context), fakeLyricsRepository, db.playHistoryDao(),
+        )
+
+        val albumDir = File(context.cacheDir, "Watched").apply { mkdirs() }
+        val trackFile = File(albumDir, "one.flac").apply { writeText("audio") }
+        val groups = listOf(
+            AudioGroup(
+                albumFolderName = "Watched",
+                artistFolderName = null,
+                artistDir = null,
+                audioFiles = listOf(DocumentFile.fromFile(trackFile)),
+                sourceDir = DocumentFile.fromFile(albumDir),
+            ),
+        )
+
+        repo.importFolderFromGroups(groups).toList()
+        repo.importFolderFromGroups(groups).toList()
+
+        assertEquals(1, db.trackDao().count())
+        assertEquals(1, pass)
+    }
 }

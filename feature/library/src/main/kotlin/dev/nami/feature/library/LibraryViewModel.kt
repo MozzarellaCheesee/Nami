@@ -92,14 +92,6 @@ class LibraryViewModel @Inject constructor(
                 }
             }
         }
-        refreshServerTracks()
-    }
-
-    fun refreshServerTracks() {
-        if (!isServerActive()) return
-        viewModelScope.launch(Dispatchers.IO) {
-            serverLibraryRepository.listTracks()
-        }
     }
 
     private val _importResult = MutableStateFlow<String?>(null)
@@ -330,17 +322,19 @@ class LibraryViewModel @Inject constructor(
 
     /** П.md §2 "Режим наблюдения за папкой" - reruns folder import for every remembered SAF
      * tree, one at a time. No true background watch exists for SAF trees on Android, so this is
-     * called on cold start and from a manual "Обновить" action instead of ever running silently
-     * in the background. */
+     * called on cold start and from a manual "Обновить" action.
+     *
+     * Прогресс намеренно не публикуется: этот проход идёт сам по себе на каждом запуске, и
+     * модальное окно импорта перекрывало приложение, пока пересканируется вся папка. Уже
+     * импортированные файлы отсеиваются по sourceUri до копирования, так что обычный проход
+     * почти ничего не делает. */
     fun rescanWatchedFolders() {
         val folders = settingsRepository.watchedFolders.value
         if (folders.isEmpty()) return
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             for (treeUri in folders) {
                 try {
-                    libraryRepository.import(ImportSource.Folder(treeUri)).collect { progress ->
-                        _uiState.value = _uiState.value.copy(importProgress = progress)
-                    }
+                    libraryRepository.import(ImportSource.Folder(treeUri)).collect { }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -349,7 +343,6 @@ class LibraryViewModel @Inject constructor(
                 }
             }
             searchRepository.rebuildIndex()
-            _uiState.value = _uiState.value.copy(importProgress = null)
         }
     }
 

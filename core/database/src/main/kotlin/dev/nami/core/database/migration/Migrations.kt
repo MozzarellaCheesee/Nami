@@ -327,6 +327,13 @@ val MIGRATION_28_29 = object : Migration(28, 29) {
 }
 
 /** Реальные LWW-метки локальных изменений для синхронизации с NAMI Server. */
+val MIGRATION_30_31 = object : Migration(30, 31) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE tracks ADD COLUMN sourceUri TEXT")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_tracks_sourceUri ON tracks(sourceUri)")
+    }
+}
+
 val MIGRATION_29_30 = object : Migration(29, 30) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE tracks ADD COLUMN ratingUpdatedAt INTEGER NOT NULL DEFAULT 0")

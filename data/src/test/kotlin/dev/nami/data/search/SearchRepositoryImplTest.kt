@@ -65,6 +65,8 @@ class SearchRepositoryImplTest {
         override fun observeByIdWithArtwork(id: String) = error("unused")
         override suspend fun findByPath(path: String): TrackEntity? = error("unused")
         override suspend fun findDuplicate(title: String, artistId: String?, albumId: String?, durationMs: Long): TrackEntity? = error("unused")
+        override suspend fun findIdBySourceUri(sourceUri: String): String? = error("unused")
+        override suspend fun setSourceUri(id: String, sourceUri: String) = error("unused")
         override suspend fun insertAll(tracks: List<TrackEntity>) = error("unused")
         override suspend fun count(): Int = error("unused")
         override suspend fun allRaw(): List<dev.nami.core.database.entity.TrackEntity> = error("unused")

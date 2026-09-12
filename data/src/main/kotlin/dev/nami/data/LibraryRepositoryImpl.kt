@@ -940,6 +940,7 @@ class LibraryRepositoryImpl @Inject constructor(
                     fallbackAlbum = group.albumFolderName,
                     lyricsDoc = folderImportScanner.findLyrics(doc),
                     cueDoc = folderImportScanner.findCue(doc),
+                    sourceUri = doc.uri.toString(),
                 )
                 if (albumIdForGroup == null) albumIdForGroup = result?.albumId
                 done++
@@ -981,7 +982,12 @@ class LibraryRepositoryImpl @Inject constructor(
         lyricsDoc: DocumentFile? = null,
         cueDoc: DocumentFile? = null,
         originalFileName: String? = null,
+        sourceUri: String? = null,
     ): CopyAndIndexResult? {
+        // Дедуп до копирования: тот же SAF-документ уже импортирован - повторное сканирование
+        // папки не должно перекачивать файл целиком только ради findDuplicate ниже.
+        if (sourceUri != null && trackDao.findIdBySourceUri(sourceUri) != null) return null
+
         val displayName = originalFileName
             ?: (if (uri.scheme == "file") uri.lastPathSegment else runCatching { queryDisplayName(resolver, uri) }.getOrNull() ?: uri.lastPathSegment)
 
@@ -1058,7 +1064,13 @@ class LibraryRepositoryImpl @Inject constructor(
 
         // Same title/artist/album/duration as an already-imported track - treat the freshly
         // copied file as a duplicate of it and discard the copy instead of indexing it again.
-        if (trackDao.findDuplicate(title, artistId, albumId, durationMs) != null) {
+        val duplicate = trackDao.findDuplicate(title, artistId, albumId, durationMs)
+        if (duplicate != null) {
+            // Запоминаем источник на уже существующей строке, иначе следующее сканирование
+            // снова дойдёт сюда только после полного копирования файла.
+            if (sourceUri != null && duplicate.sourceUri == null) {
+                trackDao.setSourceUri(duplicate.id, sourceUri)
+            }
             destination.delete()
             return null
         }
@@ -1125,6 +1137,7 @@ class LibraryRepositoryImpl @Inject constructor(
                             playCount = 0,
                             genre = tags?.genre,
                             artworkPath = trackArtworkPath,
+                            sourceUri = sourceUri,
                             sampleRateHz = tags?.sampleRateHz,
                             bitDepth = tags?.bitDepth,
                             channels = tags?.channels,
@@ -1156,6 +1169,7 @@ class LibraryRepositoryImpl @Inject constructor(
                     playCount = 0,
                     genre = tags?.genre,
                     artworkPath = trackArtworkPath,
+                    sourceUri = sourceUri,
                     sampleRateHz = tags?.sampleRateHz,
                     bitDepth = tags?.bitDepth,
                     channels = tags?.channels,

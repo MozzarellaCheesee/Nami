@@ -29,6 +29,7 @@ import androidx.room.PrimaryKey
         // Not unique - CUE-derived tracks (см. cueStartMs/cueEndMs) intentionally share one path
         // across several rows, one per track carved out of the same physical album image file.
         Index(value = ["path"]),
+        Index(value = ["sourceUri"]),
     ],
 )
 data class TrackEntity(
@@ -91,5 +92,10 @@ data class TrackEntity(
      * игнорироваться при построении очереди, а не каскадом чистить чужие строки. */
     val chainNextTrackId: String? = null,
     val ratingUpdatedAt: Long = 0,
+    /** SAF-документ, из которого трек импортирован. Нужен только для дедупа при повторном
+     * сканировании отслеживаемой папки: иначе дубль ловится лишь после полного копирования
+     * файла и чтения тегов. Null для треков, импортированных не из папки (файлы, zip, зеркала
+     * серверной библиотеки) и для всего, что было в базе до появления колонки. */
+    val sourceUri: String? = null,
     val noteUpdatedAt: Long = 0,
 )

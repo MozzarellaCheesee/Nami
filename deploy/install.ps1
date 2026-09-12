@@ -114,6 +114,12 @@ if ($ffmpegCmd) {
     if ($wingetCmd) {
         try {
             Start-Process winget -ArgumentList "install -e --id Gyan.FFmpeg --accept-source-agreements --accept-package-agreements --silent" -Wait -NoNewWindow
+            # winget правит PATH в реестре, а текущий процесс держит его старое значение. Без
+            # перечтения только что установленный (или уже стоявший) ffmpeg считается отсутствующим.
+            $env:PATH = (@(
+                [Environment]::GetEnvironmentVariable('PATH', 'Machine'),
+                [Environment]::GetEnvironmentVariable('PATH', 'User')
+            ) | Where-Object { $_ }) -join ';'
             $ffmpegCmd = Get-Command ffmpeg -ErrorAction SilentlyContinue
             if ($ffmpegCmd) {
                 Write-Host "      ✓ FFmpeg успешно установлен в систему: $($ffmpegCmd.Source)" -ForegroundColor Green
@@ -182,7 +188,9 @@ try {
     }
     
     Write-Host "      Загрузка с: $downloadUrl" -ForegroundColor Gray
-    $tempFile = Join-Path $env:TEMP "nami-server-download.tmp"
+    # Расширение обязано быть настоящим: Expand-Archive отказывается работать с чем угодно,
+    # кроме .zip, и падает на .tmp с "неподдерживаемый формат файла архива".
+    $tempFile = Join-Path $env:TEMP $(if ($isZip) { "nami-server-download.zip" } else { "nami-server-download.exe" })
     
     Invoke-WebRequest -Uri $downloadUrl -OutFile $tempFile -UseBasicParsing
     
