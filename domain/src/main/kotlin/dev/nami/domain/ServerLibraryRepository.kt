@@ -48,8 +48,17 @@ interface ServerLibraryRepository {
     /** Удалить трек с сервера. Также удаляет его из офлайн-кеша и локального зеркала. */
     suspend fun deleteTrack(serverTrackId: Long): Boolean = false
 
+    /** Удалить трек только с сервера, оставив всё, что уже есть на устройстве.
+     *
+     * Скачанный файл не трогается, а его запись переводится в свою библиотеку, чтобы следующая
+     * синхронизация её не снесла как устаревшее зеркало. Локальные треки, совпавшие с серверными,
+     * в зеркало не попадают вовсе, поэтому их этот вызов не касается по определению. */
+    suspend fun deleteFromServerOnly(serverTrackId: Long): Boolean = false
+
     /** Множественное удаление треков с сервера. */
-    suspend fun deleteTracks(serverTrackIds: List<Long>): Boolean = false
+    /** Возвращает id фактически удалённых треков. Частичный успех - нормальный исход:
+     * трек мог быть уже удалён с другого устройства, остальные при этом удаляются. */
+    suspend fun deleteTracks(serverTrackIds: List<Long>): List<Long> = emptyList()
 
     suspend fun updateTrack(track: ServerTrackMeta): Boolean = false
 

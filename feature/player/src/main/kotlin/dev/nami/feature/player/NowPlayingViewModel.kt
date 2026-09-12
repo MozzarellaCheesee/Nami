@@ -161,6 +161,9 @@ class NowPlayingViewModel @Inject constructor(
     val playbackState: StateFlow<PlaybackState> = playerRepository.state
     val queue: StateFlow<PlayerQueue> = playerRepository.queue
     val playbackSource: StateFlow<dev.nami.domain.TrackPlaybackSource> = playerRepository.playbackSource
+
+    /** Есть ли текущий трек на сервере. `null` - сервер не подключён, ответа нет. */
+    val currentTrackOnServer: StateFlow<Boolean?> = playerRepository.currentTrackOnServer
     val autoAdvanceSignal: StateFlow<Int> = playerRepository.autoAdvanceSignal
     val shuffleEnabled: StateFlow<Boolean> = playerRepository.shuffleEnabled
     val repeatMode: StateFlow<RepeatMode> = playerRepository.repeatMode

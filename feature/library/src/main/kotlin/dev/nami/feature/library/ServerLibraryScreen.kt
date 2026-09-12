@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -305,15 +306,37 @@ class ServerLibraryViewModel @Inject constructor(
         }
     }
 
+    /** Убрать трек с сервера, оставив скачанный файл на устройстве: он переходит в свою
+     * библиотеку и продолжает играть офлайн. Из списка серверных треков он при этом уходит -
+     * на сервере его больше нет. */
+    fun deleteFromServerOnly(trackId: Long) {
+        viewModelScope.launch {
+            if (serverLibraryRepository.deleteFromServerOnly(trackId)) {
+                tracks = tracks.filterNot { it.id == trackId }
+                cached = cached - trackId
+                downloading = downloading - trackId
+                selectedTrackIds = selectedTrackIds - trackId
+                actionMsg = "Трек удалён с сервера, копия осталась на устройстве"
+            } else {
+                actionMsg = "Не удалось удалить трек с сервера"
+            }
+        }
+    }
+
     fun deleteSelectedTracks() {
         val ids = selectedTrackIds.toList()
         if (ids.isEmpty()) return
         viewModelScope.launch {
-            if (serverLibraryRepository.deleteTracks(ids)) {
-                tracks = tracks.filterNot { it.id in selectedTrackIds }
-                cached = cached - selectedTrackIds
-                downloading = downloading - selectedTrackIds
-                actionMsg = "Удалено треков с сервера: ${ids.size}"
+            val deleted = serverLibraryRepository.deleteTracks(ids).toSet()
+            if (deleted.isNotEmpty()) {
+                tracks = tracks.filterNot { it.id in deleted }
+                cached = cached - deleted
+                downloading = downloading - deleted
+                actionMsg = if (deleted.size == ids.size) {
+                    "Удалено треков с сервера: ${deleted.size}"
+                } else {
+                    "Удалено ${deleted.size} из ${ids.size}: остальные удалить не удалось"
+                }
                 clearSelection()
             } else {
                 actionMsg = "Не удалось удалить выбранные треки"
@@ -511,19 +534,40 @@ fun ServerLibraryScreen(
             onDismissRequest = { deleteTarget = null },
             title = { Text("Удалить с сервера?") },
             text = {
+                val downloaded = track.id in viewModel.cached
                 Text(
-                    "Трек «${track.title}» будет удалён из библиотеки сервера и перемещён в корзину на сервере.",
+                    if (downloaded) {
+                        "Трек «${track.title}» будет удалён из библиотеки сервера и перемещён в корзину " +
+                            "на сервере. Он скачан на это устройство - выберите, оставить копию или удалить и её."
+                    } else {
+                        "Трек «${track.title}» будет удалён из библиотеки сервера и перемещён в корзину на сервере."
+                    },
                     color = NamiColors.Paper70,
                 )
             },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.deleteTrack(track.id)
-                        deleteTarget = null
-                    },
-                ) {
-                    Text("Удалить", color = NamiColors.Shu)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (track.id in viewModel.cached) {
+                        TextButton(
+                            onClick = {
+                                viewModel.deleteFromServerOnly(track.id)
+                                deleteTarget = null
+                            },
+                        ) {
+                            Text("Только с сервера", color = NamiColors.Ai)
+                        }
+                    }
+                    TextButton(
+                        onClick = {
+                            viewModel.deleteTrack(track.id)
+                            deleteTarget = null
+                        },
+                    ) {
+                        Text(
+                            if (track.id in viewModel.cached) "Удалить везде" else "Удалить",
+                            color = NamiColors.Shu,
+                        )
+                    }
                 }
             },
             dismissButton = {

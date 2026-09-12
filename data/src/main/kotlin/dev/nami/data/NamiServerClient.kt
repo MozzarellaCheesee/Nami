@@ -594,18 +594,40 @@ object NamiServerClient {
         return request("PATCH", "$base/api/tracks/${track.id}", body, cfg.token, cfg.certSha256)?.first == 204
     }
 
+    /** Потолок batch-удаления на стороне сервера (`MAX_BATCH_DELETE` в server/src/api.rs). */
+    private const val BATCH_DELETE_CHUNK = 500
+
     fun deleteTrack(cfg: Config, trackId: Long): Boolean {
         val base = reachableBase(cfg) ?: return false
         val (code, _) = request("DELETE", "$base/api/tracks/$trackId", null, cfg.token, cfg.certSha256) ?: return false
         return code in 200..204
     }
 
-    fun deleteTracks(cfg: Config, trackIds: List<Long>): Boolean {
-        if (trackIds.isEmpty()) return true
-        val base = reachableBase(cfg) ?: return false
-        val body = JSONObject().put("ids", org.json.JSONArray(trackIds)).toString()
-        val (code, _) = request("POST", "$base/api/tracks/batch-delete", body, cfg.token, cfg.certSha256) ?: return false
-        return code in 200..204
+    /** Возвращает id треков, которые сервер ДЕЙСТВИТЕЛЬНО удалил, а не общий признак успеха.
+     * Ответ `/tracks/batch-delete` и так разделяет `deleted` и `failed`: если один трек из
+     * выделения уже удалён с другого устройства, всё остальное удаляется нормально, и терять
+     * этот список означало бы оставить локальную базу рассинхронизованной с сервером.
+     *
+     * Режем на куски по [BATCH_DELETE_CHUNK]: сервер отклоняет списки длиннее (удаление
+     * держит его единственный мьютекс базы на весь цикл). */
+    fun deleteTracks(cfg: Config, trackIds: List<Long>): List<Long> {
+        if (trackIds.isEmpty()) return emptyList()
+        val base = reachableBase(cfg) ?: return emptyList()
+        val deleted = mutableListOf<Long>()
+        for (chunk in trackIds.chunked(BATCH_DELETE_CHUNK)) {
+            val body = JSONObject().put("ids", org.json.JSONArray(chunk)).toString()
+            val (code, text) = request("POST", "$base/api/tracks/batch-delete", body, cfg.token, cfg.certSha256)
+                ?: break
+            if (code !in 200..204) break
+            val arr = runCatching { JSONObject(text).getJSONArray("deleted") }.getOrNull()
+            if (arr == null) {
+                // Старый сервер без раздельного ответа: код 2xx считаем за весь кусок.
+                deleted += chunk
+                continue
+            }
+            for (i in 0 until arr.length()) deleted += arr.getLong(i)
+        }
+        return deleted
     }
 
     fun updateAlbum(cfg: Config, album: String, artist: String?, title: String?, year: Int?, updateYear: Boolean, albumArtist: String?, updateAlbumArtist: Boolean): Boolean {

@@ -80,7 +80,7 @@ class SearchRepositoryImplTest {
         override suspend fun setAlbumId(id: String, albumId: String?) = error("unused")
         override suspend fun countByAlbum(albumId: String): Int = error("unused")
         override suspend fun trackIdsForAlbum(albumId: String): List<String> = error("unused")
-        override suspend fun updateNote(id: String, note: String?) = error("unused")
+        override suspend fun updateNote(id: String, note: String?, updatedAt: Long) = error("unused")
         override suspend fun updateGenre(id: String, genre: String?) = error("unused")
         override suspend fun incrementSkipCount(id: String) = error("unused")
         override suspend fun updatePlayCount(id: String, count: Int) = error("unused")
@@ -89,9 +89,23 @@ class SearchRepositoryImplTest {
         override suspend fun setArtistId(id: String, artistId: String?) = error("unused")
         override fun trashedTracksFlow() = error("unused")
         override suspend fun incrementPlayCount(id: String) = error("unused")
-        override suspend fun updateRating(id: String, rating: Int?) = error("unused")
+        override suspend fun updateRating(id: String, rating: Int?, updatedAt: Long) = error("unused")
         override suspend fun setFirstPlayedIfUnset(id: String, timestamp: Long) = error("unused")
         override suspend fun updateReplayGain(id: String, gainDb: Float) = error("unused")
+        override suspend fun setPath(id: String, path: String) = error("unused")
+        override suspend fun deleteAllServerTracks(): Int = error("unused")
+        override suspend fun deleteServerTracksExcept(ids: List<String>) = error("unused")
+        override suspend fun updateServerTrack(
+            id: String,
+            title: String,
+            artistId: String?,
+            albumId: String?,
+            trackNo: Int?,
+            durationMs: Long,
+            format: String,
+            sizeBytes: Long,
+            artworkPath: String?,
+        ) = error("unused")
     }
 
     private fun fakeAlbumDao(rows: List<AlbumDao.AlbumListRow> = emptyList()) = object : AlbumDao {
@@ -127,6 +141,7 @@ class SearchRepositoryImplTest {
         override fun pagingSource(): PagingSource<Int, ArtistDao.ArtistWithPhoto> = error("unused")
         override fun observeFeaturedArtists(limit: Int) = error("unused")
         override suspend fun findByIdWithPhoto(id: String): ArtistDao.ArtistWithPhoto? = null
+        override fun observeByIdWithPhoto(id: String) = error("unused")
         override suspend fun insert(artist: ArtistEntity) = error("unused")
         override suspend fun allForIndexing(): List<ArtistEntity> = rows
         override suspend fun setPhotoPath(id: String, path: String) = error("unused")

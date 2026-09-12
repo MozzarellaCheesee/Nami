@@ -128,8 +128,25 @@ pub fn count_play(conn: &Connection, token: &str) -> bool {
         == 1
 }
 
-pub fn revoke(conn: &Connection, token: &str) -> rusqlite::Result<usize> {
-    conn.execute("DELETE FROM shares WHERE token_hash=?1", [hash_token(token)])
+/// Отзыв ссылки. Проверка владельца живёт здесь, а не у вызывающего: токен - единственное,
+/// что нужно знать для отзыва, так что без сверки `created_by` любой аутентифицированный
+/// пользователь гасил бы чужую ссылку, подсмотрев токен.
+///
+/// `created_by IS ?2`, а не `= ?2`: в режиме без пользователей `created_by` и `requester` оба
+/// NULL, и обычное сравнение там никогда не совпало бы.
+pub fn revoke(
+    conn: &Connection,
+    token: &str,
+    requester: Option<i64>,
+    is_owner: bool,
+) -> rusqlite::Result<usize> {
+    if is_owner {
+        return conn.execute("DELETE FROM shares WHERE token_hash=?1", [hash_token(token)]);
+    }
+    conn.execute(
+        "DELETE FROM shares WHERE token_hash=?1 AND created_by IS ?2",
+        rusqlite::params![hash_token(token), requester],
+    )
 }
 
 /// Экранирование под HTML-текст: заголовок ссылки и теги приходят от пользователя.
@@ -194,7 +211,30 @@ mod tests {
         let s = create(&c, Some(1), &req(None, None)).unwrap();
         assert_eq!(lookup(&c, &s.token).unwrap().track_ids, vec![1]);
         assert!(page(&c, &s.token, &lookup(&c, &s.token).unwrap()).contains("Трек"));
-        revoke(&c, &s.token).unwrap();
+        revoke(&c, &s.token, Some(1), false).unwrap();
+        assert!(lookup(&c, &s.token).is_none());
+    }
+
+    #[test]
+    fn чужую_ссылку_не_отозвать() {
+        let c = db();
+        let s = create(&c, Some(1), &req(None, None)).unwrap();
+
+        // Пользователь 2 знает токен, но ссылка не его - отзыв не проходит.
+        assert_eq!(revoke(&c, &s.token, Some(2), false).unwrap(), 0);
+        assert!(lookup(&c, &s.token).is_some());
+
+        // Владелец сервера гасит любую.
+        assert_eq!(revoke(&c, &s.token, Some(2), true).unwrap(), 1);
+        assert!(lookup(&c, &s.token).is_none());
+    }
+
+    #[test]
+    fn без_пользователей_отзыв_своей_ссылки_работает() {
+        let c = db();
+        // Режим без учётных записей: created_by и requester оба NULL, сравнение должно совпасть.
+        let s = create(&c, None, &req(None, None)).unwrap();
+        assert_eq!(revoke(&c, &s.token, None, false).unwrap(), 1);
         assert!(lookup(&c, &s.token).is_none());
     }
 

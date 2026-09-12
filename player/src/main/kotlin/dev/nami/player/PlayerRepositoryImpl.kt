@@ -78,6 +78,9 @@ class PlayerRepositoryImpl @Inject constructor(
     private val _playbackSource = MutableStateFlow(dev.nami.domain.TrackPlaybackSource.LOCAL)
     override val playbackSource: StateFlow<dev.nami.domain.TrackPlaybackSource> = _playbackSource
 
+    private val _currentTrackOnServer = MutableStateFlow<Boolean?>(null)
+    override val currentTrackOnServer: StateFlow<Boolean?> = _currentTrackOnServer
+
     private val _sleepTimerRemainingMs = MutableStateFlow<Long?>(null)
     override val sleepTimerRemainingMs: StateFlow<Long?> = _sleepTimerRemainingMs
     private var sleepTimerJob: Job? = null
@@ -362,9 +365,11 @@ class PlayerRepositoryImpl @Inject constructor(
         val mediaId = item.mediaId
 
         val source = when {
-            // Офлайн-кеш приложения
+            // Скачанный с сервера файл лежит на устройстве и играет с накопителя - это тот же
+            // LOCAL, что и своя библиотека. То, что трек вдобавок есть на сервере, показывает
+            // отдельный признак currentTrackOnServer ниже.
             uriStr.contains("ServerCache") || uriStr.endsWith(".audio") -> {
-                dev.nami.domain.TrackPlaybackSource.CACHE
+                dev.nami.domain.TrackPlaybackSource.LOCAL
             }
             // Потоковый стриминг с сервера
             uriStr.startsWith("http://") || uriStr.startsWith("https://") -> {
@@ -388,6 +393,15 @@ class PlayerRepositoryImpl @Inject constructor(
             }
         }
         _playbackSource.value = source
+
+        // Наличие на сервере читаем из карты, которую и так заполняет resolveServerUrls: там
+        // уже сделан match локального трека против серверной библиотеки. Пока сервер не
+        // подключён, карта пуста, и честный ответ - «не знаю», а не «нет».
+        _currentTrackOnServer.value = when {
+            mediaId.startsWith("server_") || mediaId.startsWith("jam_") -> true
+            !serverAudioRepository.isServerActive() -> null
+            else -> serverUrlByMediaId.containsKey(mediaId)
+        }
     }
 
     // Хвост группы C "CUE-поддержка" - ClippingConfiguration is ExoPlayer's own built-in answer

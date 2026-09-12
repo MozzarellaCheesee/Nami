@@ -47,6 +47,7 @@ class NowPlayingViewModelTest {
             override val shuffleEnabled: StateFlow<Boolean> = MutableStateFlow(false)
             override val repeatMode: StateFlow<dev.nami.domain.RepeatMode> = MutableStateFlow(dev.nami.domain.RepeatMode.OFF)
         override val playbackSource: StateFlow<dev.nami.domain.TrackPlaybackSource> = MutableStateFlow(dev.nami.domain.TrackPlaybackSource.LOCAL)
+        override val currentTrackOnServer: StateFlow<Boolean?> = MutableStateFlow(null)
         var playedTracks: List<PlayableTrack>? = null
         var addedTrack: PlayableTrack? = null
         var movedFromTo: Pair<Int, Int>? = null
