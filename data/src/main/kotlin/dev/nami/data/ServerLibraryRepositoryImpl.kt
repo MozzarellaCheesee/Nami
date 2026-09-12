@@ -16,14 +16,16 @@ import dev.nami.domain.SettingsRepository
 import dev.nami.domain.SearchRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -38,9 +40,22 @@ class ServerLibraryRepositoryImpl @Inject constructor(
 ) : ServerLibraryRepository {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var uploadJob: Job? = null
+    private val uploadMutex = Mutex()
     private val _uploadProgress = MutableStateFlow<String?>(null)
+    private val cachedAudioIds = ConcurrentHashMap.newKeySet<Long>()
+    private val cachedArtworkIds = ConcurrentHashMap.newKeySet<Long>()
     override val uploadProgress: StateFlow<String?> = _uploadProgress
+
+    init {
+        scope.launch {
+            cacheDir.listFiles()?.forEach { file ->
+                val id = file.nameWithoutExtension.toLongOrNull() ?: return@forEach
+                if (file.length() <= 0L) return@forEach
+                if (file.name.endsWith(".audio")) cachedAudioIds += id
+                if (file.name.endsWith(".artwork")) cachedArtworkIds += id
+            }
+        }
+    }
 
     override fun clearUploadProgress() {
         _uploadProgress.value = null
@@ -52,12 +67,12 @@ class ServerLibraryRepositoryImpl @Inject constructor(
 
     override fun uploadTracksBackground(tracks: List<Track>) {
         if (tracks.isEmpty()) return
-        uploadJob?.cancel()
-        uploadJob = scope.launch {
+        scope.launch {
+            uploadMutex.withLock {
             val cfg = activeConfig()
             if (cfg == null) {
                 _uploadProgress.value = "Сервер не подключён"
-                return@launch
+                return@withLock
             }
 
             val total = tracks.size
@@ -127,6 +142,7 @@ class ServerLibraryRepositoryImpl @Inject constructor(
                 if (totalAlready > 0) append("(уже было на сервере: $totalAlready) ")
                 if (failed > 0) append("ошибок $failed")
             }.trim()
+            }
         }
     }
 
@@ -209,23 +225,31 @@ class ServerLibraryRepositoryImpl @Inject constructor(
     override suspend fun listTracks(limit: Int, offset: Int): List<ServerTrackMeta>? =
         withContext(Dispatchers.IO) {
             val cfg = activeConfig() ?: return@withContext null
-            val arr = NamiServerClient.tracks(cfg, limit, offset) ?: return@withContext null
-            val tracks = (0 until arr.length()).mapNotNull { i ->
-                val o = arr.optJSONObject(i) ?: return@mapNotNull null
-                val id = o.optLong("id", -1)
-                if (id < 0) return@mapNotNull null
-                ServerTrackMeta(
-                    id = id,
-                    title = o.optString("title", ""),
-                    artist = o.optString("artist", ""),
-                    album = o.optString("album").takeIf { it.isNotBlank() },
-                    durationMs = o.optLong("duration_ms", 0L),
-                    trackNo = o.optInt("track_no").takeIf { o.has("track_no") && !o.isNull("track_no") },
-                    year = o.optInt("year").takeIf { o.has("year") && !o.isNull("year") },
-                    sizeBytes = o.optLong("size_bytes", 0L),
-                    format = o.optString("format").takeIf { it.isNotBlank() && it != "null" },
-                )
-            }
+            val pageSize = limit.coerceIn(1, 1000)
+            val tracks = mutableListOf<ServerTrackMeta>()
+            var nextOffset = offset.coerceAtLeast(0)
+            var pageCount: Int
+            do {
+                val arr = NamiServerClient.tracks(cfg, pageSize, nextOffset) ?: return@withContext null
+                pageCount = arr.length()
+                for (i in 0 until arr.length()) {
+                    val o = arr.optJSONObject(i) ?: continue
+                    val id = o.optLong("id", -1)
+                    if (id < 0) continue
+                    tracks += ServerTrackMeta(
+                        id = id,
+                        title = o.optString("title", ""),
+                        artist = o.optString("artist", ""),
+                        album = o.optString("album").takeIf { it.isNotBlank() },
+                        durationMs = o.optLong("duration_ms", 0L),
+                        trackNo = o.optInt("track_no").takeIf { o.has("track_no") && !o.isNull("track_no") },
+                        year = o.optInt("year").takeIf { o.has("year") && !o.isNull("year") },
+                        sizeBytes = o.optLong("size_bytes", 0L),
+                        format = o.optString("format").takeIf { it.isNotBlank() && it != "null" },
+                    )
+                }
+                nextOffset += pageCount
+            } while (pageCount == pageSize)
             mirrorIntoLibrary(tracks)
             tracks
         }
@@ -295,8 +319,11 @@ class ServerLibraryRepositoryImpl @Inject constructor(
             val dest = fileFor(serverTrackId)
             val artDest = artworkFileFor(serverTrackId)
             if (dest.exists() && dest.length() > 0) {
+                cachedAudioIds += serverTrackId
                 if (!artDest.exists() || artDest.length() == 0L) {
-                    runCatching { NamiServerClient.downloadArtwork(cfg, serverTrackId, artDest) }
+                    if (runCatching { NamiServerClient.downloadArtwork(cfg, serverTrackId, artDest) }.getOrDefault(false)) {
+                        cachedArtworkIds += serverTrackId
+                    }
                 }
                 return@withContext dest
             }
@@ -310,35 +337,39 @@ class ServerLibraryRepositoryImpl @Inject constructor(
                 tmp.delete()
                 return@withContext null
             }
+            cachedAudioIds += serverTrackId
             // Параллельно подтягиваем и сохраняем обложку трека для офлайн-режима
             if (!artDest.exists() || artDest.length() == 0L) {
-                runCatching { NamiServerClient.downloadArtwork(cfg, serverTrackId, artDest) }
+                if (runCatching { NamiServerClient.downloadArtwork(cfg, serverTrackId, artDest) }.getOrDefault(false)) {
+                    cachedArtworkIds += serverTrackId
+                }
             }
             dest
         }
 
     override fun cachedFile(serverTrackId: Long): File? =
-        fileFor(serverTrackId).takeIf { it.exists() && it.length() > 0 }
+        fileFor(serverTrackId).takeIf { serverTrackId in cachedAudioIds }
 
     override fun cachedArtwork(serverTrackId: Long): File? =
-        artworkFileFor(serverTrackId).takeIf { it.exists() && it.length() > 0 }
+        artworkFileFor(serverTrackId).takeIf { serverTrackId in cachedArtworkIds }
 
     override suspend fun downloadArtwork(serverTrackId: Long): File? = withContext(Dispatchers.IO) {
         cachedArtwork(serverTrackId)?.let { return@withContext it }
         val cfg = activeConfig() ?: return@withContext null
         val dest = artworkFileFor(serverTrackId)
-        if (NamiServerClient.downloadArtwork(cfg, serverTrackId, dest)) dest else null
+        if (NamiServerClient.downloadArtwork(cfg, serverTrackId, dest)) {
+            cachedArtworkIds += serverTrackId
+            dest
+        } else null
     }
 
-    override fun cachedTrackIds(): Set<Long> =
-        cacheDir.listFiles { f -> f.isFile && f.name.endsWith(".audio") }
-            ?.mapNotNull { it.nameWithoutExtension.toLongOrNull() }
-            ?.toSet()
-            ?: emptySet()
+    override fun cachedTrackIds(): Set<Long> = cachedAudioIds.toSet()
 
     override fun removeFromCache(serverTrackId: Long) {
         fileFor(serverTrackId).delete()
         artworkFileFor(serverTrackId).delete()
+        cachedAudioIds -= serverTrackId
+        cachedArtworkIds -= serverTrackId
     }
 
     override suspend fun updateTrack(track: ServerTrackMeta): Boolean = withContext(Dispatchers.IO) {
@@ -355,6 +386,7 @@ class ServerLibraryRepositoryImpl @Inject constructor(
         val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
         if (!NamiServerClient.uploadArtwork(cfg, serverTrackId, bytes, mime)) return@withContext false
         artworkFileFor(serverTrackId).delete()
+        cachedArtworkIds -= serverTrackId
         downloadArtwork(serverTrackId)?.let { file ->
             val id = "server_$serverTrackId"
             trackDao.setArtworkPath(id, file.absolutePath)

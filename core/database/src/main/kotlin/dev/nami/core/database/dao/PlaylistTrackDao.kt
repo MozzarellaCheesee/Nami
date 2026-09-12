@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface PlaylistTrackDao {
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entry: PlaylistTrackEntity)
 
     /** Snapshot of every playlist-track entry for export/backup - see BackupRepository. */

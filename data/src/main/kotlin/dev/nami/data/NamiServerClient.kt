@@ -1,6 +1,8 @@
 package dev.nami.data
 
 import android.util.Log
+import android.os.Handler
+import android.os.Looper
 import dev.nami.core.model.LyricLine
 import dev.nami.core.model.Lyrics
 import org.json.JSONObject
@@ -25,6 +27,7 @@ object NamiServerClient {
     private const val TAG = "NamiServerClient"
     private const val TIMEOUT_MS = 5_000
     @Volatile private var unauthorizedHandler: ((String) -> Unit)? = null
+    @Volatile private var cachedAuthorizedBase: String? = null
 
     fun setUnauthorizedHandler(handler: ((String) -> Unit)?) {
         unauthorizedHandler = handler
@@ -55,11 +58,18 @@ object NamiServerClient {
 
     /** Выбирает адрес именно сопряжённого сервера, а не любой NAMI с публичным health. */
     fun reachableBase(cfg: Config): String? {
-        val (base, unauthorized) = selectAuthorizedBase(cfg.bases) {
+        val candidates = cfg.bases.map { it.trim().trimEnd('/') }.filter { it.isNotEmpty() }
+        cachedAuthorizedBase?.takeIf { it in candidates }?.let { return it }
+        val (base, unauthorized) = selectAuthorizedBase(candidates) {
             request("GET", "$it/api/tracks?limit=1&offset=0", null, cfg.token, cfg.certSha256)?.first
         }
-        if (base == null && unauthorized) unauthorizedHandler?.invoke(cfg.token)
+        cachedAuthorizedBase = base
+        if (base == null && unauthorized) notifyUnauthorized(cfg.token)
         return base
+    }
+
+    private fun notifyUnauthorized(token: String) {
+        Handler(Looper.getMainLooper()).post { unauthorizedHandler?.invoke(token) }
     }
 
     internal fun selectAuthorizedBase(
@@ -633,11 +643,18 @@ object NamiServerClient {
             }
         }
         val code = conn.responseCode
+        if (code == 401 && bearer != null) {
+            cachedAuthorizedBase = null
+            notifyUnauthorized(bearer)
+        }
         val stream = if (code in 200..299) conn.inputStream else conn.errorStream
         val text = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
         conn.disconnect()
         code to text
-    }.onFailure { Log.w(TAG, "$method $url failed", it) }.getOrNull()
+    }.onFailure {
+        cachedAuthorizedBase?.takeIf { url.startsWith("$it/") }?.let { cachedAuthorizedBase = null }
+        Log.w(TAG, "$method $url failed", it)
+    }.getOrNull()
 
     fun hostIsIpLiteral(url: String): Boolean {
         val host = runCatching { URL(url).host }.getOrNull().orEmpty()
