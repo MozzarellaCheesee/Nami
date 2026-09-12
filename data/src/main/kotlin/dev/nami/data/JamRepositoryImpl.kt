@@ -58,6 +58,12 @@ import kotlin.coroutines.resume
 
 private const val TAG = "JamRepository"
 private const val RECONNECT_DELAY_MS = 3000L
+
+/** Потолок паузы между попытками переподключения. Фиксированные 3 секунды означали, что при
+ * недоступном сервере приложение долбится в сеть каждые 3 секунды до ручного выхода из джема
+ * и съедает батарею; удвоение с потолком в минуту оставляет быстрый отклик на короткой
+ * помехе и успокаивается на долгой. */
+private const val RECONNECT_MAX_DELAY_MS = 60_000L
 private const val NSD_SERVICE_TYPE = "_nami-jam._tcp."
 
 private data class TrackMeta(
@@ -640,6 +646,9 @@ class JamRepositoryImpl @Inject constructor(
                 override fun onOpen(ws: WebSocket, response: Response) {
                     Log.d(TAG, "Jam WebSocket connected to $wsBase")
                     isConnecting = false
+                    // Связь есть - следующий обрыв снова начинает отсчёт с трёх секунд,
+                    // иначе одна давняя серия обрывов навсегда оставила бы минутные паузы.
+                    reconnectAttempt = 0
                     _connected.value = true
                     onOpened?.invoke()
                     drainPendingActions()
@@ -693,16 +702,26 @@ class JamRepositoryImpl @Inject constructor(
         } else if (!intentionalClose && isServerConfigured.value && guestServerUrl == null) {
             reconnectJob?.cancel()
             reconnectJob = scope.launch {
-                delay(RECONNECT_DELAY_MS)
+                delay(nextReconnectDelayMs())
                 connectServerEvents()
             }
         }
     }
 
+    /** Номер текущей попытки переподключения; обнуляется при успешном соединении. */
+    private var reconnectAttempt = 0
+
+    /** 3с, 6с, 12с ... до [RECONNECT_MAX_DELAY_MS]. */
+    private fun nextReconnectDelayMs(): Long {
+        val shift = reconnectAttempt.coerceAtMost(5)
+        reconnectAttempt++
+        return (RECONNECT_DELAY_MS shl shift).coerceAtMost(RECONNECT_MAX_DELAY_MS)
+    }
+
     private fun scheduleReconnect() {
         reconnectJob?.cancel()
         reconnectJob = scope.launch {
-            delay(RECONNECT_DELAY_MS)
+            delay(nextReconnectDelayMs())
             if (intentionalClose || previousSession == null) return@launch
             val sessionToRestore = previousSession ?: return@launch
             Log.d(TAG, "Attempting reconnect to Jam session ${sessionToRestore.code}")

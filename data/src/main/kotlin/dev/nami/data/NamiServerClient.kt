@@ -404,56 +404,67 @@ object NamiServerClient {
      * Скачать трек с сервера в файл. GET /api/tracks/{id}/stream/auto.
      * Возвращает true при успехе.
      */
-    fun downloadTrack(cfg: Config, trackId: Long, destFile: java.io.File): Boolean {
-        val base = reachableBase(cfg) ?: return false
-        return runCatching {
-            val url = "$base/api/tracks/$trackId/stream/auto?token=${cfg.token}"
-            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 30_000
-                readTimeout = 60_000
-                if (this is HttpsURLConnection && cfg.certSha256 != null && hostIsIpLiteral(url)) {
-                    sslSocketFactory = pinnedFactory(cfg.certSha256)
-                    setHostnameVerifier { _, _ -> true }
-                }
-            }
-            if (conn.responseCode != 200) return false
-            conn.inputStream.use { input ->
-                destFile.outputStream().use { output ->
-                    input.copyTo(output)
-                }
-            }
-            conn.disconnect()
-            true
-        }.onFailure { Log.w(TAG, "downloadTrack: ${it.message}") }.getOrElse { false }
-    }
+    fun downloadTrack(cfg: Config, trackId: Long, destFile: java.io.File): Boolean =
+        downloadToFile(cfg, "/api/tracks/$trackId/stream/auto", destFile, readTimeoutMs = 60_000, tag = "downloadTrack")
 
     /**
-     * Скачать обложку трека с сервера в файл. GET /api/tracks/{id}/artwork?token=...
-     * Возвращает true при успехе.
+     * Скачать обложку трека с сервера в файл. Возвращает true при успехе.
      */
-    fun downloadArtwork(cfg: Config, trackId: Long, destFile: java.io.File): Boolean {
+    fun downloadArtwork(cfg: Config, trackId: Long, destFile: java.io.File): Boolean =
+        downloadToFile(cfg, "/api/tracks/$trackId/artwork", destFile, readTimeoutMs = 30_000, tag = "downloadArtwork")
+
+    /**
+     * Скачивание файла с сервера: общий путь для трека и для обложки.
+     *
+     * Токен идёт заголовком `Authorization`, а не в query-строке: URL с токеном оседает в
+     * системных логах Android и в access-логах прокси. Сервер принимает обе формы
+     * (`require_token` в server/src/api.rs), а query-вариант нужен только тегам
+     * `<audio>`/`<img>` веб-клиента, которые заголовок выставить не могут.
+     *
+     * Пишем во временный файл и переименовываем: при обрыве посреди копирования иначе
+     * остаётся обрезанный файл, а кеш считает валидным всё, что существует и непусто,
+     * так что битый файл уже никогда не перекачался бы.
+     */
+    private fun downloadToFile(
+        cfg: Config,
+        path: String,
+        destFile: java.io.File,
+        readTimeoutMs: Int,
+        tag: String,
+    ): Boolean {
         val base = reachableBase(cfg) ?: return false
-        return runCatching {
-            val url = "$base/api/tracks/$trackId/artwork?token=${cfg.token}"
+        val tmp = java.io.File(destFile.parentFile, "${destFile.name}.part")
+        var ok = false
+        try {
+            val url = "$base$path"
             val conn = (URL(url).openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 connectTimeout = 15_000
-                readTimeout = 30_000
+                readTimeout = readTimeoutMs
+                cfg.token?.let { setRequestProperty("Authorization", "Bearer $it") }
                 if (this is HttpsURLConnection && cfg.certSha256 != null && hostIsIpLiteral(url)) {
                     sslSocketFactory = pinnedFactory(cfg.certSha256)
                     setHostnameVerifier { _, _ -> true }
                 }
             }
-            if (conn.responseCode != 200) return false
-            conn.inputStream.use { input ->
-                destFile.outputStream().use { output ->
-                    input.copyTo(output)
+            try {
+                if (conn.responseCode != 200) return false
+                conn.inputStream.use { input ->
+                    tmp.outputStream().use { output -> input.copyTo(output) }
                 }
+            } finally {
+                conn.disconnect()
             }
-            conn.disconnect()
-            true
-        }.onFailure { Log.w(TAG, "downloadArtwork: ${it.message}") }.getOrElse { false }
+            // renameTo не перезаписывает существующий файл на части платформ - сносим сами.
+            destFile.delete()
+            ok = tmp.renameTo(destFile)
+            return ok
+        } catch (e: Exception) {
+            Log.w(TAG, "$tag: ${e.message}")
+            return false
+        } finally {
+            if (!ok) tmp.delete()
+        }
     }
 
     /**

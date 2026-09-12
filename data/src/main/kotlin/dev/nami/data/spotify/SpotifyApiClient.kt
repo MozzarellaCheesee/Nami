@@ -2,6 +2,8 @@ package dev.nami.data.spotify
 
 import android.util.Base64
 import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -93,11 +95,16 @@ object SpotifyApiClient {
         }
     }
 
-    fun fetchPlaylist(playlistId: String, clientId: String, clientSecret: String): SpotifyPlaylistInfo? {
-        val token = ensureToken(clientId, clientSecret) ?: return null
+    suspend fun fetchPlaylist(
+        playlistId: String,
+        clientId: String,
+        clientSecret: String,
+    ): SpotifyPlaylistInfo? = withContext(Dispatchers.IO) {
+        val token = ensureToken(clientId, clientSecret) ?: return@withContext null
         
-        val infoStr = httpGet("$BASE_URL/playlists/$playlistId", token) ?: return null
-        val infoJson = JSONObject(infoStr)
+        val infoStr = httpGet("$BASE_URL/playlists/$playlistId", token) ?: return@withContext null
+        // Spotify под rate-limit отдаёт не-JSON и обрезанные тела.
+        val infoJson = runCatching { JSONObject(infoStr) }.getOrNull() ?: return@withContext null
         val name = infoJson.optString("name", "")
         val description = infoJson.optString("description", "")
         val images = infoJson.optJSONArray("images")
@@ -114,7 +121,7 @@ object SpotifyApiClient {
         
         while (true) {
             val tracksStr = httpGet(nextUrl, token) ?: break
-            val tracksPageJson = JSONObject(tracksStr)
+            val tracksPageJson = runCatching { JSONObject(tracksStr) }.getOrNull() ?: break
             val items = tracksPageJson.optJSONArray("items") ?: break
             
             for (i in 0 until items.length()) {
@@ -131,7 +138,7 @@ object SpotifyApiClient {
             }
         }
         
-        return SpotifyPlaylistInfo(
+        return@withContext SpotifyPlaylistInfo(
             id = playlistId,
             name = name,
             description = description.ifEmpty { null },
