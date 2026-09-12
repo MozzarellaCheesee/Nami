@@ -939,8 +939,11 @@ fun NowPlayingScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        PlaybackSourceBadge(source = playbackSource)
-                        ServerPresenceBadge(onServer = onServer, showLabel = true)
+                        // Только иконки: подписи («Поток с сервера», «На сервере») занимали
+                        // больше половины ряда, и подписи формата не оставалось места. Что
+                        // означает иконка, говорит тост по нажатию - он был и раньше.
+                        PlaybackSourceBadge(source = playbackSource, showLabel = false)
+                        ServerPresenceBadge(onServer = onServer)
                         queue.nowPlaying?.format?.let { format ->
                             Box(
                                 // weight, а не wrapContentWidth: подпись забирает остаток ширины
