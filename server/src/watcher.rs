@@ -20,23 +20,27 @@ pub const DEBOUNCE: Duration = Duration::from_secs(3);
 /// Ошибки не фатальны: если inotify недоступен (лимиты ядра, экзотическая ФС) - сервер
 /// продолжает работать, библиотека обновляется по `POST /api/scan`.
 pub fn spawn(state: Shared) {
-    let dirs = state.cfg.music_dirs.clone();
-    if dirs.is_empty() {
+    let mut libraries = vec![(0, state.cfg.music_dirs.clone())];
+    if let Ok(extra) = crate::scanner::library_dirs(&state.db.lock().unwrap()) {
+        libraries.extend(extra);
+    }
+    libraries.retain(|(_, dirs)| !dirs.is_empty());
+    if libraries.is_empty() {
         return;
     }
     std::thread::spawn(move || {
-        if let Err(e) = run(state, dirs) {
+        if let Err(e) = run(state, libraries) {
             tracing::warn!("слежение за папками не запущено: {e} - остаётся ручной POST /api/scan");
         }
     });
 }
 
-fn run(state: Shared, dirs: Vec<PathBuf>) -> crate::Res<()> {
+fn run(state: Shared, libraries: Vec<(i64, Vec<PathBuf>)>) -> crate::Res<()> {
     let (tx, rx) = mpsc::channel();
     let mut watcher = notify::recommended_watcher(move |res| {
         let _ = tx.send(res);
     })?;
-    for dir in &dirs {
+    for dir in libraries.iter().flat_map(|(_, dirs)| dirs) {
         watcher.watch(dir, RecursiveMode::Recursive)?;
         tracing::info!("слежу за {}", dir.display());
     }
@@ -50,18 +54,25 @@ fn run(state: Shared, dirs: Vec<PathBuf>) -> crate::Res<()> {
         // Дебаунс: пока события идут чаще, чем раз в DEBOUNCE - копирование ещё не закончилось.
         while rx.recv_timeout(DEBOUNCE).is_ok() {}
 
+        let mut changed = false;
         let mut db = state.db.lock().unwrap();
-        match crate::scanner::scan(&mut db, &dirs, 0) {
-            Ok(rep) if rep.added + rep.updated + rep.removed > 0 => {
-                tracing::info!("библиотека обновлена по событию ФС: {rep:?}");
-                state.notify(serde_json::json!({
-                    "type": "changed",
-                    "entities": ["tracks"],
-                    "at": crate::db::now(),
-                }));
+        for (library_id, dirs) in &libraries {
+            match crate::scanner::scan(&mut db, dirs, *library_id) {
+                Ok(rep) if rep.added + rep.updated + rep.removed > 0 => {
+                    changed = true;
+                    tracing::info!("библиотека {library_id} обновлена по событию ФС: {rep:?}");
+                }
+                Ok(_) => {}
+                Err(e) => tracing::warn!("пересканирование библиотеки {library_id} не удалось: {e}"),
             }
-            Ok(_) => {}
-            Err(e) => tracing::warn!("пересканирование по событию ФС не удалось: {e}"),
+        }
+        drop(db);
+        if changed {
+            state.notify(serde_json::json!({
+                "type": "changed",
+                "entities": ["tracks"],
+                "at": crate::db::now(),
+            }));
         }
     }
 }

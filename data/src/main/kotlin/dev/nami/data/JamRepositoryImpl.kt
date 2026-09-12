@@ -169,6 +169,7 @@ class JamRepositoryImpl @Inject constructor(
     private var okHttpClient: OkHttpClient? = null
     @Volatile private var isConnecting = false
     private var reconnectJob: Job? = null
+    private var changedSyncJob: Job? = null
     @Volatile private var previousSession: JamSession? = null
     @Volatile private var intentionalClose = false
     private val pendingActions = mutableListOf<() -> Unit>()
@@ -773,10 +774,8 @@ class JamRepositoryImpl @Inject constructor(
                         playedBy = null,
                     )
                     if (!isHost && currentTrackId != null) {
-                        val latency = (System.currentTimeMillis() - at).coerceAtLeast(0L)
-                        val adjustedPositionMs = (positionMs + latency).coerceAtLeast(0L)
                         scope.launch {
-                            handleJamPlay(currentTrackId, adjustedPositionMs)
+                            handleJamPlay(currentTrackId, positionMs.coerceAtLeast(0L))
                         }
                     }
                 }
@@ -806,11 +805,9 @@ class JamRepositoryImpl @Inject constructor(
                         lastSyncAt = at,
                         playedBy = playedBy,
                     )
-                    val latency = (System.currentTimeMillis() - at).coerceAtLeast(0L)
-                    val adjustedPositionMs = (positionMs + latency).coerceAtLeast(0L)
                     if (_session.value?.isHost == false) {
                         scope.launch {
-                            handleJamPlay(trackId, adjustedPositionMs)
+                            handleJamPlay(trackId, positionMs.coerceAtLeast(0L))
                         }
                     }
                 }
@@ -837,7 +834,11 @@ class JamRepositoryImpl @Inject constructor(
                         }
                     }
                     _serverChanges.tryEmit(names)
-                    scope.launch { runCatching { syncRepository.pullFromServer() } }
+                    changedSyncJob?.cancel()
+                    changedSyncJob = scope.launch {
+                        delay(500L)
+                        runCatching { syncRepository.pullFromServer() }
+                    }
                 }
                 "position" -> {
                     // Игнорируем сервисные сообщения

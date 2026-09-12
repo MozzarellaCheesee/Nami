@@ -204,6 +204,9 @@ pub fn handle(st: &Shared, ident: &Ident, m: &mut Membership, text: &str) -> Opt
     let msg: Incoming = serde_json::from_str(text).ok()?;
     match msg.kind.as_str() {
         "jam_create" => {
+            // Одно подключение организатора владеет одной комнатой. Повторное
+            // создание сначала закрывает старую комнату и уведомляет гостей.
+            cleanup_host(st, m, ident);
             let library = library_key(st, ident);
             let now = crate::db::now();
             let code = new_code();
@@ -290,6 +293,11 @@ pub fn handle(st: &Shared, ident: &Ident, m: &mut Membership, text: &str) -> Opt
         "jam_play" => {
             let code = m.code.clone()?;
             let track_id = msg.track_id?;
+            let is_host = st.jams.0.lock().unwrap().get(&code)
+                .is_some_and(|s| s.host_ident == (ident.user_id, ident.device_id));
+            if !is_host {
+                return err("только организатор может управлять воспроизведением");
+            }
             // Ставить можно только то, что видно самому. Кому трек не виден, тот
             // просто получит 404 на потоке - проверка видимости живёт там же, где
             // отдача файла, и обходить её джемом нельзя.
@@ -588,6 +596,14 @@ mod tests {
             &serde_json::json!({"type":"jam_join", "code":code}).to_string(),
         )
         .unwrap();
+        let guest_play = handle(
+            &st,
+            &guest,
+            &mut guest_membership,
+            r#"{"type":"jam_play","track_id":7}"#,
+        )
+        .unwrap();
+        assert!(guest_play.contains("только организатор"));
         let play_reply = handle(
             &st,
             &host,

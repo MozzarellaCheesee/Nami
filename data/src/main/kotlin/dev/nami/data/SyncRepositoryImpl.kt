@@ -121,18 +121,20 @@ class SyncRepositoryImpl @Inject constructor(
         change: JSONObject,
         updatedAt: Long,
     ) {
+        val incomingMs = updatedAt * 1000L
         val isDeleted = field == "__deleted" || (change.has("value") && change.optBoolean("value", false) && field == "__deleted")
         when (entity) {
             "playlist" -> {
+                val existing = playlistDao.findById(id)
+                if (existing != null && maxOf(existing.updatedAt, existing.deletedAt ?: 0L) > incomingMs) return
                 if (isDeleted) {
-                    playlistDao.softDelete(id, updatedAt * 1000L)
+                    playlistDao.softDelete(id, incomingMs)
                 } else if (field == "name") {
                     val name = change.optString("value")
-                    val existing = playlistDao.findById(id)
                     if (existing != null) {
-                        playlistDao.rename(id, name, updatedAt * 1000L)
+                        playlistDao.rename(id, name, incomingMs)
                         val delAt = existing.deletedAt
-                        if (delAt != null && updatedAt * 1000L > delAt) {
+                        if (delAt != null && incomingMs > delAt) {
                             playlistDao.restore(id)
                         }
                     } else {
@@ -158,6 +160,10 @@ class SyncRepositoryImpl @Inject constructor(
                     pId to tId
                 }
                 if (playlistId.isNotBlank() && trackId.isNotBlank()) {
+                    val existing = playlistTrackDao.allRaw().firstOrNull {
+                        it.playlistId == playlistId && (it.trackId == trackId || it.trackId == "server_$trackId")
+                    }
+                    if (existing != null && existing.updatedAt > incomingMs) return
                     if (isDeleted) {
                         playlistTrackDao.remove(playlistId, trackId)
                     } else {
@@ -201,6 +207,8 @@ class SyncRepositoryImpl @Inject constructor(
                     trackDao.findById("server_$id") != null -> "server_$id"
                     else -> id
                 }
+                val existing = trackDao.findById(targetTrackId)
+                if (existing != null && existing.ratingUpdatedAt > incomingMs) return
                 if (isDeleted || change.isNull("value")) {
                     trackDao.updateRating(targetTrackId, null, updatedAt * 1000L)
                 } else {
@@ -215,6 +223,8 @@ class SyncRepositoryImpl @Inject constructor(
                     trackDao.findById("server_$id") != null -> "server_$id"
                     else -> id
                 }
+                val existing = trackDao.findById(targetTrackId)
+                if (existing != null && existing.noteUpdatedAt > incomingMs) return
                 if (isDeleted || change.isNull("value")) {
                     trackDao.updateNote(targetTrackId, null, updatedAt * 1000L)
                 } else {
@@ -224,6 +234,8 @@ class SyncRepositoryImpl @Inject constructor(
             }
             "moment" -> {
                 val momentId = id.toLongOrNull()
+                val existing = momentId?.let { wanted -> momentDao.allSnapshot().firstOrNull { it.id == wanted } }
+                if (existing != null && existing.updatedAt > incomingMs) return
                 if (isDeleted) {
                     if (momentId != null) momentDao.delete(momentId)
                 } else {
@@ -261,6 +273,8 @@ class SyncRepositoryImpl @Inject constructor(
             }
             "loop" -> {
                 val loopId = id.toLongOrNull()
+                val existing = loopId?.let { wanted -> loopDao.allSnapshot().firstOrNull { it.id == wanted } }
+                if (existing != null && existing.updatedAt > incomingMs) return
                 if (isDeleted) {
                     if (loopId != null) loopDao.delete(loopId)
                 } else {
@@ -295,6 +309,8 @@ class SyncRepositoryImpl @Inject constructor(
                 }
             }
             "tag" -> {
+                val existing = tagDao.allRaw().firstOrNull { it.id == id }
+                if (existing != null && existing.updatedAt > incomingMs) return
                 if (isDeleted) {
                     tagDao.delete(id)
                 } else {
@@ -321,6 +337,10 @@ class SyncRepositoryImpl @Inject constructor(
                     tId to tgId
                 }
                 if (rawTrackId.isNotBlank() && tagId.isNotBlank()) {
+                    val existing = tagDao.allAssignmentsRaw().firstOrNull {
+                        it.tagId == tagId && (it.trackId == rawTrackId || it.trackId == "server_$rawTrackId")
+                    }
+                    if (existing != null && existing.updatedAt > incomingMs) return
                     if (isDeleted) {
                         tagDao.unassign(rawTrackId, tagId)
                         tagDao.unassign("server_$rawTrackId", tagId)
@@ -366,7 +386,9 @@ class SyncRepositoryImpl @Inject constructor(
 
     override suspend fun pushToServer(): Boolean {
         val cfg = serverConfig() ?: return false
-        val since = prefs.getLong("last_sync_ts_${syncScope(cfg)}", 0L)
+        val pushKey = "last_push_ms_${syncScope(cfg)}"
+        val lastPushMs = prefs.getLong(pushKey, 0L)
+        val pushStartedMs = System.currentTimeMillis()
         val nowSec = System.currentTimeMillis() / 1000L
 
         val changes = JSONArray()
@@ -397,6 +419,7 @@ class SyncRepositoryImpl @Inject constructor(
             val pUpdatedAt = ((p.updatedAt.takeIf { it > 0 } ?: p.createdAt) / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec)
             if (p.deletedAt != null) {
                 val deletedAt = p.deletedAt ?: continue
+                if (deletedAt <= lastPushMs) continue
                 changes.put(JSONObject().apply {
                     put("entity", "playlist")
                     put("id", p.id)
@@ -406,24 +429,27 @@ class SyncRepositoryImpl @Inject constructor(
                 })
                 continue
             }
-            changes.put(JSONObject().apply {
-                put("entity", "playlist")
-                put("id", p.id)
-                put("field", "name")
-                put("value", p.name)
-                put("updated_at", pUpdatedAt)
-            })
+            if ((p.updatedAt.takeIf { it > 0 } ?: p.createdAt) > lastPushMs) {
+                changes.put(JSONObject().apply {
+                    put("entity", "playlist")
+                    put("id", p.id)
+                    put("field", "name")
+                    put("value", p.name)
+                    put("updated_at", pUpdatedAt)
+                })
+            }
 
             val tracks = playlistTrackDao.tracksInPlaylist(p.id)
             tracks.forEachIndexed { index, track ->
                 val serverTrackId = serverIds[track.id] ?: return@forEachIndexed
+                val entry = playlistEntries.firstOrNull { it.playlistId == p.id && it.trackId == track.id }
+                val changedAt = entry?.updatedAt?.takeIf { it > 0 } ?: entry?.addedAt ?: p.createdAt
+                if (changedAt <= lastPushMs) return@forEachIndexed
                 changes.put(JSONObject().apply {
                     put("entity", "playlist_track")
                     put("id", "${p.id}:$serverTrackId")
                     put("field", "position")
                     put("value", index)
-                    val entry = playlistEntries.firstOrNull { it.playlistId == p.id && it.trackId == track.id }
-                    val changedAt = entry?.updatedAt?.takeIf { it > 0 } ?: entry?.addedAt ?: p.createdAt
                     put("updated_at", (changedAt / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec))
                 })
             }
@@ -432,7 +458,7 @@ class SyncRepositoryImpl @Inject constructor(
         // 2. Треки с рейтингом или заметкой
         for (track in localTracks) {
             val serverTrackId = serverIds[track.id] ?: continue
-            if (track.rating != null) {
+            if (track.rating != null && track.ratingUpdatedAt > lastPushMs) {
                 changes.put(JSONObject().apply {
                     put("entity", "rating")
                     put("id", serverTrackId)
@@ -441,7 +467,7 @@ class SyncRepositoryImpl @Inject constructor(
                     put("updated_at", (track.ratingUpdatedAt / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec))
                 })
             }
-            if (!track.note.isNullOrBlank()) {
+            if (!track.note.isNullOrBlank() && track.noteUpdatedAt > lastPushMs) {
                 changes.put(JSONObject().apply {
                     put("entity", "track_note")
                     put("id", serverTrackId)
@@ -455,6 +481,7 @@ class SyncRepositoryImpl @Inject constructor(
         // 3. Моменты
         val moments = momentDao.allSnapshot()
         for (m in moments) {
+            if ((m.updatedAt.takeIf { it > 0 } ?: m.createdAt) <= lastPushMs) continue
             val serverTrackId = serverIds[m.trackId] ?: continue
             val mUpdatedAt = ((m.updatedAt.takeIf { it > 0 } ?: m.createdAt) / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec)
             changes.put(JSONObject().apply {
@@ -476,6 +503,7 @@ class SyncRepositoryImpl @Inject constructor(
         // 4. Петли
         val loops = loopDao.allSnapshot()
         for (l in loops) {
+            if ((l.updatedAt.takeIf { it > 0 } ?: l.createdAt) <= lastPushMs) continue
             val serverTrackId = serverIds[l.trackId] ?: continue
             val lUpdatedAt = ((l.updatedAt.takeIf { it > 0 } ?: l.createdAt) / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec)
             changes.put(JSONObject().apply {
@@ -496,6 +524,7 @@ class SyncRepositoryImpl @Inject constructor(
         // 5. Теги и связи
         val tags = tagDao.allRaw()
         for (tag in tags) {
+            if (tag.updatedAt <= lastPushMs) continue
             changes.put(JSONObject().apply {
                 put("entity", "tag")
                 put("id", tag.id)
@@ -509,6 +538,7 @@ class SyncRepositoryImpl @Inject constructor(
         }
         val assignments = tagDao.allAssignmentsRaw()
         for (a in assignments) {
+            if (a.updatedAt <= lastPushMs) continue
             val serverTrackId = serverIds[a.trackId] ?: continue
             changes.put(JSONObject().apply {
                 put("entity", "tag_assignment")
@@ -523,6 +553,7 @@ class SyncRepositoryImpl @Inject constructor(
         val tombstones = SyncTombstones.read(context)
         val sentTombstones = mutableListOf<SyncTombstone>()
         for (t in tombstones) {
+            if (t.updatedAt <= lastPushMs) continue
             val serverId = when (t.entity) {
                 "playlist_track" -> {
                     val playlistId = t.id.substringBefore(':')
@@ -547,7 +578,7 @@ class SyncRepositoryImpl @Inject constructor(
         }
 
         // 6. История прослушиваний
-        val historyList = playHistoryDao.since(since * 1000L)
+        val historyList = playHistoryDao.since(lastPushMs)
         for (h in historyList) {
             val serverTrackId = serverIds[h.trackId] ?: continue
             val hUpdatedAt = (h.playedAt / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec)
@@ -566,6 +597,7 @@ class SyncRepositoryImpl @Inject constructor(
 
         if (changes.length() == 0) {
             Log.d(TAG, "pushToServer: no local changes")
+            prefs.edit().putLong(pushKey, pushStartedMs).apply()
             return true
         }
 
@@ -597,6 +629,7 @@ class SyncRepositoryImpl @Inject constructor(
         }
         flushPendingScrobbles(cfg)
         SyncTombstones.remove(context, sentTombstones)
+        prefs.edit().putLong(pushKey, pushStartedMs).apply()
         return true
     }
 

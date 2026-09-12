@@ -1610,9 +1610,18 @@ async fn ws_loop(
                     break;
                 }
             }
-            // Медленный клиент отстал от кольцевого буфера. Событий он не увидит,
-            // но и не должен: догонит их обычным GET /api/sync?since=.
-            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+            // Клиент отстал от кольцевого буфера. Одно принудительное событие
+            // заставляет его перечитать состояние через обычные HTTP API.
+            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                let refresh = serde_json::json!({
+                    "type":"changed",
+                    "entities":["tracks","playlists","settings"],
+                    "at":crate::db::now(),
+                }).to_string();
+                if socket.send(Message::Text(refresh.into())).await.is_err() {
+                    break;
+                }
+            }
             Err(_) => break,
         }
     }
