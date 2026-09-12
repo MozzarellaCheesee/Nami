@@ -26,6 +26,10 @@ import javax.net.ssl.X509TrustManager
 object NamiServerClient {
     private const val TAG = "NamiServerClient"
     private const val TIMEOUT_MS = 5_000
+
+    /** Размер куска при выгрузке файла. Совпадает с chunked-режимом соединения, чтобы копирование
+     * не резало каждый кусок на восемь записей по умолчанию. */
+    private const val UPLOAD_BUFFER_BYTES = 64 * 1024
     @Volatile private var unauthorizedHandler: ((String) -> Unit)? = null
     @Volatile private var cachedAuthorizedBase: String? = null
 
@@ -551,7 +555,7 @@ object NamiServerClient {
                 connectTimeout = 30_000
                 readTimeout = 120_000
                 doOutput = true
-                setChunkedStreamingMode(64 * 1024)
+                setChunkedStreamingMode(UPLOAD_BUFFER_BYTES)
                 setRequestProperty("Authorization", "Bearer ${cfg.token}")
                 setRequestProperty("Content-Type", "application/octet-stream")
                 if (this is HttpsURLConnection && cfg.certSha256 != null && hostIsIpLiteral(url)) {
@@ -559,11 +563,14 @@ object NamiServerClient {
                     setHostnameVerifier { _, _ -> true }
                 }
             }
-            file.inputStream().use { input -> conn.outputStream.use { input.copyTo(it) } }
+            file.inputStream().use { input ->
+                conn.outputStream.use { input.copyTo(it, UPLOAD_BUFFER_BYTES) }
+            }
             val code = conn.responseCode
             val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
                 ?.bufferedReader()?.use { it.readText() }.orEmpty()
-            conn.disconnect()
+            // Без disconnect(): тело ответа вычитано целиком, поэтому соединение уходит в пул и
+            // следующий трек отправляется без нового TLS-рукопожатия.
             if (code in 200..299) runCatching { JSONObject(text) }.getOrNull() else null
         }.onFailure { Log.w(TAG, "uploadTrack: ${it.message}") }.getOrNull()
     }
@@ -716,7 +723,8 @@ object NamiServerClient {
         }
         val stream = if (code in 200..299) conn.inputStream else conn.errorStream
         val text = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-        conn.disconnect()
+        // Тело вычитано - соединение возвращается в пул. disconnect() закрыл бы сокет и
+        // следующий запрос начинался бы с рукопожатия заново.
         code to text
     }.onFailure {
         cachedAuthorizedBase?.takeIf { url.startsWith("$it/") }?.let { cachedAuthorizedBase = null }
@@ -729,7 +737,15 @@ object NamiServerClient {
     }
 
     /** SSLSocketFactory, доверяющий любому серверу с совпавшим SHA-256 сертификата. */
-    private fun pinnedFactory(expected: String): SSLSocketFactory {
+    /** Пул соединений HttpURLConnection разделён по экземпляру SSLSocketFactory: новая фабрика
+     * на каждый запрос означала полное TLS-рукопожатие даже при keep-alive. На выгрузке всей
+     * библиотеки это рукопожатие на каждый трек. */
+    private val pinnedFactories = java.util.concurrent.ConcurrentHashMap<String, SSLSocketFactory>()
+
+    internal fun pinnedFactory(expected: String): SSLSocketFactory =
+        pinnedFactories.getOrPut(expected) { buildPinnedFactory(expected) }
+
+    private fun buildPinnedFactory(expected: String): SSLSocketFactory {
         val want = expected.removePrefix("sha256:").lowercase()
         val tm = object : X509TrustManager {
             override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}

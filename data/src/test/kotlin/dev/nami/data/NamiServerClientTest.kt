@@ -5,7 +5,9 @@ import org.robolectric.RobolectricTestRunner
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotSame
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 // Robolectric: `org.json` под plain-JVM unit-тестом заглушён и бросает "not mocked"
@@ -59,5 +61,14 @@ class NamiServerClientTest {
         assertNull(NamiServerClient.parseLyrics("""{"track_id":7,"source":"none","lines":[]}"""))
         assertNull(NamiServerClient.parseLyrics("not json"))
         assertNull(NamiServerClient.parseLyrics("""{"no_lines":true}"""))
+    }
+
+    @Test
+    fun `pinned socket factory is reused for the same fingerprint`() {
+        val fp = "sha256:" + "ab".repeat(32)
+        // Пул соединений HttpURLConnection разделён по экземпляру фабрики: новый экземпляр на
+        // каждый запрос - полное TLS-рукопожатие на каждый выгружаемый трек.
+        assertSame(NamiServerClient.pinnedFactory(fp), NamiServerClient.pinnedFactory(fp))
+        assertNotSame(NamiServerClient.pinnedFactory(fp), NamiServerClient.pinnedFactory("sha256:" + "cd".repeat(32)))
     }
 }

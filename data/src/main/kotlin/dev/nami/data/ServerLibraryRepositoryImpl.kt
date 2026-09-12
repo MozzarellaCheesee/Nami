@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -44,6 +45,10 @@ class ServerLibraryRepositoryImpl @Inject constructor(
 ) : ServerLibraryRepository {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** Сколько файлов выгружается одновременно. Четыре перекрывают ожидание сети и обработку на
+     * сервере, не забивая канал домашнего сервера полностью. */
+    private val UPLOAD_CONCURRENCY = 4
     private val uploadMutex = Mutex()
 
     /** Обложки, которые качаются прямо сейчас. listTracks() вызывается по каждому событию
@@ -84,13 +89,21 @@ class ServerLibraryRepositoryImpl @Inject constructor(
         if (trackDao.deleteAllServerTracks() > 0) searchRepository.rebuildIndex()
     }
 
-    override fun uploadTracksBackground(tracks: List<Track>) {
-        if (tracks.isEmpty()) return
+    override fun uploadTracksBackground(allTracks: List<Track>) {
+        if (allTracks.isEmpty()) return
         scope.launch {
             uploadMutex.withLock {
             val cfg = activeConfig()
             if (cfg == null) {
                 _uploadProgress.value = "Сервер не подключён"
+                return@withLock
+            }
+
+            // Зеркала серверной библиотеки отправлять некуда: они и так на сервере, а локального
+            // файла за ними нет - каждое такое "отправление" уходило в счётчик ошибок.
+            val tracks = allTracks.filterNot { it.path.startsWith(SERVER_PATH_PREFIX) }
+            if (tracks.isEmpty()) {
+                _uploadProgress.value = "Все треки (${allTracks.size}) уже есть на сервере"
                 return@withLock
             }
 
@@ -141,18 +154,42 @@ class ServerLibraryRepositoryImpl @Inject constructor(
                 "Отправка на сервер: 0/$needUploadCount…"
             }
 
-            for ((index, track) in toUpload.withIndex()) {
-                val res = uploadLocalTrack(track.path)
-                if (res == "Уже есть на сервере") duplicates++
-                else if (res != null) uploaded++
-                else failed++
+            // Отправка шла строго по одному файлу, и на каждом треке простаивала то сеть, то
+            // сервер (он читает теги и считает хеш уже принятого файла). Несколько потоков
+            // перекрывают эти ожидания.
+            // ponytail: фиксированные UPLOAD_CONCURRENCY потоков, без подстройки под скорость
+            // канала - если понадобится, здесь и менять.
+            val queue = java.util.concurrent.ConcurrentLinkedQueue(toUpload)
+            val done = java.util.concurrent.atomic.AtomicInteger()
+            val uploadedCount = java.util.concurrent.atomic.AtomicInteger()
+            val duplicateCount = java.util.concurrent.atomic.AtomicInteger()
+            val failedCount = java.util.concurrent.atomic.AtomicInteger()
 
-                _uploadProgress.value = if (alreadyOnServer > 0) {
-                    "На сервере уже $alreadyOnServer из $total. Отправка новых: ${index + 1}/$needUploadCount…"
-                } else {
-                    "Отправка на сервер: ${index + 1}/$needUploadCount…"
+            coroutineScope {
+                repeat(minOf(UPLOAD_CONCURRENCY, needUploadCount)) {
+                    launch(Dispatchers.IO) {
+                        while (true) {
+                            val track = queue.poll() ?: break
+                            val res = uploadLocalTrack(track.path)
+                            when {
+                                res == "Уже есть на сервере" -> duplicateCount.incrementAndGet()
+                                res != null -> uploadedCount.incrementAndGet()
+                                else -> failedCount.incrementAndGet()
+                            }
+                            val finished = done.incrementAndGet()
+                            _uploadProgress.value = if (alreadyOnServer > 0) {
+                                "На сервере уже $alreadyOnServer из $total. Отправка новых: $finished/$needUploadCount…"
+                            } else {
+                                "Отправка на сервер: $finished/$needUploadCount…"
+                            }
+                        }
+                    }
                 }
             }
+
+            uploaded = uploadedCount.get()
+            duplicates = duplicateCount.get()
+            failed = failedCount.get()
 
             _uploadProgress.value = buildString {
                 append("Выгрузка завершена: ")
