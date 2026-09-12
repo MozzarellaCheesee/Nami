@@ -281,6 +281,52 @@ class SyncRepositoryImplTest {
     }
 
     @Test
+    fun `playlist positions with gaps keep their relative order`() = runTest {
+        db.trackDao().insertAll(listOf(fakeTrack("t1"), fakeTrack("t2"), fakeTrack("t3")))
+
+        // Удаление трека из плейлиста позиции не переиндексирует, поэтому пропуски -
+        // обычное состояние. Порядок задаёт сама position, а не её номер по списку:
+        // push обязан слать хранимое значение, иначе новый трек уедет с номером соседа.
+        listOf("t3" to 5, "t1" to 1, "t2" to 2).forEach { (trackId, position) ->
+            repo.applyChange(
+                entity = "playlist_track",
+                id = "p1:$trackId",
+                field = "position",
+                change = JSONObject().put("value", position),
+                updatedAt = 100L,
+            )
+        }
+
+        val order = db.playlistTrackDao().tracksInPlaylist("p1").map { it.id }
+        assertEquals(listOf("t1", "t2", "t3"), order)
+
+        val stored = db.playlistTrackDao().allRaw().filter { it.playlistId == "p1" }
+        assertEquals(listOf(1, 2, 5), stored.sortedBy { it.position }.map { it.position })
+    }
+
+    @Test
+    fun `pulling the same listen twice does not duplicate it`() = runTest {
+        val listen = JSONObject().apply {
+            put("track_id", "t1")
+            put("played_at", 123456789L)
+            put("duration_ms", 180000L)
+        }
+        // Своя же запись возвращается следующим pull, а ключ таблицы - автоинкремент,
+        // поэтому без проверки на существование статистика удваивалась бы каждый цикл.
+        repeat(2) {
+            repo.applyChange(
+                entity = "listening_history",
+                id = "t1:123456789",
+                field = "history",
+                change = JSONObject().put("value", listen),
+                updatedAt = 100L,
+            )
+        }
+
+        assertEquals(1, db.playHistoryDao().since(0L).size)
+    }
+
+    @Test
     fun `pull listening_history records listen event`() = runTest {
         val historyData = JSONObject().apply {
             put("track_id", "t1")
