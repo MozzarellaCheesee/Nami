@@ -91,6 +91,7 @@ class AppUpdateManager @Inject constructor(
 
             var apkUrl: String? = null
             var apkSize = 0L
+            var apkVersion: String? = null
             if (assets != null) {
                 for (i in 0 until assets.length()) {
                     val asset = assets.optJSONObject(i) ?: continue
@@ -98,6 +99,7 @@ class AppUpdateManager @Inject constructor(
                     if (name.endsWith(".apk", ignoreCase = true)) {
                         apkUrl = asset.optString("browser_download_url")
                         apkSize = asset.optLong("size", 0L)
+                        apkVersion = androidVersionFromApkName(name)
                         break
                     }
                 }
@@ -108,11 +110,13 @@ class AppUpdateManager @Inject constructor(
                 return@runCatching null
             }
 
-            val isNewer = isVersionNewer(tagName, currentVersionName)
-            val cleanVersion = tagName.removePrefix("v")
+            // Один GitHub-релиз содержит и сервер, и Android. Поэтому tag_name (например,
+            // v1.0.7) — версия сервера, а версию приложения берём из имени APK.
+            val releaseVersion = apkVersion ?: tagName.removePrefix("v")
+            val isNewer = isVersionNewer(releaseVersion, currentVersionName)
             val info = UpdateInfo(
                 tagName = tagName,
-                versionName = cleanVersion,
+                versionName = releaseVersion,
                 releaseNotes = bodyText,
                 apkDownloadUrl = apkUrl,
                 apkSizeBytes = apkSize,
@@ -215,28 +219,31 @@ class AppUpdateManager @Inject constructor(
         _status.value = UpdateStatus.Idle
     }
 
-    private fun isVersionNewer(latestTag: String, currentVersion: String): Boolean {
-        val cleanLatest = latestTag.trimStart('v', 'V').trim()
-        val cleanCurrent = currentVersion.trimStart('v', 'V').trim()
-        if (cleanLatest == cleanCurrent) return false
+}
 
-        val latestParts = cleanLatest.substringBefore('-').split('.').mapNotNull { it.toIntOrNull() }
-        val currentParts = cleanCurrent.substringBefore('-').split('.').mapNotNull { it.toIntOrNull() }
+internal fun androidVersionFromApkName(name: String): String? =
+    Regex("""(?i)(\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)(?:[.-]\d+)?)?)""")
+        .find(name)
+        ?.groupValues
+        ?.get(1)
 
-        val maxLen = maxOf(latestParts.size, currentParts.size)
-        for (i in 0 until maxLen) {
-            val l = latestParts.getOrElse(i) { 0 }
-            val c = currentParts.getOrElse(i) { 0 }
-            if (l > c) return true
-            if (l < c) return false
-        }
+internal fun isVersionNewer(latestTag: String, currentVersion: String): Boolean {
+    val latest = latestTag.trimStart('v', 'V').trim().lowercase()
+    val current = currentVersion.trimStart('v', 'V').trim().lowercase()
+    if (latest == current) return false
 
-        if (cleanLatest.contains("beta") && cleanCurrent.contains("beta")) {
-            val lBeta = cleanLatest.substringAfter("beta.", "").toIntOrNull() ?: 0
-            val cBeta = cleanCurrent.substringAfter("beta.", "").toIntOrNull() ?: 0
-            return lBeta > cBeta
-        }
-
-        return cleanLatest != cleanCurrent
+    val latestCore = latest.substringBefore('-').split('.').mapNotNull(String::toIntOrNull)
+    val currentCore = current.substringBefore('-').split('.').mapNotNull(String::toIntOrNull)
+    repeat(maxOf(latestCore.size, currentCore.size)) { index ->
+        val difference = latestCore.getOrElse(index) { 0 } - currentCore.getOrElse(index) { 0 }
+        if (difference != 0) return difference > 0
     }
+
+    val latestPre = latest.substringAfter('-', "")
+    val currentPre = current.substringAfter('-', "")
+    if (latestPre.isEmpty()) return currentPre.isNotEmpty()
+    if (currentPre.isEmpty()) return false
+    val latestNumber = latestPre.substringAfterLast('.').toIntOrNull() ?: 0
+    val currentNumber = currentPre.substringAfterLast('.').toIntOrNull() ?: 0
+    return latestNumber > currentNumber
 }

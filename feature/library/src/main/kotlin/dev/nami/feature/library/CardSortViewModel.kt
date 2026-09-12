@@ -37,7 +37,9 @@ class CardSortViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            _uiState.value = UiState(queue = libraryRepository.allTracksOrdered().shuffled(), loading = false)
+            val queue = libraryRepository.allTracksOrdered().shuffled()
+            if (queue.isNotEmpty()) playerRepository.playInOrder(queue.map { it.toPlayable() }, startIndex = 0)
+            _uiState.value = UiState(queue = queue, loading = false)
         }
     }
 
@@ -75,6 +77,7 @@ class CardSortViewModel @Inject constructor(
         val rest = _uiState.value.queue.drop(1)
         _uiState.value = _uiState.value.copy(queue = rest)
         viewModelScope.launch {
+            if (rest.isNotEmpty()) playerRepository.crossfadeNext()
             when (direction) {
                 SwipeDirection.RIGHT -> playlistRepository.likeTrack(current.id)
                 SwipeDirection.LEFT -> libraryRepository.deleteTrack(current.id)
@@ -82,4 +85,16 @@ class CardSortViewModel @Inject constructor(
             }
         }
     }
+
+    private fun Track.toPlayable() = PlayableTrack(
+        id = id,
+        title = title,
+        artistName = artistName,
+        path = path,
+        artworkPath = albumArtworkPath,
+        format = format,
+        durationMs = durationMs,
+        cueStartMs = cueStartMs,
+        cueEndMs = cueEndMs,
+    )
 }

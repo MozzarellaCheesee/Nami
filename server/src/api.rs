@@ -1357,11 +1357,12 @@ async fn setup_page(
              const [dr,ur]=await Promise.all([fetch('/api/auth/devices',{{headers:h}}),fetch('/api/users',{{headers:h}})]);\
              if(!dr.ok||!ur.ok){{document.getElementById('devices').textContent='Не удалось загрузить';return}}\
              const ds=await dr.json(),us=await ur.json(),root=document.getElementById('devices');root.textContent='';\
-             for(const d of ds){{const row=document.createElement('p'),name=document.createElement('b'),sel=document.createElement('select');\
+             for(const d of ds){{const row=document.createElement('p'),name=document.createElement('b'),sel=document.createElement('select'),revoke=document.createElement('button');\
              name.textContent=d.name+' ';const none=document.createElement('option');none.value='';none.textContent='Не привязано';sel.append(none);\
              for(const u of us){{const o=document.createElement('option');o.value=u.id;o.textContent=u.username+' — библиотека '+u.library_id;o.selected=u.id===d.user_id;sel.append(o)}}\
              sel.onchange=async()=>{{sel.disabled=true;await fetch('/api/auth/devices/'+d.id,{{method:'PUT',headers:{{...h,'Content-Type':'application/json'}},body:JSON.stringify({{user_id:sel.value?Number(sel.value):null}})}});sel.disabled=false}};\
-             row.append(name,sel);root.append(row)}}}}load();</script>"
+             revoke.textContent='Отозвать';revoke.className='revoke';revoke.onclick=async()=>{{if(!confirm('Отозвать устройство «'+d.name+'»? Оно потеряет доступ к серверу.'))return;revoke.disabled=true;sel.disabled=true;const r=await fetch('/api/auth/devices/'+d.id,{{method:'DELETE',headers:h}});if(r.ok)row.remove();else{{alert('Не удалось отозвать устройство');revoke.disabled=false;sel.disabled=false}}}};\
+             row.append(name,sel,revoke);root.append(row)}}}}load();</script>"
         )
     } else {
         String::new()
@@ -1369,7 +1370,7 @@ async fn setup_page(
     Ok(Html(format!(
         "<!doctype html><meta charset=utf-8><title>NAMI - сопряжение</title>\
          <style>body{{font:16px system-ui;max-width:520px;margin:40px auto;text-align:center}}\
-         code{{font-size:28px;letter-spacing:4px}}.warn{{color:#b00}}section{{margin-top:40px}}select{{font:inherit}}</style>\
+         code{{font-size:28px;letter-spacing:4px}}.warn{{color:#b00}}section{{margin-top:40px}}select,button{{font:inherit}}.revoke{{margin-left:8px;color:#b00}}</style>\
          <h1>Сопряжение устройства</h1>{qr}<p>Код: <code>{code}</code></p>\
          <p>Действует 10 минут, одно устройство.</p>{warning}{device_admin}"
     )))
