@@ -492,6 +492,18 @@ if [ -z "$PRIMARY_IP" ]; then
     PRIMARY_IP="127.0.0.1"
 fi
 
+# После обновления конфигурация уже существует. Показываем внешний адрес, который
+# пользователь реально задал, а LAN-IP используем только когда домена нет.
+EXTERNAL_URL=""
+if [ -f "${DATA_DIR}/config.toml" ]; then
+    EXTERNAL_URL="$($SUDO sed -n 's/^[[:space:]]*external_url[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "${DATA_DIR}/config.toml" 2>/dev/null | tail -n1 || true)"
+fi
+if [ -n "$EXTERNAL_URL" ]; then
+    WEB_URL="${EXTERNAL_URL%/}"
+else
+    WEB_URL="https://${PRIMARY_IP}:${PORT}"
+fi
+
 # 13. Итоговое сообщение
 echo
 if [ "$IS_UPDATE" = true ]; then
@@ -503,7 +515,7 @@ if [ "$IS_UPDATE" = true ]; then
     echo -e "  Все пользовательские данные и база данных сохранены в ${CYAN}${DATA_DIR}${NC}."
     echo
     echo -e "  ${BOLD}Веб-интерфейс сервера:${NC}"
-    echo -e "         👉 ${BOLD}${CYAN}https://${PRIMARY_IP}:${PORT}${NC} (или https://localhost:${PORT})"
+    echo -e "         👉 ${BOLD}${CYAN}${WEB_URL}${NC}"
     echo
     echo -e "${BOLD}Команды управления:${NC}"
     echo -e "  ${CYAN}nami status${NC}           - Проверка статуса сервера и здоровья API"
