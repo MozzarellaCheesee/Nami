@@ -182,6 +182,10 @@ jobs:
         shell: bash
         run: |
           TAG="${{ github.ref_name }}"
+          # Версии берём из самих манифестов: иначе их приходится править ещё и здесь, и текст
+          # релиза расходится со сборкой.
+          APP_VERSION=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' app/build.gradle.kts | head -1)
+          SERVER_VERSION=$(sed -n 's/^version = "\(.*\)".*/\1/p' server/Cargo.toml | head -1)
           cat << EOF > release_body.md
           ## 🌊 Nami Release ${TAG}
 
@@ -195,12 +199,12 @@ jobs:
           * **Удаление трека разделено на два действия.** «Удалить» убирает трек только с устройства, «Удалить везде» — ещё и с сервера. Работает и для одного трека, и для выделения нескольких.
           * **Установщик для Windows.** Исправлена распаковка релиза — установка падала с ошибкой «неподдерживаемый формат файла архива». FFmpeg, установленный тут же через winget, больше не считается отсутствующим.
 
-          * **Версия Android-клиента:** \`0.1.2-beta.23\`.
-          * **Версия сервера:** \`1.0.12\`.
+          * **Версия Android-клиента:** \`${APP_VERSION}\`.
+          * **Версия сервера:** \`${SERVER_VERSION}\`.
 
           ### 📦 Артефакты релиза:
           * **Android Client:**
-            * \`app-release.apk\` — Hi-Res / Bit-perfect аудиоплеер Nami для Android.
+            * \`Nami.Android.${APP_VERSION}.apk\` — Hi-Res / Bit-perfect аудиоплеер Nami для Android.
           * **Сервер Nami (Self-Hosted):**
             * \`nami-server-linux-x86_64.tar.gz\` — бинарник для Linux x86_64 (Ubuntu, Debian, Arch, Fedora).
             * \`nami-server-linux-aarch64.tar.gz\` — бинарник для Linux ARM64 (Raspberry Pi 4/5, Oracle Cloud ARM, Apple Silicon VPS).
