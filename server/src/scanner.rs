@@ -155,7 +155,12 @@ pub fn scan(conn: &mut Connection, dirs: &[PathBuf], library_id: i64) -> crate::
                                  duration_ms, size_bytes, mtime, format, seen_at, library_id)
              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)
              ON CONFLICT(path) DO UPDATE SET
-                title=?2, artist=?3, album=?4, album_artist=?5, track_no=?6, year=?7,
+                title=CASE WHEN tracks.metadata_edited_at IS NULL THEN ?2 ELSE tracks.title END,
+                artist=CASE WHEN tracks.metadata_edited_at IS NULL THEN ?3 ELSE tracks.artist END,
+                album=CASE WHEN tracks.metadata_edited_at IS NULL THEN ?4 ELSE tracks.album END,
+                album_artist=CASE WHEN tracks.metadata_edited_at IS NULL THEN ?5 ELSE tracks.album_artist END,
+                track_no=CASE WHEN tracks.metadata_edited_at IS NULL THEN ?6 ELSE tracks.track_no END,
+                year=CASE WHEN tracks.metadata_edited_at IS NULL THEN ?7 ELSE tracks.year END,
                 duration_ms=?8, size_bytes=?9, mtime=?10, format=?11, seen_at=?12,
                 library_id=?13",
         )?;
@@ -287,22 +292,22 @@ pub fn find_duplicate(
     ) {
         return Some((id, DuplicateOf::Hash));
     }
-    conn.query_row(
-        "SELECT id FROM tracks
-         WHERE library_id=?4 AND lower(title)=lower(?1)
-           AND lower(COALESCE(artist,''))=lower(COALESCE(?2,''))
-           AND abs(duration_ms - ?3) <= ?5",
-        rusqlite::params![
-            meta.title,
-            meta.artist,
-            meta.duration_ms as i64,
-            library_id,
-            DURATION_TOLERANCE_MS
-        ],
-        |r| r.get::<_, i64>(0),
-    )
-    .ok()
-    .map(|id| (id, DuplicateOf::Metadata))
+    // SQLite lower()/NOCASE работает только для ASCII. Сначала дешёво сужаем выборку
+    // библиотекой и длительностью, Unicode-сравнение делаем стандартным Rust lowercase.
+    let title = meta.title.to_lowercase();
+    let artist = meta.artist.as_deref().unwrap_or("").to_lowercase();
+    let mut stmt = conn.prepare(
+        "SELECT id,title,COALESCE(artist,'') FROM tracks
+         WHERE library_id=?1 AND abs(duration_ms - ?2) <= ?3",
+    ).ok()?;
+    let found = stmt.query_map(
+        rusqlite::params![library_id, meta.duration_ms as i64, DURATION_TOLERANCE_MS],
+        |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?)),
+    ).ok()?
+        .filter_map(Result::ok)
+        .find(|(_, t, a)| t.to_lowercase() == title && a.to_lowercase() == artist)
+        .map(|(id, _, _)| (id, DuplicateOf::Metadata));
+    found
 }
 
 /// Заносит уже лежащий на диске файл в библиотеку - через тот же разбор тегов,
@@ -470,6 +475,37 @@ mod tests {
         assert!(find_duplicate(&conn, "х", &meta, 0).is_some(), "в допуске - дубль");
         meta.duration_ms += 1000;
         assert!(find_duplicate(&conn, "х", &meta, 0).is_none(), "вне допуска - другой трек");
+    }
+
+    #[test]
+    fn кириллица_сравнивается_без_учёта_регистра() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(crate::db::SCHEMA).unwrap();
+        conn.execute(
+            "INSERT INTO tracks(path,title,artist,duration_ms,library_id) VALUES('/a','ПЕСНЯ','ИСПОЛНИТЕЛЬ',1000,3)",
+            [],
+        ).unwrap();
+        let meta = TrackMeta {
+            title: "песня".into(), artist: Some("исполнитель".into()), album: None,
+            album_artist: None, track_no: None, year: None, duration_ms: 1000, format: "mp3".into(),
+        };
+        assert!(find_duplicate(&conn, "другой", &meta, 3).is_some());
+    }
+
+    #[test]
+    fn повторный_скан_не_откатывает_ручные_метаданные() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(crate::db::SCHEMA).unwrap();
+        scan(&mut conn, &[fixtures()], 0).unwrap();
+        conn.execute(
+            "UPDATE tracks SET title='Ручное имя', metadata_edited_at=1, mtime=-1 WHERE title='Nami Test Wav'",
+            [],
+        ).unwrap();
+        scan(&mut conn, &[fixtures()], 0).unwrap();
+        let title: String = conn.query_row(
+            "SELECT title FROM tracks WHERE path LIKE '%sample.wav'", [], |r| r.get(0),
+        ).unwrap();
+        assert_eq!(title, "Ручное имя");
     }
 
     #[test]

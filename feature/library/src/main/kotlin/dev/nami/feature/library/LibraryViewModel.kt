@@ -77,7 +77,6 @@ class LibraryViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val tagRepository: TagRepository,
     private val serverLibraryRepository: dev.nami.domain.ServerLibraryRepository,
-    jamRepository: dev.nami.domain.JamRepository? = null,
 ) : ViewModel() {
 
     private val _serverActionMsg = MutableStateFlow<String?>(null)
@@ -94,11 +93,6 @@ class LibraryViewModel @Inject constructor(
             }
         }
         refreshServerTracks()
-        jamRepository?.serverChanges?.let { changes ->
-            changes
-                .onEach { entities -> if ("tracks" in entities) refreshServerTracks() }
-                .launchIn(viewModelScope)
-        }
     }
 
     fun refreshServerTracks() {

@@ -65,6 +65,19 @@ interface ArtistDao {
     )
     suspend fun findByIdWithPhoto(id: String): ArtistWithPhoto?
 
+    @Query(
+        """
+        SELECT artists.id AS id, artists.name AS name, artists.sortName AS sortName,
+               COALESCE(artists.photoPath, (
+                   SELECT albums.artworkPath FROM albums
+                   WHERE albums.artistId = artists.id AND albums.artworkPath IS NOT NULL
+                   ORDER BY albums.title ASC LIMIT 1
+               )) AS photoPath
+        FROM artists WHERE id = :id
+        """,
+    )
+    fun observeByIdWithPhoto(id: String): Flow<ArtistWithPhoto?>
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(artist: ArtistEntity)
 

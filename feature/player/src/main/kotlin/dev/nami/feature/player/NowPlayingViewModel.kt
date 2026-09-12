@@ -23,6 +23,7 @@ import dev.nami.domain.SettingsRepository
 import dev.nami.player.waveform.WaveformCache
 import dev.nami.player.waveform.WaveformScanner
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -371,6 +372,7 @@ class NowPlayingViewModel @Inject constructor(
     private val waveformCache = LinkedHashMap<String, List<Float>>()
     private val _waveform = MutableStateFlow<List<Float>?>(null)
     val waveform: StateFlow<List<Float>?> = _waveform.asStateFlow()
+    private var waveformJob: Job? = null
 
     init {
         combine(currentTrackDetails, playerRepository.queue) { track, q ->
@@ -386,6 +388,7 @@ class NowPlayingViewModel @Inject constructor(
     }
 
     private fun loadWaveform(track: Track?, nowPlaying: dev.nami.domain.QueueTrack? = null) {
+        waveformJob?.cancel()
         val qTrack = nowPlaying ?: playerRepository.queue.value.nowPlaying
         val path = track?.path ?: qTrack?.id?.value
         if (path == null) {
@@ -403,7 +406,7 @@ class NowPlayingViewModel @Inject constructor(
             return
         }
         _waveform.value = null
-        viewModelScope.launch {
+        waveformJob = viewModelScope.launch {
             val title = track?.title ?: qTrack?.title
             val artist = track?.artistName ?: qTrack?.artistName
             val dur = track?.durationMs ?: (playerRepository.state.value as? PlaybackState.Playing)?.durationMs ?: 0L

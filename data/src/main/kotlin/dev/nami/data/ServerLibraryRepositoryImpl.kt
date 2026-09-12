@@ -3,6 +3,7 @@ package dev.nami.data
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.nami.core.database.dao.AlbumDao
+import dev.nami.core.database.dao.ArtistDao
 import dev.nami.core.database.dao.TrackDao
 import dev.nami.core.database.entity.TrackEntity
 import dev.nami.core.model.AlbumId
@@ -35,6 +36,7 @@ class ServerLibraryRepositoryImpl @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val trackDao: TrackDao,
     private val albumDao: AlbumDao,
+    private val artistDao: ArtistDao,
     private val metadataResolver: MetadataResolver,
     private val searchRepository: SearchRepository,
 ) : ServerLibraryRepository {
@@ -192,6 +194,7 @@ class ServerLibraryRepositoryImpl @Inject constructor(
     private val cacheRoot: File by lazy {
         File(context.getExternalFilesDir(null) ?: context.filesDir, "ServerCache").apply { mkdirs() }
     }
+    @Volatile private var cachedScopedDir: Pair<String, File>? = null
     private val cacheDir: File
         get() {
             val identity = listOf(
@@ -199,12 +202,14 @@ class ServerLibraryRepositoryImpl @Inject constructor(
                 settingsRepository.namiServerCertSha256.value.orEmpty(),
                 settingsRepository.namiServerUrl.value.split('\n', ',').map { it.trim() }.sorted().joinToString("|"),
             ).joinToString("\n")
+            cachedScopedDir?.takeIf { it.first == identity }?.let { return it.second }
             val key = MessageDigest.getInstance("SHA-256").digest(identity.toByteArray())
                 .take(12).joinToString("") { "%02x".format(it) }
             val scoped = File(cacheRoot, key).apply { mkdirs() }
             // Старые версии держали один общий кеш. Однократно переносим его текущему аккаунту.
             cacheRoot.listFiles { file -> file.isFile && (file.name.endsWith(".audio") || file.name.endsWith(".artwork")) }
                 ?.forEach { legacy -> legacy.renameTo(File(scoped, legacy.name)) }
+            cachedScopedDir = identity to scoped
             return scoped
         }
 
@@ -257,6 +262,21 @@ class ServerLibraryRepositoryImpl @Inject constructor(
     /** Серверные записи живут в общей Room-библиотеке, поэтому все существующие очереди,
      * shuffle, Home и поиск получают их без специальных веток в UI. */
     private suspend fun mirrorIntoLibrary(serverTracks: List<ServerTrackMeta>) {
+        val incomingById = serverTracks.associateBy { "server_${it.id}" }
+        val mirrored = trackDao.allRaw().filter { it.id.startsWith("server_") }
+        mirrored.groupBy { it.albumId }.filterKeys { it != null }.forEach { (albumId, tracks) ->
+            val incoming = tracks.mapNotNull { incomingById[it.id] }
+            val titles = incoming.mapNotNull { it.album }.distinct()
+            if (incoming.size == tracks.size && titles.size == 1) {
+                albumDao.updateTitle(albumId!!, titles.single())
+                val years = incoming.map { it.year }.distinct()
+                if (years.size == 1) albumDao.setYear(albumId, years.single())
+            }
+        }
+        mirrored.groupBy { it.artistId }.filterKeys { it != null }.forEach { (artistId, tracks) ->
+            val names = tracks.mapNotNull { incomingById[it.id]?.artist?.takeIf(String::isNotBlank) }.distinct()
+            if (names.size == 1) artistDao.updateName(artistId!!, names.single())
+        }
         val localTracks = trackDao.allOrderedWithArtwork()
             .map { it.toDomain() }
             .filterNot { it.path.startsWith(SERVER_PATH_PREFIX) }
@@ -372,11 +392,46 @@ class ServerLibraryRepositoryImpl @Inject constructor(
         cachedArtworkIds -= serverTrackId
     }
 
+    override fun invalidateArtwork(serverTrackId: Long) {
+        artworkFileFor(serverTrackId).delete()
+        cachedArtworkIds -= serverTrackId
+    }
+
     override suspend fun updateTrack(track: ServerTrackMeta): Boolean = withContext(Dispatchers.IO) {
         val cfg = activeConfig() ?: return@withContext false
         if (!NamiServerClient.updateTrack(cfg, track)) return@withContext false
         listTracks()
         true
+    }
+
+    override suspend fun updateMatchingTrack(original: ServerTrackMeta, updated: ServerTrackMeta): Boolean = withContext(Dispatchers.IO) {
+        val cfg = activeConfig() ?: return@withContext false
+        val id = original.id.takeIf { it > 0 } ?: NamiServerClient.matchTracks(
+            cfg,
+            listOf(NamiServerClient.MatchTrackRequest(original.title, original.artist, original.durationMs)),
+        )?.firstOrNull() ?: return@withContext false
+        NamiServerClient.updateTrack(cfg, updated.copy(id = id))
+    }
+
+    override suspend fun updateMatchingArtwork(original: ServerTrackMeta, imageUri: String): Boolean = withContext(Dispatchers.IO) {
+        val cfg = activeConfig() ?: return@withContext false
+        val id = original.id.takeIf { it > 0 } ?: NamiServerClient.matchTracks(
+            cfg,
+            listOf(NamiServerClient.MatchTrackRequest(original.title, original.artist, original.durationMs)),
+        )?.firstOrNull() ?: return@withContext false
+        val uri = android.net.Uri.parse(imageUri)
+        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@withContext false
+        NamiServerClient.uploadArtwork(cfg, id, bytes, context.contentResolver.getType(uri) ?: "image/jpeg")
+    }
+
+    override suspend fun updateAlbum(album: String, artist: String?, title: String?, year: Int?, updateYear: Boolean, albumArtist: String?, updateAlbumArtist: Boolean): Boolean = withContext(Dispatchers.IO) {
+        val cfg = activeConfig() ?: return@withContext false
+        NamiServerClient.updateAlbum(cfg, album, artist, title, year, updateYear, albumArtist, updateAlbumArtist)
+    }
+
+    override suspend fun updateArtist(artist: String, name: String): Boolean = withContext(Dispatchers.IO) {
+        val cfg = activeConfig() ?: return@withContext false
+        NamiServerClient.updateArtist(cfg, artist, name)
     }
 
     override suspend fun updateArtwork(serverTrackId: Long, imageUri: String): Boolean = withContext(Dispatchers.IO) {

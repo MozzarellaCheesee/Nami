@@ -80,6 +80,7 @@ class LibraryRepositoryImpl @Inject constructor(
     private val playlistDao: PlaylistDao? = null,
     private val playlistTrackDao: PlaylistTrackDao? = null,
     private val tagDao: TagDao? = null,
+    private val serverLibraryRepository: dev.nami.domain.ServerLibraryRepository? = null,
 ) : LibraryRepository {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -144,15 +145,28 @@ class LibraryRepositoryImpl @Inject constructor(
             .filter { it.size > 1 }
             .forEach { group -> group.drop(1).forEach { union(group.first().id, it.id) } }
 
-        // ponytail: попарный перебор отпечатков, O(n²). Хэммингов порог не разбивается на
-        // корзины, поэтому индекса тут нет; при библиотеке в десятки тысяч треков имеет смысл
-        // разложить отпечаток на 4 куска по 16 бит и сравнивать только совпавшие по куску.
         val fingerprints = trackDao.allFingerprints()
-        for (i in fingerprints.indices) {
-            for (j in i + 1 until fingerprints.size) {
-                if (AudioFingerprint.matches(fingerprints[i].fingerprint, fingerprints[j].fingerprint)) {
-                    union(TrackId(fingerprints[i].id), TrackId(fingerprints[j].id))
+        // При distance <= 6 хотя бы один из восьми 8-битных кусков обязан совпасть.
+        // Поэтому сравниваем только кандидатов из общих бакетов, а не все n² пары.
+        val candidates = mutableSetOf<Long>()
+        repeat(8) { chunk ->
+            val buckets = mutableMapOf<Int, MutableList<Int>>()
+            fingerprints.forEachIndexed { index, row ->
+                val key = ((row.fingerprint ushr (chunk * 8)) and 0xff).toInt()
+                val previous = buckets.getOrPut(key) { mutableListOf() }
+                previous.forEach { other ->
+                    val lo = minOf(index, other)
+                    val hi = maxOf(index, other)
+                    candidates += (lo.toLong() shl 32) or (hi.toLong() and 0xffffffffL)
                 }
+                previous += index
+            }
+        }
+        candidates.forEach { pair ->
+            val a = (pair ushr 32).toInt()
+            val b = pair.toInt()
+            if (AudioFingerprint.matches(fingerprints[a].fingerprint, fingerprints[b].fingerprint)) {
+                union(TrackId(fingerprints[a].id), TrackId(fingerprints[b].id))
             }
         }
 
@@ -243,20 +257,23 @@ class LibraryRepositoryImpl @Inject constructor(
     override fun album(id: AlbumId): Flow<Album?> =
         albumDao.observeById(id.value).map { it?.toDomain() }
 
-    override fun artist(id: ArtistId): Flow<Artist?> = flow {
-        emit(artistDao.findByIdWithPhoto(id.value)?.toDomain())
-    }
+    override fun artist(id: ArtistId): Flow<Artist?> =
+        artistDao.observeByIdWithPhoto(id.value).map { entity -> entity?.toDomain() }
 
     override fun tracksInAlbum(id: AlbumId): Flow<List<Track>> =
         trackDao.observeTracksForAlbum(id.value).map { rows -> rows.map { it.toDomain() } }
 
     override suspend fun renameTrack(id: TrackId, title: String) {
+        val original = serverMeta(id)
         trackDao.updateTitle(id.value, title)
+        original?.let { serverLibraryRepository?.updateMatchingTrack(it, it.copy(title = title)) }
     }
 
     override suspend fun setTrackCover(id: TrackId, imageUri: String) {
+        val original = serverMeta(id)
         val bytes = context.contentResolver.openInputStream(imageUri.toUri())?.use { it.readBytes() } ?: return
         artworkStore.save(id.value, bytes)?.let { path -> trackDao.updateArtworkPath(id.value, path) }
+        original?.let { serverLibraryRepository?.updateMatchingArtwork(it, imageUri) }
     }
 
     override suspend fun createAlbum(title: String, artistId: ArtistId?): AlbumId {
@@ -282,12 +299,17 @@ class LibraryRepositoryImpl @Inject constructor(
     }
 
     override suspend fun renameAlbum(id: AlbumId, title: String) {
+        val original = albumDao.findById(id.value)
+        val artist = original?.artistId?.let { artistDao.findById(it)?.name }
         albumDao.updateTitle(id.value, title)
+        original?.let { serverLibraryRepository?.updateAlbum(it.title, artist, title = title) }
     }
 
     override suspend fun setAlbumCover(id: AlbumId, imageUri: String) {
+        val originals = trackDao.trackIdsForAlbum(id.value).mapNotNull { serverMeta(TrackId(it)) }
         val bytes = context.contentResolver.openInputStream(imageUri.toUri())?.use { it.readBytes() } ?: return
         artworkStore.save(id.value, bytes)?.let { path -> albumDao.updateArtworkPath(id.value, path) }
+        originals.forEach { serverLibraryRepository?.updateMatchingArtwork(it, imageUri) }
     }
 
     override suspend fun setAlbumIsSingle(id: AlbumId, isSingle: Boolean) {
@@ -295,15 +317,29 @@ class LibraryRepositoryImpl @Inject constructor(
     }
 
     override suspend fun setAlbumYear(id: AlbumId, year: Int?) {
+        val original = albumDao.findById(id.value)
+        val artist = original?.artistId?.let { artistDao.findById(it)?.name }
         albumDao.setYear(id.value, year)
+        original?.let { serverLibraryRepository?.updateAlbum(it.title, artist, year = year, updateYear = true) }
     }
 
     override suspend fun setAlbumArtist(id: AlbumId, artistId: ArtistId?) {
+        val original = albumDao.findById(id.value)
+        val oldArtist = original?.artistId?.let { artistDao.findById(it)?.name }
+        val newArtist = artistId?.let { artistDao.findById(it.value)?.name }
         // The single-artist picker replaces the whole credit list with just this one artist --
         // addAlbumArtist/removeAlbumArtist below are the ones that add to/trim an existing list.
         albumDao.setArtistId(id.value, artistId?.value)
         albumDao.clearArtists(id.value)
         if (artistId != null) albumDao.addArtist(dev.nami.core.database.entity.AlbumArtistCrossRef(id.value, artistId.value))
+        original?.let {
+            serverLibraryRepository?.updateAlbum(
+                album = it.title,
+                artist = oldArtist,
+                albumArtist = newArtist,
+                updateAlbumArtist = true,
+            )
+        }
     }
 
     override fun albumArtists(id: AlbumId): Flow<List<Artist>> =
@@ -349,7 +385,9 @@ class LibraryRepositoryImpl @Inject constructor(
     }
 
     override suspend fun renameArtist(id: ArtistId, name: String) {
+        val original = artistDao.findById(id.value)
         artistDao.updateName(id.value, name)
+        original?.let { serverLibraryRepository?.updateArtist(it.name, name) }
     }
 
     override suspend fun setArtistPhoto(id: ArtistId, imageUri: String) {
@@ -469,6 +507,7 @@ class LibraryRepositoryImpl @Inject constructor(
     }
 
     override suspend fun batchEditTracks(ids: List<TrackId>, artistName: String?, albumName: String?, year: Int?, genre: String?) {
+        val originals = ids.associateWith { serverMeta(it) }
         // Resolved once for the whole batch, not per track - otherwise "same artist name" would
         // still risk create-then-find races across tracks (find-or-create isn't atomic here).
         val resolvedArtistId = artistName?.takeIf { it.isNotBlank() }?.let { metadataResolver.resolveArtist(it) }
@@ -483,7 +522,34 @@ class LibraryRepositoryImpl @Inject constructor(
                 trackDao.findById(id.value)?.albumId?.let { albumDao.setYear(it, year) }
             }
             if (genre != null) trackDao.updateGenre(id.value, genre.takeIf { it.isNotBlank() })
+            originals[id]?.let { old ->
+                serverLibraryRepository?.updateMatchingTrack(
+                    old,
+                    old.copy(
+                        artist = artistName?.takeIf { it.isNotBlank() } ?: old.artist,
+                        album = albumName?.takeIf { it.isNotBlank() } ?: old.album,
+                        year = year ?: old.year,
+                    ),
+                )
+            }
         }
+    }
+
+    private suspend fun serverMeta(id: TrackId): dev.nami.domain.ServerTrackMeta? {
+        val track = trackDao.findById(id.value) ?: return null
+        val artist = track.artistId?.let { artistDao.findById(it)?.name }.orEmpty()
+        val album = track.albumId?.let { albumDao.findById(it) }
+        return dev.nami.domain.ServerTrackMeta(
+            id = id.value.removePrefix("server_").toLongOrNull() ?: -1L,
+            title = track.title,
+            artist = artist,
+            album = album?.title,
+            durationMs = track.durationMs,
+            trackNo = track.trackNo,
+            year = album?.year,
+            sizeBytes = track.sizeBytes,
+            format = track.format,
+        )
     }
 
     override suspend fun searchMusicBrainz(title: String, artistName: String?): List<dev.nami.domain.MusicBrainzCandidate> =

@@ -52,7 +52,9 @@ import dev.nami.domain.PlayerRepository
 import dev.nami.domain.ServerAudioRepository
 import dev.nami.domain.ServerLibraryRepository
 import dev.nami.domain.ServerTrackMeta
+import dev.nami.domain.JamRepository
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import javax.inject.Inject
@@ -62,6 +64,7 @@ class ServerLibraryViewModel @Inject constructor(
     private val serverLibraryRepository: ServerLibraryRepository,
     private val serverAudioRepository: ServerAudioRepository,
     private val playerRepository: PlayerRepository,
+    jamRepository: JamRepository,
 ) : ViewModel() {
 
     var tracks by mutableStateOf<List<ServerTrackMeta>>(emptyList())
@@ -80,6 +83,14 @@ class ServerLibraryViewModel @Inject constructor(
         private set
     var artworkFiles by mutableStateOf<Map<Long, String>>(emptyMap())
         private set
+
+    init {
+        viewModelScope.launch {
+            jamRepository.serverChanges.collect { entities ->
+                if ("tracks" in entities || "albums" in entities || "artists" in entities) load()
+            }
+        }
+    }
 
     fun load() {
         if (loading) return

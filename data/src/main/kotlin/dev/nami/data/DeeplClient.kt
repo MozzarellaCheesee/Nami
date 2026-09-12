@@ -16,11 +16,13 @@ object DeeplClient {
 
     fun translate(texts: List<String>, apiKey: String, targetLang: String = "RU"): List<String>? {
         if (texts.isEmpty()) return emptyList()
+        val nonEmpty = texts.withIndex().filter { it.value.isNotBlank() }
+        if (nonEmpty.isEmpty()) return List(texts.size) { "" }
         val host = if (apiKey.trim().endsWith(":fx")) "api-free.deepl.com" else "api.deepl.com"
         val body = buildString {
             append("auth_key=").append(encode(apiKey))
             append("&target_lang=").append(encode(targetLang))
-            texts.forEach { append("&text=").append(encode(it)) }
+            nonEmpty.forEach { append("&text=").append(encode(it.value)) }
         }
         return try {
             (URL("https://$host/v2/translate").openConnection() as HttpURLConnection).run {
@@ -37,7 +39,11 @@ object DeeplClient {
                     }
                     val raw = inputStream.bufferedReader().use { it.readText() }
                     val translations = JSONObject(raw).getJSONArray("translations")
-                    (0 until translations.length()).map { translations.getJSONObject(it).getString("text") }
+                    val result = MutableList(texts.size) { "" }
+                    nonEmpty.forEachIndexed { responseIndex, source ->
+                        result[source.index] = translations.getJSONObject(responseIndex).getString("text")
+                    }
+                    result
                 } finally {
                     disconnect()
                 }

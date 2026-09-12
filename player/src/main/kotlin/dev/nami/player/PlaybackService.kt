@@ -46,6 +46,7 @@ import dev.nami.player.replaygain.ReplayGainScanner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -689,6 +690,7 @@ class PlaybackService : MediaLibraryService() {
         val dataSourceFactory = DefaultDataSource.Factory(this, httpFactory)
         return builder
             .setLoadControl(loadControl)
+            .setWakeMode(C.WAKE_MODE_LOCAL)
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
             .setAudioAttributes(audioAttributes, handleAudioFocus)
             // ACTION_AUDIO_BECOMING_NOISY - без него отключение BT-наушников/выдёргивание
@@ -856,6 +858,7 @@ class PlaybackService : MediaLibraryService() {
         mediaSession
 
     override fun onDestroy() {
+        scope.cancel()
         outputDeviceDetector.release()
         // Запасной AudioTrack держит открытым выходной поток - после остановки сервиса он не нужен.
         WarmAudioTrackProvider.release()

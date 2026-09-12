@@ -253,6 +253,8 @@ WebSocket and the protected pairing page may use a token in the query string whe
 | `GET` | `/api/tracks?limit&offset` | Paginated track list. |
 | `GET` | `/api/tracks/{id}` | Track metadata. |
 | `PATCH` | `/api/tracks/{id}` | Update server track metadata. |
+| `PATCH` | `/api/albums` | Update title, year, or album artist across a visible album. |
+| `PATCH` | `/api/artists` | Rename an artist across all visible tracks. |
 | `POST` | `/api/tracks/match` | Match client tracks against server tracks. |
 | `GET` | `/api/tracks/{id}/stream` | Original byte-for-byte stream with Range support. |
 | `GET` | `/api/tracks/{id}/stream?profile=...` | Transcoded stream. |

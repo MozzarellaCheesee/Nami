@@ -594,6 +594,26 @@ object NamiServerClient {
         return request("PATCH", "$base/api/tracks/${track.id}", body, cfg.token, cfg.certSha256)?.first == 204
     }
 
+    fun updateAlbum(cfg: Config, album: String, artist: String?, title: String?, year: Int?, updateYear: Boolean, albumArtist: String?, updateAlbumArtist: Boolean): Boolean {
+        val base = reachableBase(cfg) ?: return false
+        val body = JSONObject().apply {
+            put("album", album)
+            put("artist", artist ?: JSONObject.NULL)
+            if (title != null) put("title", title)
+            put("year_set", updateYear)
+            if (updateYear) put("year", year ?: JSONObject.NULL)
+            put("album_artist_set", updateAlbumArtist)
+            if (updateAlbumArtist) put("album_artist", albumArtist ?: JSONObject.NULL)
+        }.toString()
+        return request("PATCH", "$base/api/albums", body, cfg.token, cfg.certSha256)?.first == 204
+    }
+
+    fun updateArtist(cfg: Config, artist: String, name: String): Boolean {
+        val base = reachableBase(cfg) ?: return false
+        val body = JSONObject().put("artist", artist).put("name", name).toString()
+        return request("PATCH", "$base/api/artists", body, cfg.token, cfg.certSha256)?.first == 204
+    }
+
     fun uploadArtwork(cfg: Config, trackId: Long, bytes: ByteArray, mime: String): Boolean {
         val base = reachableBase(cfg) ?: return false
         return runCatching {

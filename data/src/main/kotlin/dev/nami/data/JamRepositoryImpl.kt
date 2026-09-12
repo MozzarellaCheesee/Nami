@@ -77,6 +77,7 @@ class JamRepositoryImpl @Inject constructor(
     private val serverAudioRepository: ServerAudioRepository,
     private val syncRepository: SyncRepository,
     private val libraryRepository: LibraryRepository,
+    private val serverLibraryRepository: dev.nami.domain.ServerLibraryRepository,
 ) : JamRepository {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -170,6 +171,7 @@ class JamRepositoryImpl @Inject constructor(
     @Volatile private var isConnecting = false
     private var reconnectJob: Job? = null
     private var changedSyncJob: Job? = null
+    private var libraryRefreshJob: Job? = null
     @Volatile private var previousSession: JamSession? = null
     @Volatile private var intentionalClose = false
     private val pendingActions = mutableListOf<() -> Unit>()
@@ -833,7 +835,17 @@ class JamRepositoryImpl @Inject constructor(
                             entities.optString(i).takeIf { it.isNotBlank() }?.let(::add)
                         }
                     }
+                    names.filter { it.startsWith("artwork:") }
+                        .mapNotNull { it.substringAfter(':').toLongOrNull() }
+                        .forEach(serverLibraryRepository::invalidateArtwork)
                     _serverChanges.tryEmit(names)
+                    if ("tracks" in names || "albums" in names || "artists" in names || names.any { it.startsWith("artwork:") }) {
+                        libraryRefreshJob?.cancel()
+                        libraryRefreshJob = scope.launch {
+                            delay(150L)
+                            runCatching { serverLibraryRepository.listTracks() }
+                        }
+                    }
                     changedSyncJob?.cancel()
                     changedSyncJob = scope.launch {
                         delay(500L)

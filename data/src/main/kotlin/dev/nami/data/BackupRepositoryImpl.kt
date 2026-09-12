@@ -38,7 +38,15 @@ class BackupRepositoryImpl @Inject constructor(
             val manifest = buildManifest()
             val resolver = context.contentResolver
             val rawTracks = trackDao.allRaw().filter { File(it.path).isFile }
-            val totalCount = rawTracks.size + 1
+            val files = rawTracks.flatMap { track ->
+                val audio = File(track.path)
+                val sidecars = audio.parentFile?.listFiles()?.filter {
+                    it.isFile && it.nameWithoutExtension == audio.nameWithoutExtension &&
+                        it.extension.lowercase() in setOf("lrc", "json", "txt")
+                }.orEmpty()
+                listOf(audio) + sidecars
+            }.distinctBy { it.absolutePath }
+            val totalCount = files.size + 1
             var currentIdx = 0
 
             onProgress?.invoke(dev.nami.domain.BackupProgress(currentIdx, totalCount, "manifest.json"))
@@ -51,8 +59,7 @@ class BackupRepositoryImpl @Inject constructor(
                     currentIdx++
 
                     val usedNames = HashSet<String>()
-                    rawTracks.forEach { t ->
-                        val file = File(t.path)
+                    files.forEach { file ->
                         onProgress?.invoke(dev.nami.domain.BackupProgress(currentIdx, totalCount, file.name))
                         var entryName = file.name
                         var suffix = 1

@@ -206,9 +206,13 @@ pub fn translate_deepl(lines: &[String], api_key: &str, target: &str) -> Option<
     if lines.is_empty() {
         return Some(Vec::new());
     }
+    let non_empty: Vec<(usize, &String)> = lines.iter().enumerate().filter(|(_, l)| !l.trim().is_empty()).collect();
+    if non_empty.is_empty() {
+        return Some(vec![String::new(); lines.len()]);
+    }
     let host = if api_key.trim().ends_with(":fx") { "api-free.deepl.com" } else { "api.deepl.com" };
     let mut body = format!("auth_key={}&target_lang={}", urlencode(api_key), urlencode(target));
-    for l in lines {
+    for (_, l) in &non_empty {
         body.push_str(&format!("&text={}", urlencode(l)));
     }
     let raw = ureq::post(format!("https://{host}/v2/translate"))
@@ -223,7 +227,11 @@ pub fn translate_deepl(lines: &[String], api_key: &str, target: &str) -> Option<
         .ok()?;
     let v: serde_json::Value = serde_json::from_str(&raw).ok()?;
     let arr = v.get("translations")?.as_array()?;
-    Some(arr.iter().map(|t| t.get("text").and_then(|x| x.as_str()).unwrap_or("").to_string()).collect())
+    let mut result = vec![String::new(); lines.len()];
+    for ((index, _), translated) in non_empty.into_iter().zip(arr) {
+        result[index] = translated.get("text").and_then(|x| x.as_str()).unwrap_or("").to_string();
+    }
+    Some(result)
 }
 
 // ---------------------------------------------------------------- кеш

@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS tracks (
     bpm           REAL,     -- оценка темпа, ударов в минуту
     musical_key   TEXT,     -- тональность, например 'A Minor'
     waveform      TEXT,     -- JSON-массив из 120 значений RMS-громкости 0..1
-    analyzed_at   INTEGER   -- когда трек прогнали через анализатор (NULL - ещё нет)
+    analyzed_at   INTEGER,  -- когда трек прогнали через анализатор (NULL - ещё нет)
+    metadata_edited_at INTEGER -- ручная правка: сканер не должен вернуть старые теги файла
 );
 CREATE INDEX IF NOT EXISTS idx_tracks_artist ON tracks(artist);
 CREATE INDEX IF NOT EXISTS idx_tracks_album  ON tracks(album);
@@ -225,6 +226,7 @@ CREATE INDEX IF NOT EXISTS idx_scrobble_pending ON scrobble_queue(sent, played_a
 /// Открывает БД, накатывает схему и миграции (идемпотентно).
 pub fn open(path: &Path) -> crate::Res<Connection> {
     let conn = Connection::open(path)?;
+    conn.execute_batch("PRAGMA foreign_keys = ON;")?;
     conn.execute_batch(SCHEMA)?;
     migrate(&conn)?;
     Ok(conn)
@@ -264,6 +266,7 @@ pub fn migrate(conn: &Connection) -> crate::Res<()> {
     add("tracks", "musical_key", "TEXT")?;
     add("tracks", "waveform", "TEXT")?;
     add("tracks", "analyzed_at", "INTEGER")?;
+    add("tracks", "metadata_edited_at", "INTEGER")?;
     add("users", "subsonic_password", "TEXT")?;
     add("users", "listenbrainz_token", "TEXT")?;
     add("devices", "user_id", "INTEGER")?;
