@@ -23,6 +23,12 @@ pub fn load_override(data_dir: &Path, track_id: i64) -> Option<(Vec<u8>, String)
     Some((bytes, mime))
 }
 
+pub fn delete_override(data_dir: &Path, track_id: i64) {
+    let dir = data_dir.join("artwork-overrides");
+    let _ = std::fs::remove_file(dir.join(format!("{track_id}.image")));
+    let _ = std::fs::remove_file(dir.join(format!("{track_id}.mime")));
+}
+
 /// Имена файлов-обложек рядом с треком, в порядке предпочтения.
 const SIDECAR_NAMES: &[&str] = &["cover", "folder", "front", "AlbumArt", "album"];
 const SIDECAR_EXTS: &[&str] = &["jpg", "jpeg", "png", "webp"];

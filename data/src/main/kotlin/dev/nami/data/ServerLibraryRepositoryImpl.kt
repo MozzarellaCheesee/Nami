@@ -392,6 +392,31 @@ class ServerLibraryRepositoryImpl @Inject constructor(
         cachedArtworkIds -= serverTrackId
     }
 
+    override suspend fun deleteTrack(serverTrackId: Long): Boolean = withContext(Dispatchers.IO) {
+        val cfg = activeConfig() ?: return@withContext false
+        val ok = NamiServerClient.deleteTrack(cfg, serverTrackId)
+        if (ok) {
+            removeFromCache(serverTrackId)
+            trackDao.hardDelete("server_$serverTrackId")
+            searchRepository.rebuildIndex()
+        }
+        ok
+    }
+
+    override suspend fun deleteTracks(serverTrackIds: List<Long>): Boolean = withContext(Dispatchers.IO) {
+        if (serverTrackIds.isEmpty()) return@withContext true
+        val cfg = activeConfig() ?: return@withContext false
+        val ok = NamiServerClient.deleteTracks(cfg, serverTrackIds)
+        if (ok) {
+            for (id in serverTrackIds) {
+                removeFromCache(id)
+                trackDao.hardDelete("server_$id")
+            }
+            searchRepository.rebuildIndex()
+        }
+        ok
+    }
+
     override fun invalidateArtwork(serverTrackId: Long) {
         artworkFileFor(serverTrackId).delete()
         cachedArtworkIds -= serverTrackId

@@ -33,7 +33,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = gitCommitCount
-        versionName = "0.1.2-beta.19"
+        versionName = "0.1.2-beta.20"
     }
     val keystoreFile = rootProject.file("secrets/nami.jks")
     val storePass = System.getenv("NAMI_KEYSTORE_PASSWORD")

@@ -594,6 +594,20 @@ object NamiServerClient {
         return request("PATCH", "$base/api/tracks/${track.id}", body, cfg.token, cfg.certSha256)?.first == 204
     }
 
+    fun deleteTrack(cfg: Config, trackId: Long): Boolean {
+        val base = reachableBase(cfg) ?: return false
+        val (code, _) = request("DELETE", "$base/api/tracks/$trackId", null, cfg.token, cfg.certSha256) ?: return false
+        return code in 200..204
+    }
+
+    fun deleteTracks(cfg: Config, trackIds: List<Long>): Boolean {
+        if (trackIds.isEmpty()) return true
+        val base = reachableBase(cfg) ?: return false
+        val body = JSONObject().put("ids", org.json.JSONArray(trackIds)).toString()
+        val (code, _) = request("POST", "$base/api/tracks/batch-delete", body, cfg.token, cfg.certSha256) ?: return false
+        return code in 200..204
+    }
+
     fun updateAlbum(cfg: Config, album: String, artist: String?, title: String?, year: Int?, updateYear: Boolean, albumArtist: String?, updateAlbumArtist: Boolean): Boolean {
         val base = reachableBase(cfg) ?: return false
         val body = JSONObject().apply {

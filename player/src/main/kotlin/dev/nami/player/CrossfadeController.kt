@@ -49,6 +49,8 @@ class CrossfadeController(
     private val isCrossfadeSuitable: () -> Boolean = { true },
 ) {
     private var outgoing: ExoPlayer? = null
+    private var activeFadeMs: Long = FADE_MS
+    private var incomingFadeMs: Long = FADE_MS
 
     /** Hard ceiling (0..1) multiplied into every volume value this controller writes - this is
      * the single owner of `player.volume` while crossfade exists (it runs every tick regardless
@@ -80,6 +82,8 @@ class CrossfadeController(
     fun cancel() {
         outgoing?.let(retire)
         outgoing = null
+        activeFadeMs = FADE_MS
+        incomingFadeMs = FADE_MS
         try {
             player().volume = volumeCeiling
         } catch (e: Exception) {
@@ -89,8 +93,9 @@ class CrossfadeController(
 
     /** Немедленный переход на следующий элемент очереди тем же настоящим overlap, который обычно
      * запускается у конца трека. Нужен для осознанного перелистывания карточек: настройка общего
-     * автокроссфейда на него не влияет. Ручная пауза при этом остаётся паузой. */
-    fun crossfadeToNext(): Boolean {
+     * автокроссфейда на него не влияет. Ручная пауза при этом остаётся паузой.
+     * В разборе библиотеки кроссфейд ускорен в 2 раза: 2500 мс (CARD_SORT_FADE_MS). */
+    fun crossfadeToNext(fadeMs: Long = CARD_SORT_FADE_MS): Boolean {
         if (outgoing != null) cancel()
         val current = player()
         if (!current.hasNextMediaItem()) return false
@@ -99,6 +104,8 @@ class CrossfadeController(
             return true
         }
         val incoming = startIncoming() ?: return false
+        activeFadeMs = fadeMs
+        incomingFadeMs = fadeMs
         current.setPauseAtEndOfMediaItems(true)
         outgoing = current
         promote(incoming)
@@ -113,9 +120,10 @@ class CrossfadeController(
         }
 
         val durationMs = current.duration
+        val fadeDuration = activeFadeMs
         // Progress through the overlap, measured on the INCOMING track's own position - it starts
         // at 0 by construction, so this stays exact even if it spent a moment buffering first.
-        val progress = (current.currentPosition.toFloat() / FADE_MS).coerceIn(0f, 1f)
+        val progress = (current.currentPosition.toFloat() / fadeDuration).coerceIn(0f, 1f)
 
         outgoing?.let { old ->
             // Входящий плеер не запрашивает второй audio focus. Поэтому во время overlap
@@ -125,6 +133,7 @@ class CrossfadeController(
             old.volume = fadeOut(progress) * volumeCeiling
             if (progress >= 1f) {
                 outgoing = null
+                activeFadeMs = FADE_MS
                 retire(old)
             }
         }
@@ -138,6 +147,8 @@ class CrossfadeController(
             if (incoming != null) {
                 // Otherwise the outgoing player runs on into the very item the incoming one is
                 // already playing, and the same track decodes twice at once.
+                activeFadeMs = FADE_MS
+                incomingFadeMs = FADE_MS
                 current.setPauseAtEndOfMediaItems(true)
                 outgoing = current
                 promote(incoming)
@@ -154,12 +165,23 @@ class CrossfadeController(
         val skipTailFade = outgoing == null && current.hasNextMediaItem() &&
             current.repeatMode != Player.REPEAT_MODE_ONE && !isCrossfadeSuitable() &&
             durationMs - current.currentPosition <= FADE_MS
-        current.volume = if (skipTailFade) volumeCeiling else volumeFor(current.currentPosition, durationMs) * volumeCeiling
+        val headFade = incomingFadeMs
+        val vol = when {
+            skipTailFade -> 1f
+            outgoing != null -> fadeIn(progress)
+            else -> volumeFor(current.currentPosition, durationMs, headFade)
+        }
+        current.volume = vol * volumeCeiling
+        if (current.currentPosition >= headFade) {
+            incomingFadeMs = FADE_MS
+        }
     }
 
     companion object {
         private const val TICK_MS = 150L
         const val FADE_MS = 5000L
+        /** В разборе библиотеки (карточный режим) кроссфейд ускорен в 2 раза: 2500 мс вместо 5000 мс */
+        const val CARD_SORT_FADE_MS = 2500L
         private val HALF_PI = (PI / 2).toFloat()
 
         /** Equal-power pair: fadeIn(t)² + fadeOut(t)² == 1, so the summed power of the two
@@ -172,11 +194,11 @@ class CrossfadeController(
         /** The single-player ramp: the incoming half of a crossfade, and the whole effect when
          * there is nothing to cross into (last track in the queue, or repeat-one). Pure so it's
          * testable without an ExoPlayer. durationMs <= 0 (unknown/live) always returns full volume. */
-        fun volumeFor(positionMs: Long, durationMs: Long): Float {
+        fun volumeFor(positionMs: Long, durationMs: Long, fadeMs: Long = FADE_MS): Float {
             if (durationMs <= 0) return 1f
             val remainingMs = durationMs - positionMs
             val progress = when {
-                positionMs < FADE_MS -> positionMs.toFloat() / FADE_MS
+                positionMs < fadeMs -> positionMs.toFloat() / fadeMs
                 remainingMs < FADE_MS -> remainingMs.toFloat() / FADE_MS
                 else -> return 1f
             }

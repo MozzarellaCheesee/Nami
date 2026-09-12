@@ -460,7 +460,7 @@ pub fn can_see_track(conn: &Connection, ident: &Ident, track_id: i64) -> bool {
     .is_ok()
 }
 
-fn is_jam_guest(conn: &Connection, ident: &Ident) -> bool {
+pub fn is_jam_guest(conn: &Connection, ident: &Ident) -> bool {
     ident.device_id.is_some_and(|id| {
         conn.query_row(
             "SELECT 1 FROM devices WHERE id=?1 AND name LIKE 'Jam Guest (%)'",

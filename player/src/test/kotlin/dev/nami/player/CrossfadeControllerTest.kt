@@ -64,4 +64,16 @@ class CrossfadeControllerTest {
         assertEquals(0f, CrossfadeController.fadeIn(-1f))
         assertEquals(1f, CrossfadeController.fadeIn(5f))
     }
+
+    @Test
+    fun `card sort crossfade uses 2x faster duration`() {
+        assertEquals(2500L, CrossfadeController.CARD_SORT_FADE_MS)
+        assertEquals(CrossfadeController.FADE_MS / 2, CrossfadeController.CARD_SORT_FADE_MS)
+        val mid = CrossfadeController.volumeFor(
+            positionMs = CrossfadeController.CARD_SORT_FADE_MS / 2,
+            durationMs = 180_000,
+            fadeMs = CrossfadeController.CARD_SORT_FADE_MS,
+        )
+        assert(mid in 0.7f..0.71f) { "expected ~0.707, got $mid" }
+    }
 }

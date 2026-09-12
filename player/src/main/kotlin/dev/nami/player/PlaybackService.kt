@@ -78,6 +78,7 @@ private class DspChain {
 
 private const val ACTION_TOGGLE_LIKE = "dev.nami.ACTION_TOGGLE_LIKE"
 const val ACTION_CROSSFADE_NEXT = "dev.nami.ACTION_CROSSFADE_NEXT"
+const val EXTRA_CROSSFADE_DURATION_MS = "dev.nami.EXTRA_CROSSFADE_DURATION_MS"
 
 @AndroidEntryPoint
 class PlaybackService : MediaLibraryService() {
@@ -214,7 +215,13 @@ class PlaybackService : MediaLibraryService() {
                 return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
             }
             if (customCommand.customAction == ACTION_CROSSFADE_NEXT) {
-                val handled = crossfade?.crossfadeToNext() == true
+                val durationMs = args.getLong(EXTRA_CROSSFADE_DURATION_MS, -1L).takeIf { it > 0 }
+                    ?: customCommand.customExtras.getLong(EXTRA_CROSSFADE_DURATION_MS, -1L).takeIf { it > 0 }
+                val handled = if (durationMs != null) {
+                    crossfade?.crossfadeToNext(durationMs) == true
+                } else {
+                    crossfade?.crossfadeToNext() == true
+                }
                 return Futures.immediateFuture(
                     SessionResult(if (handled) SessionResult.RESULT_SUCCESS else SessionResult.RESULT_ERROR_BAD_VALUE),
                 )

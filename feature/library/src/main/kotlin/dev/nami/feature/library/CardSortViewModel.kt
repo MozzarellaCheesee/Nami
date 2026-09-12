@@ -77,7 +77,7 @@ class CardSortViewModel @Inject constructor(
         val rest = _uiState.value.queue.drop(1)
         _uiState.value = _uiState.value.copy(queue = rest)
         viewModelScope.launch {
-            if (rest.isNotEmpty()) playerRepository.crossfadeNext()
+            if (rest.isNotEmpty()) playerRepository.crossfadeNext(PlayerRepository.CARD_SORT_CROSSFADE_MS)
             when (direction) {
                 SwipeDirection.RIGHT -> playlistRepository.likeTrack(current.id)
                 SwipeDirection.LEFT -> libraryRepository.deleteTrack(current.id)
