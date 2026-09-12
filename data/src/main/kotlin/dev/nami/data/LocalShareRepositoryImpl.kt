@@ -395,12 +395,10 @@ class LocalShareRepositoryImpl @Inject constructor(
             }
         }
 
-        val (bytes, fileName) = httpDownload(device, "/drop") ?: return@withContext false
         // Уникальность даёт ПАПКА, а не префикс в имени файла: с "uuid_Fall Of Tears.mp3" импорт
         // подхватывал этот uuid как часть названия трека у тех файлов, где нет тегов.
         val scratchDir = File(File(context.cacheDir, "wifi_drop"), UUID.randomUUID().toString()).apply { mkdirs() }
-        val scratchFile = File(scratchDir, fileName)
-        scratchFile.writeBytes(bytes)
+        val scratchFile = httpDownloadTo(device, "/drop", scratchDir) ?: return@withContext false
         return@withContext try {
             // Какой именно трек появился, импорт наружу не сообщает (отдаёт только прогресс) -
             // сравниваем состав библиотеки до и после. Файл ровно один, так что разница ровно одна.
@@ -717,12 +715,10 @@ class LocalShareRepositoryImpl @Inject constructor(
 
     private suspend fun downloadOnly(device: DiscoveredDevice, trackId: String): File? {
         if (cachedFilesByTrackId[trackId] != null) return cachedFilesByTrackId[trackId]
-        val (bytes, fileName) = httpDownload(device, "/track/$trackId") ?: return null
         // Уникальность даёт папка, а не префикс в имени: имя файла идёт прямо в название трека при
         // "добавить в библиотеку", и "<uuid>_Артист - Трек.mp3" осело бы в библиотеке как есть,
         // если теги с хоста почему-то не доехали.
-        val file = File(File(listenTogetherCacheDir, trackId).apply { mkdirs() }, fileName)
-        file.writeBytes(bytes)
+        val file = httpDownloadTo(device, "/track/$trackId", File(listenTogetherCacheDir, trackId).apply { mkdirs() }) ?: return null
         cachedFilesByTrackId[trackId] = file
         return file
     }
@@ -1046,6 +1042,27 @@ class LocalShareRepositoryImpl @Inject constructor(
         } catch (e: Exception) {
             // Полный exception, а не только message: у половины сетевых ошибок message == null, и в
             // логе оставалось бесполезное "download /drop failed: null" без единой зацепки.
+            Log.w(TAG, "download $path failed", e)
+            null
+        } finally {
+            conn?.disconnect()
+        }
+    }
+
+    /** Аудио пишется прямо на диск: большой FLAC не должен целиком жить в heap Android. */
+    private suspend fun httpDownloadTo(device: DiscoveredDevice, path: String, directory: File): File? = withContext(Dispatchers.IO) {
+        val conn = openConnection(device, path, readTimeoutMs = 60_000)
+        try {
+            if (conn == null || conn.responseCode !in 200..299) return@withContext null
+            val fileName = conn.getHeaderField("X-Original-Filename")
+                ?.let { runCatching { java.net.URLDecoder.decode(it, "UTF-8") }.getOrDefault(it) }
+                ?.takeIf { it.isNotBlank() }
+                ?: "track.audio"
+            directory.mkdirs()
+            val file = File(directory, fileName)
+            conn.inputStream.use { input -> file.outputStream().buffered().use(input::copyTo) }
+            file
+        } catch (e: Exception) {
             Log.w(TAG, "download $path failed", e)
             null
         } finally {

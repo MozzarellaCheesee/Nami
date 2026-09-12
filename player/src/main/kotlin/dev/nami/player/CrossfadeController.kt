@@ -101,6 +101,10 @@ class CrossfadeController(
         val progress = (current.currentPosition.toFloat() / FADE_MS).coerceIn(0f, 1f)
 
         outgoing?.let { old ->
+            // Входящий плеер не запрашивает второй audio focus. Поэтому во время overlap
+            // он обязан повторять playWhenReady старого: звонок/потеря focus иначе ставили
+            // на паузу только старый трек, а новый продолжал играть поверх разговора.
+            if (current.playWhenReady != old.playWhenReady) current.playWhenReady = old.playWhenReady
             old.volume = fadeOut(progress) * volumeCeiling
             if (progress >= 1f) {
                 outgoing = null

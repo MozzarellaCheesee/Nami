@@ -322,7 +322,11 @@ class PlayerRepositoryImpl @Inject constructor(
         }
         // Drop stale origins for items no longer in the timeline (played-through or removed).
         val liveIds = upcoming.mapTo(mutableSetOf()) { it.mediaId }
+        nowPlaying?.mediaId?.let(liveIds::add)
+        previous?.mediaId?.let(liveIds::add)
         originByMediaId.keys.retainAll(liveIds)
+        trackInfoByMediaId.keys.retainAll(liveIds)
+        serverUrlByMediaId.keys.retainAll(liveIds)
         _queue.value = buildPlayerQueue(nowPlaying, upcoming, originByMediaId, previous)
     }
 

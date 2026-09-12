@@ -92,9 +92,7 @@ pub fn analyze(path: &Path, need_fingerprint: bool) -> Res<Analysis> {
         result.musical_key = estimate_key(&samples, ANALYSIS_RATE);
     }
     // Форма волны - по всему треку (отдельный декод: буферы BPM/ключа не хватило бы).
-    if let Some(full) = decode_mono(path, None) {
-        result.waveform = waveform_bars(&full);
-    }
+    result.waveform = waveform_from_file(path);
 
     // Chromaprint fingerprint через fpcalc
     if need_fingerprint {
@@ -141,6 +139,49 @@ fn decode_mono(path: &Path, limit_secs: Option<u32>) -> Option<Vec<f32>> {
             .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
             .collect(),
     )
+}
+
+/// Потоковая форма волны с постоянной памятью. При заполнении 240 промежуточных
+/// бакетов соседние объединяются; даже многочасовой микс не превращается в Vec всего PCM.
+fn waveform_from_file(path: &Path) -> Option<Vec<f32>> {
+    use std::io::Read;
+    let mut child = Command::new("ffmpeg")
+        .args(["-v", "error", "-i"]).arg(path)
+        .args(["-ac", "1", "-ar", &ANALYSIS_RATE.to_string(), "-f", "f32le", "-"])
+        .stdout(std::process::Stdio::piped()).spawn().ok()?;
+    let mut stdout = child.stdout.take()?;
+    let mut bins: Vec<(f64, u64)> = Vec::with_capacity(WAVEFORM_BARS * 2);
+    let mut target = 128u64;
+    let (mut sum, mut count) = (0.0f64, 0u64);
+    let mut bytes = [0u8; 32 * 1024];
+    let mut carry = Vec::with_capacity(3);
+    loop {
+        let n = stdout.read(&mut bytes).ok()?;
+        if n == 0 { break; }
+        carry.extend_from_slice(&bytes[..n]);
+        let complete = carry.len() / 4 * 4;
+        for b in carry[..complete].chunks_exact(4) {
+            let sample = f32::from_le_bytes([b[0], b[1], b[2], b[3]]) as f64;
+            sum += sample * sample;
+            count += 1;
+            if count == target { bins.push((sum, count)); sum = 0.0; count = 0; }
+        }
+        carry.drain(..complete);
+        if bins.len() >= WAVEFORM_BARS * 2 {
+            bins = bins.chunks(2).map(|p| {
+                if p.len() == 2 { (p[0].0 + p[1].0, p[0].1 + p[1].1) } else { p[0] }
+            }).collect();
+            target *= 2;
+        }
+    }
+    if count > 0 { bins.push((sum, count)); }
+    let _ = child.wait();
+    if bins.is_empty() { return None; }
+    let rms: Vec<f32> = bins.iter().map(|(s, n)| (s / *n as f64).sqrt() as f32).collect();
+    let sampled: Vec<f32> = (0..WAVEFORM_BARS)
+        .map(|i| rms[i * rms.len() / WAVEFORM_BARS])
+        .collect();
+    waveform_bars(&sampled)
 }
 
 const ENVELOPE_HOP: usize = 512;

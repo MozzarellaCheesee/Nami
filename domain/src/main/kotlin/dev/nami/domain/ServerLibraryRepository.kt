@@ -47,6 +47,24 @@ interface ServerLibraryRepository {
 
     suspend fun updateTrack(track: ServerTrackMeta): Boolean = false
 
+    suspend fun updateMatchingTrack(original: ServerTrackMeta, updated: ServerTrackMeta): Boolean = false
+
+    suspend fun updateMatchingArtwork(original: ServerTrackMeta, imageUri: String): Boolean = false
+
+    suspend fun updateAlbum(
+        album: String,
+        artist: String?,
+        title: String? = null,
+        year: Int? = null,
+        updateYear: Boolean = false,
+        albumArtist: String? = null,
+        updateAlbumArtist: Boolean = false,
+    ): Boolean = false
+
+    suspend fun updateArtist(artist: String, name: String): Boolean = false
+
+    fun invalidateArtwork(serverTrackId: Long) = Unit
+
     suspend fun updateArtwork(serverTrackId: Long, imageUri: String): Boolean = false
 
     /** Удалить серверные записи из общей Room-библиотеки после выхода или отзыва устройства. */

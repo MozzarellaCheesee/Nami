@@ -5,7 +5,7 @@ use axum::extract::{ConnectInfo, Extension, Path, Query, Request, State};
 use axum::http::{header, StatusCode};
 use axum::middleware::Next;
 use axum::response::{Html, IntoResponse, Response};
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, patch, post};
 use axum::{Json, Router};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
@@ -91,6 +91,8 @@ pub fn router(state: Shared) -> Router {
         .route("/api/host-capabilities", get(host_capabilities))
         .route("/api/tracks", get(tracks))
         .route("/api/tracks/{id}", get(track).patch(patch_track))
+        .route("/api/albums", patch(patch_album))
+        .route("/api/artists", patch(patch_artist))
         .route("/api/tracks/{id}/stream", get(stream))
         .route("/api/tracks/{id}/stream/auto", get(stream_auto))
         .route("/api/tracks/match", post(tracks_match))
@@ -413,8 +415,8 @@ async fn patch_track(
         return Err(ApiError(StatusCode::NOT_FOUND, "нет такого трека".into()));
     }
     db.execute(
-        "UPDATE tracks SET title=?2, artist=?3, album=?4, track_no=?5, year=?6 WHERE id=?1",
-        rusqlite::params![id, p.title.trim(), clean_text(p.artist), clean_text(p.album), p.track_no, p.year],
+        "UPDATE tracks SET title=?2, artist=?3, album=?4, track_no=?5, year=?6, metadata_edited_at=?7 WHERE id=?1",
+        rusqlite::params![id, p.title.trim(), clean_text(p.artist), clean_text(p.album), p.track_no, p.year, crate::db::now()],
     )?;
     drop(db);
     st.notify(serde_json::json!({"type":"changed","entities":["tracks"],"at":crate::db::now()}));
@@ -423,6 +425,86 @@ async fn patch_track(
 
 fn clean_text(value: Option<String>) -> Option<String> {
     value.map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+}
+
+#[derive(Deserialize)]
+struct AlbumPatch {
+    album: String,
+    artist: Option<String>,
+    title: Option<String>,
+    album_artist: Option<String>,
+    #[serde(default)]
+    album_artist_set: bool,
+    year: Option<i64>,
+    #[serde(default)]
+    year_set: bool,
+}
+
+async fn patch_album(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Json(p): Json<AlbumPatch>,
+) -> ApiResult<StatusCode> {
+    if p.album.trim().is_empty() {
+        return Err(ApiError(StatusCode::BAD_REQUEST, "не указан альбом".into()));
+    }
+    let db = st.db.lock().unwrap();
+    let (visibility, vis_params) = users::visibility(&db, &ident);
+    let artist_filter = if p.artist.is_some() { " AND COALESCE(artist,'')=COALESCE(?, '')" } else { "" };
+    let sql = format!("SELECT id FROM tracks WHERE album=?{artist_filter}{visibility}");
+    let mut params = vec![rusqlite::types::Value::Text(p.album.trim().to_string())];
+    if let Some(artist) = &p.artist {
+        params.push(rusqlite::types::Value::Text(artist.trim().to_string()));
+    }
+    params.extend(vis_params);
+    let ids = db.prepare(&sql)?.query_map(rusqlite::params_from_iter(params), |r| r.get::<_, i64>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    if ids.is_empty() {
+        return Err(ApiError(StatusCode::NOT_FOUND, "нет такого альбома".into()));
+    }
+    for id in ids {
+        db.execute("UPDATE tracks SET album=COALESCE(?2,album), metadata_edited_at=?3 WHERE id=?1", rusqlite::params![id, clean_text(p.title.clone()), crate::db::now()])?;
+        if p.album_artist_set {
+            db.execute("UPDATE tracks SET album_artist=?2, metadata_edited_at=?3 WHERE id=?1", rusqlite::params![id, clean_text(p.album_artist.clone()), crate::db::now()])?;
+        }
+        if p.year_set {
+            db.execute("UPDATE tracks SET year=?2, metadata_edited_at=?3 WHERE id=?1", rusqlite::params![id, p.year, crate::db::now()])?;
+        }
+    }
+    drop(db);
+    st.notify(serde_json::json!({"type":"changed","entities":["tracks","albums"],"at":crate::db::now()}));
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct ArtistPatch {
+    artist: String,
+    name: String,
+}
+
+async fn patch_artist(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Json(p): Json<ArtistPatch>,
+) -> ApiResult<StatusCode> {
+    if p.artist.trim().is_empty() || p.name.trim().is_empty() {
+        return Err(ApiError(StatusCode::BAD_REQUEST, "имя исполнителя не может быть пустым".into()));
+    }
+    let db = st.db.lock().unwrap();
+    let (visibility, mut params) = users::visibility(&db, &ident);
+    params.insert(0, rusqlite::types::Value::Text(p.artist.trim().to_string()));
+    let sql = format!("SELECT id FROM tracks WHERE artist=?{visibility}");
+    let ids = db.prepare(&sql)?.query_map(rusqlite::params_from_iter(params), |r| r.get::<_, i64>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    if ids.is_empty() {
+        return Err(ApiError(StatusCode::NOT_FOUND, "нет такого исполнителя".into()));
+    }
+    for id in ids {
+        db.execute("UPDATE tracks SET artist=?2, metadata_edited_at=?3 WHERE id=?1", rusqlite::params![id, p.name.trim(), crate::db::now()])?;
+    }
+    drop(db);
+    st.notify(serde_json::json!({"type":"changed","entities":["tracks","artists"],"at":crate::db::now()}));
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[derive(Deserialize)]
@@ -528,7 +610,7 @@ async fn put_artwork(
     if let Err(e) = crate::artwork::save_override(&st.cfg.data_dir, id, &bytes, &mime) {
         return ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response();
     }
-    st.notify(serde_json::json!({"type":"changed","entities":["tracks"],"at":crate::db::now()}));
+    st.notify(serde_json::json!({"type":"changed","entities":["tracks",format!("artwork:{id}")],"at":crate::db::now()}));
     StatusCode::NO_CONTENT.into_response()
 }
 
@@ -1579,12 +1661,17 @@ async fn ws_loop(
     let mut changes = st.events.subscribe();
     let mut pos = st.positions.subscribe();
     let mut jam = crate::jam::Membership::default();
+    let mut heartbeat = tokio::time::interval(std::time::Duration::from_secs(30));
     loop {
         let msg = tokio::select! {
             r = changes.recv() => r,
             r = pos.recv(), if with_position => r,
             // События джема идут по тому же сокету - второй канал ради них не заводим.
             r = jam.recv() => r,
+            _ = heartbeat.tick() => {
+                if socket.send(Message::Ping(Vec::new().into())).await.is_err() { break; }
+                continue;
+            }
             // Клиент закрыл сокет или прислал что-то своё - читаем, чтобы заметить разрыв.
             incoming = socket.recv() => {
                 match incoming {

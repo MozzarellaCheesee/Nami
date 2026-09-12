@@ -304,7 +304,9 @@ pub fn handle(st: &Shared, ident: &Ident, m: &mut Membership, text: &str) -> Opt
             if !users::can_see_track(&st.db.lock().unwrap(), ident, track_id) {
                 return err("трек вам не виден");
             }
-            let at = msg.at.unwrap_or_else(|| crate::db::now() * 1000);
+            // Серверная метка исключает дрейф часов между телефонами; клиентская `at`
+            // остаётся в wire-формате ради совместимости, но доверять ей нельзя.
+            let at = crate::db::now() * 1000;
             {
                 let mut reg = st.jams.0.lock().unwrap();
                 if let Some(s) = reg.get_mut(&code) {

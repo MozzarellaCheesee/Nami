@@ -30,6 +30,7 @@ object SpotifyApiClient {
         return null
     }
 
+    @Synchronized
     private fun ensureToken(clientId: String, clientSecret: String): String? {
         if (cachedToken != null && System.currentTimeMillis() < tokenExpiryTime) {
             return cachedToken

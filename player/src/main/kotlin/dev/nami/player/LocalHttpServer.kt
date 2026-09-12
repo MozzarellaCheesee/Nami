@@ -10,6 +10,7 @@ import java.io.InputStreamReader
 import java.io.OutputStream
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.concurrent.Executors
 
 private const val TAG = "LocalHttpServer"
 
@@ -40,6 +41,9 @@ class LocalHttpServer(
     private val artistPhotoFileBlocking: (String) -> File? = { null },
 ) {
     private var serverSocket: ServerSocket? = null
+    private val clients = Executors.newFixedThreadPool(4) { task ->
+        Thread(task, "LocalHttpServer-client").apply { isDaemon = true }
+    }
 
     /** Кто недавно спрашивал /nowplaying - это и есть "слушают вместе". Отдельного "подключения" в
      * протоколе нет (обычные stateless GET), так что живость гостя определяется тем же способом,
@@ -58,7 +62,8 @@ class LocalHttpServer(
             while (!socket.isClosed) {
                 try {
                     val client = socket.accept()
-                    Thread({ handleClient(client) }, "LocalHttpServer-client").start()
+                    client.soTimeout = 15_000
+                    clients.execute { handleClient(client) }
                 } catch (e: IOException) {
                     break // socket closed via stop()
                 }
@@ -73,6 +78,7 @@ class LocalHttpServer(
             // Already closed - fine.
         }
         serverSocket = null
+        clients.shutdownNow()
     }
 
     private fun handleClient(socket: Socket) {
