@@ -113,6 +113,11 @@ interface TrackDao {
     @Query("SELECT id FROM tracks WHERE sourceUri = :sourceUri AND deletedAt IS NULL LIMIT 1")
     suspend fun findIdBySourceUri(sourceUri: String): String?
 
+    /** Все известные источники разом: сканирование отслеживаемой папки сверяется с ними в
+     * памяти, а не запросом на каждый из тысяч файлов. */
+    @Query("SELECT sourceUri FROM tracks WHERE sourceUri IS NOT NULL AND deletedAt IS NULL")
+    suspend fun allSourceUris(): List<String>
+
     @Query("UPDATE tracks SET sourceUri = :sourceUri WHERE id = :id")
     suspend fun setSourceUri(id: String, sourceUri: String)
 

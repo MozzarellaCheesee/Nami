@@ -2,7 +2,7 @@ package dev.nami.data
 
 import android.content.Context
 import android.graphics.Bitmap
-import androidx.documentfile.provider.DocumentFile
+import android.net.Uri
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import dev.nami.core.database.NamiDatabase
@@ -168,22 +168,8 @@ class LibraryRepositoryImplTest {
         val trackA = File(albumADir, "one.flac").apply { writeText("audio-a") }
         val trackB = File(albumBDir, "two.flac").apply { writeText("audio-b") }
 
-        val groups = listOf(
-            AudioGroup(
-                albumFolderName = "Album A",
-                artistFolderName = "Farewell225",
-                artistDir = DocumentFile.fromFile(root),
-                audioFiles = listOf(DocumentFile.fromFile(trackA)),
-                sourceDir = DocumentFile.fromFile(albumADir),
-            ),
-            AudioGroup(
-                albumFolderName = "Album B",
-                artistFolderName = "Farewell225",
-                artistDir = DocumentFile.fromFile(root),
-                audioFiles = listOf(DocumentFile.fromFile(trackB)),
-                sourceDir = DocumentFile.fromFile(albumBDir),
-            ),
-        )
+        check(trackA.exists() && trackB.exists())
+        val groups = FolderImportScanner(context).scanDirectory(Uri.fromFile(root))
 
         repo.importFolderFromGroups(groups).toList()
 
@@ -221,15 +207,7 @@ class LibraryRepositoryImplTest {
             writeBytes(bytes)
         }
 
-        val groups = listOf(
-            AudioGroup(
-                albumFolderName = "Album",
-                artistFolderName = null,
-                artistDir = null,
-                audioFiles = listOf(DocumentFile.fromFile(trackFile)),
-                sourceDir = DocumentFile.fromFile(albumDir),
-            ),
-        )
+        val groups = FolderImportScanner(context).scanDirectory(Uri.fromFile(albumDir))
 
         repo.importFolderFromGroups(groups).toList()
 
@@ -259,15 +237,8 @@ class LibraryRepositoryImplTest {
 
         val albumDir = File(context.cacheDir, "Watched").apply { mkdirs() }
         val trackFile = File(albumDir, "one.flac").apply { writeText("audio") }
-        val groups = listOf(
-            AudioGroup(
-                albumFolderName = "Watched",
-                artistFolderName = null,
-                artistDir = null,
-                audioFiles = listOf(DocumentFile.fromFile(trackFile)),
-                sourceDir = DocumentFile.fromFile(albumDir),
-            ),
-        )
+        check(trackFile.exists())
+        val groups = FolderImportScanner(context).scanDirectory(Uri.fromFile(albumDir))
 
         repo.importFolderFromGroups(groups).toList()
         repo.importFolderFromGroups(groups).toList()

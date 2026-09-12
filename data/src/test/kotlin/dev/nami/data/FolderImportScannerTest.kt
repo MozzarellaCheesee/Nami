@@ -1,7 +1,7 @@
 package dev.nami.data
 
 import android.content.Context
-import androidx.documentfile.provider.DocumentFile
+import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -25,7 +25,7 @@ class FolderImportScannerTest {
         File(root, "01 - Intro.mp3").writeText("fake")
         File(root, "02 - Track.mp3").writeText("fake")
 
-        val groups = scanner.scanDirectory(DocumentFile.fromFile(root))
+        val groups = scanner.scanDirectory(Uri.fromFile(root))
 
         assertEquals(1, groups.size)
         assertEquals("Doujin Compilation", groups[0].albumFolderName)
@@ -41,7 +41,7 @@ class FolderImportScannerTest {
         File(albumA, "01.mp3").writeText("fake")
         File(albumB, "01.mp3").writeText("fake")
 
-        val groups = scanner.scanDirectory(DocumentFile.fromFile(root))
+        val groups = scanner.scanDirectory(Uri.fromFile(root))
 
         assertEquals(2, groups.map { it.albumFolderName }.toSet().size)
         assertEquals(setOf("Album A", "Album B"), groups.map { it.albumFolderName }.toSet())
@@ -56,7 +56,7 @@ class FolderImportScannerTest {
         File(disc1, "01.mp3").writeText("fake")
         File(disc2, "01.mp3").writeText("fake")
 
-        val groups = scanner.scanDirectory(DocumentFile.fromFile(root))
+        val groups = scanner.scanDirectory(Uri.fromFile(root))
 
         assertEquals(1, groups.size)
         assertEquals("Big Release", groups[0].albumFolderName)
@@ -69,7 +69,7 @@ class FolderImportScannerTest {
         val cd1 = File(root, "CD1").apply { mkdirs() }
         File(cd1, "01.mp3").writeText("fake")
 
-        val groups = scanner.scanDirectory(DocumentFile.fromFile(root))
+        val groups = scanner.scanDirectory(Uri.fromFile(root))
 
         assertEquals(1, groups.size)
         assertEquals("CD1", groups[0].albumFolderName)
@@ -83,7 +83,7 @@ class FolderImportScannerTest {
         File(root, "cover.jpg").writeText("fake-image")
         File(root, "notes.txt").writeText("fake-text")
 
-        val groups = scanner.scanDirectory(DocumentFile.fromFile(root))
+        val groups = scanner.scanDirectory(Uri.fromFile(root))
 
         assertEquals(1, groups[0].audioFiles.size)
     }
@@ -94,10 +94,10 @@ class FolderImportScannerTest {
         File(root, "01.mp3").writeText("fake")
         File(root, "Cover.PNG").writeText("fake-image")
 
-        val cover = scanner.findFolderCover(DocumentFile.fromFile(root))
+        val cover = scanner.findFolderCover(Uri.fromFile(root))
 
         assertNotNull(cover)
-        assertEquals("Cover.PNG", cover?.name)
+        assertEquals("Cover.PNG", File(cover.path!!).name)
     }
 
     @Test
@@ -106,7 +106,7 @@ class FolderImportScannerTest {
         File(root, "01.mp3").writeText("fake")
         File(root, "artwork.jpg").writeText("fake-image")
 
-        val cover = scanner.findFolderCover(DocumentFile.fromFile(root))
+        val cover = scanner.findFolderCover(Uri.fromFile(root))
 
         assertNull(cover)
     }

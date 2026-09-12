@@ -928,41 +928,49 @@ class LibraryRepositoryImpl @Inject constructor(
         val resolver = context.contentResolver
         val total = groups.sumOf { it.audioFiles.size }
         var done = 0
+        // Один запрос на всё сканирование вместо запроса на каждый из тысяч файлов: повторный
+        // проход по отслеживаемой папке, где всё уже импортировано, не делает ничего, кроме
+        // обхода каталогов.
+        val knownSources = trackDao.allSourceUris().toHashSet()
 
         for (group in groups) {
             var albumIdForGroup: String? = null
             for (doc in group.audioFiles) {
-                val result = copyAndIndex(
-                    resolver,
-                    doc.uri,
-                    musicDir,
-                    fallbackArtist = group.artistFolderName,
-                    fallbackAlbum = group.albumFolderName,
-                    lyricsDoc = folderImportScanner.findLyrics(doc),
-                    cueDoc = folderImportScanner.findCue(doc),
-                    sourceUri = doc.uri.toString(),
-                )
-                if (albumIdForGroup == null) albumIdForGroup = result?.albumId
+                val sourceUri = doc.uri.toString()
+                if (sourceUri !in knownSources) {
+                    val result = copyAndIndex(
+                        resolver,
+                        doc.uri,
+                        musicDir,
+                        fallbackArtist = group.artistFolderName,
+                        fallbackAlbum = group.albumFolderName,
+                        lyricsUri = group.lyricsByAudio[doc.uri],
+                        cueUri = group.cueByAudio[doc.uri],
+                        sourceUri = sourceUri,
+                    )
+                    if (albumIdForGroup == null) albumIdForGroup = result?.albumId
+                    knownSources += sourceUri
+                }
                 done++
-                emit(ImportProgress(done = done, total = total, currentFileName = doc.name ?: "Аудиофайл", phase = "Импорт папки"))
+                emit(ImportProgress(done = done, total = total, currentFileName = doc.name, phase = "Импорт папки"))
             }
 
-            val albumId = albumIdForGroup
-            if (albumId != null) syncAlbumIsSingle(albumId)
-            if (albumId != null && albumDao.findById(albumId)?.artworkPath == null) {
-                val coverDoc = folderImportScanner.findFolderCover(group.sourceDir)
-                val bytes = coverDoc?.let { resolver.openInputStream(it.uri)?.use { stream -> stream.readBytes() } }
+            // albumIdForGroup остаётся null, когда в группе не появилось ни одного нового трека -
+            // тогда обложку и фото артиста искать незачем, они уже разобраны прошлым проходом.
+            val albumId = albumIdForGroup ?: continue
+            syncAlbumIsSingle(albumId)
+            if (albumDao.findById(albumId)?.artworkPath == null) {
+                val bytes = group.cover?.let { resolver.openInputStream(it)?.use { stream -> stream.readBytes() } }
                 if (bytes != null) {
                     artworkStore.save(albumId, bytes)?.let { path -> albumDao.setArtworkPath(albumId, path) }
                 }
             }
 
-            val artistDir = group.artistDir
-            if (artistDir != null && group.artistFolderName != null) {
+            val artistCover = group.artistCover
+            if (artistCover != null && group.artistFolderName != null) {
                 val artistEntity = artistDao.findByName(group.artistFolderName)
                 if (artistEntity != null && artistEntity.photoPath == null) {
-                    val photoDoc = folderImportScanner.findFolderCover(artistDir)
-                    val bytes = photoDoc?.let { resolver.openInputStream(it.uri)?.use { stream -> stream.readBytes() } }
+                    val bytes = resolver.openInputStream(artistCover)?.use { stream -> stream.readBytes() }
                     if (bytes != null) {
                         artworkStore.save(artistEntity.id, bytes)?.let { path -> artistDao.setPhotoPath(artistEntity.id, path) }
                     }
@@ -979,8 +987,8 @@ class LibraryRepositoryImpl @Inject constructor(
         musicDir: File,
         fallbackArtist: String? = null,
         fallbackAlbum: String? = null,
-        lyricsDoc: DocumentFile? = null,
-        cueDoc: DocumentFile? = null,
+        lyricsUri: Uri? = null,
+        cueUri: Uri? = null,
         originalFileName: String? = null,
         sourceUri: String? = null,
     ): CopyAndIndexResult? {
@@ -1041,8 +1049,8 @@ class LibraryRepositoryImpl @Inject constructor(
         // Same basename convention LyricsRepositoryImpl reads from (sibling .lrc next to the
         // audio file) - copied alongside so a folder import with lyrics already sitting next to
         // the tracks doesn't need a separate manual "load from file" step.
-        if (lyricsDoc != null) {
-            resolver.openInputStream(lyricsDoc.uri)?.use { input ->
+        if (lyricsUri != null) {
+            resolver.openInputStream(lyricsUri)?.use { input ->
                 File(musicDir, "${destination.nameWithoutExtension}.lrc").outputStream().use { output -> input.copyTo(output) }
             }
         }
@@ -1052,7 +1060,7 @@ class LibraryRepositoryImpl @Inject constructor(
         // Only when a sidecar wasn't already copied above (a real file next to the track wins
         // over whatever's embedded). Plan's source order is local .lrc -> tag -> LRCLIB -> manual.
         val embeddedLyrics = tags?.lyrics
-        if (lyricsDoc == null && embeddedLyrics != null) {
+        if (lyricsUri == null && embeddedLyrics != null) {
             lyricsRepository.importLyricsFile(destination.path, embeddedLyrics)
         }
 
@@ -1109,8 +1117,8 @@ class LibraryRepositoryImpl @Inject constructor(
         // физический файл на несколько строк tracks, все с одним и тем же path (см.
         // TrackEntity.path's index, больше не unique) и своими cueStartMs/cueEndMs. Меньше 2
         // разобранных треков (пустой/битый .cue) - откатывается на обычный один трек на файл.
-        val cueTracks = cueDoc?.let { doc ->
-            runCatching { resolver.openInputStream(doc.uri)?.use { it.bufferedReader().readText() } }.getOrNull()
+        val cueTracks = cueUri?.let { uri ->
+            runCatching { resolver.openInputStream(uri)?.use { it.bufferedReader().readText() } }.getOrNull()
                 ?.let(CueSheet::parse)
         }?.takeIf { it.size >= 2 }
 
