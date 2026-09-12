@@ -1,6 +1,8 @@
 package dev.nami.feature.library
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,15 +17,23 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.CloudDownload
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Done
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -262,8 +272,57 @@ class ServerLibraryViewModel @Inject constructor(
             playerRepository.play(playables, startIndex = startIndex, startMs = 0L)
         }
     }
+
+    var selectedTrackIds by mutableStateOf<Set<Long>>(emptySet())
+        private set
+    var actionMsg by mutableStateOf<String?>(null)
+
+    fun clearActionMsg() { actionMsg = null }
+
+    fun toggleSelect(trackId: Long) {
+        selectedTrackIds = if (trackId in selectedTrackIds) selectedTrackIds - trackId else selectedTrackIds + trackId
+    }
+
+    fun selectAll() {
+        selectedTrackIds = tracks.map { it.id }.toSet()
+    }
+
+    fun clearSelection() {
+        selectedTrackIds = emptySet()
+    }
+
+    fun deleteTrack(trackId: Long) {
+        viewModelScope.launch {
+            if (serverLibraryRepository.deleteTrack(trackId)) {
+                tracks = tracks.filterNot { it.id == trackId }
+                cached = cached - trackId
+                downloading = downloading - trackId
+                selectedTrackIds = selectedTrackIds - trackId
+                actionMsg = "Трек удалён с сервера"
+            } else {
+                actionMsg = "Не удалось удалить трек с сервера"
+            }
+        }
+    }
+
+    fun deleteSelectedTracks() {
+        val ids = selectedTrackIds.toList()
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            if (serverLibraryRepository.deleteTracks(ids)) {
+                tracks = tracks.filterNot { it.id in selectedTrackIds }
+                cached = cached - selectedTrackIds
+                downloading = downloading - selectedTrackIds
+                actionMsg = "Удалено треков с сервера: ${ids.size}"
+                clearSelection()
+            } else {
+                actionMsg = "Не удалось удалить выбранные треки"
+            }
+        }
+    }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ServerLibraryScreen(
     onBack: () -> Unit,
@@ -271,6 +330,8 @@ fun ServerLibraryScreen(
 ) {
     LaunchedEffect(Unit) { viewModel.load() }
     var editing by remember { mutableStateOf<ServerTrackMeta?>(null) }
+    var deleteTarget by remember { mutableStateOf<ServerTrackMeta?>(null) }
+    var showBatchDeleteConfirm by remember { mutableStateOf(false) }
     var artworkTarget by remember { mutableStateOf<Long?>(null) }
     val artworkPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         val id = artworkTarget
@@ -278,8 +339,55 @@ fun ServerLibraryScreen(
         if (id != null && uri != null) viewModel.updateArtwork(id, uri.toString())
     }
 
+    viewModel.actionMsg?.let { msg ->
+        LaunchedEffect(msg) {
+            delay(3000L)
+            viewModel.clearActionMsg()
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize().background(NamiColors.Ink900)) {
-        NamiScreenHeader(title = "Серверная библиотека", onBack = onBack)
+        if (viewModel.selectedTrackIds.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = viewModel::clearSelection) {
+                    Icon(Icons.Outlined.Close, contentDescription = "Отменить выбор", tint = NamiColors.Paper100)
+                }
+                Text(
+                    text = "Выбрано: ${viewModel.selectedTrackIds.size}",
+                    color = NamiColors.Paper100,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f).padding(start = 8.dp),
+                )
+                IconButton(onClick = viewModel::selectAll) {
+                    Icon(Icons.Outlined.Done, contentDescription = "Выбрать все", tint = NamiColors.Paper70)
+                }
+                IconButton(onClick = { showBatchDeleteConfirm = true }) {
+                    Icon(Icons.Outlined.Delete, contentDescription = "Удалить с сервера", tint = NamiColors.Shu)
+                }
+            }
+        } else {
+            NamiScreenHeader(title = "Серверная библиотека", onBack = onBack)
+        }
+
+        viewModel.actionMsg?.let { msg ->
+            Surface(
+                color = NamiColors.Ink800,
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).fillMaxWidth(),
+            ) {
+                Text(
+                    msg,
+                    color = NamiColors.Paper100,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(12.dp),
+                )
+            }
+        }
 
         when {
             viewModel.loading && viewModel.tracks.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -315,13 +423,35 @@ fun ServerLibraryScreen(
                     }
                 }
                 items(viewModel.tracks, key = { it.id }) { track ->
+                    val isSelected = track.id in viewModel.selectedTrackIds
+                    val inSelectionMode = viewModel.selectedTrackIds.isNotEmpty()
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { viewModel.playTrack(track) }
+                            .combinedClickable(
+                                onClick = {
+                                    if (inSelectionMode) {
+                                        viewModel.toggleSelect(track.id)
+                                    } else {
+                                        viewModel.playTrack(track)
+                                    }
+                                },
+                                onLongClick = {
+                                    viewModel.toggleSelect(track.id)
+                                },
+                            )
+                            .background(if (isSelected) NamiColors.Ink800 else Color.Transparent)
                             .padding(horizontal = 16.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        if (inSelectionMode) {
+                            Checkbox(
+                                checked = isSelected,
+                                onCheckedChange = { viewModel.toggleSelect(track.id) },
+                                colors = CheckboxDefaults.colors(checkedColor = NamiColors.Shu),
+                                modifier = Modifier.padding(end = 8.dp),
+                            )
+                        }
                         val artUrl = viewModel.artworkUrl(track.id)
                         AsyncImage(
                             model = artUrl,
@@ -343,32 +473,98 @@ fun ServerLibraryScreen(
                         }
                         val isDownloading = track.id in viewModel.downloading
                         val isCached = track.id in viewModel.cached
-                        IconButton(onClick = { editing = track }) {
-                            Icon(Icons.Outlined.Edit, contentDescription = "Изменить серверный трек", tint = NamiColors.Paper70)
-                        }
-                        IconButton(onClick = { viewModel.toggleDownload(track) }, enabled = !isDownloading) {
-                            when {
-                                isDownloading -> CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    color = NamiColors.Shu,
-                                    strokeWidth = 2.dp,
-                                )
-                                isCached -> Icon(
-                                    Icons.Outlined.CheckCircle,
-                                    contentDescription = "В офлайн-кеше, нажмите чтобы удалить",
-                                    tint = NamiColors.Shu,
-                                )
-                                else -> Icon(
-                                    Icons.Outlined.CloudDownload,
-                                    contentDescription = "Скачать в офлайн",
-                                    tint = NamiColors.Paper70,
-                                )
+                        if (!inSelectionMode) {
+                            IconButton(onClick = { editing = track }) {
+                                Icon(Icons.Outlined.Edit, contentDescription = "Изменить серверный трек", tint = NamiColors.Paper70)
+                            }
+                            IconButton(onClick = { viewModel.toggleDownload(track) }, enabled = !isDownloading) {
+                                when {
+                                    isDownloading -> CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        color = NamiColors.Shu,
+                                        strokeWidth = 2.dp,
+                                    )
+                                    isCached -> Icon(
+                                        Icons.Outlined.CheckCircle,
+                                        contentDescription = "В офлайн-кеше, нажмите чтобы удалить",
+                                        tint = NamiColors.Shu,
+                                    )
+                                    else -> Icon(
+                                        Icons.Outlined.CloudDownload,
+                                        contentDescription = "Скачать в офлайн",
+                                        tint = NamiColors.Paper70,
+                                    )
+                                }
+                            }
+                            IconButton(onClick = { deleteTarget = track }) {
+                                Icon(Icons.Outlined.Delete, contentDescription = "Удалить с сервера", tint = NamiColors.Paper40)
                             }
                         }
                     }
                 }
             }
         }
+    }
+
+    deleteTarget?.let { track ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("Удалить с сервера?") },
+            text = {
+                Text(
+                    "Трек «${track.title}» будет удалён из библиотеки сервера и перемещён в корзину на сервере.",
+                    color = NamiColors.Paper70,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteTrack(track.id)
+                        deleteTarget = null
+                    },
+                ) {
+                    Text("Удалить", color = NamiColors.Shu)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTarget = null }) {
+                    Text("Отмена", color = NamiColors.Paper70)
+                }
+            },
+            containerColor = NamiColors.Ink800,
+            titleContentColor = NamiColors.Paper100,
+        )
+    }
+
+    if (showBatchDeleteConfirm) {
+        val count = viewModel.selectedTrackIds.size
+        AlertDialog(
+            onDismissRequest = { showBatchDeleteConfirm = false },
+            title = { Text("Удалить треки с сервера?") },
+            text = {
+                Text(
+                    "Выбрано треков: $count. Они будут удалены из библиотеки сервера и перемещены в корзину на сервере.",
+                    color = NamiColors.Paper70,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteSelectedTracks()
+                        showBatchDeleteConfirm = false
+                    },
+                ) {
+                    Text("Удалить ($count)", color = NamiColors.Shu)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBatchDeleteConfirm = false }) {
+                    Text("Отмена", color = NamiColors.Paper70)
+                }
+            },
+            containerColor = NamiColors.Ink800,
+            titleContentColor = NamiColors.Paper100,
+        )
     }
 
     editing?.let { track ->

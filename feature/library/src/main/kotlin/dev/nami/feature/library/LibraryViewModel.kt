@@ -421,9 +421,17 @@ class LibraryViewModel @Inject constructor(
 
     private fun deleteTracks(ids: Set<TrackId>) {
         viewModelScope.launch {
-            libraryRepository.deleteTracks(ids.toList())
+            val serverIds = ids.filter { it.value.startsWith("server_") }
+                .mapNotNull { it.value.removePrefix("server_").toLongOrNull() }
+            if (serverIds.isNotEmpty()) {
+                serverLibraryRepository.deleteTracks(serverIds)
+            }
+            val localIds = ids.filterNot { it.value.startsWith("server_") }
+            if (localIds.isNotEmpty()) {
+                libraryRepository.deleteTracks(localIds.toList())
+            }
             playerRepository.removeTracks(ids)
-            _uiState.value = _uiState.value.copy(lastDeletedTrackIds = ids)
+            _uiState.value = _uiState.value.copy(lastDeletedTrackIds = localIds.toSet())
         }
     }
 

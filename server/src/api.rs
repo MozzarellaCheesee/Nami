@@ -90,7 +90,8 @@ pub fn router(state: Shared) -> Router {
     let protected = Router::new()
         .route("/api/host-capabilities", get(host_capabilities))
         .route("/api/tracks", get(tracks))
-        .route("/api/tracks/{id}", get(track).patch(patch_track))
+        .route("/api/tracks/{id}", get(track).patch(patch_track).delete(delete_track))
+        .route("/api/tracks/batch-delete", post(batch_delete_tracks))
         .route("/api/albums", patch(patch_album))
         .route("/api/artists", patch(patch_artist))
         .route("/api/tracks/{id}/stream", get(stream))
@@ -421,6 +422,127 @@ async fn patch_track(
     drop(db);
     st.notify(serde_json::json!({"type":"changed","entities":["tracks"],"at":crate::db::now()}));
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct BatchDeleteReq {
+    ids: Vec<i64>,
+}
+
+#[derive(Serialize)]
+struct BatchDeleteResp {
+    deleted: Vec<i64>,
+    failed: Vec<i64>,
+}
+
+fn delete_tracks_internal(
+    st: &Shared,
+    ident: &Ident,
+    track_ids: &[i64],
+) -> Result<(Vec<i64>, Vec<i64>), ApiError> {
+    let db = st.db.lock().unwrap();
+
+    if users::is_jam_guest(&db, ident) {
+        return Err(ApiError(StatusCode::FORBIDDEN, "гостевой доступ Jam не позволяет удалять треки".into()));
+    }
+
+    if let Some(uid) = ident.user_id {
+        if let Some(u) = users::get(&db, uid) {
+            if u.role == "guest" {
+                return Err(ApiError(StatusCode::FORBIDDEN, "гостевой доступ не позволяет удалять треки".into()));
+            }
+        }
+    }
+
+    let library_mode = users::library_mode(&db);
+    let mut deleted = Vec::new();
+    let mut failed = Vec::new();
+
+    let trash_dir = st.cfg.data_dir.join("trash");
+    let _ = std::fs::create_dir_all(&trash_dir);
+
+    for &id in track_ids {
+        let row: Option<(String, i64)> = db
+            .query_row("SELECT path, library_id FROM tracks WHERE id=?1", [id], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .ok();
+
+        let Some((path, track_lib_id)) = row else {
+            failed.push(id);
+            continue;
+        };
+
+        if !users::can_see_track(&db, ident, id) {
+            failed.push(id);
+            continue;
+        }
+
+        if library_mode == users::LibraryMode::Separate {
+            if let Some(uid) = ident.user_id {
+                if let Some(u) = users::get(&db, uid) {
+                    if u.role != "owner" && u.library_id != track_lib_id {
+                        failed.push(id);
+                        continue;
+                    }
+                }
+            }
+        }
+
+        // Безопасное удаление: переносим в серверную корзину data/trash (или удаляем файл, если rename невозможен)
+        let p = std::path::Path::new(&path);
+        if p.exists() {
+            let file_name = p.file_name().and_then(|n| n.to_str()).unwrap_or("track");
+            let dest = trash_dir.join(format!("{}_{}_{file_name}", crate::db::now(), id));
+            if std::fs::rename(p, &dest).is_err() {
+                let _ = std::fs::remove_file(p);
+            }
+        }
+
+        // Удаляем сохранённую обложку
+        crate::artwork::delete_override(&st.cfg.data_dir, id);
+
+        // Удаляем из базы
+        let _ = db.execute("DELETE FROM playback_position WHERE track_id=?1", [id]);
+        if db.execute("DELETE FROM tracks WHERE id=?1", [id]).is_ok() {
+            deleted.push(id);
+        } else {
+            failed.push(id);
+        }
+    }
+
+    drop(db);
+
+    if !deleted.is_empty() {
+        st.notify(serde_json::json!({
+            "type": "changed",
+            "entities": ["tracks", "albums", "artists"],
+            "at": crate::db::now(),
+        }));
+    }
+
+    Ok((deleted, failed))
+}
+
+async fn delete_track(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Path(id): Path<i64>,
+) -> ApiResult<StatusCode> {
+    let (deleted, _) = delete_tracks_internal(&st, &ident, &[id])?;
+    if deleted.is_empty() {
+        return Err(ApiError(StatusCode::NOT_FOUND, "трек не найден или нет прав на удаление".into()));
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn batch_delete_tracks(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Json(p): Json<BatchDeleteReq>,
+) -> ApiResult<Json<BatchDeleteResp>> {
+    let (deleted, failed) = delete_tracks_internal(&st, &ident, &p.ids)?;
+    Ok(Json(BatchDeleteResp { deleted, failed }))
 }
 
 fn clean_text(value: Option<String>) -> Option<String> {

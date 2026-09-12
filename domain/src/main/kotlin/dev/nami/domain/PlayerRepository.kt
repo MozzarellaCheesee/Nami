@@ -106,7 +106,13 @@ interface PlayerRepository {
     suspend fun skipNext()
     /** Переводит на следующий трек плавным overlap-кроссфейдом. Если воспроизведение вручную
      * поставлено на паузу, сохраняет паузу и просто выбирает следующий трек. */
-    suspend fun crossfadeNext() { skipNext() }
+    suspend fun crossfadeNext(durationMs: Long? = null) { skipNext() }
+
+    companion object {
+        const val DEFAULT_CROSSFADE_MS = 5000L
+        /** В разборе библиотеки (карточный режим) кроссфейд ускорен в 2 раза: 2500 мс вместо 5000 мс */
+        const val CARD_SORT_CROSSFADE_MS = 2500L
+    }
     /** Threshold-based: restarts the current track if it's already played past a few seconds,
      * only moving to the actual previous track on a second call. Matches standard media-player
      * "prev button" behavior. */

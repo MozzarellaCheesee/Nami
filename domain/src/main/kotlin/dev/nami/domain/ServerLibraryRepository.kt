@@ -45,6 +45,12 @@ interface ServerLibraryRepository {
     /** Удалить трек и его сохранённую обложку из офлайн-кеша. */
     fun removeFromCache(serverTrackId: Long)
 
+    /** Удалить трек с сервера. Также удаляет его из офлайн-кеша и локального зеркала. */
+    suspend fun deleteTrack(serverTrackId: Long): Boolean = false
+
+    /** Множественное удаление треков с сервера. */
+    suspend fun deleteTracks(serverTrackIds: List<Long>): Boolean = false
+
     suspend fun updateTrack(track: ServerTrackMeta): Boolean = false
 
     suspend fun updateMatchingTrack(original: ServerTrackMeta, updated: ServerTrackMeta): Boolean = false

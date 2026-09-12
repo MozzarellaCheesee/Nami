@@ -611,10 +611,15 @@ class PlayerRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun crossfadeNext() {
+    override suspend fun crossfadeNext(durationMs: Long?) {
+        val bundle = if (durationMs != null) {
+            android.os.Bundle().apply { putLong(EXTRA_CROSSFADE_DURATION_MS, durationMs) }
+        } else {
+            android.os.Bundle.EMPTY
+        }
         awaitController()?.sendCustomCommand(
-            androidx.media3.session.SessionCommand(ACTION_CROSSFADE_NEXT, android.os.Bundle.EMPTY),
-            android.os.Bundle.EMPTY,
+            androidx.media3.session.SessionCommand(ACTION_CROSSFADE_NEXT, bundle),
+            bundle,
         )
     }
 
