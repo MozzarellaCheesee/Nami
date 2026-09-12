@@ -77,6 +77,7 @@ private class DspChain {
 }
 
 private const val ACTION_TOGGLE_LIKE = "dev.nami.ACTION_TOGGLE_LIKE"
+const val ACTION_CROSSFADE_NEXT = "dev.nami.ACTION_CROSSFADE_NEXT"
 
 @AndroidEntryPoint
 class PlaybackService : MediaLibraryService() {
@@ -165,6 +166,7 @@ class PlaybackService : MediaLibraryService() {
      * только в своём собственном MiniPlayer. Media3's MediaSession.Callback is the extension
      * point for a custom action beyond the standard play/pause/skip set. */
     private val likeCommand = SessionCommand(ACTION_TOGGLE_LIKE, Bundle.EMPTY)
+    private val crossfadeNextCommand = SessionCommand(ACTION_CROSSFADE_NEXT, Bundle.EMPTY)
 
     // ICON_HEART_FILLED/UNFILLED (не ICON_UNDEFINED + свой setIconResId) - системный медиа-плеер
     // (шторка/блокировка на Android 13+) распознаёт и перерисовывает при тапе только эти
@@ -187,6 +189,7 @@ class PlaybackService : MediaLibraryService() {
                 .setAvailableSessionCommands(
                     MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS.buildUpon()
                         .add(likeCommand)
+                        .add(crossfadeNextCommand)
                         .build(),
                 )
                 .build()
@@ -209,6 +212,12 @@ class PlaybackService : MediaLibraryService() {
                     }
                 }
                 return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+            }
+            if (customCommand.customAction == ACTION_CROSSFADE_NEXT) {
+                val handled = crossfade?.crossfadeToNext() == true
+                return Futures.immediateFuture(
+                    SessionResult(if (handled) SessionResult.RESULT_SUCCESS else SessionResult.RESULT_ERROR_BAD_VALUE),
+                )
             }
             return Futures.immediateFuture(SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED))
         }

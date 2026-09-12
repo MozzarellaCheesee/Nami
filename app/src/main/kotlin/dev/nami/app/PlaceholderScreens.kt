@@ -436,6 +436,7 @@ fun SettingsServerScreen(
     val paired = token != null && url.isNotBlank()
     var addr by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
+    var loginAddr by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
 
@@ -536,6 +537,14 @@ fun SettingsServerScreen(
                         style = MaterialTheme.typography.bodySmall,
                     )
                     androidx.compose.material3.OutlinedTextField(
+                        value = loginAddr,
+                        onValueChange = { loginAddr = it; viewModel.clearServerConnectMsg() },
+                        label = { Text("Адрес сервера") },
+                        placeholder = { Text("nami.example.com или 192.168.1.5:4533") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                    )
+                    androidx.compose.material3.OutlinedTextField(
                         value = username,
                         onValueChange = { username = it; viewModel.clearServerConnectMsg() },
                         label = { Text("Логин") },
@@ -553,7 +562,7 @@ fun SettingsServerScreen(
                     NamiPill(
                         text = "Войти и привязать устройство",
                         modifier = Modifier.padding(top = 12.dp),
-                        onClick = { viewModel.loginNamiServer(addr, username, password) },
+                        onClick = { viewModel.loginNamiServer(loginAddr, username, password) },
                     )
                 }
             }

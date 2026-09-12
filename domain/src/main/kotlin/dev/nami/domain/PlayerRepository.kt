@@ -97,9 +97,16 @@ interface PlayerRepository {
     /** Real ExoPlayer repeat mode - see [RepeatMode]. */
     val repeatMode: StateFlow<RepeatMode>
     suspend fun play(tracks: List<PlayableTrack>, startIndex: Int, startMs: Long = 0)
+    /** Запускает очередь ровно в переданном порядке, без библиотечных «цепочек» треков. */
+    suspend fun playInOrder(tracks: List<PlayableTrack>, startIndex: Int, startMs: Long = 0) {
+        play(tracks, startIndex, startMs)
+    }
     suspend fun toggle()
     suspend fun seek(ms: Long)
     suspend fun skipNext()
+    /** Переводит на следующий трек плавным overlap-кроссфейдом. Если воспроизведение вручную
+     * поставлено на паузу, сохраняет паузу и просто выбирает следующий трек. */
+    suspend fun crossfadeNext() { skipNext() }
     /** Threshold-based: restarts the current track if it's already played past a few seconds,
      * only moving to the actual previous track on a second call. Matches standard media-player
      * "prev button" behavior. */

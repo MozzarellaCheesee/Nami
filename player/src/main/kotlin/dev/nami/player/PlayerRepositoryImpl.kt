@@ -507,6 +507,19 @@ class PlayerRepositoryImpl @Inject constructor(
     }
 
     override suspend fun play(tracks: List<PlayableTrack>, startIndex: Int, startMs: Long) {
+        playInternal(tracks, startIndex, startMs, applyTrackChains = true)
+    }
+
+    override suspend fun playInOrder(tracks: List<PlayableTrack>, startIndex: Int, startMs: Long) {
+        playInternal(tracks, startIndex, startMs, applyTrackChains = false)
+    }
+
+    private suspend fun playInternal(
+        tracks: List<PlayableTrack>,
+        startIndex: Int,
+        startMs: Long,
+        applyTrackChains: Boolean,
+    ) {
         originByMediaId.clear()
         trackInfoByMediaId.clear()
         // A fresh context starts unshuffled - there is no "pre-shuffle order" left to restore
@@ -514,9 +527,13 @@ class PlayerRepositoryImpl @Inject constructor(
         _shuffleEnabled.value = false
         preShuffleOrder = null
         tracks.forEach { trackInfoByMediaId[it.id.value] = it.toMediaItemInfo() }
-        // Цепочки (П.md §20) применяются именно здесь - play() единственный вход, через который
-        // очередь вообще возникает, так что одного места хватает и для плейлиста, и для альбома.
-        val orderedIds = applyChains(tracks.map { it.id.value }, libraryRepository.trackChains())
+        // Обычные очереди учитывают библиотечные цепочки (П.md §20). Режимы, где внешний UI сам
+        // задаёт строгий порядок (карточный разбор), проходят через playInOrder().
+        val orderedIds = if (applyTrackChains) {
+            applyChains(tracks.map { it.id.value }, libraryRepository.trackChains())
+        } else {
+            tracks.map { it.id.value }
+        }
         val byId = tracks.associateBy { it.id.value }
         val ordered = orderedIds.mapNotNull { byId[it] }
         // Якорь - тот же трек, что выбрал пользователь: перестановка не должна начинать
@@ -526,7 +543,7 @@ class PlayerRepositoryImpl @Inject constructor(
         resolveServerUrls(ordered)
         ordered.forEach { trackInfoByMediaId[it.id.value] = it.toMediaItemInfo() }
         val items = ordered.map { it.toMediaItem() }
-        controller?.apply {
+        awaitController()?.apply {
             setMediaItems(items, newStartIndex, startMs)
             prepare()
             play()
@@ -592,6 +609,13 @@ class PlayerRepositoryImpl @Inject constructor(
             publishState(player)
             publishQueue(player)
         }
+    }
+
+    override suspend fun crossfadeNext() {
+        awaitController()?.sendCustomCommand(
+            androidx.media3.session.SessionCommand(ACTION_CROSSFADE_NEXT, android.os.Bundle.EMPTY),
+            android.os.Bundle.EMPTY,
+        )
     }
 
     override suspend fun skipPrevious() {

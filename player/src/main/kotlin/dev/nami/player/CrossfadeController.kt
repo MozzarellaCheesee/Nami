@@ -87,10 +87,27 @@ class CrossfadeController(
         }
     }
 
+    /** Немедленный переход на следующий элемент очереди тем же настоящим overlap, который обычно
+     * запускается у конца трека. Нужен для осознанного перелистывания карточек: настройка общего
+     * автокроссфейда на него не влияет. Ручная пауза при этом остаётся паузой. */
+    fun crossfadeToNext(): Boolean {
+        if (outgoing != null) cancel()
+        val current = player()
+        if (!current.hasNextMediaItem()) return false
+        if (!current.playWhenReady) {
+            current.seekToNext()
+            return true
+        }
+        val incoming = startIncoming() ?: return false
+        current.setPauseAtEndOfMediaItems(true)
+        outgoing = current
+        promote(incoming)
+        return true
+    }
+
     private fun tick() {
         val current = player()
-        if (!settingsRepository.crossfadeEnabled.value) {
-            if (outgoing != null) cancel()
+        if (!settingsRepository.crossfadeEnabled.value && outgoing == null) {
             if (current.volume != volumeCeiling) current.volume = volumeCeiling
             return
         }
@@ -112,7 +129,7 @@ class CrossfadeController(
             }
         }
 
-        if (outgoing == null && durationMs > 0 && current.isPlaying &&
+        if (settingsRepository.crossfadeEnabled.value && outgoing == null && durationMs > 0 && current.isPlaying &&
             durationMs - current.currentPosition <= FADE_MS &&
             current.repeatMode != Player.REPEAT_MODE_ONE && current.hasNextMediaItem() &&
             isCrossfadeSuitable()
