@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS state (
 );
 -- Запрос синхронизации ровно один: "всё, что новее метки" - под него и индекс.
 CREATE INDEX IF NOT EXISTS idx_state_updated ON state(updated_at);
+CREATE INDEX IF NOT EXISTS idx_state_user_updated ON state(user_id, updated_at);
 
 -- Позиция воспроизведения: высокочастотная, поэтому вне таблицы state (см. sync.rs).
 -- Одна строка на устройство, история не копится.
@@ -297,7 +298,10 @@ pub fn migrate(conn: &Connection) -> crate::Res<()> {
     }
     conn.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_tracks_library ON tracks(library_id);
-         CREATE INDEX IF NOT EXISTS idx_tracks_hash ON tracks(file_hash);",
+         CREATE INDEX IF NOT EXISTS idx_tracks_hash ON tracks(file_hash);
+         -- pull() фильтрует по user_id И updated_at, а индекс был только по второму:
+         -- на многопользовательском сервере каждый pull сканировал чужие строки тоже.
+         CREATE INDEX IF NOT EXISTS idx_state_user_updated ON state(user_id, updated_at);",
     )?;
     Ok(())
 }

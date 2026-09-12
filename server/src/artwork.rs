@@ -33,6 +33,48 @@ pub fn delete_override(data_dir: &Path, track_id: i64) {
 const SIDECAR_NAMES: &[&str] = &["cover", "folder", "front", "AlbumArt", "album"];
 const SIDECAR_EXTS: &[&str] = &["jpg", "jpeg", "png", "webp"];
 
+/// Определяет тип картинки по её содержимому, а не по заголовку запроса.
+///
+/// Заголовок пишет клиент, и `image/svg+xml` проходил проверку "начинается с image/":
+/// SVG - это документ со скриптом внутри, и отданный с таким Content-Type он выполняется
+/// при открытии по прямой ссылке (Subsonic-клиенты, браузер). Поэтому тип берём из
+/// сигнатуры файла и разрешаем только растровые форматы.
+pub fn sniff_image_mime(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        return Some("image/jpeg");
+    }
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Some("image/png");
+    }
+    if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
+        return Some("image/webp");
+    }
+    if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        return Some("image/gif");
+    }
+    if bytes.len() >= 12 && &bytes[4..8] == b"ftyp" && (&bytes[8..12] == b"heic" || &bytes[8..12] == b"heif") {
+        return Some("image/heic");
+    }
+    None
+}
+
+#[cfg(test)]
+mod sniff_tests {
+    use super::sniff_image_mime;
+
+    #[test]
+    fn растровые_форматы_узнаются_а_svg_отвергается() {
+        assert_eq!(sniff_image_mime(&[0xFF, 0xD8, 0xFF, 0xE0]), Some("image/jpeg"));
+        assert_eq!(sniff_image_mime(b"\x89PNG\r\n\x1a\n\x00"), Some("image/png"));
+        assert_eq!(sniff_image_mime(b"RIFF\x00\x00\x00\x00WEBPVP8 "), Some("image/webp"));
+        assert_eq!(sniff_image_mime(b"GIF89a\x00"), Some("image/gif"));
+        // Ровно тот случай, ради которого проверка и делалась.
+        assert_eq!(sniff_image_mime(b"<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>"), None);
+        assert_eq!(sniff_image_mime(b""), None);
+        assert_eq!(sniff_image_mime(b"not an image at all"), None);
+    }
+}
+
 fn mime_for_ext(ext: &str) -> &'static str {
     match ext.to_ascii_lowercase().as_str() {
         "png" => "image/png",

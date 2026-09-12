@@ -112,6 +112,8 @@ fn record_end(conn: &Connection, code: &str) {
 }
 
 /// Убирает сессии, из которых все разошлись, и помечает их завершёнными в журнале.
+/// Вызывается из cleanup_host, а тот - после каждого закрытия сокета, так что комнаты,
+/// покинутые по обрыву связи, тоже убираются; отдельный фоновый таск не нужен.
 fn sweep(reg: &mut HashMap<String, Session>, conn: &Connection) {
     reg.retain(|code, s| {
         let alive = s.tx.receiver_count() > 0;
@@ -171,6 +173,10 @@ pub fn library_key(st: &Shared, ident: &Ident) -> i64 {
         users::LibraryMode::Shared => 0,
     }
 }
+
+/// Потолок очереди джема. Добавлять может любой участник, а очередь на каждое добавление
+/// целиком уезжает в БД, поэтому без предела один гость раздувает и память, и запись.
+const MAX_QUEUE: usize = 200;
 
 /// Код сессии: 6 символов без похожих друг на друга (0/O, 1/I) - его диктуют голосом.
 fn new_code() -> String {
@@ -239,6 +245,10 @@ pub fn handle(st: &Shared, ident: &Ident, m: &mut Membership, text: &str) -> Opt
             Some(serde_json::json!({ "type": "jam_created", "code": code }).to_string())
         }
         "jam_join" => {
+            // Одно подключение состоит в одной комнате. Без этого переход организатора в
+            // чужую комнату оставлял бы свою в реестре без хозяина: m.code перезаписан,
+            // гости не уведомлены, а sweep её не уберёт - подписчики ещё живы.
+            cleanup_host(st, m, ident);
             let code = msg.code?.trim().to_uppercase();
             let db = st.db.lock().unwrap();
             let mut reg = st.jams.0.lock().unwrap();
@@ -342,6 +352,9 @@ pub fn handle(st: &Shared, ident: &Ident, m: &mut Membership, text: &str) -> Opt
             let queue = {
                 let mut reg = st.jams.0.lock().unwrap();
                 let s = reg.get_mut(&code)?;
+                if s.queue.len() >= MAX_QUEUE {
+                    return err("очередь джема заполнена");
+                }
                 s.queue.push(track_id);
                 s.queue.clone()
             };
@@ -487,6 +500,84 @@ if (navigator.userAgent.match(/Android/i)) {{
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Минимальное состояние сервера в памяти: джемы живут только в нём, диск не нужен.
+    fn state() -> Shared {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch(crate::db::SCHEMA).unwrap();
+        std::sync::Arc::new(crate::api::AppState {
+            db: std::sync::Mutex::new(db),
+            cfg: crate::config::Config::default(),
+            fingerprint: None,
+            rate: Default::default(),
+            qr_challenges: Default::default(),
+            ffmpeg: false,
+            fpcalc: false,
+            events: tokio::sync::broadcast::channel(BUFFER).0,
+            positions: tokio::sync::broadcast::channel(BUFFER).0,
+            jams: Registry::default(),
+            metrics: crate::metrics::Metrics::new(),
+        })
+    }
+
+    fn code_of(reply: &str) -> String {
+        serde_json::from_str::<serde_json::Value>(reply).unwrap()["code"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    }
+
+    #[test]
+    fn переход_в_чужую_комнату_закрывает_свою() {
+        let st = state();
+        let host = Ident { user_id: Some(1), device_id: Some(1) };
+        let other = Ident { user_id: Some(2), device_id: Some(2) };
+
+        // Чужая комната, в которую потом перейдёт первый организатор.
+        let mut other_m = Membership::default();
+        let b = code_of(&handle(&st, &other, &mut other_m, r#"{"type":"jam_create"}"#).unwrap());
+
+        // Своя комната, и в ней гость.
+        let mut host_m = Membership::default();
+        let a = code_of(&handle(&st, &host, &mut host_m, r#"{"type":"jam_create"}"#).unwrap());
+        let mut guest_m = Membership::default();
+        let guest = Ident { user_id: Some(3), device_id: Some(3) };
+        handle(&st, &guest, &mut guest_m, &format!(r#"{{"type":"jam_join","code":"{a}"}}"#)).unwrap();
+
+        // Организатор уходит в чужую комнату тем же соединением.
+        handle(&st, &host, &mut host_m, &format!(r#"{{"type":"jam_join","code":"{b}"}}"#)).unwrap();
+
+        // Комната A должна закрыться: без этого она осталась бы в реестре без хозяина,
+        // гость не узнал бы о закрытии, а sweep её не убрал бы - подписчик ещё жив.
+        assert!(
+            !st.jams.0.lock().unwrap().contains_key(&a),
+            "комната покинутого организатора осталась в реестре",
+        );
+        assert!(st.jams.0.lock().unwrap().contains_key(&b), "чужая комната не должна страдать");
+
+        let notice = guest_m.rx.as_mut().unwrap().try_recv().expect("гость получает уведомление");
+        assert!(notice.contains("jam_closed"), "гостю ушло: {notice}");
+    }
+
+    #[test]
+    fn очередь_джема_ограничена() {
+        let st = state();
+        let host = Ident { user_id: Some(1), device_id: Some(1) };
+        let mut m = Membership::default();
+        let code = code_of(&handle(&st, &host, &mut m, r#"{"type":"jam_create"}"#).unwrap());
+
+        // Трек должен быть виден, иначе добавление отсечётся раньше проверки предела.
+        st.db.lock().unwrap()
+            .execute("INSERT INTO tracks (id, path, title) VALUES (1,'/a.mp3','Трек')", [])
+            .unwrap();
+
+        for _ in 0..MAX_QUEUE {
+            handle(&st, &host, &mut m, r#"{"type":"jam_queue_add","track_id":1}"#);
+        }
+        let over = handle(&st, &host, &mut m, r#"{"type":"jam_queue_add","track_id":1}"#).unwrap();
+        assert!(over.contains("заполнена"), "за пределом ожидается отказ, пришло: {over}");
+        assert_eq!(st.jams.0.lock().unwrap()[&code].queue.len(), MAX_QUEUE);
+    }
 
     #[test]
     fn код_читаемый_и_не_повторяется() {

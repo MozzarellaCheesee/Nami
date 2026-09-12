@@ -734,13 +734,16 @@ async fn put_artwork(
     if !users::can_see_track(&st.db.lock().unwrap(), &ident, id) {
         return ApiError(StatusCode::NOT_FOUND, "нет такого трека".into()).into_response();
     }
-    let mime = req.headers().get(header::CONTENT_TYPE).and_then(|v| v.to_str().ok()).unwrap_or("image/jpeg").to_string();
-    if !mime.starts_with("image/") {
-        return ApiError(StatusCode::BAD_REQUEST, "ожидается изображение".into()).into_response();
-    }
     let bytes = match axum::body::to_bytes(req.into_body(), 10 * 1024 * 1024).await {
         Ok(b) if !b.is_empty() => b,
         _ => return ApiError(StatusCode::BAD_REQUEST, "пустая или слишком большая обложка".into()).into_response(),
+    };
+    let Some(mime) = crate::artwork::sniff_image_mime(&bytes).map(str::to_string) else {
+        return ApiError(
+            StatusCode::BAD_REQUEST,
+            "ожидается картинка JPEG, PNG, WebP, GIF или HEIC".into(),
+        )
+        .into_response();
     };
     if let Err(e) = crate::artwork::save_override(&st.cfg.data_dir, id, &bytes, &mime) {
         return ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response();
@@ -767,7 +770,9 @@ pub async fn serve_artwork(st: Shared, id: i64, ident: &Ident) -> Response {
     (
         [
             (header::CONTENT_TYPE, mime),
-            (header::CACHE_CONTROL, "public, max-age=31536000, immutable".into()),
+            // Не immutable и не на год: версии в URL нет, а обложка меняется вместе с
+            // тегами файла на диске - иначе клиент держал бы старую картинку вечно.
+            (header::CACHE_CONTROL, "public, max-age=3600".into()),
         ],
         bytes,
     )
@@ -1752,6 +1757,16 @@ pub(crate) fn create_jam_guest(db: &Connection, code: &str) -> rusqlite::Result<
     Ok(raw_token)
 }
 
+/// Синтетический device_id для анонимного гостя джема (вход по коду, без токена).
+/// Отрицательный и уникальный на соединение: реальные device_id приходят из
+/// AUTOINCREMENT и всегда положительные, так что пересечься они не могут, а без
+/// уникальности все анонимные гости делили бы одну запись в реестре доступов.
+fn next_anon_device_id() -> i64 {
+    use std::sync::atomic::{AtomicI64, Ordering};
+    static NEXT: AtomicI64 = AtomicI64::new(-1);
+    NEXT.fetch_sub(1, Ordering::Relaxed)
+}
+
 /// WebSocket с событиями изменений. Не заменяет `GET /api/sync?since=`, а ускоряет его:
 /// по событию клиент идёт за самими изменениями обычным HTTP. Поллинг остаётся
 /// полноценным запасным путём, если сокет недоступен или разорван.
@@ -1766,7 +1781,7 @@ async fn ws(
             if let Some(code) = q.jam_code.as_deref() {
                 let code_upper = code.trim().to_uppercase();
                 if st.jams.contains(&code_upper) {
-                    Some(Ident { user_id: None, device_id: None })
+                    Some(Ident { user_id: None, device_id: Some(next_anon_device_id()) })
                 } else {
                     None
                 }
@@ -1805,6 +1820,8 @@ async fn ws_loop(
     let mut pos = st.positions.subscribe();
     let mut jam = crate::jam::Membership::default();
     let mut heartbeat = tokio::time::interval(std::time::Duration::from_secs(30));
+    // Любой кадр от клиента - признак жизни: Pong, сообщение джема, что угодно.
+    let mut last_seen = std::time::Instant::now();
     loop {
         let msg = tokio::select! {
             r = changes.recv() => r,
@@ -1812,11 +1829,16 @@ async fn ws_loop(
             // События джема идут по тому же сокету - второй канал ради них не заводим.
             r = jam.recv() => r,
             _ = heartbeat.tick() => {
+                // Три пропущенных подряд ответа - соединение мертво, дальше оно только
+                // держит комнату живой и мешает sweep.
+                if last_seen.elapsed() > std::time::Duration::from_secs(90) { break; }
                 if socket.send(Message::Ping(Vec::new().into())).await.is_err() { break; }
                 continue;
             }
             // Клиент закрыл сокет или прислал что-то своё - читаем, чтобы заметить разрыв.
             incoming = socket.recv() => {
+                // Любой кадр (в том числе Pong) продлевает жизнь соединения.
+                last_seen = std::time::Instant::now();
                 match incoming {
                     None | Some(Err(_)) | Some(Ok(Message::Close(_))) => break,
                     Some(Ok(Message::Text(t))) => {

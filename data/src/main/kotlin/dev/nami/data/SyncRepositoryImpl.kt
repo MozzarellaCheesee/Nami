@@ -372,13 +372,18 @@ class SyncRepositoryImpl @Inject constructor(
                     val playedAt = obj?.optLong("played_at")
                         ?: (if (id.contains(":")) id.substringAfter(":").toLongOrNull() ?: (updatedAt * 1000L) else (updatedAt * 1000L))
                     val durationMs = obj?.optLong("duration_ms", 0L) ?: 0L
-                    playHistoryDao.insert(
-                        PlayHistoryEntity(
-                            trackId = targetTrackId,
-                            playedAt = playedAt,
-                            durationMs = durationMs,
-                        ),
-                    )
+                    // Своя же запись возвращается при следующем pull, а ключ таблицы -
+                    // автоинкремент, так что без этой проверки каждая синхронизация
+                    // добавляла бы ещё одну копию и задваивала статистику.
+                    if (!playHistoryDao.exists(targetTrackId, playedAt)) {
+                        playHistoryDao.insert(
+                            PlayHistoryEntity(
+                                trackId = targetTrackId,
+                                playedAt = playedAt,
+                                durationMs = durationMs,
+                            ),
+                        )
+                    }
                 }
             }
         }

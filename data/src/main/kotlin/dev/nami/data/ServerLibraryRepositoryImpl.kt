@@ -43,6 +43,12 @@ class ServerLibraryRepositoryImpl @Inject constructor(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val uploadMutex = Mutex()
+
+    /** Обложки, которые качаются прямо сейчас. listTracks() вызывается по каждому событию
+     * "changed" и на каждом вызове запускал новую корутину скачивания для того же id, пока
+     * предыдущая не закончила: две записи в один файл портили его. Ключ убирается в finally,
+     * поэтому неудачная попытка не блокирует повтор. */
+    private val artworkInFlight = ConcurrentHashMap.newKeySet<Long>()
     private val _uploadProgress = MutableStateFlow<String?>(null)
     private val cachedAudioIds = ConcurrentHashMap.newKeySet<Long>()
     private val cachedArtworkIds = ConcurrentHashMap.newKeySet<Long>()
@@ -341,9 +347,9 @@ class ServerLibraryRepositoryImpl @Inject constructor(
             if (dest.exists() && dest.length() > 0) {
                 cachedAudioIds += serverTrackId
                 if (!artDest.exists() || artDest.length() == 0L) {
-                    if (runCatching { NamiServerClient.downloadArtwork(cfg, serverTrackId, artDest) }.getOrDefault(false)) {
-                        cachedArtworkIds += serverTrackId
-                    }
+                    // Через downloadArtwork(), а не напрямую через клиента: там стоит
+                    // защита от параллельной записи в один и тот же файл.
+                    downloadArtwork(serverTrackId)
                 }
                 return@withContext dest
             }
@@ -360,9 +366,9 @@ class ServerLibraryRepositoryImpl @Inject constructor(
             cachedAudioIds += serverTrackId
             // Параллельно подтягиваем и сохраняем обложку трека для офлайн-режима
             if (!artDest.exists() || artDest.length() == 0L) {
-                if (runCatching { NamiServerClient.downloadArtwork(cfg, serverTrackId, artDest) }.getOrDefault(false)) {
-                    cachedArtworkIds += serverTrackId
-                }
+                // Через downloadArtwork(), а не напрямую через клиента: там стоит
+                // защита от параллельной записи в один и тот же файл.
+                downloadArtwork(serverTrackId)
             }
             dest
         }
@@ -374,6 +380,16 @@ class ServerLibraryRepositoryImpl @Inject constructor(
         artworkFileFor(serverTrackId).takeIf { serverTrackId in cachedArtworkIds }
 
     override suspend fun downloadArtwork(serverTrackId: Long): File? = withContext(Dispatchers.IO) {
+        // Уже качается этим же процессом - второй заход писал бы в тот же файл параллельно.
+        if (!artworkInFlight.add(serverTrackId)) return@withContext null
+        try {
+            downloadArtworkLocked(serverTrackId)
+        } finally {
+            artworkInFlight -= serverTrackId
+        }
+    }
+
+    private suspend fun downloadArtworkLocked(serverTrackId: Long): File? = withContext(Dispatchers.IO) {
         cachedArtwork(serverTrackId)?.let { return@withContext it }
         val cfg = activeConfig() ?: return@withContext null
         val dest = artworkFileFor(serverTrackId)

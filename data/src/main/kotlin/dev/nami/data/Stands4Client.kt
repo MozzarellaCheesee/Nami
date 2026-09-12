@@ -62,7 +62,9 @@ object Stands4Client {
                 setRequestProperty("User-Agent", "Nami Android app")
                 try {
                     if (responseCode !in 200..299) {
-                        Log.w("Stands4Client", "HTTP $responseCode for $url")
+                        // Без query-строки: в ней лежат uid и tokenid STANDS4, а logcat
+                        // читает любое приложение с отладочным доступом.
+                        Log.w("Stands4Client", "HTTP $responseCode for ${url.substringBefore('?')}")
                         return null
                     }
                     inputStream.bufferedReader().use { it.readText() }
