@@ -143,6 +143,7 @@ fun NowPlayingScreen(
     val queue by viewModel.queue.collectAsState()
     val trackDetails by viewModel.currentTrackDetails.collectAsState()
     val playbackSource by viewModel.playbackSource.collectAsState()
+    val onServer by viewModel.currentTrackOnServer.collectAsState()
     val playing = state as? PlaybackState.Playing
     val density = LocalDensity.current
     val dismissThresholdPx = with(density) { DISMISS_THRESHOLD_DP.dp.toPx() }
@@ -451,7 +452,7 @@ fun NowPlayingScreen(
                 onDismiss = { showOverflowMenu = false },
                 header = {
                     if (track != null) {
-                        NowPlayingOverflowHeader(track = track, playbackSource = playbackSource)
+                        NowPlayingOverflowHeader(track = track, playbackSource = playbackSource, onServer = onServer)
                         VolumeSlider(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp))
                     }
                 },
@@ -934,6 +935,7 @@ fun NowPlayingScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         PlaybackSourceBadge(source = playbackSource)
+                        ServerPresenceBadge(onServer = onServer, showLabel = true)
                         queue.nowPlaying?.format?.let { format ->
                             Box(
                                 modifier = Modifier
@@ -1342,6 +1344,7 @@ private fun shareTrackText(context: android.content.Context, track: dev.nami.cor
 private fun NowPlayingOverflowHeader(
     track: dev.nami.core.model.Track,
     playbackSource: dev.nami.domain.TrackPlaybackSource,
+    onServer: Boolean?,
 ) {
     Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         if (track.albumArtworkPath != null) {
@@ -1361,7 +1364,13 @@ private fun NowPlayingOverflowHeader(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("Сейчас играет", color = NamiColors.Paper40, style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
-                PlaybackSourceBadge(source = playbackSource)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    PlaybackSourceBadge(source = playbackSource)
+                    ServerPresenceBadge(onServer = onServer)
+                }
             }
             Text(track.title, color = NamiColors.Paper100, style = androidx.compose.material3.MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             track.artistName?.let { Text(it, color = NamiColors.Paper70, style = androidx.compose.material3.MaterialTheme.typography.bodySmall, maxLines = 1) }

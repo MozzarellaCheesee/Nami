@@ -116,6 +116,170 @@ if [ -n "$EARLY_CURRENT_VERSION" ] && [ -n "$EARLY_TARGET_VERSION" ] && [ "${EAR
     exit 0
 fi
 
+
+# ==============================================================================
+# TUI: выбор режима доступа
+# ==============================================================================
+# Скрипт обычно запускают через `curl ... | bash`, и тогда stdin занят самим
+# скриптом - обычный `read` мгновенно получил бы EOF. Поэтому весь ввод идёт из
+# /dev/tty. Само существование файла ничего не гарантирует (в контейнере без
+# выделенного терминала открытие падает с ENXIO), поэтому пробуем открыть.
+TTY_IN=""
+if { : < /dev/tty; } 2>/dev/null; then
+    TTY_IN=/dev/tty
+fi
+
+# Значения можно задать заранее - тогда вопросов не будет вовсе:
+#   NAMI_MODE=domain|lan|proxy  NAMI_DOMAIN=music.example.com
+#   NAMI_ACME_EMAIL=me@example.com  NAMI_PORT=4533  NAMI_MUSIC_DIR=/srv/music
+NAMI_MODE="${NAMI_MODE:-}"
+NAMI_DOMAIN="${NAMI_DOMAIN:-}"
+NAMI_ACME_EMAIL="${NAMI_ACME_EMAIL:-}"
+NAMI_MUSIC_DIR="${NAMI_MUSIC_DIR:-}"
+PORT="${NAMI_PORT:-$PORT}"
+
+# Рамка намеренно без правого края: ширину пришлось бы считать в символах, а printf
+# выравнивает по байтам, и любая кириллическая строка разъезжалась бы. Левый рельс
+# и горизонтальные линии дают тот же вид без арифметики по ширине текста.
+TUI_RULE="──────────────────────────────────────────────────────────────────────"
+
+tui_line()  { printf "${CYAN}│${NC} %s\n" "$1"; }
+tui_top()   { printf "${CYAN}╭%s${NC}\n" "$TUI_RULE"; }
+tui_sep()   { printf "${CYAN}├%s${NC}\n" "$TUI_RULE"; }
+tui_bottom(){ printf "${CYAN}╰%s${NC}\n" "$TUI_RULE"; }
+
+tui_title() {
+    echo
+    tui_top
+    printf "${CYAN}│${NC} ${BOLD}%s${NC}\n" "$1"
+    tui_sep
+}
+
+# Меню со стрелками. Выбор возвращается в MENU_CHOICE (нумерация с 1).
+# Без терминала вопрос не задаётся - берётся первый пункт.
+tui_menu() {
+    local title="$1"; shift
+    local -a items=("$@")
+    local n=${#items[@]}
+    local cur=0 key rest
+
+    if [ -z "$TTY_IN" ]; then
+        MENU_CHOICE=1
+        return
+    fi
+
+    while true; do
+        tui_title "$title"
+        local i=0
+        while [ $i -lt $n ]; do
+            if [ $i -eq $cur ]; then
+                printf "${CYAN}│${NC} ${GREEN}❯${NC} ${BOLD}%s${NC}\n" "${items[$i]}"
+            else
+                printf "${CYAN}│${NC}   %s\n" "${items[$i]}"
+            fi
+            i=$((i + 1))
+        done
+        tui_sep
+        tui_line "↑/↓ или 1-${n} — выбор, Enter — подтвердить"
+        tui_bottom
+
+        IFS= read -rsn1 key < "$TTY_IN" || { MENU_CHOICE=$((cur + 1)); return; }
+        case "$key" in
+            $'\x1b')
+                # Стрелки приходят как ESC [ A / ESC [ B - дочитываем хвост.
+                IFS= read -rsn2 -t 0.1 rest < "$TTY_IN" || rest=""
+                case "$rest" in
+                    '[A') cur=$(( (cur - 1 + n) % n ));;
+                    '[B') cur=$(( (cur + 1) % n ));;
+                esac
+                ;;
+            '') MENU_CHOICE=$((cur + 1)); return;;
+            k)  cur=$(( (cur - 1 + n) % n ));;
+            j)  cur=$(( (cur + 1) % n ));;
+            [1-9])
+                if [ "$key" -le "$n" ]; then MENU_CHOICE=$key; return; fi
+                ;;
+        esac
+        # Перерисовываем поверх предыдущего кадра. Высота: пустая строка + верх +
+        # заголовок + разделитель (4) + пункты (n) + разделитель + подсказка + низ (3).
+        printf '\033[%dA\033[J' "$((n + 7))"
+    done
+}
+
+# tui_ask <подсказка> <значение-по-умолчанию> <имя-переменной>
+tui_ask() {
+    local prompt="$1" def="$2" var="$3" val=""
+    if [ -z "$TTY_IN" ]; then
+        printf -v "$var" '%s' "$def"
+        return
+    fi
+    if [ -n "$def" ]; then
+        printf "${CYAN}?${NC} ${BOLD}%s${NC} [${CYAN}%s${NC}]: " "$prompt" "$def" > "$TTY_IN"
+    else
+        printf "${CYAN}?${NC} ${BOLD}%s${NC}: " "$prompt" > "$TTY_IN"
+    fi
+    IFS= read -r val < "$TTY_IN" || val=""
+    [ -z "$val" ] && val="$def"
+    printf -v "$var" '%s' "$val"
+}
+
+tui_confirm() {
+    local prompt="$1" def="${2:-y}" val=""
+    if [ -z "$TTY_IN" ]; then
+        [ "$def" = "y" ]
+        return
+    fi
+    printf "${CYAN}?${NC} ${BOLD}%s${NC} [%s]: " "$prompt" "$([ "$def" = y ] && echo 'Y/n' || echo 'y/N')" > "$TTY_IN"
+    IFS= read -r val < "$TTY_IN" || val=""
+    [ -z "$val" ] && val="$def"
+    case "$val" in [yYдД]*) return 0;; *) return 1;; esac
+}
+
+# Домен годится для Let's Encrypt, только если это имя, а не IP, и в нём есть точка.
+valid_domain() {
+    case "$1" in
+        ''|*[!A-Za-z0-9.-]*) return 1;;   # пусто или посторонние символы
+        *.*) ;;                            # точка обязательна
+        *) return 1;;
+    esac
+    case "$1" in
+        *[A-Za-z]*) return 0;;             # есть буквы - это имя
+        *) return 1;;                      # только цифры и точки - это IP
+    esac
+}
+
+if [ "$IS_UPDATE" != true ] && [ -z "$NAMI_MODE" ] && [ -n "$TTY_IN" ]; then
+    tui_menu "Как сервер будет доступен?" \
+        "Домен + HTTPS        — сертификат Let's Encrypt, вход по https://домен" \
+        "Локальная сеть       — самоподписанный сертификат, вход по IP" \
+        "Свой обратный прокси — сервер на 127.0.0.1, TLS терминирует прокси"
+    case "$MENU_CHOICE" in
+        1) NAMI_MODE="domain";;
+        2) NAMI_MODE="lan";;
+        3) NAMI_MODE="proxy";;
+    esac
+fi
+[ -z "$NAMI_MODE" ] && NAMI_MODE="lan"
+
+if [ "$NAMI_MODE" = "domain" ]; then
+    while [ -z "$NAMI_DOMAIN" ] || ! valid_domain "$NAMI_DOMAIN"; do
+        tui_ask "Домен (A-запись уже должна вести на этот сервер)" "" NAMI_DOMAIN
+        if [ -z "$TTY_IN" ]; then break; fi
+        if ! valid_domain "$NAMI_DOMAIN"; then
+            log_warn "Нужно доменное имя, например music.example.com — на IP сертификат не выдаётся."
+            NAMI_DOMAIN=""
+        fi
+    done
+    [ -z "$NAMI_ACME_EMAIL" ] && tui_ask "E-mail для Let's Encrypt (уведомления об истечении)" "admin@${NAMI_DOMAIN}" NAMI_ACME_EMAIL
+elif [ "$NAMI_MODE" = "proxy" ] && [ -z "$NAMI_DOMAIN" ]; then
+    tui_ask "Внешний домен, по которому прокси отдаёт сервер (можно пропустить)" "" NAMI_DOMAIN
+fi
+
+if [ "$IS_UPDATE" != true ]; then
+    [ -z "$NAMI_MUSIC_DIR" ] && tui_ask "Папка с музыкой" "/srv/music" NAMI_MUSIC_DIR
+    tui_ask "Порт сервера" "$PORT" PORT
+fi
+
 # 5. Автоматическая установка всех необходимых системных компонентов
 echo
 HAS_NGINX=false
@@ -425,6 +589,71 @@ $SUDO mkdir -p /etc/caddy
 $SUDO chown -R nami:nami /etc/caddy 2>/dev/null || true
 $SUDO chmod 775 /etc/caddy 2>/dev/null || true
 
+# 9a. Предзаполнение config.toml по ответам из TUI, чтобы /setup открывался сразу по
+# нужному адресу, а не после ручной правки конфига.
+if [ "$IS_UPDATE" != true ] && [ ! -f "${DATA_DIR}/config.toml" ]; then
+    case "$NAMI_MODE" in
+        domain|proxy)
+            # TLS снимает прокси настоящим сертификатом, сам сервер слушает открытый HTTP
+            # на localhost - иначе прокси пришлось бы ходить в самоподписанный сертификат.
+            CFG_TLS=false
+            if [ -n "$NAMI_DOMAIN" ]; then
+                CFG_EXTERNAL="https://${NAMI_DOMAIN}"
+            else
+                CFG_EXTERNAL=""
+            fi
+            ;;
+        *)
+            CFG_TLS=true
+            CFG_EXTERNAL=""
+            ;;
+    esac
+    log_info "Создание ${DATA_DIR}/config.toml..."
+    {
+        printf 'port = %s\n' "$PORT"
+        printf 'tls = %s\n' "$CFG_TLS"
+        [ -n "$CFG_EXTERNAL" ] && printf 'external_url = "%s"\n' "$CFG_EXTERNAL"
+        if [ -n "$NAMI_MUSIC_DIR" ]; then
+            $SUDO mkdir -p "$NAMI_MUSIC_DIR" 2>/dev/null || true
+            printf 'music_dirs = ["%s"]\n' "$NAMI_MUSIC_DIR"
+        fi
+    } | $SUDO tee "${DATA_DIR}/config.toml" > /dev/null
+    $SUDO chown nami:nami "${DATA_DIR}/config.toml"
+fi
+
+# 9b. Caddy: домен + автоматический сертификат Let's Encrypt.
+if [ "$NAMI_MODE" = "domain" ] && [ -n "$NAMI_DOMAIN" ]; then
+    if [ "$HAS_NGINX" = true ]; then
+        log_warn "Обнаружен Nginx — он уже занимает порты 80/443, поэтому Caddy не настраивается."
+        log_warn "Добавьте в конфигурацию Nginx proxy_pass на http://127.0.0.1:${PORT} для ${NAMI_DOMAIN}"
+        log_warn "и выпустите сертификат: sudo certbot --nginx -d ${NAMI_DOMAIN}"
+    elif command -v caddy >/dev/null 2>&1; then
+        log_info "Настройка Caddy для домена ${NAMI_DOMAIN}..."
+        cat << EOF | $SUDO tee /etc/caddy/Caddyfile > /dev/null
+{
+	email ${NAMI_ACME_EMAIL}
+}
+
+# Сертификат Let's Encrypt Caddy получает и продлевает сам. Внутрь идёт открытый
+# HTTP на localhost: config.toml в этом режиме ставит tls = false.
+${NAMI_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:${PORT}
+}
+EOF
+        $SUDO chown nami:nami /etc/caddy/Caddyfile 2>/dev/null || true
+        if $SUDO caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
+            log_ok "Caddyfile проверен."
+        else
+            log_warn "Caddy не принял конфигурацию — проверьте /etc/caddy/Caddyfile вручную."
+        fi
+        $SUDO systemctl enable caddy >/dev/null 2>&1 || true
+        $SUDO systemctl restart caddy >/dev/null 2>&1 || log_warn "Не удалось перезапустить caddy."
+    else
+        log_warn "Caddy не установлен — HTTPS для ${NAMI_DOMAIN} придётся настроить вручную."
+    fi
+fi
+
 # 10. Создание systemd unit
 log_info "Создание systemd службы: ${SYSTEMD_UNIT}..."
 cat << EOF | $SUDO tee "$SYSTEMD_UNIT" > /dev/null
@@ -457,26 +686,39 @@ $SUDO systemctl daemon-reload
 $SUDO systemctl enable "${SERVICE_NAME}.service"
 $SUDO systemctl restart "${SERVICE_NAME}.service"
 
-# Открытие портов в брандмауэре (UFW / firewalld): 4533 (Nami), 80 (HTTP/Caddy), 443 (HTTPS/Caddy)
-PORTS_TO_OPEN=($PORT 80 443)
+# Открытие портов в брандмауэре. Набор зависит от режима: за прокси наружу смотрят
+# только 80/443, в локальном режиме - порт самого сервера. Открытие наружу спрашиваем
+# явно: на машине с публичным IP это выставляет сервис в интернет.
+case "$NAMI_MODE" in
+    domain) PORTS_TO_OPEN=(80 443);;
+    proxy)  PORTS_TO_OPEN=();;
+    *)      PORTS_TO_OPEN=($PORT);;
+esac
+
+if [ ${#PORTS_TO_OPEN[@]} -gt 0 ] && [ "$IS_UPDATE" != true ]; then
+    if ! tui_confirm "Открыть порты ${PORTS_TO_OPEN[*]} в брандмауэре?" y; then
+        PORTS_TO_OPEN=()
+        log_info "Порты не трогаем — откройте их вручную, когда понадобится."
+    fi
+fi
 
 if command -v ufw >/dev/null 2>&1; then
-    if ufw status 2>/dev/null | grep -qw "active"; then
-        log_info "Настройка UFW: открытие входящих портов ${PORT}/tcp (Nami), 80/tcp (HTTP), 443/tcp (HTTPS)..."
+    if [ ${#PORTS_TO_OPEN[@]} -gt 0 ] && ufw status 2>/dev/null | grep -qw "active"; then
+        log_info "Настройка UFW: открытие портов ${PORTS_TO_OPEN[*]}/tcp..."
         for p in "${PORTS_TO_OPEN[@]}"; do
             $SUDO ufw allow ${p}/tcp >/dev/null 2>&1 || true
         done
-        log_ok "Порты ${PORT}/tcp, 80/tcp, 443/tcp разрешены в UFW."
+        log_ok "Порты ${PORTS_TO_OPEN[*]}/tcp разрешены в UFW."
     fi
 fi
 if command -v firewall-cmd >/dev/null 2>&1; then
-    if firewall-cmd --state 2>/dev/null | grep -qw "running"; then
-        log_info "Настройка firewalld: открытие портов ${PORT}/tcp, 80/tcp, 443/tcp..."
+    if [ ${#PORTS_TO_OPEN[@]} -gt 0 ] && firewall-cmd --state 2>/dev/null | grep -qw "running"; then
+        log_info "Настройка firewalld: открытие портов ${PORTS_TO_OPEN[*]}/tcp..."
         for p in "${PORTS_TO_OPEN[@]}"; do
             $SUDO firewall-cmd --add-port=${p}/tcp --permanent >/dev/null 2>&1 || true
         done
         $SUDO firewall-cmd --reload >/dev/null 2>&1 || true
-        log_ok "Порты ${PORT}/tcp, 80/tcp, 443/tcp разрешены в firewalld."
+        log_ok "Порты ${PORTS_TO_OPEN[*]}/tcp разрешены в firewalld."
     fi
 fi
 
@@ -500,6 +742,8 @@ if [ -f "${DATA_DIR}/config.toml" ]; then
 fi
 if [ -n "$EXTERNAL_URL" ]; then
     WEB_URL="${EXTERNAL_URL%/}"
+elif [ "$NAMI_MODE" = "domain" ] && [ -n "$NAMI_DOMAIN" ]; then
+    WEB_URL="https://${NAMI_DOMAIN}"
 else
     WEB_URL="https://${PRIMARY_IP}:${PORT}"
 fi
@@ -528,11 +772,21 @@ else
     echo -e "${BOLD}${GREEN}  🎉 Nami Server успешно установлен и запущен!${NC}"
     echo -e "${BOLD}${GREEN}======================================================================${NC}"
     echo
-    echo -e "  ${BOLD}ШАГ 1. Первичная защищённая настройка в браузере (HTTPS):${NC}"
-    echo -e "         👉 ${BOLD}${CYAN}https://${PRIMARY_IP}:${PORT}/setup${NC}"
-    echo -e "         (или локально: ${CYAN}https://localhost:${PORT}/setup${NC})"
-    echo -e "         ${YELLOW}Примечание: Браузер предупредит о самоподписанном сертификате.${NC}"
-    echo -e "         ${YELLOW}Нажмите «Дополнительно» → «Перейти на сайт» (все пароли шифруются TLS).${NC}"
+    echo -e "  ${BOLD}ШАГ 1. Первичная настройка в браузере:${NC}"
+    if [ "$NAMI_MODE" = "domain" ] && [ -n "$NAMI_DOMAIN" ]; then
+        echo -e "         👉 ${BOLD}${CYAN}https://${NAMI_DOMAIN}/setup${NC}"
+        echo -e "         ${GREEN}Сертификат Let's Encrypt выпускается автоматически — предупреждений нет.${NC}"
+        echo -e "         ${YELLOW}Если страница не открылась сразу: A-запись ${NAMI_DOMAIN} должна вести${NC}"
+        echo -e "         ${YELLOW}на ${PRIMARY_IP}, а порты 80 и 443 быть доступны снаружи.${NC}"
+    elif [ "$NAMI_MODE" = "proxy" ]; then
+        echo -e "         👉 ${BOLD}${CYAN}http://127.0.0.1:${PORT}/setup${NC} (через ваш обратный прокси)"
+        echo -e "         ${YELLOW}Сервер слушает открытый HTTP на localhost — TLS терминирует прокси.${NC}"
+    else
+        echo -e "         👉 ${BOLD}${CYAN}https://${PRIMARY_IP}:${PORT}/setup${NC}"
+        echo -e "         (или локально: ${CYAN}https://localhost:${PORT}/setup${NC})"
+        echo -e "         ${YELLOW}Примечание: Браузер предупредит о самоподписанном сертификате.${NC}"
+        echo -e "         ${YELLOW}Нажмите «Дополнительно» → «Перейти на сайт» (все пароли шифруются TLS).${NC}"
+    fi
     echo
     echo -e "  ${BOLD}ШАГ 2. В мастере укажите:${NC}"
     echo -e "         • Папку с вашей музыкальной коллекцией (например: /home/music);"
@@ -543,7 +797,7 @@ else
     echo -e "         ${BOLD}sudo systemctl restart nami${NC}"
     echo
     echo -e "  ${BOLD}ШАГ 4. Сопряжение с Android-клиентом:${NC}"
-    echo -e "         • Снова откройте ${CYAN}https://${PRIMARY_IP}:${PORT}/setup${NC}"
+    echo -e "         • Снова откройте ${CYAN}${WEB_URL}/setup${NC}"
     echo -e "         • На странице отобразится ${BOLD}QR-код${NC} и 8-значный код."
     echo -e "         • В приложении Nami на смартфоне откройте:"
     echo -e "           ${BOLD}Настройки → Подключить сервер → Сканировать QR${NC}"

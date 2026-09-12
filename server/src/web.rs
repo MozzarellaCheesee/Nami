@@ -20,6 +20,9 @@ pub fn router() -> Router {
         .route("/", get(index))
         .route("/manifest.json", get(file))
         .route("/sw.js", get(file))
+        // Шрифты лежат подпапкой, а роутер перечисляет пути поимённо - без этой строки
+        // @font-face получал бы 404. `serve` уже отдаёт правильный MIME через mime_guess.
+        .route("/fonts/{*path}", get(file))
 }
 
 async fn index() -> Response {
@@ -55,5 +58,22 @@ mod tests {
         assert!(html.contains("id=\"inviteView\""));
         assert!(html.contains("if (inviteToken()) showAuthView()"));
         assert!(html.contains("'/accept'"));
+    }
+
+    /// Имена пользователей и библиотек подставляются в JS-строки внутри onclick-атрибутов,
+    /// поэтому escapeHtml обязан экранировать апостроф и бэктик, а не только `& < > "`.
+    /// Без этого имя вида `x', alert(1), '` выполняет произвольный код в сессии владельца.
+    #[test]
+    fn escape_html_covers_quote_characters() {
+        let html = Assets::get("index.html").expect("embedded web client");
+        let html = std::str::from_utf8(&html.data).expect("utf-8 html");
+        let body = html
+            .split_once("function escapeHtml(s)")
+            .expect("escapeHtml defined")
+            .1;
+        let body = body.split_once('}').expect("escapeHtml body").0;
+        for needle in ["&amp;", "&lt;", "&gt;", "&quot;", "&#39;", "&#96;"] {
+            assert!(body.contains(needle), "escapeHtml не экранирует {needle}");
+        }
     }
 }

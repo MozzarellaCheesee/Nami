@@ -226,6 +226,13 @@ interface TrackDao {
     suspend fun allChainLinks(): List<TrackChainRow>
 
     /** П.md §20 "цепочки". null снимает звено. */
+    /** Путь у серверного зеркала переписывается на скачанный файл, когда трек удалён с сервера,
+     * но остаётся на устройстве. Очистка зеркал ([deleteServerTracksExcept]) отбирает строки по
+     * `path LIKE 'nami-server://%'`, поэтому смена пути и есть перевод трека в свою библиотеку -
+     * id сохраняется, так что плейлисты, история и статистика ссылок не теряют. */
+    @Query("UPDATE tracks SET path = :path WHERE id = :id")
+    suspend fun setPath(id: String, path: String)
+
     @Query("UPDATE tracks SET chainNextTrackId = :nextTrackId WHERE id = :id")
     suspend fun setChainNext(id: String, nextTrackId: String?)
 

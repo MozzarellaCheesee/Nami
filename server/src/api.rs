@@ -435,6 +435,10 @@ struct BatchDeleteResp {
     failed: Vec<i64>,
 }
 
+/// Потолок на batch-удаление из клиентского запроса. Внутренние вызовы (удаление библиотеки)
+/// его не касаются: там список формирует сам сервер.
+const MAX_BATCH_DELETE: usize = 500;
+
 fn delete_tracks_internal(
     st: &Shared,
     ident: &Ident,
@@ -541,6 +545,15 @@ async fn batch_delete_tracks(
     Extension(ident): Extension<Ident>,
     Json(p): Json<BatchDeleteReq>,
 ) -> ApiResult<Json<BatchDeleteResp>> {
+    // Удаление держит единственный мьютекс базы на весь цикл, поэтому длину списка из
+    // клиентского JSON ограничиваем здесь, на границе доверия: иначе один запрос блокирует
+    // базу для всех остальных на произвольно долгое время.
+    if p.ids.len() > MAX_BATCH_DELETE {
+        return Err(ApiError(
+            StatusCode::BAD_REQUEST,
+            format!("за один раз можно удалить не больше {MAX_BATCH_DELETE} треков"),
+        ));
+    }
     let (deleted, failed) = delete_tracks_internal(&st, &ident, &p.ids)?;
     Ok(Json(BatchDeleteResp { deleted, failed }))
 }
@@ -2586,18 +2599,33 @@ async fn delete_library(
     Extension(ident): Extension<Ident>,
     Path(id): Path<i64>,
 ) -> ApiResult<StatusCode> {
-    let db = st.db.lock().unwrap();
-    need_owner(&db, &ident)?;
+    // Список треков собираем под коротким локом и отпускаем его: сами файлы удаляет
+    // delete_tracks_internal, а он берёт тот же мьютекс сам.
+    let track_ids: Vec<i64> = {
+        let db = st.db.lock().unwrap();
+        need_owner(&db, &ident)?;
 
-    if id == 0 {
-        return Err(ApiError(
-            StatusCode::FORBIDDEN,
-            "основную библиотеку удалить нельзя".into(),
-        ));
+        if id == 0 {
+            return Err(ApiError(
+                StatusCode::FORBIDDEN,
+                "основную библиотеку удалить нельзя".into(),
+            ));
+        }
+
+        let mut stmt = db.prepare("SELECT id FROM tracks WHERE library_id=?1")?;
+        let ids = stmt.query_map([id], |r| r.get(0))?.collect::<rusqlite::Result<Vec<i64>>>()?;
+        ids
+    };
+
+    // Раньше здесь был голый `DELETE FROM tracks WHERE library_id=?1`: строки исчезали, а
+    // файлы оставались на диске навсегда, мимо серверной корзины. Переиспользуем обычный
+    // путь удаления, он переносит файлы в data/trash и чистит обложки с позициями.
+    if !track_ids.is_empty() {
+        delete_tracks_internal(&st, &ident, &track_ids)?;
     }
 
+    let db = st.db.lock().unwrap();
     db.execute("UPDATE users SET library_id=0 WHERE library_id=?1", [id])?;
-    db.execute("DELETE FROM tracks WHERE library_id=?1", [id])?;
     let n = db.execute("DELETE FROM libraries WHERE id=?1", [id])?;
 
     Ok(if n == 1 {
@@ -3055,10 +3083,15 @@ async fn create_share(
 
 async fn revoke_share(
     State(st): State<Shared>,
-    Extension(_ident): Extension<Ident>,
+    Extension(ident): Extension<Ident>,
     Path(token): Path<String>,
 ) -> ApiResult<StatusCode> {
-    let n = share::revoke(&st.db.lock().unwrap(), &token)?;
+    let db = st.db.lock().unwrap();
+    let owner = match ident.user_id {
+        Some(id) => users::is_owner(&db, id),
+        None => users::count(&db) == 0,
+    };
+    let n = share::revoke(&db, &token, ident.user_id, owner)?;
     Ok(if n == 1 { StatusCode::NO_CONTENT } else { StatusCode::NOT_FOUND })
 }
 

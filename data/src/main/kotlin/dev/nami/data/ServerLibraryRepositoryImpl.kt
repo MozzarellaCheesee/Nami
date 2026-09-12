@@ -403,18 +403,41 @@ class ServerLibraryRepositoryImpl @Inject constructor(
         ok
     }
 
-    override suspend fun deleteTracks(serverTrackIds: List<Long>): Boolean = withContext(Dispatchers.IO) {
-        if (serverTrackIds.isEmpty()) return@withContext true
+    override suspend fun deleteFromServerOnly(serverTrackId: Long): Boolean = withContext(Dispatchers.IO) {
         val cfg = activeConfig() ?: return@withContext false
-        val ok = NamiServerClient.deleteTracks(cfg, serverTrackIds)
-        if (ok) {
-            for (id in serverTrackIds) {
+        val cached = cachedFile(serverTrackId)
+        if (!NamiServerClient.deleteTrack(cfg, serverTrackId)) return@withContext false
+
+        val mirrorId = "server_$serverTrackId"
+        if (cached != null) {
+            // Файл уже на устройстве - оставляем и его, и запись о нём. Смены пути достаточно:
+            // зеркала чистятся по `path LIKE 'nami-server://%'`, так что строка с реальным путём
+            // переживёт синхронизацию и станет обычным локальным треком с тем же id.
+            trackDao.setPath(mirrorId, cached.absolutePath)
+            cachedAudioIds -= serverTrackId
+        } else {
+            // Ничего не скачано - на устройстве оставлять нечего, убираем пустое зеркало.
+            trackDao.hardDelete(mirrorId)
+        }
+        searchRepository.rebuildIndex()
+        true
+    }
+
+    override suspend fun deleteTracks(serverTrackIds: List<Long>): List<Long> = withContext(Dispatchers.IO) {
+        if (serverTrackIds.isEmpty()) return@withContext emptyList()
+        val cfg = activeConfig() ?: return@withContext emptyList()
+        // Чистим локально ровно то, что сервер подтвердил удалённым. Раньше здесь было
+        // all-or-nothing по одному Boolean: один уже удалённый трек в выделении означал, что
+        // локально не удаляется вообще ничего.
+        val deleted = NamiServerClient.deleteTracks(cfg, serverTrackIds)
+        if (deleted.isNotEmpty()) {
+            for (id in deleted) {
                 removeFromCache(id)
                 trackDao.hardDelete("server_$id")
             }
             searchRepository.rebuildIndex()
         }
-        ok
+        deleted
     }
 
     override fun invalidateArtwork(serverTrackId: Long) {
