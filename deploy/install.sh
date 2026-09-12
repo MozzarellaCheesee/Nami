@@ -569,13 +569,117 @@ else
     log_info "Системный пользователь 'nami' уже существует."
 fi
 
-# Настройка sudoers для nami, чтобы веб-мастер /setup мог настраивать Nginx, Caddy, Certbot и фаервол
+# Права sudo для пользователя nami: мастер /setup настраивает Nginx, Caddy, Certbot и
+# брандмауэр от его имени.
+#
+# Список именно перечисляет команды, а не даёт NOPASSWD: ALL. Nami слушает сеть, и любое
+# выполнение кода в нём при полном доступе сразу давало бы root на всей машине.
+#
+# Пути ищем через command -v: sudoers принимает только абсолютные, а лежат они по-разному в
+# разных дистрибутивах. Для того, что ставится позже (certbot), берём обычные пути.
+#
+# Полностью безопасным список не станет: установка пакетов и запись в /etc/nginx - это по сути
+# root-эквивалент. Но поверхность сужается с «что угодно» до «то, что нужно мастеру».
 if [ -d /etc/sudoers.d ]; then
     log_info "Настройка прав sudoers для пользователя nami..."
-    cat << 'EOF' | $SUDO tee /etc/sudoers.d/nami > /dev/null
-nami ALL=(ALL) NOPASSWD: ALL
+
+    # Абсолютный путь команды; пусто, если её нет или это встроенная команда оболочки.
+    # Проверка на "/" обязательна: `command -v true` возвращает само слово (true - builtin
+    # bash), а sudoers принимает только абсолютные пути и на относительном ломается целиком.
+    bin_path() {
+        local p
+        p="$(command -v "$1" 2>/dev/null || true)"
+        case "$p" in
+            /*) printf '%s' "$p";;
+            *) for d in /bin /usr/bin /sbin /usr/sbin /usr/local/bin; do
+                   if [ -x "$d/$1" ]; then printf '%s' "$d/$1"; return 0; fi
+               done;;
+        esac
+        # Ничего не нашли - это не ошибка: под `set -e` ненулевой код уронил бы установщик.
+        return 0
+    }
+
+    SUDO_CMDS=""
+    add_cmd() {
+        [ -n "$1" ] || return 0
+        SUDO_CMDS="${SUDO_CMDS}${SUDO_CMDS:+, }$1"
+    }
+
+    SYSTEMCTL="$(bin_path systemctl)"
+    if [ -n "$SYSTEMCTL" ]; then
+        for unit in nami nginx caddy; do
+            for action in restart reload enable; do
+                add_cmd "$SYSTEMCTL $action $unit"
+            done
+        done
+        add_cmd "$SYSTEMCTL is-active nginx"
+    fi
+
+    # `sudo -n true` - это проверка самого сервера, доступен ли ему sudo без пароля.
+    add_cmd "$(bin_path true)"
+
+    TEE="$(bin_path tee)"
+    if [ -n "$TEE" ]; then
+        # Только конкретные файлы, которые мастер и правит.
+        add_cmd "$TEE /etc/nginx/sites-available/nami.conf"
+        add_cmd "$TEE /etc/nginx/conf.d/nami.conf"
+        add_cmd "$TEE /etc/caddy/Caddyfile"
+        add_cmd "$TEE ${DATA_DIR}/config.toml"
+    fi
+
+    MKDIR="$(bin_path mkdir)"
+    if [ -n "$MKDIR" ]; then
+        add_cmd "$MKDIR -p /etc/nginx/conf.d"
+        add_cmd "$MKDIR -p /etc/nginx/sites-enabled"
+        add_cmd "$MKDIR -p /etc/nginx/sites-available"
+        add_cmd "$MKDIR -p /etc/caddy"
+    fi
+
+    LN="$(bin_path ln)"
+    if [ -n "$LN" ]; then add_cmd "$LN -sf /etc/nginx/sites-available/nami.conf /etc/nginx/sites-enabled/nami.conf"; fi
+
+    NGINX_BIN="$(bin_path nginx)"
+    if [ -n "$NGINX_BIN" ]; then add_cmd "$NGINX_BIN -t"; fi
+
+    UFW="$(bin_path ufw)"
+    if [ -n "$UFW" ]; then
+        add_cmd "$UFW allow 80/tcp"
+        add_cmd "$UFW allow 443/tcp"
+    fi
+
+    FIREWALL_CMD="$(bin_path firewall-cmd)"
+    if [ -n "$FIREWALL_CMD" ]; then
+        add_cmd "$FIREWALL_CMD --add-port=80/tcp --permanent"
+        add_cmd "$FIREWALL_CMD --add-port=443/tcp --permanent"
+        add_cmd "$FIREWALL_CMD --reload"
+    fi
+
+    # Certbot и пакетные менеджеры: сам certbot ставится уже после этого шага, поэтому путь
+    # берём обычный для дистрибутива, а не через command -v.
+    CERTBOT="$(bin_path certbot)"
+    add_cmd "${CERTBOT:-/usr/bin/certbot} --nginx *"
+    for pm in apt-get dnf yum pacman apk zypper; do
+        PM_PATH="$(bin_path $pm)"
+        if [ -n "$PM_PATH" ]; then add_cmd "$PM_PATH *"; fi
+    done
+
+    cat << EOF | $SUDO tee /etc/sudoers.d/nami > /dev/null
+# Создан установщиком Nami. Перечислены только команды, нужные мастеру /setup:
+# настройка Nginx или Caddy, выпуск сертификата и правила брандмауэра.
+nami ALL=(root) NOPASSWD: ${SUDO_CMDS}
 EOF
     $SUDO chmod 0440 /etc/sudoers.d/nami
+
+    # Ошибка в sudoers ломает sudo для всей машины, поэтому проверяем и откатываем.
+    if command -v visudo >/dev/null 2>&1; then
+        if $SUDO visudo -cf /etc/sudoers.d/nami >/dev/null 2>&1; then
+            log_ok "Права sudo для nami ограничены списком нужных команд."
+        else
+            $SUDO rm -f /etc/sudoers.d/nami
+            log_warn "sudoers не прошёл проверку и удалён — мастер /setup не сможет настроить домен."
+            log_warn "Настройте Nginx или Caddy вручную либо запустите 'sudo nami domain <домен>' от root."
+        fi
+    fi
 fi
 
 # 9. Настройка директории данных и каталога конфигурации caddy

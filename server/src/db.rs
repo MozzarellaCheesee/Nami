@@ -75,6 +75,9 @@ CREATE TABLE IF NOT EXISTS state (
     field       TEXT NOT NULL,
     value       TEXT NOT NULL,   -- JSON-значение
     updated_at  INTEGER NOT NULL,
+    -- Значение до последней правки. По нему push отличает новую правку от повторно
+    -- доставленного старого запроса, когда метки совпали с точностью до секунды.
+    prev_value  TEXT,
     PRIMARY KEY (user_id, entity, id, field)
 );
 -- Запрос синхронизации ровно один: "всё, что новее метки" - под него и индекс.
@@ -296,6 +299,10 @@ pub fn migrate(conn: &Connection) -> crate::Res<()> {
              COMMIT;",
         )?;
     }
+    // Предыдущее значение поля: по нему push отличает новую правку от повторно доставленного
+    // старого запроса, когда метки совпали с точностью до секунды (см. sync::push).
+    let _ = conn.execute("ALTER TABLE state ADD COLUMN prev_value TEXT", []);
+
     conn.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_tracks_library ON tracks(library_id);
          CREATE INDEX IF NOT EXISTS idx_tracks_hash ON tracks(file_hash);

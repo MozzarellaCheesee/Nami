@@ -15,6 +15,8 @@ import org.json.JSONObject
 class YandexStationTransport(
     override val device: RemoteDevice,
     private val oauthToken: String,
+    /** Хранилище отпечатков сертификатов станций - см. [GlagolClient]. */
+    private val pins: StationPins = StationPins.None,
 ) : RemoteTransport {
 
     private var client: GlagolClient? = null
@@ -27,7 +29,13 @@ class YandexStationTransport(
         val deviceId = device.extras["deviceId"] ?: error("${device.name}: станция не сообщила deviceId")
         val platform = device.extras["platform"].orEmpty()
         val token = fetchGlagolDeviceToken(oauthToken, deviceId, platform)
-        GlagolClient(device.host, device.port, token).also {
+        GlagolClient(
+            host = device.host,
+            port = device.port,
+            deviceToken = token,
+            knownFingerprint = pins.get(deviceId),
+            onFingerprint = { pins.put(deviceId, it) },
+        ).also {
             it.connect()
             client = it
         }
@@ -96,6 +104,27 @@ class YandexStationTransport(
     }
 }
 
+/** Отпечатки сертификатов станций, запомненные при первом подключении. Переживает перезапуск
+ * приложения: иначе сверять было бы не с чем и проверка ничего не давала бы. */
+interface StationPins {
+    fun get(deviceId: String): String?
+    fun put(deviceId: String, fingerprint: String)
+
+    /** Для тестов и для вызова без хранилища: каждое подключение считается первым. */
+    object None : StationPins {
+        override fun get(deviceId: String): String? = null
+        override fun put(deviceId: String, fingerprint: String) = Unit
+    }
+}
+
+private class PrefsStationPins(context: Context) : StationPins {
+    private val prefs = context.getSharedPreferences("nami_station_pins", Context.MODE_PRIVATE)
+    override fun get(deviceId: String): String? = prefs.getString(deviceId, null)
+    override fun put(deviceId: String, fingerprint: String) {
+        prefs.edit().putString(deviceId, fingerprint).apply()
+    }
+}
+
 /** Создаётся только при включённом тумблере "Яндекс Станция (Beta)" - выключенный тумблер
  * означает, что mDNS на `_yandexio._tcp` не запускается вообще. */
 class YandexStationDiscovery(
@@ -120,6 +149,6 @@ class YandexStationDiscovery(
     override fun transportFor(device: RemoteDevice): RemoteTransport {
         val token = settings.yandexOAuthToken.value
         check(!token.isNullOrBlank()) { "Войдите в Яндекс ID в настройках плеера" }
-        return YandexStationTransport(device, token)
+        return YandexStationTransport(device, token, PrefsStationPins(context))
     }
 }
