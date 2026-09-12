@@ -25,15 +25,24 @@ private const val TAG = "Glagol"
  * текстовые кадры в обе стороны, а ради них тянуть OkHttp (единственная альтернатива - в Android
  * SDK WebSocket-клиента нет) в проект, который весь построен на java.net, несоразмерно.
  *
- * Проверка сертификата станции выключена намеренно и осознанно: станция предъявляет
- * самоподписанный сертификат на свой же локальный IP, проверить его нечем и не у кого - ровно так
- * же поступает референсная реализация (ssl=False). Соединение при этом всё равно шифруется, а
- * доверять тут можно только тому, что устройство ответило на нашем же device_id в локальной сети.
+ * Сертификат станции самоподписанный и выписан на локальный IP, так что проверить его по цепочке
+ * доверия нечем - референсная реализация на этом месте просто выключает проверку (ssl=False).
+ * Здесь вместо этого доверие при первом подключении: отпечаток запоминается ([onFingerprint]) и
+ * при каждом следующем сверяется ([knownFingerprint]). Полноценной проверкой это не становится -
+ * подменить станцию можно в момент самого первого соединения, - но дальше подмена в локальной сети
+ * уже не проходит молча, а именно она и уводила бы токен Яндекса.
+ *
+ * Смена отпечатка (перепрошивка станции, замена устройства) роняет подключение с понятным текстом:
+ * автоматически принимать новый ключ нельзя, иначе вся проверка теряет смысл.
  */
 class GlagolClient(
     private val host: String,
     private val port: Int,
     private val deviceToken: String,
+    /** Отпечаток, запомненный при прошлом подключении; null - подключаемся впервые. */
+    private val knownFingerprint: String? = null,
+    /** Вызывается с отпечатком первого успешного подключения, чтобы его сохранить. */
+    private val onFingerprint: (String) -> Unit = {},
 ) {
     private var socket: SSLSocket? = null
     private var output: OutputStream? = null
@@ -51,6 +60,21 @@ class GlagolClient(
         val s = ssl.socketFactory.createSocket(host, port) as SSLSocket
         s.soTimeout = 0
         s.startHandshake()
+
+        // Сверяем отпечаток сразу после рукопожатия и до отправки чего-либо: токен станции
+        // не должен уехать на чужое устройство даже в первом кадре.
+        val fingerprint = s.session.peerCertificates.firstOrNull()
+            ?.let { sha256Hex(it.encoded) }
+            ?: run { s.close(); error("станция не предъявила сертификат") }
+        if (knownFingerprint == null) {
+            onFingerprint(fingerprint)
+        } else if (!knownFingerprint.equals(fingerprint, ignoreCase = true)) {
+            s.close()
+            error(
+                "сертификат станции изменился - подключение прервано. Если станцию перепрошили " +
+                    "или это другое устройство, забудьте её в настройках и подключитесь заново",
+            )
+        }
         val input = BufferedInputStream(s.inputStream)
         val out = s.outputStream
 
@@ -179,6 +203,13 @@ internal fun encodeExternalCommand(name: String, payloadJson: String?): ByteArra
     return bytes.toByteArray()
 }
 
+private fun sha256Hex(bytes: ByteArray): String =
+    java.security.MessageDigest.getInstance("SHA-256")
+        .digest(bytes)
+        .joinToString("") { "%02x".format(it) }
+
+/** Цепочку доверия проверять нечем: сертификат самоподписанный и выписан на локальный IP.
+ * Вместо неё [GlagolClient] сверяет отпечаток с запомненным при первом подключении. */
 private object TrustAnyCertificate : X509TrustManager {
     override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
     override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit

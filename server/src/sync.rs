@@ -118,21 +118,37 @@ pub fn pull(conn: &Connection, user_id: i64, since: i64, cursor: i64) -> rusqlit
     Ok(Pull { now: now(), changes, truncated, next_cursor })
 }
 
-/// Применяет изменения клиента. LWW по полю: побеждает более поздняя метка,
-/// При равной секундной метке меняющееся значение принимается: Android хранит миллисекунды,
-/// а старый wire-формат — секунды, поэтому две быстрые правки иначе терялись.
+/// Применяет изменения клиента. LWW по полю: побеждает более поздняя метка.
+///
+/// Метка на проводе - в секундах, а Android хранит миллисекунды, поэтому две правки одной и той
+/// же секунды приходят с равными метками, и при равенстве приходится принимать отличающееся
+/// значение - иначе вторая правка терялась бы. Само по себе это означало, что побеждает порядок
+/// прихода запросов, и на ретраях данные терялись: если ответ на push не дошёл до устройства, оно
+/// повторяло тот же запрос, и повтор откатывал правку, сделанную тем временем на другом
+/// устройстве.
+///
+/// Поэтому вместе со значением хранится и предыдущее: возврат к нему при той же метке - это не
+/// новая правка, а повторно доставленный старый запрос, и он отвергается.
+///
+/// ponytail: колонка с предыдущим значением вместо миллисекунд на проводе. Миллисекунды убрали бы
+/// саму коллизию меток, но формат можно менять только вместе с клиентом, а сервер и телефон
+/// обновляются порознь. Переходить, когда протоколу и так понадобится версия.
 pub fn push(conn: &mut Connection, user_id: i64, changes: &[Change]) -> rusqlite::Result<PushReport> {
     let t = now();
     let mut rep = PushReport { now: t, ..Default::default() };
     let tx = conn.transaction()?;
     {
         let mut stmt = tx.prepare(
-            "INSERT INTO state (user_id, entity, id, field, value, updated_at)
-             VALUES (?6,?1,?2,?3,?4,?5)
+            "INSERT INTO state (user_id, entity, id, field, value, updated_at, prev_value)
+             VALUES (?6,?1,?2,?3,?4,?5,NULL)
              ON CONFLICT(user_id, entity, id, field) DO UPDATE SET
-                value = excluded.value, updated_at = excluded.updated_at
+                prev_value = state.value,
+                value = excluded.value,
+                updated_at = excluded.updated_at
              WHERE excluded.updated_at > state.updated_at
-                OR (excluded.updated_at = state.updated_at AND excluded.value != state.value)",
+                OR (excluded.updated_at = state.updated_at
+                    AND excluded.value != state.value
+                    AND (state.prev_value IS NULL OR excluded.value != state.prev_value))",
         )?;
         for c in changes {
             if !ENTITIES.contains(&c.entity.as_str())
@@ -284,6 +300,36 @@ pub fn now_playing(
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn повтор_запроса_не_откатывает_чужую_правку() {
+        let mut c = Connection::open_in_memory().unwrap();
+        c.execute_batch(crate::db::SCHEMA).unwrap();
+
+        let change = |value: &str| Change {
+            entity: "rating".into(),
+            id: "1".into(),
+            field: "stars".into(),
+            value: serde_json::json!(value),
+            updated_at: 100,
+        };
+
+        // Обе правки сделаны в одну и ту же секунду на разных устройствах.
+        push(&mut c, 0, &[change("3")]).unwrap();
+        push(&mut c, 0, &[change("5")]).unwrap();
+
+        let after_both: String = c
+            .query_row("SELECT value FROM state WHERE entity='rating'", [], |r| r.get(0))
+            .unwrap();
+
+        // Ответ на первый push потерялся по сети, устройство повторяет тот же запрос.
+        push(&mut c, 0, &[change("3")]).unwrap();
+
+        let after_retry: String = c
+            .query_row("SELECT value FROM state WHERE entity='rating'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(after_both, after_retry, "повтор запроса изменил уже применённое состояние");
+    }
     use super::*;
 
     fn db() -> Connection {
