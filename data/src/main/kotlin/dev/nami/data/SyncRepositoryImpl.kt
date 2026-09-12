@@ -16,6 +16,7 @@ import dev.nami.core.database.entity.PlayHistoryEntity
 import dev.nami.core.database.entity.PlaylistEntity
 import dev.nami.core.database.entity.PlaylistTrackEntity
 import dev.nami.core.database.entity.TagEntity
+import dev.nami.core.database.entity.TrackEntity
 import dev.nami.core.database.entity.TrackTagEntity
 import dev.nami.domain.SettingsRepository
 import dev.nami.domain.SyncRepository
@@ -402,21 +403,47 @@ class SyncRepositoryImpl @Inject constructor(
         // Серверное состояние ссылается только на id серверной библиотеки. Локальные Room id
         // разных устройств намеренно никогда не уходят в sync-протокол.
         val localTracks = trackDao.allRaw()
-        val matchedIds = NamiServerClient.matchTracks(
-            cfg,
-            localTracks.map { track ->
-                NamiServerClient.MatchTrackRequest(
-                    title = track.title,
-                    artist = track.artistId?.let { artistDao.findById(it)?.name },
-                    durationMs = track.durationMs,
-                    fileHash = track.fileHash,
-                )
-            },
-        ) ?: return false
-        val serverIds = localTracks.zip(matchedIds).mapNotNull { (track, matched) ->
+
+        // На сопоставление уходят только те треки, чей серверный id ещё неизвестен.
+        // У зеркала серверной библиотеки он зашит прямо в id, а для локальных файлов
+        // однажды найденное соответствие лежит в кеше - иначе вся библиотека целиком
+        // уезжала бы на сервер при каждой синхронизации.
+        val cache = matchCache(cfg)
+        val known = HashMap<String, String>(localTracks.size)
+        val unresolved = ArrayList<TrackEntity>()
+        for (track in localTracks) {
             val direct = track.id.removePrefix("server_").toLongOrNull()
-            (direct ?: matched)?.let { track.id to it.toString() }
-        }.toMap()
+            if (direct != null) {
+                known[track.id] = direct.toString()
+                continue
+            }
+            val cached = cache.getString(matchKey(track), null)
+            if (cached != null) known[track.id] = cached else unresolved += track
+        }
+
+        if (unresolved.isNotEmpty()) {
+            val matchedIds = NamiServerClient.matchTracks(
+                cfg,
+                unresolved.map { track ->
+                    NamiServerClient.MatchTrackRequest(
+                        title = track.title,
+                        artist = track.artistId?.let { artistDao.findById(it)?.name },
+                        durationMs = track.durationMs,
+                        fileHash = track.fileHash,
+                    )
+                },
+            ) ?: return false
+            val editor = cache.edit()
+            unresolved.zip(matchedIds).forEach { (track, matched) ->
+                if (matched == null) return@forEach
+                known[track.id] = matched.toString()
+                // Запоминаем только совпадения: промах может стать совпадением, как только
+                // трек появится на сервере, поэтому его переспрашиваем каждый раз.
+                editor.putString(matchKey(track), matched.toString())
+            }
+            editor.apply()
+        }
+        val serverIds: Map<String, String> = known
 
         // 1. Плейлисты и треки в плейлистах
         val playlists = playlistDao.allForSync()
@@ -454,7 +481,13 @@ class SyncRepositoryImpl @Inject constructor(
                     put("entity", "playlist_track")
                     put("id", "${p.id}:$serverTrackId")
                     put("field", "position")
-                    put("value", index)
+                    // Хранимая позиция, а не номер в списке. Удаление трека из плейлиста
+                    // позиции не переиндексирует, поэтому в базе остаются пропуски, и номер
+                    // в отсортированном списке расходится с position. Пушатся при этом только
+                    // изменившиеся строки, так что новый трек уезжал с чужим номером и
+                    // сталкивался с позицией соседа - порядок на другом устройстве
+                    // становился произвольным. На приёме значение кладётся прямо в position.
+                    put("value", entry?.position ?: index)
                     put("updated_at", (changedAt / 1000L).coerceAtLeast(1L).coerceAtMost(nowSec))
                 })
             }
@@ -693,6 +726,23 @@ class SyncRepositoryImpl @Inject constructor(
         val cert = settingsRepository.namiServerCertSha256.value
         return NamiServerClient.Config(urls.first(), token, cert, urls)
     }
+
+    /** Кеш «локальный трек -> id на сервере». Живёт отдельно от остального состояния
+     * синхронизации, потому что чистится целиком при смене сервера: чужие соответствия
+     * бессмысленны. */
+    private fun matchCache(cfg: NamiServerClient.Config): android.content.SharedPreferences {
+        val scope = syncScope(cfg)
+        val cache = context.getSharedPreferences("nami_match_cache", Context.MODE_PRIVATE)
+        if (cache.getString("scope", null) != scope) {
+            cache.edit().clear().putString("scope", scope).apply()
+        }
+        return cache
+    }
+
+    /** Ключ кеша включает то, по чему сервер и сопоставляет трек: сменились теги или файл -
+     * прежнее соответствие могло перестать быть верным, и его нужно пересчитать. */
+    private fun matchKey(track: TrackEntity): String =
+        "m|${track.id}|${track.fileHash.orEmpty()}|${track.title}|${track.durationMs}"
 
     private fun syncScope(cfg: NamiServerClient.Config): String {
         val identity = listOf(cfg.token, cfg.certSha256.orEmpty(), *cfg.bases.sorted().toTypedArray())
