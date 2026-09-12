@@ -37,6 +37,7 @@ import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.Done
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -191,6 +192,9 @@ fun LibraryScreen(
                         onCancel = viewModel::clearSelection,
                         onSelectAll = viewModel::selectAllTracks,
                         onDelete = viewModel::deleteSelectedTracks,
+                        onDeleteEverywhere = if (viewModel.isServerActive()) {
+                            viewModel::deleteSelectedTracksEverywhere
+                        } else null,
                         onAddToPlaylist = { showAddSelectedToPlaylist = true },
                         onLikeSelected = viewModel::likeSelectedTracks,
                         onEditTags = { showBatchEditDialog = true },
@@ -247,6 +251,9 @@ fun LibraryScreen(
                             onLikeTrack = { trackId -> viewModel.likeTrack(trackId) },
                             onAddToQueueTrack = { track -> viewModel.addToQueue(track) },
                             onDelete = { trackId -> viewModel.deleteTrack(trackId) },
+                            onDeleteEverywhere = if (viewModel.isServerActive()) {
+                                { trackId -> viewModel.deleteTrackEverywhere(trackId) }
+                            } else null,
                             onToggleSelection = { trackId -> viewModel.toggleTrackSelection(trackId) },
                             onSetSelection = { ids -> viewModel.setSelectedTracks(ids) },
                             onRenameTrack = { track -> renameTrack = track },
@@ -417,6 +424,7 @@ private fun SelectionTopBar(
     onCancel: () -> Unit,
     onSelectAll: () -> Unit,
     onDelete: () -> Unit,
+    onDeleteEverywhere: (() -> Unit)?,
     onAddToPlaylist: () -> Unit,
     onLikeSelected: () -> Unit,
     onEditTags: () -> Unit,
@@ -452,6 +460,9 @@ private fun SelectionTopBar(
                 add(ContextAction("Отправить на сервер", Icons.Outlined.CloudUpload, onClick = onUploadToServer))
             }
             add(ContextAction("Удалить", Icons.Outlined.Delete, onClick = onDelete))
+            if (onDeleteEverywhere != null) {
+                add(ContextAction("Удалить везде", Icons.Outlined.DeleteForever, onClick = onDeleteEverywhere))
+            }
         }
         ContextActionSheet(
             onDismiss = { showMenu = false },
@@ -671,6 +682,7 @@ private fun TrackListContent(
     onLikeTrack: (TrackId) -> Unit,
     onAddToQueueTrack: (Track) -> Unit,
     onDelete: (TrackId) -> Unit,
+    onDeleteEverywhere: ((TrackId) -> Unit)?,
     onToggleSelection: (TrackId) -> Unit,
     onSetSelection: (Set<TrackId>) -> Unit,
     onRenameTrack: (Track) -> Unit,
@@ -800,6 +812,11 @@ private fun TrackListContent(
                         onLikeTrack = if (selectionMode) null else { { onLikeTrack(track.id) } },
                         onAddToQueue = if (selectionMode || nowPlaying == null) null else { { onAddToQueueTrack(track) } },
                         onDelete = if (selectionMode) null else { { onDelete(track.id) } },
+                        onDeleteEverywhere = if (selectionMode || onDeleteEverywhere == null) {
+                            null
+                        } else {
+                            { onDeleteEverywhere(track.id) }
+                        },
                         onRename = if (selectionMode) null else { { onRenameTrack(track) } },
                         onEditNote = if (selectionMode) null else { { onEditNoteTrack(track) } },
                         onEditTags = if (selectionMode) null else { { onEditTagsTrack(track) } },

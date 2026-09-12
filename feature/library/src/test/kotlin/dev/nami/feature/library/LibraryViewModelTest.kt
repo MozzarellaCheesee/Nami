@@ -124,6 +124,91 @@ class LibraryViewModelTest {
         override suspend fun stop() {}
     }
 
+    private class RecordingServerLibraryRepository : dev.nami.domain.ServerLibraryRepository {
+        val idsDeleted = mutableListOf<Long>()
+        val matchDeleted = mutableListOf<dev.nami.domain.ServerTrackMeta>()
+
+        override fun isServerActive() = true
+        override suspend fun listTracks(limit: Int, offset: Int): List<dev.nami.domain.ServerTrackMeta>? = null
+        override suspend fun downloadTrack(serverTrackId: Long): java.io.File? = null
+        override fun cachedFile(serverTrackId: Long): java.io.File? = null
+        override fun cachedArtwork(serverTrackId: Long): java.io.File? = null
+        override fun cachedTrackIds(): Set<Long> = emptySet()
+        override fun removeFromCache(serverTrackId: Long) {}
+        override suspend fun uploadLocalTrack(path: String): String? = null
+        override suspend fun createGuestLink(
+            title: String,
+            tracks: List<Triple<String?, String, Long>>,
+            ttlSecs: Long?,
+            maxPlays: Int?,
+        ): String? = null
+
+        override suspend fun deleteTracks(serverTrackIds: List<Long>): List<Long> {
+            idsDeleted += serverTrackIds
+            return serverTrackIds
+        }
+
+        override suspend fun deleteMatchingTracks(
+            tracks: List<dev.nami.domain.ServerTrackMeta>,
+        ): List<Long> {
+            matchDeleted += tracks
+            return emptyList()
+        }
+    }
+
+    /** Фейк библиотеки, записывающий удаления. Общий для тестов удаления - остальные методы
+     * им не нужны. */
+    private fun deleteRecordingRepository(deletedIds: MutableList<TrackId>) =
+        object : LibraryRepository {
+            override suspend fun libraryHealthReport() = error("unused")
+            override suspend fun batchEditTracks(ids: List<dev.nami.core.model.TrackId>, artistName: String?, albumName: String?, year: Int?, genre: String?) = error("unused")
+            override suspend fun searchMusicBrainz(title: String, artistName: String?) = error("unused")
+            override fun tracks() = flowOf(PagingData.empty<Track>())
+            override suspend fun allTracksOrdered(): List<Track> = emptyList()
+            override fun track(id: TrackId) = flowOf<Track?>(null)
+            override fun albums() = flowOf(PagingData.empty<AlbumSummary>())
+            override fun recentAlbums(limit: Int) = flowOf(emptyList<AlbumSummary>())
+            override fun featuredArtists(limit: Int) = flowOf(emptyList<dev.nami.core.model.Artist>())
+            override fun artists() = flowOf(PagingData.empty<Artist>())
+            override fun album(id: AlbumId) = flowOf<Album?>(null)
+            override fun artist(id: ArtistId) = flowOf<Artist?>(null)
+            override fun tracksInAlbum(id: AlbumId) = flowOf(emptyList<Track>())
+override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
+            override suspend fun setTrackCover(id: TrackId, imageUri: String) = error("unused")
+            override suspend fun renameAlbum(id: AlbumId, title: String) = error("unused")
+            override suspend fun createAlbum(title: String, artistId: ArtistId?): AlbumId = error("unused")
+            override suspend fun deleteAlbum(id: AlbumId) = error("unused")
+            override suspend fun setAlbumCover(id: AlbumId, imageUri: String) = error("unused")
+            override suspend fun setAlbumIsSingle(id: AlbumId, isSingle: Boolean) = error("unused")
+            override suspend fun setAlbumYear(id: AlbumId, year: Int?) = error("unused")
+            override suspend fun setAlbumArtist(id: AlbumId, artistId: ArtistId?) = error("unused")
+            override fun albumArtists(id: AlbumId) = flowOf(emptyList<dev.nami.core.model.Artist>())
+            override suspend fun addAlbumArtist(id: AlbumId, artistId: ArtistId) = error("unused")
+            override suspend fun removeAlbumArtist(id: AlbumId, artistId: ArtistId) = error("unused")
+            override suspend fun addTrackToAlbum(trackId: TrackId, albumId: AlbumId) = error("unused")
+            override suspend fun removeTrackFromAlbum(trackId: TrackId) = error("unused")
+            override suspend fun addTrackToArtist(trackId: TrackId, artistId: ArtistId) = error("unused")
+            override suspend fun removeTrackFromArtist(trackId: TrackId) = error("unused")
+            override suspend fun renameArtist(id: ArtistId, name: String) = error("unused")
+            override suspend fun setArtistPhoto(id: ArtistId, imageUri: String) = error("unused")
+            override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
+            override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
+            override suspend fun incrementPlayCount(id: TrackId) {}
+            override suspend fun setTrackRating(id: TrackId, rating: Int?) {}
+            override suspend fun recordPlayHistory(id: TrackId, playedAt: Long, durationMs: Long) {}
+            override suspend fun dailyListeningMinutes(days: Int) = emptyList<dev.nami.domain.DayActivity>()
+            override suspend fun listeningSummary(days: Int) = dev.nami.domain.ListeningSummary(0, 0, 0)
+            override suspend fun hourOfDayMinutes(days: Int) = List(24) { 0 }
+            override suspend fun topTracks(days: Int, limit: Int) = emptyList<dev.nami.domain.TopTrackStat>()
+            override suspend fun setTrackReplayGain(id: TrackId, gainDb: Float) {}
+            override suspend fun setTrackNote(id: TrackId, note: String?) {}
+            override suspend fun incrementSkipCount(id: TrackId) {}
+            override suspend fun setTrackBpmKey(id: TrackId, bpm: Float?, musicalKey: String?) {}
+            override suspend fun import(source: ImportSource) = flowOf(ImportProgress(0, 0))
+            override suspend fun deleteTrack(id: TrackId) {}
+            override suspend fun deleteTracks(ids: List<TrackId>) { deletedIds.addAll(ids) }
+        }
+
     @Test
     fun `importing clears progress once finished`() = runTest {
         val fakeRepo = object : LibraryRepository {
@@ -611,57 +696,50 @@ override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
     }
 
     @Test
+    fun `deleteSelectedTracks leaves the server untouched`() = runTest {
+        val deletedIds = mutableListOf<TrackId>()
+        val server = RecordingServerLibraryRepository()
+        val viewModel = LibraryViewModel(
+            deleteRecordingRepository(deletedIds), noOpSearchRepo, FakeTrashRepository(),
+            FakePlayerRepository(), NoOpPlaylistRepository, NoOpSettingsRepository,
+            NoOpTagRepository, server,
+        )
+        // В выборке и обычный файл, и зеркало серверной библиотеки: у зеркала серверный id
+        // известен сразу, так что именно на нём видно, полез ли код на сервер.
+        viewModel.toggleTrackSelection(TrackId("t1"))
+        viewModel.toggleTrackSelection(TrackId("server_42"))
+
+        viewModel.deleteSelectedTracks()
+
+        assertEquals(listOf(TrackId("t1")), deletedIds)
+        // "Удалить" - это только устройство: трек на сервере обязан остаться.
+        assertEquals(emptyList<dev.nami.domain.ServerTrackMeta>(), server.matchDeleted)
+        assertEquals(emptyList<Long>(), server.idsDeleted)
+    }
+
+    @Test
+    fun `deleteSelectedTracksEverywhere also deletes on the server`() = runTest {
+        val deletedIds = mutableListOf<TrackId>()
+        val server = RecordingServerLibraryRepository()
+        val viewModel = LibraryViewModel(
+            deleteRecordingRepository(deletedIds), noOpSearchRepo, FakeTrashRepository(),
+            FakePlayerRepository(), NoOpPlaylistRepository, NoOpSettingsRepository,
+            NoOpTagRepository, server,
+        )
+        // Зеркало серверной библиотеки: id известен сразу, сопоставлять нечего.
+        viewModel.toggleTrackSelection(TrackId("server_42"))
+
+        viewModel.deleteSelectedTracksEverywhere()
+
+        assertEquals(listOf(42L), server.idsDeleted)
+        // Зеркало локально не удаляется: его уберёт сам серверный репозиторий.
+        assertEquals(emptyList<TrackId>(), deletedIds)
+    }
+
+    @Test
     fun `deleteSelectedTracks deletes all selected ids and clears selection`() = runTest {
         val deletedIds = mutableListOf<TrackId>()
-        val fakeLibraryRepository = object : LibraryRepository {
-            override suspend fun libraryHealthReport() = error("unused")
-            override suspend fun batchEditTracks(ids: List<dev.nami.core.model.TrackId>, artistName: String?, albumName: String?, year: Int?, genre: String?) = error("unused")
-            override suspend fun searchMusicBrainz(title: String, artistName: String?) = error("unused")
-            override fun tracks() = flowOf(PagingData.empty<Track>())
-            override suspend fun allTracksOrdered(): List<Track> = emptyList()
-            override fun track(id: TrackId) = flowOf<Track?>(null)
-            override fun albums() = flowOf(PagingData.empty<AlbumSummary>())
-            override fun recentAlbums(limit: Int) = flowOf(emptyList<AlbumSummary>())
-            override fun featuredArtists(limit: Int) = flowOf(emptyList<dev.nami.core.model.Artist>())
-            override fun artists() = flowOf(PagingData.empty<Artist>())
-            override fun album(id: AlbumId) = flowOf<Album?>(null)
-            override fun artist(id: ArtistId) = flowOf<Artist?>(null)
-            override fun tracksInAlbum(id: AlbumId) = flowOf(emptyList<Track>())
-override suspend fun renameTrack(id: TrackId, title: String) = error("unused")
-            override suspend fun setTrackCover(id: TrackId, imageUri: String) = error("unused")
-            override suspend fun renameAlbum(id: AlbumId, title: String) = error("unused")
-            override suspend fun createAlbum(title: String, artistId: ArtistId?): AlbumId = error("unused")
-            override suspend fun deleteAlbum(id: AlbumId) = error("unused")
-            override suspend fun setAlbumCover(id: AlbumId, imageUri: String) = error("unused")
-            override suspend fun setAlbumIsSingle(id: AlbumId, isSingle: Boolean) = error("unused")
-            override suspend fun setAlbumYear(id: AlbumId, year: Int?) = error("unused")
-            override suspend fun setAlbumArtist(id: AlbumId, artistId: ArtistId?) = error("unused")
-            override fun albumArtists(id: AlbumId) = flowOf(emptyList<dev.nami.core.model.Artist>())
-            override suspend fun addAlbumArtist(id: AlbumId, artistId: ArtistId) = error("unused")
-            override suspend fun removeAlbumArtist(id: AlbumId, artistId: ArtistId) = error("unused")
-            override suspend fun addTrackToAlbum(trackId: TrackId, albumId: AlbumId) = error("unused")
-            override suspend fun removeTrackFromAlbum(trackId: TrackId) = error("unused")
-            override suspend fun addTrackToArtist(trackId: TrackId, artistId: ArtistId) = error("unused")
-            override suspend fun removeTrackFromArtist(trackId: TrackId) = error("unused")
-            override suspend fun renameArtist(id: ArtistId, name: String) = error("unused")
-            override suspend fun setArtistPhoto(id: ArtistId, imageUri: String) = error("unused")
-            override fun tracksByArtist(id: ArtistId) = flowOf(emptyList<Track>())
-            override fun albumsByArtist(id: ArtistId) = flowOf(emptyList<AlbumSummary>())
-            override suspend fun incrementPlayCount(id: TrackId) {}
-            override suspend fun setTrackRating(id: TrackId, rating: Int?) {}
-            override suspend fun recordPlayHistory(id: TrackId, playedAt: Long, durationMs: Long) {}
-            override suspend fun dailyListeningMinutes(days: Int) = emptyList<dev.nami.domain.DayActivity>()
-            override suspend fun listeningSummary(days: Int) = dev.nami.domain.ListeningSummary(0, 0, 0)
-            override suspend fun hourOfDayMinutes(days: Int) = List(24) { 0 }
-            override suspend fun topTracks(days: Int, limit: Int) = emptyList<dev.nami.domain.TopTrackStat>()
-            override suspend fun setTrackReplayGain(id: TrackId, gainDb: Float) {}
-            override suspend fun setTrackNote(id: TrackId, note: String?) {}
-            override suspend fun incrementSkipCount(id: TrackId) {}
-            override suspend fun setTrackBpmKey(id: TrackId, bpm: Float?, musicalKey: String?) {}
-            override suspend fun import(source: ImportSource) = flowOf(ImportProgress(0, 0))
-            override suspend fun deleteTrack(id: TrackId) {}
-            override suspend fun deleteTracks(ids: List<TrackId>) { deletedIds.addAll(ids) }
-        }
+        val fakeLibraryRepository = deleteRecordingRepository(deletedIds)
         val viewModel = LibraryViewModel(fakeLibraryRepository, noOpSearchRepo, FakeTrashRepository(), FakePlayerRepository(), NoOpPlaylistRepository, NoOpSettingsRepository, NoOpTagRepository, NoOpServerLibraryRepository)
         viewModel.toggleTrackSelection(TrackId("t1"))
         viewModel.toggleTrackSelection(TrackId("t2"))

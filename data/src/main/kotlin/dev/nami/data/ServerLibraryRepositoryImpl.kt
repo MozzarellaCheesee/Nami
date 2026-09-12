@@ -439,6 +439,24 @@ class ServerLibraryRepositoryImpl @Inject constructor(
         true
     }
 
+    override suspend fun deleteMatchingTracks(tracks: List<ServerTrackMeta>): List<Long> =
+        withContext(Dispatchers.IO) {
+            if (tracks.isEmpty()) return@withContext emptyList()
+            val cfg = activeConfig() ?: return@withContext emptyList()
+            // Сопоставляем разом: matchTracks сам режет список на куски и возвращает ответы
+            // в том же порядке. Известный id (зеркало серверной библиотеки) матчить не нужно.
+            val matched = NamiServerClient.matchTracks(
+                cfg,
+                tracks.map {
+                    NamiServerClient.MatchTrackRequest(it.title, it.artist, it.durationMs)
+                },
+            ) ?: return@withContext emptyList()
+            val ids = tracks.zip(matched).mapNotNull { (track, byMatch) ->
+                track.id.takeIf { it > 0 } ?: byMatch
+            }
+            deleteTracks(ids.distinct())
+        }
+
     override suspend fun deleteTracks(serverTrackIds: List<Long>): List<Long> = withContext(Dispatchers.IO) {
         if (serverTrackIds.isEmpty()) return@withContext emptyList()
         val cfg = activeConfig() ?: return@withContext emptyList()

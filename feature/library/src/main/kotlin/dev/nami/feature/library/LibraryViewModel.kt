@@ -392,8 +392,15 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
+    /** Удаление только на этом устройстве. Трек на сервере остаётся, поэтому у зеркала
+     * серверной библиотеки удалять локально нечего, кроме скачанной копии. */
     fun deleteTrack(id: TrackId) {
-        deleteTracks(setOf(id))
+        deleteTracks(setOf(id), alsoOnServer = false)
+    }
+
+    /** Удаление и с сервера, и с устройства. */
+    fun deleteTrackEverywhere(id: TrackId) {
+        deleteTracks(setOf(id), alsoOnServer = true)
     }
 
     fun toggleTrackSelection(id: TrackId) {
@@ -415,18 +422,47 @@ class LibraryViewModel @Inject constructor(
     fun deleteSelectedTracks() {
         val ids = _uiState.value.selectedTrackIds
         if (ids.isEmpty()) return
-        deleteTracks(ids)
+        deleteTracks(ids, alsoOnServer = false)
         clearSelection()
     }
 
-    private fun deleteTracks(ids: Set<TrackId>) {
+    fun deleteSelectedTracksEverywhere() {
+        val ids = _uiState.value.selectedTrackIds
+        if (ids.isEmpty()) return
+        deleteTracks(ids, alsoOnServer = true)
+        clearSelection()
+    }
+
+    /** [alsoOnServer] решает, трогать ли серверную библиотеку. Без него удаление затрагивает
+     * только это устройство: файл уезжает в корзину, а на сервере трек остаётся. */
+    private fun deleteTracks(ids: Set<TrackId>, alsoOnServer: Boolean) {
         viewModelScope.launch {
-            val serverIds = ids.filter { it.value.startsWith("server_") }
+            val mirrorIds = ids.filter { it.value.startsWith("server_") }
                 .mapNotNull { it.value.removePrefix("server_").toLongOrNull() }
-            if (serverIds.isNotEmpty()) {
-                serverLibraryRepository.deleteTracks(serverIds)
-            }
             val localIds = ids.filterNot { it.value.startsWith("server_") }
+
+            if (alsoOnServer) {
+                // У зеркала серверный id известен сразу, локальный файл приходится
+                // сопоставлять по метаданным - его на сервере может не быть вовсе.
+                if (mirrorIds.isNotEmpty()) serverLibraryRepository.deleteTracks(mirrorIds)
+                val localMeta = localIds.mapNotNull { id ->
+                    libraryRepository.track(id).first()?.let { track ->
+                        dev.nami.domain.ServerTrackMeta(
+                            id = 0,
+                            title = track.title,
+                            artist = track.artistName.orEmpty(),
+                            album = null,
+                            durationMs = track.durationMs,
+                        )
+                    }
+                }
+                if (localMeta.isNotEmpty()) serverLibraryRepository.deleteMatchingTracks(localMeta)
+            } else {
+                // Трек остаётся на сервере, поэтому у зеркала на устройстве лежит только
+                // скачанная копия - её и убираем. Сама запись вернётся синхронизацией.
+                mirrorIds.forEach { serverLibraryRepository.removeFromCache(it) }
+            }
+
             if (localIds.isNotEmpty()) {
                 libraryRepository.deleteTracks(localIds.toList())
             }

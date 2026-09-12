@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Info
@@ -77,6 +78,8 @@ fun TrackListItem(
     onAddToPlaylist: (() -> Unit)? = null,
     onLikeTrack: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
+    /** Удаление и с сервера тоже. Null, когда сервер не подключён: удалять там нечего. */
+    onDeleteEverywhere: (() -> Unit)? = null,
     onRename: (() -> Unit)? = null,
     onEditNote: (() -> Unit)? = null,
     onEditTags: (() -> Unit)? = null,
@@ -205,7 +208,7 @@ fun TrackListItem(
         }
         if (selectionMode) {
             Checkbox(checked = isSelected, onCheckedChange = null)
-        } else if (onAddToPlaylist != null || onAddToQueue != null || onDelete != null || onRename != null || onRemoveFromAlbum != null || onRemoveFromArtist != null || onLikeTrack != null || onEditNote != null || onEditTags != null || onShowInfo != null || onUploadToServer != null) {
+        } else if (onAddToPlaylist != null || onAddToQueue != null || onDelete != null || onDeleteEverywhere != null || onRename != null || onRemoveFromAlbum != null || onRemoveFromArtist != null || onLikeTrack != null || onEditNote != null || onEditTags != null || onShowInfo != null || onUploadToServer != null) {
             IconButton(onClick = { showMenu = true }) {
                 Icon(Icons.Outlined.MoreVert, contentDescription = "Ещё", tint = NamiColors.Paper40)
             }
@@ -226,6 +229,9 @@ fun TrackListItem(
                         onRemoveFromAlbum?.let { ContextAction("Убрать из альбома", Icons.Outlined.Delete, onClick = it) },
                         onRemoveFromArtist?.let { ContextAction("Убрать у артиста", Icons.Outlined.Delete, onClick = it) },
                         onDelete?.let { ContextAction("Удалить", Icons.Outlined.Delete, onClick = it) },
+                        onDeleteEverywhere?.let {
+                            ContextAction("Удалить везде", Icons.Outlined.DeleteForever, onClick = it)
+                        },
                     ),
                 )
             }
