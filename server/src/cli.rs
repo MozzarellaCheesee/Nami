@@ -835,14 +835,13 @@ fn uninstall(cfg: &crate::config::Config, purge: bool) -> Res<()> {
             println!("   ✓ Очищен кэш транскодов: {}", cache.display());
         }
         if cfg.data_dir.exists() && cfg.data_dir != PathBuf::from(".") {
-            let _ = std::fs::remove_dir_all(&cfg.data_dir);
-            println!("   ✓ Удалён каталог данных: {}", cfg.data_dir.display());
+            purge_data_dir(&cfg.data_dir);
         }
         #[cfg(unix)]
         {
             let _ = Command::new("userdel").args(["-r", "nami"]).output();
         }
-        println!("   ✓ Все данные успешно вычищены.");
+        println!("   ✓ Данные вычищены (см. отметки выше по каждому пункту).");
     } else {
         println!("\n• База данных и папки с музыкой сохранены на диске.");
     }
@@ -852,6 +851,89 @@ fn uninstall(cfg: &crate::config::Config, purge: bool) -> Res<()> {
     println!("{}", "=".repeat(60));
 
     Ok(())
+}
+
+/// Удаляет содержимое каталога данных: базу, кэш, корзину, загрузки, обложки, сертификаты,
+/// лог службы. Раньше здесь стоял один `remove_dir_all(data_dir)`, а результат игнорировался -
+/// сообщение "✓ Удалён каталог данных" печаталось независимо от того, получилось или нет.
+///
+/// На Windows каталог данных - это, как правило, ТА ЖЕ папка, где лежит сам исполняемый файл
+/// (см. `default_config_path`), и `uninstall` выполняет именно он. Windows не даёт удалить
+/// работающий exe: `remove_dir_all` рвётся об него на середине обхода, часть файлов уже стёрта,
+/// часть - нет, и получается ровно то, на что жаловался пользователь - "не всё удаляется".
+///
+/// Поэтому чистим по одному элементу верхнего уровня, пропуская только сам исполняемый файл, и
+/// честно отчитываемся по каждому. Сам exe и опустевшую папку удаляет уже отдельный процесс,
+/// запущенный после нашего выхода - тем же приёмом, что и замена бинарника при обновлении
+/// (см. update.rs): держащий файл процесс должен сперва закрыться.
+/// Совпадает ли имя файла с именем работающего исполняемого файла - чистое сравнение,
+/// вынесенное отдельно ради юнит-теста без похода на диск.
+fn is_running_exe_name(entry_name: Option<&std::ffi::OsStr>, running_exe: Option<&std::path::Path>) -> bool {
+    match (entry_name, running_exe.and_then(|e| e.file_name())) {
+        (Some(a), Some(b)) => a == b,
+        _ => false,
+    }
+}
+
+fn purge_data_dir(data_dir: &std::path::Path) {
+    let running_exe = std::env::current_exe().ok();
+    let is_running_exe =
+        |p: &std::path::Path| is_running_exe_name(p.file_name(), running_exe.as_deref());
+
+    let entries = match std::fs::read_dir(data_dir) {
+        Ok(e) => e,
+        Err(e) => {
+            println!("   ⚠ Не удалось прочитать {}: {e}", data_dir.display());
+            return;
+        }
+    };
+
+    let mut exe_remains = false;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if is_running_exe(&path) {
+            exe_remains = true;
+            continue;
+        }
+        let result = if path.is_dir() { std::fs::remove_dir_all(&path) } else { std::fs::remove_file(&path) };
+        match result {
+            Ok(()) => println!("   ✓ Удалено: {}", path.display()),
+            Err(e) => println!("   ⚠ Не удалось удалить {}: {e}", path.display()),
+        }
+    }
+
+    if !exe_remains {
+        // Ничего не держит папку - обычный случай для остатков от версий, где данные лежали
+        // отдельно от exe. Пустую (или уже почищенную) папку можно снести сразу.
+        let _ = std::fs::remove_dir_all(data_dir);
+        return;
+    }
+
+    // Сам исполняемый файл жив, пока работает этот процесс - удаляем его отдельным процессом
+    // после выхода, а не тут же: с одной стороны self-delete на Windows требует именно такого
+    // обходного пути, с другой - без этого "успешное удаление" всё равно оставляло бы exe и
+    // папку висеть до ручной уборки.
+    #[cfg(windows)]
+    if let Some(exe) = running_exe {
+        println!(
+            "   • {} будет удалён автоматически через несколько секунд после закрытия",
+            exe.display()
+        );
+        let _ = Command::new("cmd")
+            .args([
+                "/C",
+                &format!(
+                    "timeout /T 2 /NOBREAK >nul & del /F /Q \"{}\" & rmdir \"{}\" 2>nul",
+                    exe.display(),
+                    data_dir.display()
+                ),
+            ])
+            .spawn();
+    }
+    #[cfg(not(windows))]
+    {
+        println!("   ⚠ Каталог {} не пуст - в нём остался исполняемый файл", data_dir.display());
+    }
 }
 
 /// Интерактивный мастер настройки сервера в терминале
@@ -1429,5 +1511,31 @@ fn service_command(action: &ServiceAction) -> Res<()> {
             Ok(())
         }
         ServiceAction::Run => service::run_dispatcher(),
+    }
+}
+
+#[cfg(test)]
+mod purge_tests {
+    use super::is_running_exe_name;
+    use std::path::Path;
+
+    #[test]
+    fn работающий_exe_пропускается() {
+        let running = Path::new("C:/ProgramData/Nami/nami-server.exe");
+        assert!(is_running_exe_name(Some(Path::new("nami-server.exe").as_os_str()), Some(running)));
+    }
+
+    #[test]
+    fn остальные_файлы_не_путаются_с_exe() {
+        let running = Path::new("C:/ProgramData/Nami/nami-server.exe");
+        assert!(!is_running_exe_name(Some(Path::new("nami.db").as_os_str()), Some(running)));
+        assert!(!is_running_exe_name(Some(Path::new("config.toml").as_os_str()), Some(running)));
+    }
+
+    #[test]
+    fn без_известного_exe_ничего_не_пропускается() {
+        // current_exe() может не определиться - тогда лучше попытаться удалить всё и
+        // получить честную ошибку по конкретному файлу, чем молча оставить лишнее.
+        assert!(!is_running_exe_name(Some(Path::new("nami-server.exe").as_os_str()), None));
     }
 }
