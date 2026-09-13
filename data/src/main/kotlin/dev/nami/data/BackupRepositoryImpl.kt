@@ -38,14 +38,17 @@ class BackupRepositoryImpl @Inject constructor(
             val manifest = buildManifest()
             val resolver = context.contentResolver
             val rawTracks = trackDao.allRaw().filter { File(it.path).isFile }
+            // Файл на диске называется UUID'ом трека (LibraryRepositoryImpl.copyAndIndex) - в
+            // прогресс экспорта отдаём название трека, а не это имя файла, иначе пользователь
+            // видит "a3f2c1e8-....flac" в диалоге вместо названия песни.
             val files = rawTracks.flatMap { track ->
                 val audio = File(track.path)
                 val sidecars = audio.parentFile?.listFiles()?.filter {
                     it.isFile && it.nameWithoutExtension == audio.nameWithoutExtension &&
                         it.extension.lowercase() in setOf("lrc", "json", "txt")
                 }.orEmpty()
-                listOf(audio) + sidecars
-            }.distinctBy { it.absolutePath }
+                (listOf(audio) + sidecars).map { it to track.title }
+            }.distinctBy { it.first.absolutePath }
             val totalCount = files.size + 1
             var currentIdx = 0
 
@@ -59,8 +62,8 @@ class BackupRepositoryImpl @Inject constructor(
                     currentIdx++
 
                     val usedNames = HashSet<String>()
-                    files.forEach { file ->
-                        onProgress?.invoke(dev.nami.domain.BackupProgress(currentIdx, totalCount, file.name))
+                    files.forEach { (file, trackTitle) ->
+                        onProgress?.invoke(dev.nami.domain.BackupProgress(currentIdx, totalCount, trackTitle))
                         var entryName = file.name
                         var suffix = 1
                         while (!usedNames.add(entryName)) {

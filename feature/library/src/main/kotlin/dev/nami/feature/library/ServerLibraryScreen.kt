@@ -486,16 +486,45 @@ fun ServerLibraryScreen(
                                 .background(NamiColors.Ink700),
                         )
                         Spacer(modifier = Modifier.width(12.dp))
+                        val isDownloading = track.id in viewModel.downloading
+                        val isCached = track.id in viewModel.cached
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(track.title, color = NamiColors.Paper100, style = MaterialTheme.typography.bodyLarge)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    track.title,
+                                    color = NamiColors.Paper100,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    maxLines = 1,
+                                    modifier = Modifier.weight(1f, fill = false),
+                                )
+                                // Заметная плашка "установлен": трек уже скачан и стал полностью
+                                // локальным (см. ServerLibraryRepositoryImpl.downloadTrack) - в
+                                // том же стиле, что PlaybackSourceBadge для локальных треков в
+                                // плеере (feature:library его переиспользовать не может - нет
+                                // зависимости на feature:player, поэтому копия того же вида).
+                                if (isCached) {
+                                    Box(
+                                        modifier = Modifier
+                                            .padding(start = 6.dp)
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(NamiColors.Wakaba.copy(alpha = 0.14f))
+                                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                                    ) {
+                                        Text(
+                                            "Установлен",
+                                            color = NamiColors.Wakaba,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            maxLines = 1,
+                                        )
+                                    }
+                                }
+                            }
                             Text(
                                 listOfNotNull(track.artist.ifBlank { null }, track.album).joinToString(" — "),
                                 color = NamiColors.Paper70,
                                 style = MaterialTheme.typography.bodySmall,
                             )
                         }
-                        val isDownloading = track.id in viewModel.downloading
-                        val isCached = track.id in viewModel.cached
                         if (!inSelectionMode) {
                             IconButton(onClick = { editing = track }) {
                                 Icon(Icons.Outlined.Edit, contentDescription = "Изменить серверный трек", tint = NamiColors.Paper70)

@@ -140,7 +140,13 @@ class LibraryRepositoryImpl @Inject constructor(
             if (rootA != rootB) parent[rootA] = rootB
         }
 
-        tracks.groupBy { Triple(it.title.trim().lowercase(), it.artistId, it.durationMs / 5000) }
+        // DedupKey: название+артист+альбом (артист уже artistId - MetadataResolver сводит
+        // "Artist feat. X" к тому же id, что и "Artist"). Раньше группировка ещё требовала
+        // durationMs с точностью 5 с и вовсе не смотрела на альбом - трек с альбомом и
+        // одноимённый сингл того же артиста считались бы дублями. Теперь альбом обязателен
+        // (null у обоих - тоже совпадение), длительность для этого метаданного признака не нужна -
+        // её роль (ловить перекодированный в другой битрейт файл) берёт на себя фингерпринт ниже.
+        tracks.groupBy { Triple(DedupKey.normalize(it.title), it.artistId, it.albumId) }
             .values
             .filter { it.size > 1 }
             .forEach { group -> group.drop(1).forEach { union(group.first().id, it.id) } }
@@ -1070,9 +1076,9 @@ class LibraryRepositoryImpl @Inject constructor(
         val title = tags?.title?.takeIf { it.isNotBlank() } ?: fallbackTitle
         val durationMs = tags?.durationMs?.takeIf { it > 0 } ?: readDurationMs(destination.path)
 
-        // Same title/artist/album/duration as an already-imported track - treat the freshly
+        // Same title/artist/album as an already-imported track (DedupKey) - treat the freshly
         // copied file as a duplicate of it and discard the copy instead of indexing it again.
-        val duplicate = trackDao.findDuplicate(title, artistId, albumId, durationMs)
+        val duplicate = trackDao.findDuplicate(title, artistId, albumId)
         if (duplicate != null) {
             // Запоминаем источник на уже существующей строке, иначе следующее сканирование
             // снова дойдёт сюда только после полного копирования файла.

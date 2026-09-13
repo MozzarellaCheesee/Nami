@@ -98,15 +98,21 @@ interface TrackDao {
 
     // "IS" (not "=") so NULL artistId/albumId compare equal to NULL - most tracks with no
     // tag-resolved artist/album still shouldn't get re-imported as a "new" duplicate.
+    // Единое правило дедупа (DedupKey): название+артист+альбом, без длительности - раньше
+    // durationMs = :durationMs требовал точного совпадения до миллисекунды, из-за чего один и
+    // тот же трек, перекодированный или с чуть другим таймингом тегов, дедупу не подпадал.
+    // LOWER(TRIM()) - тот же регистронезависимый разбор пробелов, что и DedupKey.normalize,
+    // только на стороне SQL (artistId/albumId уже сравниваются как разрешённые сущности -
+    // MetadataResolver сводит "Artist feat. X" к тому же artistId, что и "Artist").
     @Query(
         """
         SELECT * FROM tracks
-        WHERE title = :title AND artistId IS :artistId AND albumId IS :albumId
-        AND durationMs = :durationMs AND deletedAt IS NULL
+        WHERE LOWER(TRIM(title)) = LOWER(TRIM(:title)) AND artistId IS :artistId AND albumId IS :albumId
+        AND deletedAt IS NULL
         LIMIT 1
         """,
     )
-    suspend fun findDuplicate(title: String, artistId: String?, albumId: String?, durationMs: Long): TrackEntity?
+    suspend fun findDuplicate(title: String, artistId: String?, albumId: String?): TrackEntity?
 
     /** Дедуп до копирования файла: повторное сканирование отслеживаемой папки видит тот же
      * SAF-документ и пропускает его, не вычитывая гигабайты ради findDuplicate. */

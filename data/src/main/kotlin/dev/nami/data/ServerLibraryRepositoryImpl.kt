@@ -99,11 +99,13 @@ class ServerLibraryRepositoryImpl @Inject constructor(
                 return@withLock
             }
 
-            // Зеркала серверной библиотеки отправлять некуда: они и так на сервере, а локального
-            // файла за ними нет - каждое такое "отправление" уходило в счётчик ошибок.
-            val tracks = allTracks.filterNot { it.path.startsWith(SERVER_PATH_PREFIX) }
+            val (tracks, withoutMirrorsSize, missingFiles) = uploadCandidates(allTracks)
             if (tracks.isEmpty()) {
-                _uploadProgress.value = "Все треки (${allTracks.size}) уже есть на сервере"
+                _uploadProgress.value = if (missingFiles > 0) {
+                    "Нечего отправлять: файлов не найдено на диске - $missingFiles"
+                } else {
+                    "Все треки ($withoutMirrorsSize) уже есть на сервере"
+                }
                 return@withLock
             }
 
@@ -140,7 +142,7 @@ class ServerLibraryRepositoryImpl @Inject constructor(
 
             if (toUpload.isEmpty()) {
                 _uploadProgress.value = "Все треки ($total) уже есть на сервере"
-                return@launch
+                return@withLock
             }
 
             val needUploadCount = toUpload.size
@@ -196,7 +198,8 @@ class ServerLibraryRepositoryImpl @Inject constructor(
                 if (uploaded > 0) append("загружено $uploaded ")
                 val totalAlready = alreadyOnServer + duplicates
                 if (totalAlready > 0) append("(уже было на сервере: $totalAlready) ")
-                if (failed > 0) append("ошибок $failed")
+                if (failed > 0) append("ошибок $failed ")
+                if (missingFiles > 0) append("файлов не найдено на диске: $missingFiles")
             }.trim()
             }
         }
@@ -334,11 +337,22 @@ class ServerLibraryRepositoryImpl @Inject constructor(
         val localTracks = trackDao.allOrderedWithArtwork()
             .map { it.toDomain() }
             .filterNot { it.path.startsWith(SERVER_PATH_PREFIX) }
+        // Одно правило дедупа на всю библиотеку (см. DedupKey): название, артист, альбом. Раньше
+        // здесь было своё условие с допуском по длительности и вовсе без альбома, из-за чего один
+        // и тот же трек считался дублем по одним правилам при импорте и по другим при зеркалении.
+        // Название альбома берётся разом, а не запросом на каждый трек: список локальных треков -
+        // это вся библиотека, и на паре тысяч записей это была бы пара тысяч запросов.
+        val albumTitles = albumDao.allForIndexing().associate { it.id to it.title }
         val unique = serverTracks.filterNot { server ->
             localTracks.any { local ->
-                local.title.equals(server.title, ignoreCase = true) &&
-                    local.artistName.orEmpty().equals(server.artist, ignoreCase = true) &&
-                    kotlin.math.abs(local.durationMs - server.durationMs) <= 2_000
+                DedupKey.matches(
+                    title = local.title,
+                    artistName = metadataResolver.primaryArtistName(local.artistName),
+                    albumName = local.albumId?.value?.let { albumTitles[it] },
+                    otherTitle = server.title,
+                    otherArtistName = metadataResolver.primaryArtistName(server.artist),
+                    otherAlbumName = server.album,
+                )
             }
         }
         val ids = unique.map { "server_${it.id}" }
@@ -399,6 +413,7 @@ class ServerLibraryRepositoryImpl @Inject constructor(
                     // защита от параллельной записи в один и тот же файл.
                     downloadArtwork(serverTrackId)
                 }
+                localizeMirror(serverTrackId, dest)
                 return@withContext dest
             }
             val tmp = File(dest.parentFile, "${dest.name}.part")
@@ -418,8 +433,20 @@ class ServerLibraryRepositoryImpl @Inject constructor(
                 // защита от параллельной записи в один и тот же файл.
                 downloadArtwork(serverTrackId)
             }
+            localizeMirror(serverTrackId, dest)
             dest
         }
+
+    /** Трек остаётся и на сервере, но в приложении становится полностью локальным: тот же
+     * приём, что и в deleteFromServerOnly - меняем path у существующей строки-зеркала на
+     * реальный файл, id не трогаем (на него ссылаются плейлисты и история). Смены пути
+     * достаточно: зеркала чистятся синхронизацией по `path LIKE 'nami-server://%'`, так что
+     * строка с реальным путём её переживёт. mirrorIntoLibrary дедуплицирует по (название,
+     * артист, длительность), так что повторного зеркала для этого трека не появится. */
+    private suspend fun localizeMirror(serverTrackId: Long, dest: File) {
+        trackDao.setPath("server_$serverTrackId", dest.absolutePath)
+        searchRepository.rebuildIndex()
+    }
 
     override fun cachedFile(serverTrackId: Long): File? =
         fileFor(serverTrackId).takeIf { serverTrackId in cachedAudioIds }
@@ -611,4 +638,25 @@ class ServerLibraryRepositoryImpl @Inject constructor(
     private companion object {
         const val SERVER_PATH_PREFIX = "nami-server://"
     }
+}
+
+/**
+ * Отбор треков для отправки на сервер (задача "неправильное кол-во при отправке всех"):
+ * зеркала серверной библиотеки убираем (слать их некуда), дубликаты одного файла (например
+ * трек с несколькими артистами в allTracksOrdered()) схлопываем - иначе он считался бы и
+ * отправлялся дважды, а записи об уже удалённых с диска файлах не входят ни в total, ни в
+ * "ошибок" при отправке (это не ошибка сервера), а показываются отдельно.
+ * Возвращает (реально отправляемые треки, кол-во после дедупа без зеркал, кол-во отсутствующих файлов).
+ * internal + вынесено из uploadTracksBackground, чтобы проверяться юнит-тестом без поднятия
+ * всего репозитория (Context, DAO и т.д.).
+ */
+internal fun uploadCandidates(
+    allTracks: List<Track>,
+    fileExists: (String) -> Boolean = { File(it).exists() },
+): Triple<List<Track>, Int, Int> {
+    val withoutMirrors = allTracks.filterNot { it.path.startsWith("nami-server://") }
+        .distinctBy { it.path }
+    val missingFiles = withoutMirrors.count { !fileExists(it.path) }
+    val tracks = withoutMirrors.filter { fileExists(it.path) }
+    return Triple(tracks, withoutMirrors.size, missingFiles)
 }

@@ -57,6 +57,7 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var appSettingsRepository: AppSettingsRepository
     @Inject lateinit var playerRepository: PlayerRepository
     @Inject lateinit var jamRepository: dev.nami.domain.JamRepository
+    @Inject lateinit var appUpdateManager: dev.nami.app.update.AppUpdateManager
 
     private var shakeDetector: ShakeDetector? = null
 
@@ -239,6 +240,9 @@ class MainActivity : ComponentActivity() {
         // Считаем до setContent, один раз за создание Activity - иначе флаг, погашенный
         // onBatteryHintShown, тут же перечитается при рекомпозиции.
         val batteryHintPending = !appSettingsRepository.batteryHintShown && !isIgnoringBatteryOptimizations()
+        // Тихая проверка обновлений при каждом холодном старте - диалог ниже сам решит, стоит ли
+        // что-то показывать (по dismissedUpdateVersion), поэтому здесь просто запускаем проверку.
+        lifecycleScope.launch { appUpdateManager.checkForUpdates() }
 
         shakeDetector = ShakeDetector(this) {
             if (appSettingsRepository.shakeToShuffleEnabled.value) {
@@ -334,6 +338,46 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     confirmButton = {},
+                )
+            }
+            // Единоразовое уведомление о новой версии: диалог, а не системная нотификация -
+            // экран уже наблюдает appUpdateManager.status для страницы настроек, тут просто
+            // переиспользуем тот же StateFlow вместо отдельного канала уведомлений и разрешения
+            // POST_NOTIFICATIONS ради одного диалога. "Позже" запоминает именно эту версию
+            // (dismissedUpdateVersion), поэтому следующий релиз напомнит о себе снова.
+            val updateStatus by appUpdateManager.status.collectAsState()
+            var updateDialogHidden by remember { mutableStateOf(false) }
+            val pendingUpdateInfo = (updateStatus as? dev.nami.app.update.UpdateStatus.Available)?.info
+            if (pendingUpdateInfo != null &&
+                !updateDialogHidden &&
+                pendingUpdateInfo.versionName != appSettingsRepository.dismissedUpdateVersion
+            ) {
+                dev.nami.core.designsystem.NamiAlertDialog(
+                    onDismissRequest = {},
+                    title = {
+                        androidx.compose.material3.Text(
+                            text = "Доступна новая версия ${pendingUpdateInfo.versionName}",
+                            color = dev.nami.core.designsystem.NamiColors.Paper100,
+                        )
+                    },
+                    text = {
+                        androidx.compose.material3.Text(
+                            text = "Обновление можно скачать и установить в Настройки → О приложении.",
+                            color = dev.nami.core.designsystem.NamiColors.Paper70,
+                            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                        )
+                    },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(onClick = { updateDialogHidden = true }) {
+                            androidx.compose.material3.Text("Хорошо")
+                        }
+                    },
+                    dismissButton = {
+                        androidx.compose.material3.TextButton(onClick = {
+                            appSettingsRepository.dismissedUpdateVersion = pendingUpdateInfo.versionName
+                            updateDialogHidden = true
+                        }) { androidx.compose.material3.Text("Позже") }
+                    },
                 )
             }
             val activeImportProgress by importProgress.collectAsState()
@@ -435,7 +479,13 @@ class MainActivity : ComponentActivity() {
                     useNavigationRail = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact,
                     batteryHintPending = batteryHintPending,
                     onBatteryHintShown = { appSettingsRepository.batteryHintShown = true },
-                    onImportRequested = { pickFiles.launch(arrayOf("audio/*")) },
+                    // "audio/*" один не пропускает старые/экзотические форматы (.ape, .wv, .tak,
+                    // .mpc, трекерные модули .mod/.xm/.it, чиптюны .nsf/.spc/.vgm и т.п.) - SAF-
+                    // провайдеры отдают для них MIME "application/octet-stream", и под "audio/*"
+                    // такой файл не подпадает - выборщик показывает его серым. Добавляем
+                    // "application/octet-stream" вторым типом (OR, не AND) - copyAndIndex всё
+                    // равно берёт расширение из имени файла, а MIME только как запасной вариант.
+                    onImportRequested = { pickFiles.launch(arrayOf("audio/*", "application/octet-stream")) },
                     onImportFolderRequested = { pickFolder.launch(null) },
                     onImportZipRequested = {
                         pickZip.launch(

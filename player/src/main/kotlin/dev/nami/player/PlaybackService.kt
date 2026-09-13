@@ -137,7 +137,7 @@ class PlaybackService : MediaLibraryService() {
             val trackId = mediaItem?.mediaId?.let(::TrackId) ?: return
             scope.launch { updateReplayGainForCurrentTrack(trackId) }
             scope.launch { updateEndingFadeForCurrentTrack(trackId) }
-            scope.launch { scanBpmKeyIfMissing(trackId) }
+            scope.launch { bpmKeyScanner.scanIfMissing(trackId) }
         }
 
         // "Кроссфейд при перелистывании назад не должен работать" - skipPrevious/
@@ -158,6 +158,7 @@ class PlaybackService : MediaLibraryService() {
     @Inject lateinit var playlistRepository: PlaylistRepository
     @Inject lateinit var serverAudioRepository: dev.nami.domain.ServerAudioRepository
     @Inject lateinit var lyricsRepository: LyricsRepository
+    @Inject lateinit var bpmKeyScanner: dev.nami.player.analysis.BpmKeyScanner
 
     private var currentLyricLine: String? = null
     private var cachedLyrics: Lyrics? = null
@@ -838,36 +839,6 @@ class PlaybackService : MediaLibraryService() {
         if (endingFadeCache.size >= 30) endingFadeCache.remove(endingFadeCache.keys.first())
         endingFadeCache[trackId.value] = naturalFade
         currentEndsWithNaturalFade = naturalFade
-    }
-
-    /** BPM/key (План.md §3), cached on the track once scanned - never re-scanned. Runs
-     * unconditionally on every play (not gated behind a setting like the other two scans) since
-     * QueueBuilder's autoQueue rules (План.md §22.13) need it available for any track without a
-     * separate "did you enable this" toggle - it's cheap to skip once cached, same file already
-     * gets fully decoded once for ReplayGain regardless. */
-    private suspend fun scanBpmKeyIfMissing(trackId: TrackId) {
-        val track = libraryRepository.track(trackId).first() ?: return
-        // Both fields are always written together below - requiring both present here (not
-        // "either") avoids a stuck-forever gap where a partial result (say the tempo estimator
-        // failed but the key one didn't) permanently skips ever retrying the field that failed.
-        if (track.bpm != null && track.musicalKey != null) return
-        val server =
-            serverAudioRepository.serverAnalysis(track.artistName, track.title, track.durationMs)
-        val bpm: Float?
-        val key: String?
-        if (server?.bpm != null || server?.musicalKey != null) {
-            bpm = server.bpm
-            key = server.musicalKey
-        } else {
-            val result = kotlinx.coroutines.withContext(Dispatchers.Default) {
-                dev.nami.player.analysis.BpmKeyAnalyzer.scan(track.path)
-            }
-            bpm = result.bpm
-            key = result.musicalKey
-        }
-        if (bpm != null || key != null) {
-            libraryRepository.setTrackBpmKey(trackId, bpm, key)
-        }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession =

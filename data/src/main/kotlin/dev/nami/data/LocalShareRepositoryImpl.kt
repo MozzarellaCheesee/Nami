@@ -76,6 +76,7 @@ class LocalShareRepositoryImpl @Inject constructor(
     private val playerRepository: PlayerRepository,
     private val playlistRepository: PlaylistRepository,
     private val settingsRepository: SettingsRepository,
+    private val metadataResolver: MetadataResolver,
 ) : LocalShareRepository {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val nsdManager by lazy { context.getSystemService(Context.NSD_SERVICE) as NsdManager }
@@ -379,15 +380,20 @@ class LocalShareRepositoryImpl @Inject constructor(
         val meta = httpGetJson(device, "/dropmeta")
         val remoteTitle = meta?.optString("title")?.trim()
         val remoteArtist = meta?.optString("artistName")?.trim()
-        val remoteDuration = meta?.optLong("durationMs", 0L) ?: 0L
+        val remoteAlbum = meta?.optString("albumName")?.trim()
 
-        // Защита от дубликатов (Проблемы.md §2): если трек уже есть в локальной библиотеке,
-        // не импортируем файл заново и не плодим дубликаты альбома/трека.
+        // Защита от дубликатов (Проблемы.md §2, DedupKey): если трек уже есть в локальной
+        // библиотеке под тем же названием/артистом/альбомом, не импортируем файл заново.
+        // Артист сравнивается через primaryArtistName - "Artist" с принимающей стороны не должен
+        // считаться отличным от "Artist feat. X" на отдающей.
         if (!remoteTitle.isNullOrBlank()) {
+            val remoteArtistPrimary = metadataResolver.primaryArtistName(remoteArtist)
             val existing = libraryRepository.allTracksOrdered().firstOrNull { local ->
-                local.title.equals(remoteTitle, ignoreCase = true) &&
-                    (remoteArtist.isNullOrBlank() || local.artistName.isNullOrBlank() || local.artistName.equals(remoteArtist, ignoreCase = true)) &&
-                    (remoteDuration == 0L || Math.abs(local.durationMs - remoteDuration) <= MATCH_DURATION_TOLERANCE_MS)
+                val localAlbumName = local.albumId?.let { runCatching { libraryRepository.album(it).first() }.getOrNull()?.title }
+                DedupKey.matches(
+                    title = remoteTitle, artistName = remoteArtistPrimary, albumName = remoteAlbum,
+                    otherTitle = local.title, otherArtistName = metadataResolver.primaryArtistName(local.artistName), otherAlbumName = localAlbumName,
+                )
             }
             if (existing != null) {
                 applyRemoteMeta(device, meta, existing.id)

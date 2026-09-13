@@ -48,6 +48,7 @@ class SearchRepositoryImplTest {
         rows: List<TrackDao.TrackIndexRow> = emptyList(),
         filterRows: List<TrackDao.TrackFilterRow> = emptyList(),
     ) = object : TrackDao {
+        override suspend fun allSourceUris(): List<String> = emptyList()
         override suspend fun allForSearchFilter(): List<TrackDao.TrackFilterRow> = filterRows
         override suspend fun tracksWithoutFingerprint(limit: Int): List<TrackDao.TrackPathRow> = emptyList()
         override suspend fun allFingerprints(): List<TrackDao.TrackFingerprintRow> = emptyList()
@@ -64,7 +65,7 @@ class SearchRepositoryImplTest {
         override suspend fun findByIdWithArtwork(id: String): TrackDao.TrackWithArtwork? = null
         override fun observeByIdWithArtwork(id: String) = error("unused")
         override suspend fun findByPath(path: String): TrackEntity? = error("unused")
-        override suspend fun findDuplicate(title: String, artistId: String?, albumId: String?, durationMs: Long): TrackEntity? = error("unused")
+        override suspend fun findDuplicate(title: String, artistId: String?, albumId: String?): TrackEntity? = error("unused")
         override suspend fun findIdBySourceUri(sourceUri: String): String? = error("unused")
         override suspend fun setSourceUri(id: String, sourceUri: String) = error("unused")
         override suspend fun insertAll(tracks: List<TrackEntity>) = error("unused")

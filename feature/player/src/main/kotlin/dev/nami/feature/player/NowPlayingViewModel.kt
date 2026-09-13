@@ -71,16 +71,11 @@ class NowPlayingViewModel @Inject constructor(
     private val jamRepository: dev.nami.domain.JamRepository? = null,
     // Работа с библиотекой сервера, в т.ч. скачивание треков
     private val serverLibraryRepository: dev.nami.domain.ServerLibraryRepository? = null,
+    // Same reasoning - анализ BPM/тональности сразу после скачивания трека с сервера.
+    private val bpmKeyScanner: dev.nami.player.analysis.BpmKeyScanner? = null,
 ) : ViewModel() {
 
     private val downloadTrigger = MutableStateFlow(0)
-
-    val isServerTrack: StateFlow<Boolean> = playerRepository.state
-        .map { state ->
-            val id = (state as? PlaybackState.Playing)?.trackId?.value
-            id?.startsWith("server_") == true || id?.startsWith("jam_") == true
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     val isDownloaded: StateFlow<Boolean> = combine(playerRepository.state, downloadTrigger) { state, _ ->
         val id = (state as? PlaybackState.Playing)?.trackId?.value ?: return@combine false
@@ -99,10 +94,17 @@ class NowPlayingViewModel @Inject constructor(
             viewModelScope.launch(Dispatchers.IO) {
                 if (serverLibraryRepository?.downloadTrack(serverId) != null) {
                     playerRepository.refreshCurrentSource()
+                    // Трек стал полностью локальным - считаем BPM/тональность сразу, а не
+                    // дожидаясь следующего запуска воспроизведения (см. BpmKeyScanner).
+                    if (id.startsWith("server_")) bpmKeyScanner?.scanIfMissing(TrackId(id))
                 }
                 downloadTrigger.value += 1
             }
         }
+    }
+
+    private companion object {
+        const val SERVER_PATH_PREFIX = "nami-server://"
     }
 
     /** Состояние активной Jam-сессии для индикации в плеере, мини-плеере и меню "Ещё". */
@@ -365,6 +367,18 @@ class NowPlayingViewModel @Inject constructor(
         // of needing the next track selection to see it.
         .flatMapLatest { trackId -> libraryRepository.track(trackId) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    // По ПУТИ, а не по префиксу id: после скачивания трек переводится в полностью локальный
+    // режим (path меняется на реальный файл, id зеркала остаётся прежним - на него ссылаются
+    // плейлисты и история), поэтому id.startsWith("server_") продолжал бы врать про "скачать"
+    // после того, как трек уже стал локальным. currentTrackDetails - Room Flow настоящего Track,
+    // он сам переотдаёт значение при смене path, так что кнопка обновится живьём без доп. кода.
+    // Jam-трек (id.startsWith("jam_")) в библиотеке не лежит - currentTrackDetails даст null,
+    // и такой случай по-прежнему считается серверным.
+    val isServerTrack: StateFlow<Boolean> = combine(playerRepository.state, currentTrackDetails) { state, details ->
+        val id = (state as? PlaybackState.Playing)?.trackId?.value ?: return@combine false
+        isServerTrack(id, details?.path)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     // Real per-track waveform for the scrubber (see WaveformScanner) - a full-track decode, so
     // it's scanned lazily off the main thread. Two-tier cache: an in-memory map for instant reuse
@@ -649,4 +663,12 @@ class NowPlayingViewModel @Inject constructor(
             cueStartMs = cueStartMs,
             cueEndMs = cueEndMs,
         )
+}
+
+/** internal + вынесена из isServerTrack, чтобы проверяться юнит-тестом без поднятия всей
+ * реактивной цепочки ViewModel (что в plain JUnit тянет за собой WaveformScanner - реальный
+ * android.media.MediaExtractor, которого в этом окружении нет). */
+internal fun isServerTrack(id: String, detailsPath: String?): Boolean {
+    if (id.startsWith("jam_")) return true
+    return (detailsPath ?: return id.startsWith("server_")).startsWith("nami-server://")
 }

@@ -44,6 +44,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import dev.nami.core.designsystem.NamiAlertDialog
 import dev.nami.core.designsystem.NamiColors
 import dev.nami.core.designsystem.NamiRadius
+import dev.nami.core.model.Track
 import dev.nami.core.model.TrackId
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -101,7 +102,10 @@ fun TrackInfoScreen(onBack: () -> Unit, viewModel: TrackInfoViewModel = hiltView
                 InfoRow("Разрядность", current.bitDepth?.let { "$it бит" } ?: "—")
                 InfoRow("Каналы", current.channels?.toString() ?: "—")
                 InfoRow("Размер", formatFileSize(current.sizeBytes))
-                InfoRow("Путь", current.path)
+                // Файл на диске импорт называет UUID'ом (не именем трека - чтобы одинаковые
+                // названия у разных треков не сталкивались), поэтому сырой путь пользователю не
+                // показываем - только папку и человекочитаемое "Артист - Название.формат".
+                InfoRow("Путь", displayFilePath(current))
             }
             InfoSection(title = "Прослушивание") {
                 InfoRow("Добавлен", formatDate(current.dateAdded))
@@ -330,6 +334,19 @@ internal fun TextEditDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
     )
+}
+
+/** Путь для показа пользователю: реальная папка на диске + человекочитаемое имя файла.
+ * Сам файл на диске импорт называет UUID'ом (LibraryRepositoryImpl.copyAndIndex - чтобы разные
+ * треки с одинаковым названием не сталкивались друг с другом на файловой системе), так что
+ * показывать last path segment как есть нельзя - меняем задним числом только то, что видит
+ * пользователь, а не сам файл (переименовывать существующие файлы библиотеки слишком рискованно). */
+internal fun displayFilePath(track: Track): String {
+    val dir = track.path.substringBeforeLast('/', missingDelimiterValue = "")
+    val name = listOfNotNull(track.artistName?.takeIf { it.isNotBlank() }, track.title.takeIf { it.isNotBlank() })
+        .joinToString(" - ")
+        .ifBlank { "track" }
+    return if (dir.isBlank()) "$name.${track.format}" else "$dir/$name.${track.format}"
 }
 
 internal fun formatFileSize(bytes: Long): String = when {

@@ -81,6 +81,7 @@ private const val KEY_SHUFFLE_MODE = "shuffle_mode"
 // система может вернуть "оптимизируется" и после отказа пользователя, а долбить его каждый старт
 // нельзя.
 private const val KEY_BATTERY_HINT_SHOWN = "battery_hint_shown"
+private const val KEY_DISMISSED_UPDATE_VERSION = "dismissed_update_version"
 private const val KEY_SESSIONS = "sessions" // JSON array, see AppSettingsRepository.readSessions
 private const val KEY_LAST_APPLIED_SESSION = "last_applied_session"
 private const val KEY_OUTPUT_PROFILES_ENABLED = "output_profiles_enabled"
@@ -1118,6 +1119,13 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
     var batteryHintShown: Boolean
         get() = prefs.getBoolean(KEY_BATTERY_HINT_SHOWN, false)
         set(value) = prefs.edit { putBoolean(KEY_BATTERY_HINT_SHOWN, value) }
+
+    // Версия, про которую пользователь уже нажал "Позже" в уведомлении об обновлении - хранится
+    // сама версия, а не булев флаг: так следующий релиз снова покажет уведомление, а не только
+    // "было ли когда-то показано хоть одно".
+    var dismissedUpdateVersion: String
+        get() = prefs.getString(KEY_DISMISSED_UPDATE_VERSION, "") ?: ""
+        set(value) = prefs.edit { putString(KEY_DISMISSED_UPDATE_VERSION, value) }
 
     private fun readSessions(): List<Session> {
         val raw = prefs.getString(KEY_SESSIONS, null) ?: return emptyList()

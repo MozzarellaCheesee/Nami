@@ -1,9 +1,12 @@
 package dev.nami.app.navigation
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
@@ -64,6 +67,9 @@ import dev.nami.feature.playlists.SpotifyImportScreen
 import dev.nami.feature.search.SearchScreen
 import dev.nami.feature.trash.TrashScreen
 import kotlinx.coroutines.flow.StateFlow
+
+// Длительность общего перехода между экранами графа - см. NavHost ниже.
+private const val NAV_TRANSITION_MS = 260
 
 private const val ROUTE_HOME = "home"
 private const val ROUTE_HOME_CONSTRUCTOR = "home_constructor"
@@ -340,14 +346,28 @@ fun NamiNavHost(
             // handled per-route below (each list screen wraps itself in its own clipToBounds()),
             // so screens that don't need it aren't clipped for no reason.
             modifier = Modifier.weight(1f),
-            // Default Navigation-Compose cross-fade leaves the outgoing destination composed
-            // and touchable for the transition's duration, overlapping the incoming one. That
-            // window is where a screen popped by back (e.g. AlbumDetailScreen) can still catch
-            // a tap meant for what's now visually on top (e.g. the Albums grid), firing the
-            // wrong click handler. Instant, no-overlap switches close that window entirely.
-            enterTransition = { EnterTransition.None },
+            // Единый набор переходов на весь граф (54 адресата) вместо анимации на каждый composable -
+            // обычный для Android паттерн: сдвиг по горизонтали вперёд/назад + лёгкое затухание, ~260 мс.
+            // NowPlayingScreen сюда не входит - это отдельный AnimatedVisibility-оверлей поверх NavHost
+            // (см. showNowPlaying ниже), а не адресат графа, так что его свайп-вниз и анимация появления
+            // не затронуты.
+            //
+            // exitTransition/popExitTransition оставлены мгновенными (ExitTransition.None), а не
+            // симметричным слайдом наружу - это не стилистика, а обход бага: при анимированном exit
+            // уходящий адресат остаётся скомпонованным и принимающим касания всё время анимации,
+            // перекрываясь с приходящим. В это окно тап, предназначенный экрану, который визуально уже
+            // сверху, попадает в экран, который уже "закрыт" - срабатывает чужой обработчик. Мгновенное
+            // снятие уходящего экрана закрывает это окно, при этом движение всё равно видно за счёт
+            // анимированного enter.
+            enterTransition = {
+                slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(NAV_TRANSITION_MS)) +
+                    fadeIn(tween(NAV_TRANSITION_MS))
+            },
             exitTransition = { ExitTransition.None },
-            popEnterTransition = { EnterTransition.None },
+            popEnterTransition = {
+                slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(NAV_TRANSITION_MS)) +
+                    fadeIn(tween(NAV_TRANSITION_MS))
+            },
             popExitTransition = { ExitTransition.None },
         ) {
             composable(ROUTE_HOME) {

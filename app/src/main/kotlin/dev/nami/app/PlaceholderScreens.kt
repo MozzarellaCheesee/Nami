@@ -243,10 +243,8 @@ fun SettingsScreen(
                                 )
                             }
                             if (status.info.releaseNotes.isNotBlank()) {
-                                Text(
-                                    text = status.info.releaseNotes.take(300),
-                                    color = NamiColors.Paper70,
-                                    style = MaterialTheme.typography.bodySmall,
+                                ReleaseNotesView(
+                                    markdown = status.info.releaseNotes,
                                     modifier = Modifier.padding(vertical = 6.dp),
                                 )
                             }
@@ -1731,4 +1729,64 @@ private fun SaveSessionDialog(onSave: (name: String, sleepTimerMinutes: Int?) ->
         },
         dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Отмена") } },
     )
+}
+
+/**
+ * Рендерит changelog релиза (markdown из GitHub) в настройках: заголовки жирным крупнее,
+ * вложенные пункты списка с отступом, код моноширинным шрифтом. Разбор — в
+ * dev.nami.app.update.parseReleaseNotes, здесь только раскладка по Compose.
+ */
+@Composable
+private fun ReleaseNotesView(markdown: String, modifier: Modifier = Modifier) {
+    val blocks = remember(markdown) { dev.nami.app.update.parseReleaseNotes(markdown) }
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        for (block in blocks) {
+            when (block) {
+                is dev.nami.app.update.MdBlock.Heading -> Text(
+                    text = releaseNotesAnnotatedString(block.segments),
+                    color = NamiColors.Paper100,
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                is dev.nami.app.update.MdBlock.Bullet -> Text(
+                    text = releaseNotesAnnotatedString(block.segments),
+                    color = NamiColors.Paper70,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(start = (12 * (block.indent + 1)).dp),
+                )
+                is dev.nami.app.update.MdBlock.CodeBlock -> Text(
+                    text = block.lines.joinToString("\n"),
+                    color = NamiColors.Paper70,
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(NamiColors.Ink700, androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
+                        .padding(8.dp),
+                )
+                is dev.nami.app.update.MdBlock.Paragraph -> Text(
+                    text = releaseNotesAnnotatedString(block.segments),
+                    color = NamiColors.Paper70,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
+}
+
+private fun releaseNotesAnnotatedString(
+    segments: List<dev.nami.app.update.MdInlineSegment>,
+): androidx.compose.ui.text.AnnotatedString = androidx.compose.ui.text.buildAnnotatedString {
+    for (segment in segments) {
+        val style = when {
+            segment.code -> androidx.compose.ui.text.SpanStyle(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+            segment.bold -> androidx.compose.ui.text.SpanStyle(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+            else -> null
+        }
+        if (style != null) {
+            pushStyle(style)
+            append(segment.text)
+            pop()
+        } else {
+            append(segment.text)
+        }
+    }
 }
