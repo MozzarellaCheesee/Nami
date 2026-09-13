@@ -1172,7 +1172,7 @@ dependencies = [
 
 [[package]]
 name = "nami-server"
-version = "1.0.14"
+version = "1.0.15"
 dependencies = [
  "argon2",
  "axum",
