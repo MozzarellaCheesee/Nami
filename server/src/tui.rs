@@ -33,7 +33,9 @@
 use std::io;
 use std::time::Duration;
 
-use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use crossterm::event::{
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, MouseButton, MouseEventKind,
+};
 use crossterm::execute;
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
 use ratatui::backend::CrosstermBackend;
@@ -55,7 +57,7 @@ pub fn run(cfg: &Config) -> Res<()> {
 
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stdout);
     let mut term = Terminal::new(backend)?;
 
@@ -64,7 +66,7 @@ pub fn run(cfg: &Config) -> Res<()> {
     // Восстанавливаем терминал в любом случае, даже если внутри была ошибка -
     // иначе пользователь останется в альтернативном экране без эха ввода.
     disable_raw_mode()?;
-    execute!(term.backend_mut(), LeaveAlternateScreen)?;
+    execute!(term.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
     term.show_cursor()?;
 
     result
@@ -197,7 +199,7 @@ fn main_menu(term: &mut Term, conn: &Connection, cfg: &Config) -> Res<()> {
         let labels: Vec<&str> = items.iter().map(|s| s.as_str()).collect();
         let info = summary(conn, cfg);
         term.draw(|f| draw_home(f, &info, &labels, &mut state))?;
-        match read_key()? {
+        match read_action(&mut state, items.len(), home_list_rect(term, info.len())?)? {
             Key::Up => move_sel(&mut state, items.len(), -1),
             Key::Down => move_sel(&mut state, items.len(), 1),
             Key::Enter => {
@@ -267,7 +269,7 @@ fn tracks_screen(term: &mut Term, conn: &Connection, cfg: &Config) -> Res<()> {
                 "↑↓ выбор, Enter - действие, Esc/q - назад"
             };
             term.draw(|f| draw_menu_owned(f, "Треки", &items, &mut state, Some(hint)))?;
-            match read_key()? {
+            match read_action(&mut state, items.len(), menu_list_rect(term)?)? {
                 Key::Up => move_sel(&mut state, items.len(), -1),
                 Key::Down => move_sel(&mut state, items.len(), 1),
                 Key::Quit => return Ok(()),
@@ -406,25 +408,53 @@ enum Key {
     Other,
 }
 
-/// Блокирующее чтение одной "осмысленной" клавиши. Esc и q равнозначны выходу/назад -
-/// так требовалось в задаче явно.
-fn read_key() -> Res<Key> {
+/// То же, что [`read_key`], но клик мышью по пункту списка выбирает его и сразу активирует -
+/// как и ожидается от мыши, отдельного "выделить, потом ещё раз нажать" никто делать не станет.
+/// Колесо прокрутки перемещает выделение так же, как стрелки.
+///
+/// `list_rect` - область СО СВОЕЙ РАМКОЙ (то, что передано в `render_stateful_widget`), не
+/// внутренняя область: рамку вычитаем здесь же, тем же способом, что и сам List при отрисовке -
+/// иначе клик по рамке на пиксель промахивался бы мимо первого или последнего пункта.
+fn read_action(state: &mut ListState, items_len: usize, list_rect: Rect) -> Res<Key> {
     loop {
         if event::poll(Duration::from_millis(200))? {
-            if let Event::Key(k) = event::read()? {
-                if k.kind != KeyEventKind::Press {
-                    continue;
+            match event::read()? {
+                Event::Key(k) if k.kind == KeyEventKind::Press => {
+                    return Ok(match k.code {
+                        KeyCode::Up | KeyCode::Char('k') => Key::Up,
+                        KeyCode::Down | KeyCode::Char('j') => Key::Down,
+                        KeyCode::Enter => Key::Enter,
+                        KeyCode::Esc | KeyCode::Char('q') => Key::Quit,
+                        _ => Key::Other,
+                    });
                 }
-                return Ok(match k.code {
-                    KeyCode::Up | KeyCode::Char('k') => Key::Up,
-                    KeyCode::Down | KeyCode::Char('j') => Key::Down,
-                    KeyCode::Enter => Key::Enter,
-                    KeyCode::Esc | KeyCode::Char('q') => Key::Quit,
-                    _ => Key::Other,
-                });
+                Event::Mouse(m) => match m.kind {
+                    MouseEventKind::Down(MouseButton::Left) => {
+                        if let Some(i) = hit_test(list_rect, state, items_len, m.column, m.row) {
+                            state.select(Some(i));
+                            return Ok(Key::Enter);
+                        }
+                    }
+                    MouseEventKind::ScrollUp => return Ok(Key::Up),
+                    MouseEventKind::ScrollDown => return Ok(Key::Down),
+                    _ => {}
+                },
+                _ => {}
             }
         }
     }
+}
+
+/// Пункт списка под координатами клика, если он туда попал. `state.offset()` - это то, с
+/// какого пункта список начал рисоваться на ПРОШЛОМ кадре: он обновляется самим List при
+/// `render_stateful_widget`, поэтому к моменту клика уже соответствует видимой прокрутке.
+fn hit_test(list_rect: Rect, state: &ListState, items_len: usize, col: u16, row: u16) -> Option<usize> {
+    let inner = Block::default().borders(Borders::ALL).inner(list_rect);
+    if col < inner.x || col >= inner.x + inner.width || row < inner.y || row >= inner.y + inner.height {
+        return None;
+    }
+    let index = state.offset() + (row - inner.y) as usize;
+    (index < items_len).then_some(index)
 }
 
 fn move_sel(state: &mut ListState, len: usize, delta: isize) {
@@ -441,6 +471,30 @@ fn move_sel(state: &mut ListState, len: usize, delta: isize) {
 /// Главный экран: сверху сводка, снизу действия. Сводка не прокручивается и не прячется -
 /// ради неё ярлык и открывают, а меню без ответа на вопрос «а сервер-то работает?» заставляло бы
 /// лезть в диспетчер задач.
+/// Геометрия списка на главном экране - те же Constraint, что и в [`draw_home`]. Нужна отдельно
+/// от отрисовки, чтобы клик мышью можно было проверить ДО следующего кадра, а не только после.
+fn home_list_rect(term: &Term, info_len: usize) -> Res<Rect> {
+    let size = term.size()?;
+    let area = Rect::new(0, 0, size.width, size.height);
+    let info_height = info_len as u16 + 2;
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(info_height), Constraint::Min(3), Constraint::Length(1)])
+        .split(area);
+    Ok(chunks[1])
+}
+
+/// Та же геометрия, что у [`draw_menu`]/[`draw_menu_owned`].
+fn menu_list_rect(term: &Term) -> Res<Rect> {
+    let size = term.size()?;
+    let area = Rect::new(0, 0, size.width, size.height);
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(3), Constraint::Length(1)])
+        .split(area);
+    Ok(chunks[0])
+}
+
 fn draw_home(f: &mut ratatui::Frame, info: &[String], items: &[&str], state: &mut ListState) {
     let area = f.area();
     let info_height = info.len() as u16 + 2;
@@ -529,10 +583,18 @@ fn confirm(term: &mut Term, question: &str) -> Res<bool> {
     let mut state = ListState::default();
     state.select(Some(0));
     loop {
+        let size = term.size()?;
+        let area = centered_rect(Rect::new(0, 0, size.width, size.height), 60, 7);
+        let inner = Block::default().borders(Borders::ALL).inner(area);
+        // Список без своей рамки: высота попапа и так всего 7 строк, обрамлять список внутри
+        // него было бы негде. Клик проверяем по тем же chunks[1], без вычитания рамки.
+        let list_rect = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(2), Constraint::Length(2)])
+            .split(inner)[1];
+
         term.draw(|f| {
-            let area = centered_rect(f.area(), 60, 7);
             let block = Block::default().borders(Borders::ALL).title("Подтверждение");
-            let inner = block.inner(area);
             f.render_widget(ratatui::widgets::Clear, area);
             f.render_widget(block, area);
             let chunks = Layout::default()
@@ -547,11 +609,37 @@ fn confirm(term: &mut Term, question: &str) -> Res<bool> {
             let list = List::new(items).highlight_style(Style::default().add_modifier(Modifier::REVERSED)).highlight_symbol("> ");
             f.render_stateful_widget(list, chunks[1], &mut state);
         })?;
-        match read_key()? {
-            Key::Up | Key::Down => move_sel(&mut state, options.len(), 1),
-            Key::Enter => return Ok(state.selected() == Some(1)),
-            Key::Quit => return Ok(false),
-            Key::Other => {}
+
+        if event::poll(Duration::from_millis(200))? {
+            match event::read()? {
+                Event::Key(k) if k.kind == KeyEventKind::Press => match k.code {
+                    KeyCode::Up | KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('j') => {
+                        move_sel(&mut state, options.len(), 1)
+                    }
+                    KeyCode::Enter => return Ok(state.selected() == Some(1)),
+                    KeyCode::Esc | KeyCode::Char('q') => return Ok(false),
+                    _ => {}
+                },
+                Event::Mouse(m) => match m.kind {
+                    MouseEventKind::Down(MouseButton::Left) => {
+                        if m.column >= list_rect.x
+                            && m.column < list_rect.x + list_rect.width
+                            && m.row >= list_rect.y
+                            && m.row < list_rect.y + list_rect.height
+                        {
+                            let idx = (m.row - list_rect.y) as usize;
+                            if idx < options.len() {
+                                return Ok(idx == 1);
+                            }
+                        }
+                    }
+                    MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => {
+                        move_sel(&mut state, options.len(), 1)
+                    }
+                    _ => {}
+                },
+                _ => {}
+            }
         }
     }
 }
@@ -640,7 +728,7 @@ fn users_screen(term: &mut Term, conn: &Connection) -> Res<()> {
         state.select(Some(0));
         loop {
             term.draw(|f| draw_menu_owned(f, "Пользователи", &items, &mut state, None))?;
-            match read_key()? {
+            match read_action(&mut state, items.len(), menu_list_rect(term)?)? {
                 Key::Up => move_sel(&mut state, items.len(), -1),
                 Key::Down => move_sel(&mut state, items.len(), 1),
                 Key::Quit => return Ok(()),
@@ -693,7 +781,7 @@ fn pick_role(term: &mut Term) -> Res<Option<&'static str>> {
     state.select(Some(1));
     loop {
         term.draw(|f| draw_menu(f, "Роль", &roles, &mut state, Some("↑↓ выбор, Enter - ок, Esc - отмена")))?;
-        match read_key()? {
+        match read_action(&mut state, roles.len(), menu_list_rect(term)?)? {
             Key::Up => move_sel(&mut state, roles.len(), -1),
             Key::Down => move_sel(&mut state, roles.len(), 1),
             Key::Enter => return Ok(Some(roles[state.selected().unwrap_or(1)])),
@@ -717,7 +805,7 @@ fn user_actions(term: &mut Term, conn: &Connection, u: &users::User) -> Res<()> 
                 None,
             )
         })?;
-        match read_key()? {
+        match read_action(&mut state, items.len(), menu_list_rect(term)?)? {
             Key::Up => move_sel(&mut state, items.len(), -1),
             Key::Down => move_sel(&mut state, items.len(), 1),
             Key::Quit => return Ok(()),
@@ -774,7 +862,7 @@ fn pick_role_for_invite(term: &mut Term) -> Res<Option<&'static str>> {
     state.select(Some(0));
     loop {
         term.draw(|f| draw_menu(f, "Роль приглашённого", &roles, &mut state, None))?;
-        match read_key()? {
+        match read_action(&mut state, roles.len(), menu_list_rect(term)?)? {
             Key::Up => move_sel(&mut state, roles.len(), -1),
             Key::Down => move_sel(&mut state, roles.len(), 1),
             Key::Enter => return Ok(Some(roles[state.selected().unwrap_or(0)])),
@@ -792,7 +880,7 @@ fn library_screen(term: &mut Term, conn: &Connection, cfg: &Config) -> Res<()> {
     state.select(Some(0));
     loop {
         term.draw(|f| draw_menu(f, "Библиотека", &items, &mut state, None))?;
-        match read_key()? {
+        match read_action(&mut state, items.len(), menu_list_rect(term)?)? {
             Key::Up => move_sel(&mut state, items.len(), -1),
             Key::Down => move_sel(&mut state, items.len(), 1),
             Key::Quit => return Ok(()),
@@ -830,7 +918,7 @@ fn dirs_screen(term: &mut Term, cfg: &Config) -> Res<()> {
         let mut state = ListState::default();
         state.select(Some(0));
         term.draw(|f| draw_menu_owned(f, "Папки музыки", &items, &mut state, None))?;
-        match read_key()? {
+        match read_action(&mut state, items.len(), menu_list_rect(term)?)? {
             Key::Quit => return Ok(()),
             Key::Enter => {
                 if state.selected() == Some(cfg.music_dirs.len()) {
@@ -922,7 +1010,7 @@ fn library_mode_screen(term: &mut Term, conn: &Connection) -> Res<()> {
     state.select(Some(if current == LibraryMode::Separate { 1 } else { 0 }));
     loop {
         term.draw(|f| draw_menu(f, "Режим библиотеки", &items, &mut state, None))?;
-        match read_key()? {
+        match read_action(&mut state, items.len(), menu_list_rect(term)?)? {
             Key::Up => move_sel(&mut state, items.len(), -1),
             Key::Down => move_sel(&mut state, items.len(), 1),
             Key::Quit => return Ok(()),
@@ -972,7 +1060,7 @@ fn devices_screen(term: &mut Term, conn: &Connection) -> Res<()> {
         let mut state = ListState::default();
         state.select(Some(0));
         term.draw(|f| draw_menu_owned(f, "Устройства (Enter - отозвать)", &items, &mut state, None))?;
-        match read_key()? {
+        match read_action(&mut state, items.len(), menu_list_rect(term)?)? {
             Key::Quit => return Ok(()),
             Key::Enter => {
                 let i = state.selected().unwrap_or(0);
@@ -1001,7 +1089,7 @@ fn shares_screen(term: &mut Term, conn: &Connection) -> Res<()> {
         let mut state = ListState::default();
         state.select(Some(0));
         term.draw(|f| draw_menu_owned(f, "Общие ссылки (Enter - отозвать)", &items, &mut state, None))?;
-        match read_key()? {
+        match read_action(&mut state, items.len(), menu_list_rect(term)?)? {
             Key::Quit => return Ok(()),
             Key::Enter => {
                 let s = &list[state.selected().unwrap_or(0)];
@@ -1059,6 +1147,51 @@ mod tests {
         let items = track_menu_items(&rows);
         assert!(items[0].contains("без исполнителя"), "{}", items[0]);
         assert!(items[0].contains("без альбома"), "{}", items[0]);
+    }
+}
+
+#[cfg(test)]
+mod hit_test_tests {
+    use super::{hit_test, Rect};
+    use ratatui::widgets::ListState;
+
+    #[test]
+    fn клик_внутри_рамки_попадает_в_нужный_пункт() {
+        // Рамка занимает по одной строке/столбцу сверху и слева - первый пункт списка
+        // рисуется на list_rect.y + 1, а не на list_rect.y.
+        let list_rect = Rect::new(0, 0, 20, 5);
+        let state = ListState::default();
+        assert_eq!(hit_test(list_rect, &state, 3, 2, 1), Some(0));
+        assert_eq!(hit_test(list_rect, &state, 3, 2, 2), Some(1));
+    }
+
+    #[test]
+    fn клик_по_рамке_промахивается() {
+        let list_rect = Rect::new(0, 0, 20, 5);
+        let state = ListState::default();
+        assert_eq!(hit_test(list_rect, &state, 3, 0, 0), None, "верхняя рамка");
+        assert_eq!(hit_test(list_rect, &state, 3, 0, 4), None, "нижняя рамка");
+    }
+
+    #[test]
+    fn клик_ниже_последнего_реального_пункта_промахивается() {
+        // Область списка (5 строк - 2 на рамку = 3 видимые строки) больше, чем самих пунктов -
+        // такое бывает на коротких списках. Клик по пустой части не должен выбрать пункт,
+        // которого нет.
+        let list_rect = Rect::new(0, 0, 20, 5);
+        let state = ListState::default();
+        assert_eq!(hit_test(list_rect, &state, 2, 2, 3), None);
+    }
+
+    #[test]
+    fn прокрученный_список_учитывает_offset() {
+        // offset() - это то, с какого пункта список начал рисоваться на прошлом кадре; без
+        // него клик по видимой третьей строке выбрал бы пункт #2 вместо реально видимого.
+        let list_rect = Rect::new(0, 0, 20, 5);
+        let mut state = ListState::default();
+        *state.offset_mut() = 4;
+        assert_eq!(hit_test(list_rect, &state, 10, 2, 1), Some(4));
+        assert_eq!(hit_test(list_rect, &state, 10, 2, 3), Some(6));
     }
 }
 
