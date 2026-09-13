@@ -104,9 +104,12 @@ pub fn state() -> Option<ServiceState> {
 ///
 /// Через PowerShell, а не своим вызовом ShellExecute: нужен ровно один глагол `runas`, и тащить
 /// ради него крейт с привязками к WinAPI незачем - powershell.exe есть в любой Windows.
-pub fn run_elevated(action: &str) -> Res<()> {
+/// `visible` = false прячет окно (короткая фоновая команда вроде переключения службы),
+/// true оставляет его на экране (долгая операция с собственным выводом или вопросом
+/// пользователю, например `uninstall` без `--purge`, который спрашивает y/N).
+pub fn run_elevated(args: &[&str], visible: bool) -> Res<()> {
     let exe = std::env::current_exe()?;
-    let command = elevate_command(&exe.to_string_lossy(), action);
+    let command = elevate_command(&exe.to_string_lossy(), args, visible);
     let status = std::process::Command::new("powershell.exe")
         .args(["-NoProfile", "-NonInteractive", "-Command", &command])
         .status()?;
@@ -117,17 +120,28 @@ pub fn run_elevated(action: &str) -> Res<()> {
     }
 }
 
+/// Проверка прав администратора без лишних зависимостей: `net session` отвечает "Отказано в
+/// доступе" без прав и молча завершается успехом с ними - тот же приём, что уже применяют
+/// многие консольные утилиты, чтобы не тащить крейт ради одного WinAPI-вызова.
+pub fn is_elevated() -> bool {
+    std::process::Command::new("net")
+        .args(["session"])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
 /// Команда PowerShell для запуска действия с правами администратора.
 ///
 /// Вынесена отдельно и покрыта тестом, потому что ломается молча: путь с пробелом или
 /// апострофом (папка пользователя вида C:\Users\O'Brien) разъедет команду, и вместо
 /// запроса прав пользователь получит невнятную ошибку разбора.
-fn elevate_command(exe: &str, action: &str) -> String {
+fn elevate_command(exe: &str, args: &[&str], visible: bool) -> String {
     // Одинарные кавычки PowerShell экранируются удвоением.
     let quoted = exe.replace('\'', "''");
-    format!(
-        "Start-Process -FilePath '{quoted}' -ArgumentList 'service','{action}' -Verb RunAs -Wait -WindowStyle Hidden"
-    )
+    let arg_list = args.iter().map(|a| format!("'{}'", a.replace('\'', "''"))).collect::<Vec<_>>().join(",");
+    let window = if visible { "" } else { " -WindowStyle Hidden" };
+    format!("Start-Process -FilePath '{quoted}' -ArgumentList {arg_list} -Verb RunAs -Wait{window}")
 }
 
 pub fn is_running() -> bool {
@@ -229,9 +243,26 @@ mod tests {
 
     #[test]
     fn путь_с_пробелом_и_апострофом_не_ломает_команду() {
-        let cmd = elevate_command("C:\\Users\\O\'Brien\\Nami Server\\nami-server.exe", "start");
+        let cmd = elevate_command("C:\\Users\\O\'Brien\\Nami Server\\nami-server.exe", &["service", "start"], false);
         assert!(cmd.contains("'C:\\Users\\O''Brien\\Nami Server\\nami-server.exe'"), "{cmd}");
         assert!(cmd.contains("-ArgumentList 'service','start'"), "{cmd}");
+        assert!(cmd.contains("-Verb RunAs"), "{cmd}");
+        assert!(cmd.contains("-WindowStyle Hidden"), "{cmd}");
+    }
+
+    #[test]
+    fn апостроф_внутри_аргумента_тоже_экранируется() {
+        // uninstall передаёт свои аргументы как есть, и хотя "--purge" не содержит кавычек,
+        // проверка не должна зависеть от конкретного набора флагов - экранирование обязано
+        // работать для любого аргумента, а не только для пути к exe.
+        let cmd = elevate_command("C:\\Nami\\nami-server.exe", &["uninstall", "--purge"], false);
+        assert!(cmd.contains("-ArgumentList 'uninstall','--purge'"), "{cmd}");
+    }
+
+    #[test]
+    fn видимое_окно_не_добавляет_windowstyle() {
+        let cmd = elevate_command("C:\\Nami\\nami-server.exe", &["uninstall"], true);
+        assert!(!cmd.contains("WindowStyle"), "{cmd}");
         assert!(cmd.contains("-Verb RunAs"), "{cmd}");
     }
 }

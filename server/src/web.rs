@@ -112,6 +112,49 @@ mod tests {
         assert!(html.contains("restoreTab()"), "вкладка не восстанавливается");
     }
 
+    /// Ловит именно тот класс поломки, что уже случался: правка в Python вставила ЖИВОЙ
+    /// перевод строки внутри JS-строки в одинарных кавычках (`confirm('текст\n\nещё текст')`
+    /// вместо `confirm('текст\\n\\nещё текст')`) - синтаксическая ошибка обрывала выполнение
+    /// ВСЕГО инлайнового скрипта разом, и весь клиент показывал пустой светлый экран без
+    /// единой ошибки в консоли, которую было бы легко заметить в обычном ревью правки.
+    ///
+    /// Требует `node` в PATH - если его нет (например в части CI-образов), тест пропускается,
+    /// а не падает: сама сборка сервера от node не зависит, это только страховка для правок
+    /// веб-клиента, а ложный красный тест на машине без Node хуже пропущенной проверки.
+    #[test]
+    fn embedded_web_client_scripts_are_valid_javascript() {
+        let node = std::process::Command::new("node").arg("--version").output();
+        if node.is_err() {
+            eprintln!("node не найден в PATH - пропускаю проверку синтаксиса web/app/index.html");
+            return;
+        }
+
+        let html = Assets::get("index.html").expect("embedded web client");
+        let html = std::str::from_utf8(&html.data).expect("utf-8 html");
+
+        let mut pos = 0;
+        let mut checked = 0;
+        while let Some(start) = html[pos..].find("<script>") {
+            let body_start = pos + start + "<script>".len();
+            let Some(end_rel) = html[body_start..].find("</script>") else { break };
+            let script = &html[body_start..body_start + end_rel];
+            pos = body_start + end_rel;
+
+            let tmp = std::env::temp_dir().join(format!("nami-web-script-check-{checked}.js"));
+            std::fs::write(&tmp, script).expect("временный файл для проверки синтаксиса");
+            let result = std::process::Command::new("node").arg("--check").arg(&tmp).output();
+            let _ = std::fs::remove_file(&tmp);
+            let output = result.expect("запуск node --check");
+            assert!(
+                output.status.success(),
+                "инлайновый <script> в index.html не проходит синтаксис JS:\n{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            checked += 1;
+        }
+        assert!(checked > 0, "в index.html не нашлось ни одного <script>");
+    }
+
     #[test]
     fn health_report_uses_actual_server_field_names() {
         let html = Assets::get("index.html").expect("embedded web client");

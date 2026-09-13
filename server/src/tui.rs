@@ -120,7 +120,7 @@ fn service_action(
     expect_running: bool,
 ) -> String {
     if direct().is_err() {
-        let _ = crate::service::run_elevated(verb);
+        let _ = crate::service::run_elevated(&["service", verb], false);
     }
     // Отчитываемся по фактическому состоянию, а не по коду возврата. Отменённый запрос UAC
     // виден PowerShell как обычное завершение, и доверие коду возврата означало бы бодрое

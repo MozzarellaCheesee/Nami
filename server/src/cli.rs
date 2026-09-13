@@ -768,6 +768,23 @@ fn uninstall(cfg: &crate::config::Config, purge: bool) -> Res<()> {
 
     #[cfg(windows)]
     {
+        // Без прав администратора netsh и schtasks молча проваливаются (Command::output()
+        // всё равно возвращает Ok - процесс просто печатает "Отказано в доступе" в свой
+        // stderr, который никто не читает), и человек видит "готово" там, где на деле ничего
+        // не произошло. Запрашиваем права один раз здесь же, а не тащим этот риск в каждый шаг.
+        if !crate::service::is_elevated() {
+            println!("Для полного удаления (служба, брандмауэр, автозапуск) нужны права администратора.");
+            println!("Запрашиваю права...");
+            let args: Vec<&str> = if purge { vec!["uninstall", "--purge"] } else { vec!["uninstall"] };
+            match crate::service::run_elevated(&args, true) {
+                Ok(()) => return Ok(()), // повышенная копия уже всё сделала и всё напечатала
+                Err(e) => {
+                    println!("⚠ Не удалось получить права администратора: {e}");
+                    println!("  Служба, брандмауэр и задача автозапуска не будут тронуты.");
+                }
+            }
+        }
+
         println!("1. Удаление службы NamiServer...");
         if crate::service::state().is_some() {
             match crate::service::uninstall() {
@@ -777,7 +794,14 @@ fn uninstall(cfg: &crate::config::Config, purge: bool) -> Res<()> {
         } else {
             println!("   • Служба не зарегистрирована");
         }
-        let _ = Command::new("taskkill").args(["/F", "/IM", "nami-server.exe"]).output();
+        // Не /IM в лоб: он матчит по имени процесса и убивает ЛЮБОЙ nami-server.exe,
+        // включая тот, что сейчас выполняет эту самую команду - uninstall убивал сам себя
+        // сразу после первого шага, и всё, что должно идти дальше (брандмауэр, задача
+        // автозапуска, ярлыки), просто не успевало выполниться. Исключаем свой PID фильтром.
+        let own_pid = std::process::id().to_string();
+        let _ = Command::new("taskkill")
+            .args(["/F", "/FI", &format!("PID ne {own_pid}"), "/IM", "nami-server.exe"])
+            .output();
 
         println!("2. Удаление задачи автозапуска прошлых версий...");
         let _ = Command::new("schtasks").args(["/Delete", "/TN", "NamiServer", "/F"]).output();
