@@ -893,7 +893,34 @@ function renderTracks(list) {
       row.appendChild(dur);
     }
 
+    const del = document.createElement('button');
+    del.className = 'danger';
+    del.textContent = 'Удалить';
+    del.title = 'Удалить трек с сервера';
+    del.style.cssText = 'margin-left:10px;padding:4px 10px;font-size:12px;';
+    // stopPropagation обязателен: клик по строке запускает воспроизведение, и без него
+    // удаление начиналось бы с проигрывания удаляемого трека.
+    del.onclick = (e) => { e.stopPropagation(); deleteTrack(t); };
+    row.appendChild(del);
+
     box.appendChild(row);
+  }
+}
+
+/** Удаление трека с сервера. Файл при этом уезжает в серверную корзину (data/trash),
+ * а не пропадает: восстановить его можно, положив обратно и пересканировав. */
+async function deleteTrack(t) {
+  const name = [t.artist, t.title].filter(Boolean).join(' — ') || 'этот трек';
+  if (!confirm('Удалить «' + name + '» с сервера?
+
+Файл переедет в корзину сервера.')) return;
+  try {
+    await api('/tracks/' + t.id, { method: 'DELETE' });
+    ALL_TRACKS = ALL_TRACKS.filter(x => x.id !== t.id);
+    // Перерисовываем через фильтр, чтобы не потерять введённый поиск.
+    filterTracks();
+  } catch (e) {
+    alert('Не удалось удалить: ' + (e.message || e));
   }
 }
 

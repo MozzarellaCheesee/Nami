@@ -79,6 +79,7 @@ const MAIN_ITEMS: &[&str] = &[
     "Режим библиотеки",
     "Устройства",
     "Общие ссылки",
+    "Треки (поиск и удаление)",
     "Обновление сервера",
     "Выход",
 ];
@@ -219,13 +220,125 @@ fn main_menu(term: &mut Term, conn: &Connection, cfg: &Config) -> Res<()> {
                     2 => library_mode_screen(term, conn)?,
                     3 => devices_screen(term, conn)?,
                     4 => shares_screen(term, conn)?,
-                    5 => update_screen(term)?,
+                    5 => tracks_screen(term, conn, cfg)?,
+                    6 => update_screen(term)?,
                     _ => return Ok(()),
                 }
             }
             Key::Quit => return Ok(()),
             Key::Other => {}
         }
+    }
+}
+
+/// Один трек в списке удаления.
+struct TrackRow {
+    id: i64,
+    title: String,
+    artist: Option<String>,
+    album: Option<String>,
+    path: String,
+}
+
+/// Поиск и удаление треков.
+///
+/// Показывается страница, а не вся библиотека: на десятках тысяч строк список пришлось бы
+/// держать в памяти целиком и рисовать каждый кадр. Поиск сужает выборку до нужного - им же
+/// и пользуются вместо листания.
+fn tracks_screen(term: &mut Term, conn: &Connection, cfg: &Config) -> Res<()> {
+    let mut query = String::new();
+    loop {
+        let rows = find_tracks(conn, &query, TRACKS_PAGE)?;
+        let mut items = track_menu_items(&rows);
+        items.push(if query.is_empty() {
+            "🔍 Найти трек по названию или артисту".to_string()
+        } else {
+            format!("🔍 Поиск: «{query}» (Enter - изменить, пусто - сбросить)")
+        });
+
+        let mut state = ListState::default();
+        state.select(Some(0));
+        loop {
+            let hint = if rows.len() == TRACKS_PAGE {
+                "Показаны первые записи - сузьте поиск. ↑↓ выбор, Enter - действие, Esc/q - назад"
+            } else {
+                "↑↓ выбор, Enter - действие, Esc/q - назад"
+            };
+            term.draw(|f| draw_menu_owned(f, "Треки", &items, &mut state, Some(hint)))?;
+            match read_key()? {
+                Key::Up => move_sel(&mut state, items.len(), -1),
+                Key::Down => move_sel(&mut state, items.len(), 1),
+                Key::Quit => return Ok(()),
+                Key::Enter => {
+                    let i = state.selected().unwrap_or(0);
+                    if i == rows.len() {
+                        query = text_input(term, "Поиск по названию или артисту", false)?
+                            .unwrap_or_default()
+                            .trim()
+                            .to_string();
+                    } else {
+                        delete_track_row(term, conn, cfg, &rows[i])?;
+                    }
+                    break; // список мог измениться - перечитываем
+                }
+                Key::Other => {}
+            }
+        }
+    }
+}
+
+const TRACKS_PAGE: usize = 50;
+
+fn find_tracks(conn: &Connection, query: &str, limit: usize) -> Res<Vec<TrackRow>> {
+    let like = format!("%{}%", query.trim().to_lowercase());
+    let mut stmt = conn.prepare(
+        "SELECT id, title, artist, album, path FROM tracks
+         WHERE ?1 = '%%' OR LOWER(title) LIKE ?1 OR LOWER(COALESCE(artist,'')) LIKE ?1
+         ORDER BY artist, album, title LIMIT ?2",
+    )?;
+    let rows = stmt
+        .query_map(rusqlite::params![like, limit as i64], |r| {
+            Ok(TrackRow {
+                id: r.get(0)?,
+                title: r.get(1)?,
+                artist: r.get(2)?,
+                album: r.get(3)?,
+                path: r.get(4)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
+}
+
+/// Чистая функция форматирования - проверяется тестом без терминала.
+fn track_menu_items(rows: &[TrackRow]) -> Vec<String> {
+    rows.iter()
+        .map(|t| {
+            let artist = t.artist.as_deref().unwrap_or("без исполнителя");
+            let album = t.album.as_deref().unwrap_or("без альбома");
+            format!("#{:<6} {} - {} ({})", t.id, artist, t.title, album)
+        })
+        .collect()
+}
+
+fn delete_track_row(term: &mut Term, conn: &Connection, cfg: &Config, row: &TrackRow) -> Res<()> {
+    let artist = row.artist.as_deref().unwrap_or("без исполнителя");
+    let question = format!(
+        "Удалить «{} - {}»?
+
+Файл переедет в корзину сервера, а не пропадёт:
+{}",
+        artist, row.title, row.path
+    );
+    if !confirm(term, &question)? {
+        return Ok(());
+    }
+    // Удаляем тем же кодом, что и HTTP API: перенос файла в корзину, чистка позиций
+    // воспроизведения и надгробие для дельта-синхронизации живут там, а не здесь.
+    if crate::api::remove_track(conn, &cfg.data_dir, row.id) {
+        message(term, "Треки", "Трек удалён. Файл лежит в корзине сервера.")
+    } else {
+        message(term, "Треки", "Трек не найден - возможно, его уже удалили.")
     }
 }
 
@@ -903,6 +1016,41 @@ fn share_menu_line(s: &crate::share::ShareInfo) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::{track_menu_items, TrackRow};
+
+    #[test]
+    fn строка_трека_показывает_исполнителя_и_альбом() {
+        let rows = vec![TrackRow {
+            id: 7,
+            title: "Песня".into(),
+            artist: Some("Артист".into()),
+            album: Some("Альбом".into()),
+            path: "/музыка/а.flac".into(),
+        }];
+        let items = track_menu_items(&rows);
+        assert!(items[0].contains("Артист"), "{}", items[0]);
+        assert!(items[0].contains("Песня"), "{}", items[0]);
+        assert!(items[0].contains("Альбом"), "{}", items[0]);
+    }
+
+    #[test]
+    fn трек_без_тегов_не_показывает_пустоту() {
+        // Пустые поля читаются как сломанный интерфейс: человек не понимает, что выбирает.
+        let rows = vec![TrackRow {
+            id: 8,
+            title: "Без тегов".into(),
+            artist: None,
+            album: None,
+            path: "/музыка/б.mp3".into(),
+        }];
+        let items = track_menu_items(&rows);
+        assert!(items[0].contains("без исполнителя"), "{}", items[0]);
+        assert!(items[0].contains("без альбома"), "{}", items[0]);
+    }
+}
+
+#[cfg(test)]
+mod tests_existing {
     use super::*;
 
     #[test]

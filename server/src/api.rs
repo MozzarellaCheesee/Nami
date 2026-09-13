@@ -509,6 +509,44 @@ struct BatchDeleteResp {
 /// его не касаются: там список формирует сам сервер.
 const MAX_BATCH_DELETE: usize = 500;
 
+/// Физическое удаление одного трека: файл в корзину, обложка, позиция воспроизведения,
+/// надгробие для дельта-синхронизации, строка в базе.
+///
+/// Без проверок прав - их делает вызывающий: HTTP-слой по личности запроса, TUI по факту
+/// доступа к консоли сервера. Вынесено сюда, чтобы у консоли и у веб-панели не появилось двух
+/// разных «удалений»: забыть в одном из них надгробие - значит получить трек, который на
+/// другом устройстве не исчезнет никогда.
+pub fn remove_track(db: &rusqlite::Connection, data_dir: &std::path::Path, id: i64) -> bool {
+    let path: Option<String> =
+        db.query_row("SELECT path FROM tracks WHERE id=?1", [id], |r| r.get(0)).ok();
+    let Some(path) = path else { return false };
+
+    // Не удаляем, а переносим в корзину сервера: ошибочное удаление обратимо. Если перенести
+    // не вышло (другой том, нет прав) - удаляем, иначе строка исчезнет, а файл останется
+    // мусором, который следующее сканирование заведёт заново.
+    let trash_dir = data_dir.join("trash");
+    let _ = std::fs::create_dir_all(&trash_dir);
+    let p = std::path::Path::new(&path);
+    if p.exists() {
+        let file_name = p.file_name().and_then(|n| n.to_str()).unwrap_or("track");
+        let dest = trash_dir.join(format!("{}_{}_{file_name}", crate::db::now(), id));
+        if std::fs::rename(p, &dest).is_err() {
+            let _ = std::fs::remove_file(p);
+        }
+    }
+
+    crate::artwork::delete_override(data_dir, id);
+    let _ = db.execute("DELETE FROM playback_position WHERE track_id=?1", [id]);
+    // Надгробие ставим ДО удаления: library_id и path читаются из самой строки, после DELETE
+    // их взять уже негде, а без них удаление не отфильтровать по видимости.
+    let _ = db.execute(
+        "INSERT OR REPLACE INTO deleted_tracks (id, deleted_at, library_id, path)
+         SELECT id, ?2, library_id, path FROM tracks WHERE id=?1",
+        rusqlite::params![id, crate::db::now()],
+    );
+    db.execute("DELETE FROM tracks WHERE id=?1", [id]).is_ok()
+}
+
 fn delete_tracks_internal(
     st: &Shared,
     ident: &Ident,
@@ -563,29 +601,8 @@ fn delete_tracks_internal(
             }
         }
 
-        // Безопасное удаление: переносим в серверную корзину data/trash (или удаляем файл, если rename невозможен)
-        let p = std::path::Path::new(&path);
-        if p.exists() {
-            let file_name = p.file_name().and_then(|n| n.to_str()).unwrap_or("track");
-            let dest = trash_dir.join(format!("{}_{}_{file_name}", crate::db::now(), id));
-            if std::fs::rename(p, &dest).is_err() {
-                let _ = std::fs::remove_file(p);
-            }
-        }
-
-        // Удаляем сохранённую обложку
-        crate::artwork::delete_override(&st.cfg.data_dir, id);
-
-        // Удаляем из базы
-        let _ = db.execute("DELETE FROM playback_position WHERE track_id=?1", [id]);
-        // Надгробие ставим ДО удаления: library_id читается из самой строки, после DELETE
-        // его взять уже негде, а без него удаление не отфильтровать по видимости.
-        let _ = db.execute(
-            "INSERT OR REPLACE INTO deleted_tracks (id, deleted_at, library_id, path)
-             SELECT id, ?2, library_id, path FROM tracks WHERE id=?1",
-            rusqlite::params![id, crate::db::now()],
-        );
-        if db.execute("DELETE FROM tracks WHERE id=?1", [id]).is_ok() {
+        let _ = &path;
+        if remove_track(&db, &st.cfg.data_dir, id) {
             deleted.push(id);
         } else {
             failed.push(id);

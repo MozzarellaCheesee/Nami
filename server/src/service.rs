@@ -148,6 +148,17 @@ fn service_main(_arguments: Vec<OsString>) {
 }
 
 fn run_service() -> Res<()> {
+    // Служба стартует с рабочим каталогом C:\Windows\System32 - его назначает диспетчер, и
+    // задать свой в описании службы нельзя. А относительные пути в конфигурации (config.toml,
+    // nami.db, папка данных) считаются именно от рабочего каталога: сервер искал конфигурацию
+    // в системной папке, не находил, запускал мастер настройки и заводил пустую базу рядом.
+    // Со стороны это выглядело как «переустановка стёрла библиотеку».
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let _ = std::env::set_current_dir(dir);
+        }
+    }
+
     let (shutdown_tx, shutdown_rx) = std::sync::mpsc::channel();
 
     let handler = move |control| -> ServiceControlHandlerResult {

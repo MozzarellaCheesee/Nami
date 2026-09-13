@@ -219,7 +219,16 @@ pub fn find_config_path() -> PathBuf {
             return p;
         }
     }
-    for p in ["config.toml", "/var/lib/nami/config.toml", "/etc/nami/config.toml"] {
+    // Относительный путь считается от рабочего каталога, и у службы Windows это системная
+    // папка. Конфигурация там - всегда след прошлой ошибки, а не осознанный выбор: считать её
+    // рабочей значит запустить сервер с чужой пустой базой вместо настоящей библиотеки.
+    if !cwd_is_system_dir() {
+        let path = PathBuf::from("config.toml");
+        if path.exists() {
+            return path;
+        }
+    }
+    for p in ["/var/lib/nami/config.toml", "/etc/nami/config.toml"] {
         let path = PathBuf::from(p);
         if path.exists() {
             return path;
@@ -237,6 +246,16 @@ pub fn find_config_path() -> PathBuf {
 ///
 /// Рядом с исполняемым файлом - каталог, одинаковый при любом способе запуска. На Linux,
 /// где пакет кладёт данные в /var/lib/nami, этот каталог уже существует и выигрывает.
+/// Является ли рабочий каталог системной папкой Windows. На других системах - никогда.
+fn cwd_is_system_dir() -> bool {
+    if !cfg!(windows) {
+        return false;
+    }
+    let Ok(cwd) = std::env::current_dir() else { return false };
+    let system_root = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".into());
+    cwd.starts_with(&system_root)
+}
+
 pub fn default_config_path() -> PathBuf {
     if PathBuf::from("/var/lib/nami").is_dir() {
         return PathBuf::from("/var/lib/nami/config.toml");
@@ -246,3 +265,62 @@ pub fn default_config_path() -> PathBuf {
         .and_then(|exe| exe.parent().map(|dir| dir.join("config.toml")))
         .unwrap_or_else(|| PathBuf::from("config.toml"))
 }
+
+/// Спасение данных, оставшихся в системной папке Windows.
+///
+/// Версии, где сервер работал службой, но ещё не выставлял себе рабочий каталог, писали
+/// конфигурацию и базу в `C:\Windows\System32` - туда их ставил диспетчер служб. Со стороны
+/// это выглядело как «переустановка стёрла библиотеку»: сервер не находил конфигурацию рядом с
+/// собой, открывал мастер настройки и заводил пустую базу.
+///
+/// Переносим то, что невосстановимо: конфигурацию, базу и загруженные через приложение файлы.
+/// Кеш транскодов, корзину и сертификат не трогаем - они создаются заново.
+///
+/// Работает один раз: если файл уже лежит на новом месте, ничего не делаем и чужое не трогаем.
+#[cfg(windows)]
+pub fn rescue_from_system_dir() {
+    let target_config = default_config_path();
+    if target_config.exists() {
+        return;
+    }
+    let Some(target_dir) = target_config.parent().map(|p| p.to_path_buf()) else { return };
+    let system_root = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".into());
+    let stray_dir = PathBuf::from(system_root).join("System32");
+    let stray_config = stray_dir.join("config.toml");
+    if !stray_config.is_file() {
+        return;
+    }
+    // Убеждаемся, что файл действительно наш, а не чужой с тем же именем: разбираем его как
+    // свою конфигурацию. Не разобрался - не трогаем.
+    let Ok(text) = std::fs::read_to_string(&stray_config) else { return };
+    if toml::from_str::<Config>(&text).is_err() {
+        return;
+    }
+
+    let _ = std::fs::create_dir_all(&target_dir);
+    for name in ["config.toml", "nami.db", "nami.db-wal", "nami.db-shm"] {
+        let from = stray_dir.join(name);
+        if from.is_file() {
+            let to = target_dir.join(name);
+            if std::fs::rename(&from, &to).is_err() {
+                // Перенос между томами невозможен - копируем и убираем оригинал.
+                if std::fs::copy(&from, &to).is_ok() {
+                    let _ = std::fs::remove_file(&from);
+                }
+            }
+        }
+    }
+    let uploads_from = stray_dir.join("uploads");
+    let uploads_to = target_dir.join("uploads");
+    if uploads_from.is_dir() && !uploads_to.exists() {
+        let _ = std::fs::rename(&uploads_from, &uploads_to);
+    }
+    tracing::warn!(
+        "конфигурация и база перенесены из {} в {}: прежние версии службы писали их в системную папку",
+        stray_dir.display(),
+        target_dir.display()
+    );
+}
+
+#[cfg(not(windows))]
+pub fn rescue_from_system_dir() {}

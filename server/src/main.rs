@@ -65,6 +65,8 @@ async fn main() -> Res<()> {
 pub async fn serve_from_config() -> Res<()> {
     // Остаток прошлого обновления: пока старый процесс был жив, файл держался им.
     update::cleanup_old();
+    // Данные, осевшие в системной папке у версий, где служба стартовала без рабочего каталога.
+    config::rescue_from_system_dir();
     let config_path = config::find_config_path();
     let cfg = config::Config::load(&config_path)?;
 

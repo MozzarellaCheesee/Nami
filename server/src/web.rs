@@ -83,6 +83,16 @@ mod tests {
     /// кто-то опять переименует поле на одной стороне и забудет про другую, сборка
     /// это не поймает - но эта проверка ловит хотя бы уход в сторону старых имён.
     #[test]
+    fn трек_можно_удалить_из_панели() {
+        let html = Assets::get("index.html").expect("embedded web client");
+        let html = std::str::from_utf8(&html.data).expect("utf-8 html");
+        assert!(html.contains("function deleteTrack"), "нет удаления трека");
+        // stopPropagation обязателен: клик по строке запускает воспроизведение, и без него
+        // удаление начиналось бы с проигрывания удаляемого трека.
+        assert!(html.contains("e.stopPropagation(); deleteTrack"), "кнопка удаления запустит трек");
+    }
+
+    #[test]
     fn в_панели_есть_проверка_и_установка_обновления() {
         let html = Assets::get("index.html").expect("embedded web client");
         let html = std::str::from_utf8(&html.data).expect("utf-8 html");
