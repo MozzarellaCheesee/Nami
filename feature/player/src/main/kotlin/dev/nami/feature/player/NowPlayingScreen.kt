@@ -81,6 +81,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -1143,15 +1144,28 @@ internal fun LaunchedEffectSettlePage(
     viewModel: NowPlayingViewModel,
     suppressSkip: () -> Boolean = { false },
 ) {
+    // LaunchedEffect(pagerState) запускает корутину ОДИН раз на всё время жизни экрана -
+    // pagerState создаётся через rememberPagerState и не меняет идентичность никогда, а значит
+    // ключ эффекта не меняется тоже. Обычные Boolean-параметры при этом захватываются замыканием
+    // в момент ПЕРВОЙ композиции и дальше не обновляются: рекомпозиция с новыми hasPrevious/
+    // hasNext создаёт новое замыкание, но раз ключ эффекта тот же, Compose его просто не
+    // запускает - работает старая корутина со старыми, уже неактуальными значениями. Именно
+    // из-за этого свайп иногда молча не переключал трек: если очередь была пуста в начале и
+    // трек появился позже, hasNext навсегда оставался false, каким был при первой отрисовке.
+    // rememberUpdatedState даёт то же самое замыкание, но чтение .value внутри уже видит
+    // актуальное значение на момент срабатывания, без перезапуска эффекта и без пропуска
+    // текущей позиции пейджера.
+    val currentHasPrevious by rememberUpdatedState(hasPrevious)
+    val currentHasNext by rememberUpdatedState(hasNext)
     androidx.compose.runtime.LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.settledPage }.collect { page ->
             when (page) {
                 0 -> {
-                    if (hasPrevious && !suppressSkip()) viewModel.skipToPreviousTrack()
+                    if (currentHasPrevious && !suppressSkip()) viewModel.skipToPreviousTrack()
                     pagerState.scrollToPage(1)
                 }
                 2 -> {
-                    if (hasNext && !suppressSkip()) viewModel.skipNext()
+                    if (currentHasNext && !suppressSkip()) viewModel.skipNext()
                     pagerState.scrollToPage(1)
                 }
             }

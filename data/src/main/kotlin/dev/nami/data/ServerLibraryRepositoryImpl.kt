@@ -407,8 +407,13 @@ class ServerLibraryRepositoryImpl @Inject constructor(
         return ServerTrackMeta(
             id = id,
             title = o.optString("title", ""),
-            artist = o.optString("artist", ""),
-            album = o.optString("album").takeIf { it.isNotBlank() },
+            // org.json.optString на JSON null возвращает буквальную строку "null" (четыре
+            // символа), а не пусто: JSONObject.NULL - настоящий Java-объект, а не ссылка null,
+            // и внутренняя проверка "значение есть - берём toString()" срабатывает на нём же.
+            // Без фильтра трек без артиста на сервере показывался бы в приложении с текстом
+            // "null" вместо пустого поля - тот же класс бага, что уже обходили у format ниже.
+            artist = o.optString("artist", "").takeIf { it != "null" }.orEmpty(),
+            album = o.optString("album").takeIf { it.isNotBlank() && it != "null" },
             durationMs = o.optLong("duration_ms", 0L),
             trackNo = o.optInt("track_no").takeIf { o.has("track_no") && !o.isNull("track_no") },
             year = o.optInt("year").takeIf { o.has("year") && !o.isNull("year") },
@@ -716,11 +721,24 @@ class ServerLibraryRepositoryImpl @Inject constructor(
 
         val res = NamiServerClient.uploadTrack(cfg, file, meta) ?: return@withContext null
         val dup = res.optString("duplicate_of").takeIf { it.isNotBlank() && it != "null" }
+        val serverId = res.optLong("track_id", -1).takeIf { it > 0 }
+
+        // Связь с серверным id ставим сразу, а не полагаемся на то, что следующее зеркалирование
+        // само найдёт пару по названию/артисту/альбому. Именно этот путь и создавал дубль: если
+        // подсказка метаданных не покрыла какое-то поле (или сервер ответил null на что-то из
+        // тегов), совпадение по метаданным срывалось, и рядом с только что отправленным файлом
+        // появлялось второе зеркало - того же трека, но с пустыми полями. Точный id срывов не
+        // допускает вообще: pairServerTracksWithLocal сверяет его в первую очередь, до всякого
+        // сравнения по метаданным. Ставим и для дубля тоже: сервер уже знает этот файл под
+        // своим id, и следующая синхронизация обязана связать его с тем же локальным файлом,
+        // а не гадать по метаданным заново.
+        if (local != null && serverId != null) {
+            trackDao.setServerTrackId(local.id, serverId)
+        }
 
         // Обложку сервер тоже не увидит, если её нет в тегах. Ставим свою - но только новому
         // треку: у дубля обложка уже есть, и перетирать её нашей незачем.
         if (dup == null) {
-            val serverId = res.optLong("track_id", -1).takeIf { it > 0 }
             val artwork = local?.artworkPath ?: local?.albumId?.let { albumDao.findById(it)?.artworkPath }
             if (serverId != null && artwork != null) {
                 val bytes = runCatching { File(artwork).readBytes() }.getOrNull()

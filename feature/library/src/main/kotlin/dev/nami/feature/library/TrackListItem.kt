@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CloudDone
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DeleteForever
@@ -182,13 +183,30 @@ fun TrackListItem(
                 animationSpec = tween(200),
                 label = "track-title-color",
             )
-            Text(
-                text = track.title,
-                color = titleColor,
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = track.title,
+                    color = titleColor,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                // Статус вместо отдельной записи: раньше трек, уже известный серверу под другим
+                // именем/метаданными, иногда заводил себе зеркало-дубликат в этом же списке -
+                // сопоставление по названию/артисту/альбому срывалось, если сервер не знал
+                // артиста или альбом. Теперь связь с сервером - это одно поле на самой строке
+                // (serverTrackId), а не поиск пары по метаданным, и в списке просто меняется
+                // иконка у уже существующего трека, вторая запись никогда не появляется.
+                if (track.serverTrackId != null) {
+                    Icon(
+                        Icons.Outlined.CloudDone,
+                        contentDescription = "Есть на сервере",
+                        tint = NamiColors.Ai,
+                        modifier = Modifier.padding(start = 6.dp).size(14.dp),
+                    )
+                }
+            }
             androidx.compose.animation.AnimatedContent(
                 targetState = isCurrentTrack,
                 transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(200)) },
