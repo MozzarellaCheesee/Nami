@@ -124,9 +124,19 @@ if (-not $currentVersion -and (Test-Path $versionFile)) {
     $currentVersion = (Get-Content $versionFile -Raw).Trim().TrimStart('v')
 }
 if (-not $currentVersion) {
+    # Сначала https: сервер поднимает мастер настройки только по TLS (см. server/src/main.rs),
+    # и обычный http-запрос к нему просто не отвечает. Сертификат самоподписанный, поэтому на
+    # время запроса проверку отключаем и сразу возвращаем обратно - глобальную настройку нельзя
+    # оставлять выключенной, ниже по скрипту идут запросы к GitHub.
+    $prevCallback = [Net.ServicePointManager]::ServerCertificateValidationCallback
     try {
-        $currentVersion = (Invoke-RestMethod -Uri "http://127.0.0.1`:$Port/api/health" -TimeoutSec 2).version
-    } catch {}
+        [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+        $currentVersion = (Invoke-RestMethod -Uri "https://127.0.0.1`:$Port/api/health" -TimeoutSec 2).version
+    } catch {
+        try { $currentVersion = (Invoke-RestMethod -Uri "http://127.0.0.1`:$Port/api/health" -TimeoutSec 2).version } catch {}
+    } finally {
+        [Net.ServicePointManager]::ServerCertificateValidationCallback = $prevCallback
+    }
 }
 $earlyTargetVersion = $null
 try {
@@ -418,8 +428,11 @@ if (-not $localIP) { $localIP = "127.0.0.1" }
 
 Start-Sleep -Seconds 2
 
-$setupUrl = "http://localhost:$Port/setup"
-$lanSetupUrl = "http://$localIP`:$Port/setup"
+# Именно https: без config.toml сервер поднимает ТОЛЬКО защищённый мастер настройки, чтобы
+# пароль администратора не уходил открытым текстом. По http там никто не отвечает, и браузер
+# показывал пустую страницу вместо мастера.
+$setupUrl = "https://localhost:$Port/setup"
+$lanSetupUrl = "https://$localIP`:$Port/setup"
 
 if (-not $SkipBrowser) {
     try {
@@ -439,6 +452,10 @@ Write-Host @"
   ШАГ 1. Первичная настройка (открыта в браузере):
          👉 $setupUrl
          (для настройки с других устройств: $lanSetupUrl)
+
+         Браузер предупредит о сертификате - это нормально. Сертификат самоподписанный:
+         он шифрует пароль по дороге, но подтвердить его некому. Нажмите «Дополнительно»
+         и перейдите на страницу. Приложение сверяет отпечаток этого сертификата само.
 
   ШАГ 2. В мастере укажите:
          • Папку с музыкальной коллекцией (например: D:\Music);
