@@ -89,6 +89,7 @@ class AlbumDetailViewModelTest {
             override suspend fun setTrackNote(id: TrackId, note: String?) {}
             override suspend fun incrementSkipCount(id: TrackId) {}
             override suspend fun setTrackBpmKey(id: TrackId, bpm: Float?, musicalKey: String?) {}
+            override suspend fun setTrackWaveform(id: TrackId, waveform: List<Float>) {}
             override suspend fun import(source: ImportSource) = throw NotImplementedError()
             override suspend fun deleteTrack(id: TrackId) = throw NotImplementedError()
             override suspend fun deleteTracks(ids: List<TrackId>) {}

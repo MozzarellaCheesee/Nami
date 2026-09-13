@@ -66,6 +66,7 @@ class SearchRepositoryImplTest {
         override fun observeByIdWithArtwork(id: String) = error("unused")
         override suspend fun findByPath(path: String): TrackEntity? = error("unused")
         override suspend fun findDuplicate(title: String, artistId: String?, albumId: String?): TrackEntity? = error("unused")
+        override suspend fun setWaveform(id: String, waveform: String?) = error("unused")
         override suspend fun findIdBySourceUri(sourceUri: String): String? = error("unused")
         override suspend fun setSourceUri(id: String, sourceUri: String) = error("unused")
         override suspend fun insertAll(tracks: List<TrackEntity>) = error("unused")

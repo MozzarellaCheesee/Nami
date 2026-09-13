@@ -65,6 +65,22 @@ class ServerAudioRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun requestServerAnalysis(artist: String?, title: String, durationMs: Long): ServerAnalysis? =
+        withContext(Dispatchers.IO) {
+            val cfg = activeConfig() ?: return@withContext null
+            val id = serverTrackId(artist, title, durationMs) ?: return@withContext null
+            val obj = NamiServerClient.analyzeTrack(cfg, id) ?: return@withContext null
+            val base = parseAnalysis(obj) ?: return@withContext null
+            val bars = obj.optJSONArray("waveform")?.let { arr ->
+                (0 until arr.length()).map { arr.optDouble(it).toFloat() }
+            }?.takeIf { it.isNotEmpty() }
+            val full = base.copy(waveform = bars)
+            // Кладём в тот же кеш, что и serverAnalysis: повторный вопрос про этот трек в
+            // пределах сессии не должен снова ходить в сеть.
+            analysisCache[cacheKey(artist, title, durationMs)] = full
+            full
+        }
+
     override suspend fun serverWaveform(artist: String?, title: String, durationMs: Long): List<Float>? =
         withContext(Dispatchers.IO) {
             val cfg = activeConfig() ?: return@withContext null

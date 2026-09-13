@@ -99,6 +99,7 @@ pub fn router(state: Shared) -> Router {
         .route("/api/tracks/match", post(tracks_match))
         .route("/api/tracks/{id}/artwork", get(artwork_handler).put(put_artwork))
         .route("/api/tracks/{id}/waveform", get(waveform_handler))
+        .route("/api/tracks/{id}/analyze", post(analyze_track))
         .route("/api/tracks/{id}/radio", get(radio_handler))
         .route("/api/tracks/{id}/hls/master.m3u8", get(hls_master))
         .route("/api/tracks/{id}/hls/{profile}/index.m3u8", get(hls_index))
@@ -957,6 +958,112 @@ async fn waveform_handler(
             .into_response(),
         None => ApiError(StatusCode::NOT_FOUND, "форма волны ещё не посчитана".into()).into_response(),
     }
+}
+
+/// Анализ ОДНОГО трека по требованию: ReplayGain/R128, BPM, тональность, форма волны.
+///
+/// Пакетный `/api/library/analyze` для клиента не годится по двум причинам: он только для
+/// владельца и он берёт первые попавшиеся непросчитанные треки, а телефону нужен конкретный -
+/// тот, который человек прямо сейчас слушает. Без этой ручки клиент оставался без данных
+/// навсегда: у серверного трека локального файла нет, посчитать самому нечем, а попросить
+/// сервер было некого.
+///
+/// Идемпотентна: уже посчитанный трек отдаётся из базы, файл второй раз не декодируется.
+/// Права - те же, что на сам трек: считает тот, кто его и так может слушать.
+async fn analyze_track(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Path(id): Path<i64>,
+) -> ApiResult<Json<TrackAnalysis>> {
+    if !can_access_track(&st, &ident, id) {
+        return Err(ApiError(StatusCode::NOT_FOUND, "нет такого трека".into()));
+    }
+    if let Some(done) = stored_analysis(&st, id) {
+        return Ok(Json(done));
+    }
+    let path: String = {
+        let db = st.db.lock().unwrap();
+        db.query_row("SELECT path FROM tracks WHERE id=?1", [id], |r| r.get(0))
+            .map_err(|_| ApiError(StatusCode::NOT_FOUND, "нет такого трека".into()))?
+    };
+    let write_st = st.clone();
+    tokio::task::spawn_blocking(move || -> crate::Res<()> {
+        // Полный декод файла - блокирующая работа, ей не место в асинхронном исполнителе.
+        let a = crate::analyzer::analyze(std::path::Path::new(&path), false)?;
+        let wf = a.waveform.as_ref().map(|w| serde_json::to_string(w).unwrap_or_default());
+        let db = write_st.db.lock().unwrap();
+        db.execute(
+            "UPDATE tracks SET rg_track_gain=?2, rg_track_peak=?3, r128_loudness=?4,
+                bpm=?5, musical_key=?6, waveform=COALESCE(?7, waveform), analyzed_at=?8
+             WHERE id=?1",
+            rusqlite::params![
+                id,
+                a.replaygain_track_gain,
+                a.replaygain_track_peak,
+                a.r128_loudness,
+                a.bpm,
+                a.musical_key,
+                wf,
+                crate::db::now(),
+            ],
+        )?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .map_err(|e| ApiError(StatusCode::BAD_REQUEST, format!("не удалось проанализировать: {e}")))?;
+
+    stored_analysis(&st, id)
+        .map(Json)
+        .ok_or_else(|| ApiError(StatusCode::INTERNAL_SERVER_ERROR, "анализ не сохранился".into()))
+}
+
+/// Результат анализа в том виде, в каком он лежит в базе. `None`, если трека нет или он ещё
+/// не считался - вызывающий сам решает, запускать расчёт или нет.
+fn stored_analysis(st: &Shared, id: i64) -> Option<TrackAnalysis> {
+    let db = st.db.lock().unwrap();
+    let row = db
+        .query_row(
+            "SELECT bpm, musical_key, r128_loudness, rg_track_gain, rg_track_peak, waveform, analyzed_at
+             FROM tracks WHERE id=?1",
+            [id],
+            |r| {
+                Ok(TrackAnalysis {
+                    bpm: r.get(0)?,
+                    musical_key: r.get(1)?,
+                    r128_loudness: r.get(2)?,
+                    replaygain_track_gain: r.get(3)?,
+                    replaygain_track_peak: r.get(4)?,
+                    waveform: r
+                        .get::<_, Option<String>>(5)?
+                        .and_then(|json| serde_json::from_str(&json).ok()),
+                    analyzed_at: r.get(6)?,
+                })
+            },
+        )
+        .ok()?;
+    // analyzed_at проставляется в начале пакетного прохода, поэтому сам по себе он ещё не
+    // означает, что что-то посчиталось. Считаем сделанным только когда есть хоть одно значение.
+    let empty = row.bpm.is_none()
+        && row.musical_key.is_none()
+        && row.r128_loudness.is_none()
+        && row.waveform.is_none();
+    if empty {
+        None
+    } else {
+        Some(row)
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct TrackAnalysis {
+    bpm: Option<f64>,
+    musical_key: Option<String>,
+    r128_loudness: Option<f64>,
+    replaygain_track_gain: Option<f64>,
+    replaygain_track_peak: Option<f64>,
+    waveform: Option<Vec<f32>>,
+    analyzed_at: Option<i64>,
 }
 
 // ---------------------------------------------------------------- HLS
@@ -3227,4 +3334,73 @@ struct JamActiveRoomsResp {
 async fn jam_active_rooms(State(st): State<Shared>) -> Response {
     let rooms = st.jams.active_codes();
     Json(JamActiveRoomsResp { rooms }).into_response()
+}
+
+#[cfg(test)]
+mod analysis_tests {
+    use super::*;
+    use rusqlite::Connection;
+
+    fn state() -> Shared {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch(crate::db::SCHEMA).unwrap();
+        std::sync::Arc::new(AppState {
+            db: std::sync::Mutex::new(db),
+            cfg: crate::config::Config::default(),
+            fingerprint: None,
+            rate: Default::default(),
+            qr_challenges: Default::default(),
+            ffmpeg: false,
+            fpcalc: false,
+            events: tokio::sync::broadcast::channel(8).0,
+            positions: tokio::sync::broadcast::channel(8).0,
+            jams: Default::default(),
+            metrics: crate::metrics::Metrics::new(),
+        })
+    }
+
+    fn insert_track(st: &Shared) -> i64 {
+        let db = st.db.lock().unwrap();
+        db.execute(
+            "INSERT INTO tracks (path, title, duration_ms, size_bytes, mtime, library_id)
+             VALUES ('/музыка/трек.flac', 'Трек', 1000, 1, 0, 0)",
+            [],
+        )
+        .unwrap();
+        db.last_insert_rowid()
+    }
+
+    #[test]
+    fn непосчитанный_трек_не_выдаётся_за_посчитанный() {
+        let st = state();
+        let id = insert_track(&st);
+        // analyzed_at проставляется В НАЧАЛЕ пакетного прохода, до самого расчёта. Если
+        // ориентироваться на него, трек с провалившимся ffmpeg навсегда считался бы готовым,
+        // и клиент никогда не получил бы ни BPM, ни формы волны.
+        st.db
+            .lock()
+            .unwrap()
+            .execute("UPDATE tracks SET analyzed_at=123 WHERE id=?1", [id])
+            .unwrap();
+        assert!(stored_analysis(&st, id).is_none());
+    }
+
+    #[test]
+    fn посчитанный_трек_отдаёт_форму_волны_и_темп() {
+        let st = state();
+        let id = insert_track(&st);
+        st.db
+            .lock()
+            .unwrap()
+            .execute(
+                "UPDATE tracks SET bpm=128.0, musical_key='A Minor', waveform='[0.1,0.9]' WHERE id=?1",
+                [id],
+            )
+            .unwrap();
+
+        let got = stored_analysis(&st, id).expect("анализ должен найтись");
+        assert_eq!(got.bpm, Some(128.0));
+        assert_eq!(got.musical_key.as_deref(), Some("A Minor"));
+        assert_eq!(got.waveform, Some(vec![0.1, 0.9]));
+    }
 }

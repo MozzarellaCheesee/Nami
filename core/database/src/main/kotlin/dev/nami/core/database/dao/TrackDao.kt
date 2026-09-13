@@ -124,6 +124,9 @@ interface TrackDao {
     @Query("SELECT sourceUri FROM tracks WHERE sourceUri IS NOT NULL AND deletedAt IS NULL")
     suspend fun allSourceUris(): List<String>
 
+    @Query("UPDATE tracks SET waveform = :waveform WHERE id = :id")
+    suspend fun setWaveform(id: String, waveform: String?)
+
     @Query("UPDATE tracks SET sourceUri = :sourceUri WHERE id = :id")
     suspend fun setSourceUri(id: String, sourceUri: String)
 

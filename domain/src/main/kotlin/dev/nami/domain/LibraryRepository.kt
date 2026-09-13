@@ -116,6 +116,10 @@ interface LibraryRepository {
 
     /** См. BpmKeyAnalyzer - caches its result on the track. */
     suspend fun setTrackBpmKey(id: TrackId, bpm: Float?, musicalKey: String?)
+
+    /** Сохраняет форму волны на самом треке. Файлового кеша по пути мало: путь меняется, когда
+     * скачанный серверный трек становится локальным, и посчитанное сервером терялось. */
+    suspend fun setTrackWaveform(id: TrackId, waveform: List<Float>)
     fun albumsByArtist(id: ArtistId): Flow<List<AlbumSummary>>
     suspend fun import(source: ImportSource): Flow<ImportProgress>
     suspend fun deleteTrack(id: TrackId)

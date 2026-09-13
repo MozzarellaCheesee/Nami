@@ -137,7 +137,7 @@ class PlaybackService : MediaLibraryService() {
             val trackId = mediaItem?.mediaId?.let(::TrackId) ?: return
             scope.launch { updateReplayGainForCurrentTrack(trackId) }
             scope.launch { updateEndingFadeForCurrentTrack(trackId) }
-            scope.launch { bpmKeyScanner.scanIfMissing(trackId) }
+            scope.launch { trackAnalysisScanner.scanIfMissing(trackId) }
         }
 
         // "Кроссфейд при перелистывании назад не должен работать" - skipPrevious/
@@ -158,7 +158,7 @@ class PlaybackService : MediaLibraryService() {
     @Inject lateinit var playlistRepository: PlaylistRepository
     @Inject lateinit var serverAudioRepository: dev.nami.domain.ServerAudioRepository
     @Inject lateinit var lyricsRepository: LyricsRepository
-    @Inject lateinit var bpmKeyScanner: dev.nami.player.analysis.BpmKeyScanner
+    @Inject lateinit var trackAnalysisScanner: dev.nami.player.analysis.TrackAnalysisScanner
 
     private var currentLyricLine: String? = null
     private var cachedLyrics: Lyrics? = null

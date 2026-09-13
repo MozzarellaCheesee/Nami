@@ -569,6 +569,10 @@ class LibraryRepositoryImpl @Inject constructor(
         trackDao.updateBpmKey(id.value, bpm, musicalKey)
     }
 
+    override suspend fun setTrackWaveform(id: TrackId, waveform: List<Float>) {
+        trackDao.setWaveform(id.value, encodeWaveform(waveform))
+    }
+
     override suspend fun deleteTrack(id: TrackId) {
         val track = trackDao.findById(id.value) ?: return
         val trashedPath = trashFileStore.moveToTrash(id.value, track.path) ?: track.path

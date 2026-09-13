@@ -30,6 +30,9 @@ object NamiServerClient {
     /** Размер куска при выгрузке файла. Совпадает с chunked-режимом соединения, чтобы копирование
      * не резало каждый кусок на восемь записей по умолчанию. */
     private const val UPLOAD_BUFFER_BYTES = 64 * 1024
+
+    /** Расчёт трека на сервере - полный декод файла, минуты для длинного альбомного FLAC. */
+    private const val ANALYZE_TIMEOUT_MS = 180_000
     @Volatile private var unauthorizedHandler: ((String) -> Unit)? = null
     @Volatile private var cachedAuthorizedBase: String? = null
 
@@ -197,6 +200,24 @@ object NamiServerClient {
         if (code != 200) return null
         val arr = runCatching { org.json.JSONArray(text) }.getOrNull() ?: return null
         return (0 until arr.length()).map { arr.optDouble(it).toFloat() }
+    }
+
+    /** POST /api/tracks/{id}/analyze - посчитать трек на сервере и получить результат.
+     * Идемпотентна: уже посчитанный трек сервер отдаёт из базы, не декодируя файл заново.
+     * Нужна для серверных треков: локального файла за ними нет, и посчитать самим нечем. */
+    fun analyzeTrack(cfg: Config, serverTrackId: Long): JSONObject? {
+        val base = reachableBase(cfg) ?: return null
+        // Полный декод файла на сервере - это не пять секунд, обычный таймаут тут мал.
+        val (code, text) = request(
+            "POST",
+            "$base/api/tracks/$serverTrackId/analyze",
+            null,
+            cfg.token,
+            cfg.certSha256,
+            readTimeoutMs = ANALYZE_TIMEOUT_MS,
+        ) ?: return null
+        if (code != 200) return null
+        return runCatching { JSONObject(text) }.getOrNull()
     }
 
     /** GET /api/tracks/{id} - метаданные трека, включая поля анализатора. */
@@ -698,11 +719,12 @@ object NamiServerClient {
         body: String?,
         bearer: String?,
         certSha256: String?,
+        readTimeoutMs: Int = TIMEOUT_MS,
     ): Pair<Int, String>? = runCatching {
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = method
             connectTimeout = TIMEOUT_MS
-            readTimeout = TIMEOUT_MS
+            readTimeout = readTimeoutMs
             // Пиннинг отпечатка - только для адреса-IP в локальной сети (самоподписанный
             // сертификат). У внешнего домена настоящий сертификат от CA - обычная проверка.
             if (this is HttpsURLConnection && certSha256 != null && hostIsIpLiteral(url)) {

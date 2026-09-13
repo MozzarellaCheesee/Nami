@@ -21,11 +21,12 @@ class LyricsRepositoryImpl @Inject constructor(
 ) : LyricsRepository {
 
     private fun resolveSiblingFile(path: String, newExtension: String): File {
-        val isRemoteOrVirtual = path.startsWith("http://") ||
-            path.startsWith("https://") ||
-            path.startsWith("server_") ||
-            path.startsWith("jam_") ||
-            (!path.contains(File.separator) && !path.contains("/"))
+        // Сайдкар кладётся рядом с файлом только если путь ведёт к настоящему файлу, то есть
+        // абсолютный. Перечислять схемы поимённо было ошибкой: проверка ловила "server_" - это
+        // ПРЕФИКС ID зеркала, а не его путь, путь выглядит как "nami-server://42". Он не попадал
+        // ни под одно условие, уходил в ветку "рядом с файлом", и File("nami-server:/42.lrc")
+        // .writeText() валил приложение FileNotFoundException при поиске текста серверного трека.
+        val isRemoteOrVirtual = !File(path).isAbsolute
 
         return if (isRemoteOrVirtual) {
             val safeName = path.replace(Regex("[^a-zA-Z0-9._-]"), "_")

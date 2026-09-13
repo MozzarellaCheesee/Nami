@@ -76,6 +76,7 @@ class SearchViewModelTest {
         override suspend fun setTrackNote(id: TrackId, note: String?) = error("unused")
         override suspend fun incrementSkipCount(id: TrackId) = error("unused")
         override suspend fun setTrackBpmKey(id: TrackId, bpm: Float?, musicalKey: String?) = error("unused")
+        override suspend fun setTrackWaveform(id: TrackId, waveform: List<Float>) = Unit
         override fun albumsByArtist(id: ArtistId): Flow<List<AlbumSummary>> = error("unused")
         override suspend fun import(source: ImportSource): Flow<ImportProgress> = error("unused")
         override suspend fun deleteTrack(id: TrackId) = error("unused")

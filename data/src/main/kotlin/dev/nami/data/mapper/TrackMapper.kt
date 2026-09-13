@@ -7,6 +7,7 @@ import dev.nami.core.model.AlbumId
 import dev.nami.core.model.ArtistId
 import dev.nami.core.model.Track
 import dev.nami.core.model.TrackId
+import dev.nami.data.decodeWaveform
 import dev.nami.domain.TrashedTrack
 
 fun TrackEntity.toDomain(albumArtworkPath: String? = null, artistName: String? = null): Track = Track(
@@ -34,6 +35,7 @@ fun TrackEntity.toDomain(albumArtworkPath: String? = null, artistName: String? =
     skipCount = skipCount,
     bpm = bpm,
     musicalKey = musicalKey,
+    waveform = decodeWaveform(waveform),
     rating = rating,
     firstPlayed = firstPlayed,
     fileHash = fileHash,

@@ -964,9 +964,12 @@ fun NowPlayingScreen(
                                         style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
                                         maxLines = 1,
                                         softWrap = false,
-                                        modifier = Modifier
-                                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                                            .basicMarquee(iterations = Int.MAX_VALUE),
+                                        // Без бегущей строки: она шла непрерывно и мельтешила
+                                        // внизу экрана. Плашки рядом теперь без подписей, так
+                                        // что текст почти всегда помещается целиком, а редкий
+                                        // длинный хвост лучше обрезать, чем всё время двигать.
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                     )
                                 }
                             }

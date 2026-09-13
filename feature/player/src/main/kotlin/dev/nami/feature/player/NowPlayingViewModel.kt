@@ -72,7 +72,7 @@ class NowPlayingViewModel @Inject constructor(
     // Работа с библиотекой сервера, в т.ч. скачивание треков
     private val serverLibraryRepository: dev.nami.domain.ServerLibraryRepository? = null,
     // Same reasoning - анализ BPM/тональности сразу после скачивания трека с сервера.
-    private val bpmKeyScanner: dev.nami.player.analysis.BpmKeyScanner? = null,
+    private val trackAnalysisScanner: dev.nami.player.analysis.TrackAnalysisScanner? = null,
 ) : ViewModel() {
 
     private val downloadTrigger = MutableStateFlow(0)
@@ -95,8 +95,8 @@ class NowPlayingViewModel @Inject constructor(
                 if (serverLibraryRepository?.downloadTrack(serverId) != null) {
                     playerRepository.refreshCurrentSource()
                     // Трек стал полностью локальным - считаем BPM/тональность сразу, а не
-                    // дожидаясь следующего запуска воспроизведения (см. BpmKeyScanner).
-                    if (id.startsWith("server_")) bpmKeyScanner?.scanIfMissing(TrackId(id))
+                    // дожидаясь следующего запуска воспроизведения (см. TrackAnalysisScanner).
+                    if (id.startsWith("server_")) trackAnalysisScanner?.scanIfMissing(TrackId(id))
                 }
                 downloadTrigger.value += 1
             }
@@ -412,6 +412,15 @@ class NowPlayingViewModel @Inject constructor(
             _waveform.value = null
             return
         }
+        // Сохранённая на треке форма волны - первый источник. Она переживает смену пути
+        // (скачанный серверный трек переезжает на реальный файл) и перезапуск приложения, в
+        // отличие от кеша по пути ниже. Пустой список означает "считали, не получилось" - рисуем
+        // заглушку и не запускаем расчёт заново.
+        val stored = track?.waveform
+        if (stored != null) {
+            if (stored.isEmpty()) _waveform.value = null else rememberWaveform(path, stored)
+            return
+        }
         val memoryCached = waveformCache[path]
         if (memoryCached != null) {
             _waveform.value = memoryCached
@@ -437,6 +446,9 @@ class NowPlayingViewModel @Inject constructor(
             val bars = fromServer ?: localBars ?: return@launch
             rememberWaveform(path, bars)
             withContext(Dispatchers.IO) { waveformDiskCache.write(path, bars) }
+            // И на сам трек: иначе результат, посчитанный сервером, терялся при смене пути и
+            // запрашивался заново при каждом проигрывании.
+            track?.id?.let { libraryRepository.setTrackWaveform(it, bars) }
         }
     }
 

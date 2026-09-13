@@ -7,6 +7,9 @@ data class ServerAnalysis(
     val r128LoudnessLufs: Float?,
     val bpm: Float?,
     val musicalKey: String?,
+    /** Заполнена только у ответа `requestServerAnalysis` - обычная выдача трека формы волны
+     * не содержит, она лежит отдельной ручкой. */
+    val waveform: List<Float>? = null,
 )
 
 /**
@@ -27,8 +30,15 @@ interface ServerAudioRepository {
      */
     suspend fun serverTrackId(artist: String?, title: String, durationMs: Long): Long?
 
-    /** Анализ трека с сервера (ReplayGain/R128/BPM/тональность). Null - недоступно. */
+    /** Анализ трека с сервера (ReplayGain/R128/BPM/тональность). Null - недоступно.
+     * Только ЧИТАЕТ уже посчитанное: если сервер трек ещё не считал, вернётся null. */
     suspend fun serverAnalysis(artist: String?, title: String, durationMs: Long): ServerAnalysis?
+
+    /** То же, но при промахе ПРОСИТ сервер посчитать (`POST /api/tracks/{id}/analyze`) и ждёт
+     * результат вместе с формой волны. Для серверного трека это единственный способ получить
+     * BPM и тональность: локального файла за ним нет, считать нечего. Долгая операция - полный
+     * декод файла на сервере. */
+    suspend fun requestServerAnalysis(artist: String?, title: String, durationMs: Long): ServerAnalysis? = null
 
     /** Форма волны трека с сервера - 120 значений RMS 0..1 (`GET /api/tracks/{id}/waveform`).
      * Null - сервера нет, трек ему не известен, или анализ на сервере ещё не прогонялся. */

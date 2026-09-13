@@ -28,6 +28,9 @@ data class Track(
     val skipCount: Int = 0,
     val bpm: Float? = null,
     val musicalKey: String? = null,
+    /** Форма волны, 120 значений 0..1. Пустой список отличается от null: null - ещё не считали,
+     * пустой - считали и не получилось, второй раз пробовать незачем. */
+    val waveform: List<Float>? = null,
     val rating: Int? = null,
     val firstPlayed: Long? = null,
     val fileHash: String? = null,

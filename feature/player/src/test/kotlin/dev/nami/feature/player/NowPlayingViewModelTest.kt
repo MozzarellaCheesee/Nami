@@ -109,6 +109,7 @@ class NowPlayingViewModelTest {
         override suspend fun setTrackNote(id: dev.nami.core.model.TrackId, note: String?) {}
         override suspend fun incrementSkipCount(id: dev.nami.core.model.TrackId) {}
         override suspend fun setTrackBpmKey(id: dev.nami.core.model.TrackId, bpm: Float?, musicalKey: String?) {}
+        override suspend fun setTrackWaveform(id: TrackId, waveform: List<Float>) = Unit
         override suspend fun import(source: ImportSource): Flow<dev.nami.domain.ImportProgress> = throw NotImplementedError()
         override suspend fun deleteTrack(id: TrackId) = throw NotImplementedError()
         override suspend fun deleteTracks(ids: List<TrackId>) {}
