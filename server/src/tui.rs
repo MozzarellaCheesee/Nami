@@ -162,6 +162,8 @@ fn toggle_server() -> String {
 fn summary(conn: &Connection, cfg: &Config) -> Vec<String> {
     let mut lines = Vec::new();
 
+    lines.push(format!("Версия: {}", crate::update::current_version()));
+
     #[cfg(windows)]
     {
         lines.push(match crate::service::state() {
@@ -344,7 +346,7 @@ fn delete_track_row(term: &mut Term, conn: &Connection, cfg: &Config, row: &Trac
 
 /// Проверка и установка обновления сервера.
 fn update_screen(term: &mut Term) -> Res<()> {
-    message(term, "Обновление", "Проверяю наличие новой версии...")?;
+    status(term, "Обновление", "Проверяю наличие новой версии...")?;
     let info = match crate::update::check() {
         Ok(i) => i,
         Err(e) => return message(term, "Обновление", &format!("Не удалось проверить: {e}")),
@@ -374,7 +376,7 @@ fn update_screen(term: &mut Term) -> Res<()> {
         return Ok(());
     }
 
-    message(term, "Обновление", "Скачиваю и устанавливаю...")?;
+    status(term, "Обновление", "Скачиваю и устанавливаю...")?;
     match crate::update::install(&info) {
         Ok(v) => {
             message(term, "Обновление", &format!("Обновлено до {v}. Перезапускаю сервер."))?;
@@ -556,15 +558,8 @@ fn confirm(term: &mut Term, question: &str) -> Res<bool> {
 
 /// Отображает сообщение (результат операции, ошибку) и ждёт любую клавишу.
 fn message(term: &mut Term, title: &str, text: &str) -> Res<()> {
+    status(term, title, text)?;
     loop {
-        term.draw(|f| {
-            let area = centered_rect(f.area(), 70, 40.min(f.area().height.saturating_sub(2)));
-            let block = Block::default().borders(Borders::ALL).title(title);
-            f.render_widget(ratatui::widgets::Clear, area);
-            let inner = block.inner(area);
-            f.render_widget(block, area);
-            f.render_widget(Paragraph::new(text).wrap(Wrap { trim: false }), inner);
-        })?;
         if event::poll(Duration::from_millis(200))? {
             if let Event::Key(k) = event::read()? {
                 if k.kind == KeyEventKind::Press {
@@ -573,6 +568,24 @@ fn message(term: &mut Term, title: &str, text: &str) -> Res<()> {
             }
         }
     }
+}
+
+/// Рисует то же окно, что [`message`], но не ждёт нажатия клавиши.
+///
+/// Нужен для "Проверяю..."/"Скачиваю..." перед долгой блокирующей операцией: message() ждёт
+/// Enter ДО того, как что-либо начнёт происходить, поэтому статус проверки обновлений
+/// оставался на экране до нажатия клавиши, и сама проверка не запускалась, пока пользователь
+/// не нажимал Enter вслепую - выглядело так, будто экран обновляется только по Enter.
+fn status(term: &mut Term, title: &str, text: &str) -> Res<()> {
+    term.draw(|f| {
+        let area = centered_rect(f.area(), 70, 40.min(f.area().height.saturating_sub(2)));
+        let block = Block::default().borders(Borders::ALL).title(title);
+        f.render_widget(ratatui::widgets::Clear, area);
+        let inner = block.inner(area);
+        f.render_widget(block, area);
+        f.render_widget(Paragraph::new(text).wrap(Wrap { trim: false }), inner);
+    })?;
+    Ok(())
 }
 
 /// Текстовое поле ввода. `mask` включает отображение звёздочек вместо символов - для
@@ -872,7 +885,7 @@ fn append_music_dir(content: &str, new_dir: &str) -> String {
 }
 
 fn scan_now(term: &mut Term, cfg: &Config) -> Res<()> {
-    message(term, "Сканирование", "Идёт сканирование библиотеки, подождите...")?;
+    status(term, "Сканирование", "Идёт сканирование библиотеки, подождите...")?;
     let mut conn = crate::db::open(&cfg.db_path)?;
     match crate::scanner::scan(&mut conn, &cfg.music_dirs, 0) {
         Ok(rep) => message(
