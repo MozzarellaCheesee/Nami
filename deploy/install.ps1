@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 <#
 .SYNOPSIS
     Скрипт установки Nami Music Server для Windows Server и Windows Desktop.
@@ -14,6 +14,12 @@
     Порт сервера (по умолчанию: 4533).
 .PARAMETER SkipBrowser
     Не открывать веб-браузер автоматически после завершения установки.
+.NOTES
+    Файл намеренно сохранён БЕЗ BOM. Основной способ запуска - `irm ... | iex`, а с BOM
+    Invoke-Expression не разбирает блок param() и падает на первой же строке. Обратная сторона:
+    при сохранении файла на диск и запуске через -File PowerShell 5.1 прочитает его в ANSI.
+    Поэтому запускайте одной командой из .EXAMPLE; при повышении прав скрипт сам скачивает свою
+    копию и пишет её уже с BOM.
 .EXAMPLE
     irm https://raw.githubusercontent.com/MozzarellaCheesee/Nami/main/deploy/install.ps1 | iex
 #>
@@ -62,20 +68,37 @@ if (-not $isAdmin) {
     $elevateArgs = "-NoProfile -ExecutionPolicy Bypass -File `"{0}`" -OriginalUser `"$OriginalUser`""
     $scriptPath = $MyInvocation.MyCommand.Path
     if (-not $scriptPath) {
-        # Скрипт запущен через `irm ... | iex` — файла на диске нет, и
+        # Скрипт запущен через `irm ... | iex` — файла на диске нет, а
         # `Start-Process -Verb RunAs` не умеет поднимать код из памяти.
-        # Сохраняем исходный текст во временный .ps1 и поднимаем уже его.
-        # Пишем с BOM: PowerShell 5.1 без BOM читает файл в ANSI, и весь
-        # русский текст превращается в кракозябры при запуске через -File.
+        #
+        # Взять собственный текст из $MyInvocation.MyCommand.Definition НЕЛЬЗЯ: под iex там
+        # лежит не текст скрипта, а путь внешнего файла (а при запуске прямо из консоли —
+        # пусто). Во временный .ps1 записалась бы строка с путём, и права поднимались бы
+        # для неё. Поэтому честно скачиваем себя заново.
+        #
+        # Файл пишем с BOM: PowerShell 5.1 читает файлы без BOM в ANSI, и весь русский текст
+        # при запуске через -File превращается в кракозябры. Самому себе BOM ставить при этом
+        # нельзя — тогда ломается `irm | iex`, ради которого всё и затевалось.
         $scriptPath = Join-Path $env:TEMP "nami-install-$(Get-Random).ps1"
-        [System.IO.File]::WriteAllText($scriptPath, $MyInvocation.MyCommand.Definition, [System.Text.UTF8Encoding]::new($true))
+        $selfUrl = "https://raw.githubusercontent.com/$Repo/main/deploy/install.ps1"
+        try {
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+            $selfText = Invoke-RestMethod -Uri $selfUrl -UseBasicParsing
+            [System.IO.File]::WriteAllText($scriptPath, $selfText, [System.Text.UTF8Encoding]::new($true))
+        } catch {
+            Write-Warning "Не удалось получить скрипт для запроса прав Администратора: $($_.Exception.Message)"
+            Write-Warning "Продолжаем без повышения прав: брандмауэр и автозапуск настроены не будут."
+            $scriptPath = $null
+        }
     }
-    Write-Host "Запрос прав Администратора для настройки Брандмауэра и автозапуска..." -ForegroundColor Yellow
-    try {
-        Start-Process powershell.exe -Verb RunAs -ArgumentList ($elevateArgs -f $scriptPath)
-        exit 0
-    } catch {
-        Write-Warning "Пользователь отклонил запрос UAC. Продолжаем установку с правами текущего пользователя."
+    if ($scriptPath) {
+        Write-Host "Запрос прав Администратора для настройки Брандмауэра и автозапуска..." -ForegroundColor Yellow
+        try {
+            Start-Process powershell.exe -Verb RunAs -ArgumentList ($elevateArgs -f $scriptPath)
+            exit 0
+        } catch {
+            Write-Warning "Пользователь отклонил запрос UAC. Продолжаем установку с правами текущего пользователя."
+        }
     }
 
     if (-not $isAdmin) {
