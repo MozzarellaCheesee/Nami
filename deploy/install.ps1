@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     Скрипт установки Nami Music Server для Windows Server и Windows Desktop.
@@ -23,7 +23,11 @@ param(
     [string]$Repo = "MozzarellaCheesee/Nami",
     [string]$InstallDir = "$env:ProgramData\Nami",
     [int]$Port = 4533,
-    [switch]$SkipBrowser
+    [switch]$SkipBrowser,
+    # Имя пользователя до самоподнятия через UAC. Нужно, чтобы задача автозапуска
+    # регистрировалась на реального человека, а не на аккаунт, от которого нажали
+    # "Да" в диалоге UAC (это может быть другой администратор).
+    [string]$OriginalUser
 )
 
 $ErrorActionPreference = "Stop"
@@ -51,16 +55,29 @@ if (-not [Environment]::Is64BitOperatingSystem) {
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
 if (-not $isAdmin) {
-    if ($MyInvocation.MyCommand.Path) {
-        Write-Host "Запрос прав Администратора для настройки Брандмауэра и автозапуска..." -ForegroundColor Yellow
-        try {
-            Start-Process powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$($MyInvocation.MyCommand.Path)`""
-            exit 0
-        } catch {
-            Write-Warning "Пользователь отклонил запрос UAC. Продолжаем установку с правами текущего пользователя."
-        }
+    # Сохраняем реального пользователя ДО подъёма прав: после -Verb RunAs
+    # WindowsIdentity.GetCurrent() будет показывать того, кто подтвердил UAC
+    # (не обязательно того же человека), а он нужен ниже для задачи автозапуска.
+    if (-not $OriginalUser) { $OriginalUser = "$env:USERDOMAIN\$env:USERNAME" }
+    $elevateArgs = "-NoProfile -ExecutionPolicy Bypass -File `"{0}`" -OriginalUser `"$OriginalUser`""
+    $scriptPath = $MyInvocation.MyCommand.Path
+    if (-not $scriptPath) {
+        # Скрипт запущен через `irm ... | iex` — файла на диске нет, и
+        # `Start-Process -Verb RunAs` не умеет поднимать код из памяти.
+        # Сохраняем исходный текст во временный .ps1 и поднимаем уже его.
+        # Пишем с BOM: PowerShell 5.1 без BOM читает файл в ANSI, и весь
+        # русский текст превращается в кракозябры при запуске через -File.
+        $scriptPath = Join-Path $env:TEMP "nami-install-$(Get-Random).ps1"
+        [System.IO.File]::WriteAllText($scriptPath, $MyInvocation.MyCommand.Definition, [System.Text.UTF8Encoding]::new($true))
     }
-    
+    Write-Host "Запрос прав Администратора для настройки Брандмауэра и автозапуска..." -ForegroundColor Yellow
+    try {
+        Start-Process powershell.exe -Verb RunAs -ArgumentList ($elevateArgs -f $scriptPath)
+        exit 0
+    } catch {
+        Write-Warning "Пользователь отклонил запрос UAC. Продолжаем установку с правами текущего пользователя."
+    }
+
     if (-not $isAdmin) {
         $InstallDir = "$env:LOCALAPPDATA\Nami"
         Write-Warning "Установка будет выполнена локально в: $InstallDir"
@@ -193,26 +210,41 @@ try {
     $tempFile = Join-Path $env:TEMP $(if ($isZip) { "nami-server-download.zip" } else { "nami-server-download.exe" })
     
     Invoke-WebRequest -Uri $downloadUrl -OutFile $tempFile -UseBasicParsing
-    
-    # Остановим предыдущий запущенный процесс, если он работает
+
+    # Остановим предыдущий запущенный процесс, если он работает. Задачу автозапуска
+    # тоже временно отключаем: иначе при RestartCount=3 планировщик может успеть
+    # перезапустить только что убитый процесс за то же мгновение, и старый
+    # nami-server.exe снова заблокирует файл к моменту Copy-Item.
+    $namiTask = Get-ScheduledTask -TaskName "NamiServer" -ErrorAction SilentlyContinue
+    if ($namiTask) { Disable-ScheduledTask -TaskName "NamiServer" -ErrorAction SilentlyContinue | Out-Null }
     Get-Process "nami-server" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     Start-Sleep -Milliseconds 500
-    
+
+    # Copy-Item с повтором: файл ещё может быть занят, если процесс не успел
+    # освободить хендл (антивирус, медленное завершение и т.п.).
+    function Copy-BinaryWithRetry([string]$From, [string]$To) {
+        for ($i = 1; $i -le 5; $i++) {
+            try { Copy-Item -Path $From -Destination $To -Force; return $true } catch {
+                if ($i -eq 5) { throw }
+                Start-Sleep -Milliseconds 500
+            }
+        }
+    }
+
     if ($isZip) {
         Write-Host "      Распаковка архива..." -ForegroundColor Gray
         $tempExtract = Join-Path $env:TEMP "nami-extract-$(Get-Random)"
         Expand-Archive -Path $tempFile -DestinationPath $tempExtract -Force
-        
+
         $foundExe = Get-ChildItem -Path $tempExtract -Filter "nami-server*.exe" -Recurse | Select-Object -First 1
         if ($foundExe) {
-            Copy-Item -Path $foundExe.FullName -Destination $binPath -Force
-            $downloadSucceeded = $true
+            $downloadSucceeded = Copy-BinaryWithRetry -From $foundExe.FullName -To $binPath
         }
         Remove-Item -Path $tempExtract -Recurse -Force -ErrorAction SilentlyContinue
     } else {
-        Copy-Item -Path $tempFile -Destination $binPath -Force
-        $downloadSucceeded = $true
+        $downloadSucceeded = Copy-BinaryWithRetry -From $tempFile -To $binPath
     }
+    if ($namiTask) { Enable-ScheduledTask -TaskName "NamiServer" -ErrorAction SilentlyContinue | Out-Null }
     Remove-Item -Path $tempFile -Force -ErrorAction SilentlyContinue
 } catch {
     Write-Warning "      Не удалось скачать предсобранный релиз: $($_.Exception.Message)"
@@ -280,6 +312,23 @@ if ($isAdmin) {
     Write-Warning "      Если смартфон не сможет подключиться, добавьте порт $Port TCP в исключения Брандмауэра."
 }
 
+# Порт передаётся серверу через NAMI_PORT (см. server/src/config.rs) — сам по себе
+# параметр -Port иначе влиял бы только на правило брандмауэра и текст подсказок,
+# а сервер продолжал бы слушать порт по умолчанию 4533.
+# ВАЖНО: config.rs применяет NAMI_PORT ПОСЛЕ чтения config.toml, то есть переменная
+# окружения перебивает порт, который пользователь позже выберет в мастере /setup.
+# Поэтому переменную ставим только при нестандартном -Port, а при значении по
+# умолчанию — снимаем (в обоих scope), чтобы не осталась висеть с прошлого запуска
+# с другим портом и не мешала конфигу из мастера.
+if ($Port -ne 4533) {
+    [Environment]::SetEnvironmentVariable('NAMI_PORT', $Port, $(if ($isAdmin) { 'Machine' } else { 'User' }))
+    $env:NAMI_PORT = $Port
+} else {
+    try { [Environment]::SetEnvironmentVariable('NAMI_PORT', $null, 'Machine') } catch {}
+    try { [Environment]::SetEnvironmentVariable('NAMI_PORT', $null, 'User') } catch {}
+    Remove-Item Env:\NAMI_PORT -ErrorAction SilentlyContinue
+}
+
 # 6. Ярлык и фоновая задача автозапуска
 Write-Host "[5/6] Создание ярлыков и задачи автозапуска..." -ForegroundColor Cyan
 try {
@@ -302,7 +351,10 @@ try {
         $trigger = New-ScheduledTaskTrigger -AtLogOn
         $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit 0 -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
         
-        $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+        # Если поднялись через UAC, берём исходного пользователя (см. $OriginalUser выше),
+        # иначе задача будет привязана к тому, кто нажал "Да" в UAC, и не запустится
+        # при обычном входе владельца компьютера.
+        $currentUser = if ($OriginalUser) { $OriginalUser } else { [System.Security.Principal.WindowsIdentity]::GetCurrent().Name }
         $principal = New-ScheduledTaskPrincipal -UserId $currentUser -LogonType Interactive -RunLevel Highest
         
         Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
@@ -313,18 +365,30 @@ try {
 }
 
 # 7. Запуск сервера и открытие мастера настройки
+# Ниже — без учёта $ErrorActionPreference = "Stop": сбой запуска процесса или браузера
+# не должен обрывать скрипт до вывода финальной памятки с адресами и инструкцией.
 Write-Host "[6/6] Запуск Nami Server..." -ForegroundColor Cyan
-$running = Get-Process "nami-server" -ErrorAction SilentlyContinue
-if (-not $running) {
-    Start-Process -FilePath $binPath -WorkingDirectory $InstallDir
-    Write-Host "      Сервер запущен в фоновом режиме." -ForegroundColor Green
-} else {
-    Write-Host "      Сервер уже запущен (PID: $($running.Id))." -ForegroundColor Green
+try {
+    $running = Get-Process "nami-server" -ErrorAction SilentlyContinue
+    if (-not $running) {
+        Start-Process -FilePath $binPath -WorkingDirectory $InstallDir
+        Write-Host "      Сервер запущен в фоновом режиме." -ForegroundColor Green
+    } else {
+        Write-Host "      Сервер уже запущен (PID: $($running.Id))." -ForegroundColor Green
+    }
+} catch {
+    Write-Warning "      Не удалось запустить сервер автоматически: $($_.Exception.Message)"
 }
 
-# Определение локального IP-адреса для подсказки подключения
-$localIP = (Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias "Wi-Fi*", "Ethernet*", "Беспроводная*", "Подключение*" -ErrorAction SilentlyContinue |
-    Where-Object { $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" } |
+# Определение локального IP-адреса для подсказки подключения. Не фильтруем по конкретным
+# именам адаптеров (Wi-Fi/Ethernet/...) — они зависят от локали и оборудования и не покрывают
+# все варианты (USB-модемы, переименованные подключения и т.д.); вместо этого просто
+# отбрасываем loopback, APIPA и явно виртуальные интерфейсы.
+$localIP = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+    Where-Object {
+        $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" -and
+        $_.InterfaceAlias -notmatch "Loopback|vEthernet|Virtual|VPN"
+    } |
     Select-Object -ExpandProperty IPAddress -First 1)
 
 if (-not $localIP) { $localIP = "127.0.0.1" }
@@ -335,8 +399,12 @@ $setupUrl = "http://localhost:$Port/setup"
 $lanSetupUrl = "http://$localIP`:$Port/setup"
 
 if (-not $SkipBrowser) {
-    Write-Host "      Открытие мастера настройки в браузере..." -ForegroundColor Gray
-    Start-Process $setupUrl
+    try {
+        Write-Host "      Открытие мастера настройки в браузере..." -ForegroundColor Gray
+        Start-Process $setupUrl
+    } catch {
+        Write-Warning "      Не удалось открыть браузер автоматически. Откройте вручную: $setupUrl"
+    }
 }
 
 Write-Host @"
