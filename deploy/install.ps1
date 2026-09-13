@@ -362,55 +362,83 @@ if ($Port -ne 4533) {
     Remove-Item Env:\NAMI_PORT -ErrorAction SilentlyContinue
 }
 
-# 6. Ярлык и фоновая задача автозапуска
-Write-Host "[5/6] Создание ярлыков и задачи автозапуска..." -ForegroundColor Cyan
+# 6. Ярлыки управления
+# Ярлык ведёт НЕ на сам сервер, а на экран управления (`nami-server tui`). Раньше он запускал
+# сервер напрямую: на экране висело чёрное консольное окно, закрытие которого выключало сервер,
+# и понять по нему, работает ли что-то, было нельзя.
+Write-Host "[5/6] Создание ярлыков..." -ForegroundColor Cyan
 try {
     $wshShell = New-Object -ComObject WScript.Shell
-    
-    # Ярлык в меню Пуск
-    $programsPath = if ($isAdmin) { [Environment]::GetFolderPath("CommonPrograms") } else { [Environment]::GetFolderPath("Programs") }
-    $shortcutPath = Join-Path $programsPath "Nami Server.lnk"
-    $shortcut = $wshShell.CreateShortcut($shortcutPath)
-    $shortcut.TargetPath = $binPath
-    $shortcut.WorkingDirectory = $InstallDir
-    $shortcut.Description = "Nami Hi-Res Music Server"
-    $shortcut.Save()
-    Write-Host "      ✓ Создан ярлык в меню Пуск" -ForegroundColor Green
 
-    # Планировщик задач Windows (автозапуск при входе пользователя)
-    if ($isAdmin) {
-        $taskName = "NamiServer"
-        $action = New-ScheduledTaskAction -Execute $binPath -WorkingDirectory $InstallDir
-        $trigger = New-ScheduledTaskTrigger -AtLogOn
-        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit 0 -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
-        
-        # Если поднялись через UAC, берём исходного пользователя (см. $OriginalUser выше),
-        # иначе задача будет привязана к тому, кто нажал "Да" в UAC, и не запустится
-        # при обычном входе владельца компьютера.
-        $currentUser = if ($OriginalUser) { $OriginalUser } else { [System.Security.Principal.WindowsIdentity]::GetCurrent().Name }
-        $principal = New-ScheduledTaskPrincipal -UserId $currentUser -LogonType Interactive -RunLevel Highest
-        
-        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
-        Write-Host "      ✓ Зарегистрирована фоновая задача автозапуска '$taskName'" -ForegroundColor Green
+    foreach ($folder in @([Environment]::GetFolderPath("Desktop"),
+                          $(if ($isAdmin) { [Environment]::GetFolderPath("CommonPrograms") } else { [Environment]::GetFolderPath("Programs") }))) {
+        $shortcutPath = Join-Path $folder "Nami - сервер.lnk"
+        $shortcut = $wshShell.CreateShortcut($shortcutPath)
+        # Запуск через powershell, а не напрямую: ярлык на exe с аргументом закрывает окно
+        # сразу после выхода из TUI, и сообщение об ошибке (например «нужны права
+        # администратора») человек не успевает прочитать.
+        $shortcut.TargetPath = "powershell.exe"
+        $shortcut.Arguments = "-NoProfile -NoExit -Command & '$binPath' tui"
+        $shortcut.WorkingDirectory = $InstallDir
+        $shortcut.Description = "Управление сервером Nami: включить, выключить, пользователи, библиотека"
+        $shortcut.Save()
     }
+    Write-Host "      ✓ Ярлык «Nami - сервер» создан на рабочем столе и в меню Пуск" -ForegroundColor Green
 } catch {
-    Write-Warning "      Не удалось создать ярлык или задачу: $($_.Exception.Message)"
+    Write-Warning "      Не удалось создать ярлык: $($_.Exception.Message)"
 }
 
-# 7. Запуск сервера и открытие мастера настройки
-# Ниже — без учёта $ErrorActionPreference = "Stop": сбой запуска процесса или браузера
-# не должен обрывать скрипт до вывода финальной памятки с адресами и инструкцией.
+# 7. Служба Windows и запуск
+# Служба, а не задача планировщика: задача стартует по ВХОДУ пользователя (перезагрузили
+# машину и не залогинились — сервера нет) и запускает обычное консольное приложение с окном.
+# Служба поднимается вместе с Windows и живёт без окна вовсе.
 Write-Host "[6/6] Запуск Nami Server..." -ForegroundColor Cyan
 try {
-    $running = Get-Process "nami-server" -ErrorAction SilentlyContinue
-    if (-not $running) {
-        Start-Process -FilePath $binPath -WorkingDirectory $InstallDir
-        Write-Host "      Сервер запущен в фоновом режиме." -ForegroundColor Green
-    } else {
-        Write-Host "      Сервер уже запущен (PID: $($running.Id))." -ForegroundColor Green
+    # Задача от прошлых версий больше не нужна: иначе сервер поднимался бы дважды —
+    # службой и задачей — и второй экземпляр падал бы на занятом порту.
+    if (Get-ScheduledTask -TaskName "NamiServer" -ErrorAction SilentlyContinue) {
+        Unregister-ScheduledTask -TaskName "NamiServer" -Confirm:$false -ErrorAction SilentlyContinue
+        Write-Host "      Старая задача автозапуска удалена (её заменяет служба)." -ForegroundColor Gray
     }
-} catch {
-    Write-Warning "      Не удалось запустить сервер автоматически: $($_.Exception.Message)"
+} catch {}
+
+$serviceReady = $false
+if ($isAdmin) {
+    try {
+        $existing = Get-Service -Name "NamiServer" -ErrorAction SilentlyContinue
+        if ($existing) {
+            & $binPath service stop 2>$null | Out-Null
+            & $binPath service start 2>$null | Out-Null
+        } else {
+            & $binPath service install 2>$null | Out-Null
+        }
+        Start-Sleep -Seconds 2
+        $svc = Get-Service -Name "NamiServer" -ErrorAction SilentlyContinue
+        if ($svc -and $svc.Status -eq 'Running') {
+            $serviceReady = $true
+            Write-Host "      ✓ Служба «NamiServer» работает и будет запускаться вместе с Windows" -ForegroundColor Green
+        }
+    } catch {
+        Write-Warning "      Не удалось зарегистрировать службу: $($_.Exception.Message)"
+    }
+} else {
+    Write-Warning "      Без прав Администратора служба не регистрируется."
+}
+
+if (-not $serviceReady) {
+    # Запасной путь: без службы поднимаем обычный процесс, скрыв окно. Пользователь хотя бы
+    # получит работающий сервер до конца сеанса.
+    try {
+        $running = Get-Process "nami-server" -ErrorAction SilentlyContinue
+        if (-not $running) {
+            Start-Process -FilePath $binPath -WorkingDirectory $InstallDir -WindowStyle Hidden
+            Write-Host "      Сервер запущен как обычный процесс (до перезагрузки)." -ForegroundColor Yellow
+        } else {
+            Write-Host "      Сервер уже запущен (PID: $($running.Id))." -ForegroundColor Green
+        }
+    } catch {
+        Write-Warning "      Не удалось запустить сервер: $($_.Exception.Message)"
+    }
 }
 
 # Определение локального IP-адреса для подсказки подключения. Не фильтруем по конкретным
@@ -462,12 +490,20 @@ Write-Host @"
          • Логин и пароль администратора (от 8 символов);
          • Нажмите «Сохранить конфигурацию».
 
-  ШАГ 3. Перезапустите сервер (через Диспетчер задач или ярлык в Пуске).
+  ШАГ 3. Перезапустите сервер: ярлык «Nami - сервер» на рабочем столе,
+         первый пункт выключает, второе нажатие включает обратно.
 
   ШАГ 4. Сопряжение с Android-клиентом:
          • Снова откройте $lanSetupUrl
          • Отсканируйте отобразившийся QR-код камерой в приложении Nami:
            «Настройки» → «Подключить сервер» → «Сканировать QR».
+
+  ДАЛЬШЕ. Ярлык «Nami - сервер» на рабочем столе показывает, работает ли сервер,
+         по какому адресу подключаться и сколько треков в библиотеке. Там же
+         включение и выключение, пользователи, папки и сканирование.
+
+  Сервер работает службой Windows: запускается вместе с системой, ещё до входа
+  в учётную запись, и не держит на экране консольного окна.
 
   Рабочая директория: $InstallDir
 ======================================================================

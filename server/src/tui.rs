@@ -82,22 +82,114 @@ const MAIN_ITEMS: &[&str] = &[
     "Выход",
 ];
 
+/// Пункты меню вместе с управлением сервером. Первая строка меняется по состоянию службы:
+/// один и тот же пункт то запускает, то останавливает - отдельные «включить» и «выключить»,
+/// из которых один всегда бесполезен, читаются хуже.
+fn main_items() -> Vec<String> {
+    let mut items: Vec<String> = Vec::new();
+    #[cfg(windows)]
+    items.push(server_control_label());
+    items.extend(MAIN_ITEMS.iter().map(|s| s.to_string()));
+    items
+}
+
+#[cfg(windows)]
+fn server_control_label() -> String {
+    match crate::service::state() {
+        None => "Сервер: не установлен как служба (Enter - установить)".to_string(),
+        Some(st) if format!("{st:?}") == "Running" => "Сервер работает (Enter - выключить)".to_string(),
+        Some(_) => "Сервер выключен (Enter - включить)".to_string(),
+    }
+}
+
+/// Возвращает сообщение для показа пользователю. Ошибка здесь не должна валить весь TUI:
+/// чаще всего это «нет прав администратора», и человеку надо просто это увидеть.
+#[cfg(windows)]
+fn toggle_server() -> String {
+    use crate::service;
+    match service::state() {
+        None => match std::env::current_exe().map_err(crate::Err::from).and_then(|exe| service::install(&exe)) {
+            Ok(()) => "Служба зарегистрирована и запущена.".to_string(),
+            Err(e) => format!("Не удалось установить службу: {e}
+Запустите TUI от имени администратора."),
+        },
+        Some(st) if format!("{st:?}") == "Running" => match service::stop() {
+            Ok(()) => "Сервер выключен.".to_string(),
+            Err(e) => format!("Не удалось выключить: {e}"),
+        },
+        Some(_) => match service::start() {
+            Ok(()) => "Сервер включён.".to_string(),
+            Err(e) => format!("Не удалось включить: {e}"),
+        },
+    }
+}
+
+/// Сводка для главного экрана: человек должен с первого взгляда понять, работает ли сервер и
+/// куда подключаться, не зная ни одной команды.
+fn summary(conn: &Connection, cfg: &Config) -> Vec<String> {
+    let mut lines = Vec::new();
+
+    #[cfg(windows)]
+    {
+        lines.push(match crate::service::state() {
+            None => "Состояние: сервер не установлен как служба".to_string(),
+            Some(st) if format!("{st:?}") == "Running" => "Состояние: работает".to_string(),
+            Some(_) => "Состояние: выключен".to_string(),
+        });
+    }
+    #[cfg(not(windows))]
+    lines.push("Состояние: см. systemctl status nami".to_string());
+
+    let scheme = if cfg.tls { "https" } else { "http" };
+    let ip = crate::local_ip();
+    lines.push(format!("Адрес для телефона: {scheme}://{ip}:{}", cfg.port));
+    lines.push(format!("Здесь, на этом компьютере: {scheme}://localhost:{}", cfg.port));
+    lines.push(format!(
+        "В библиотеке: {} треков, пользователей: {}",
+        crate::api::track_count(conn),
+        users::count(conn),
+    ));
+    lines
+}
+
 fn main_menu(term: &mut Term, conn: &Connection, cfg: &Config) -> Res<()> {
     let mut state = ListState::default();
     state.select(Some(0));
     loop {
-        term.draw(|f| draw_menu(f, "NAMI - управление сервером", MAIN_ITEMS, &mut state, None))?;
+        // Состав пересобирается на каждом кадре: подпись первой строки зависит от того,
+        // работает ли сервер прямо сейчас, а он мог быть остановлен и снаружи.
+        let items = main_items();
+        let labels: Vec<&str> = items.iter().map(|s| s.as_str()).collect();
+        let info = summary(conn, cfg);
+        term.draw(|f| draw_home(f, &info, &labels, &mut state))?;
         match read_key()? {
-            Key::Up => move_sel(&mut state, MAIN_ITEMS.len(), -1),
-            Key::Down => move_sel(&mut state, MAIN_ITEMS.len(), 1),
-            Key::Enter => match state.selected().unwrap_or(0) {
-                0 => users_screen(term, conn)?,
-                1 => library_screen(term, conn, cfg)?,
-                2 => library_mode_screen(term, conn)?,
-                3 => devices_screen(term, conn)?,
-                4 => shares_screen(term, conn)?,
-                _ => return Ok(()),
-            },
+            Key::Up => move_sel(&mut state, items.len(), -1),
+            Key::Down => move_sel(&mut state, items.len(), 1),
+            Key::Enter => {
+                // Со сдвигом: под Windows первый пункт - управление сервером, дальше общий
+                // список; на других системах его нет, и нумерация прежняя.
+                let raw = state.selected().unwrap_or(0);
+                #[cfg(windows)]
+                let index = {
+                    if raw == 0 {
+                        let msg = toggle_server();
+                        message(term, "Сервер", &msg)?;
+                        continue;
+                    }
+                    raw - 1
+                };
+                #[cfg(not(windows))]
+                let index = raw;
+
+                match index {
+                    0 => users_screen(term, conn)?,
+                    1 => library_screen(term, conn, cfg)?,
+                    2 => library_mode_screen(term, conn)?,
+                    3 => devices_screen(term, conn)?,
+                    4 => shares_screen(term, conn)?,
+                    _ => return Ok(()),
+                }
+            }
             Key::Quit => return Ok(()),
             Key::Other => {}
         }
@@ -145,6 +237,44 @@ fn move_sel(state: &mut ListState, len: usize, delta: isize) {
 }
 
 // ---------------------------------------------------------------- рисование
+
+/// Главный экран: сверху сводка, снизу действия. Сводка не прокручивается и не прячется -
+/// ради неё ярлык и открывают, а меню без ответа на вопрос «а сервер-то работает?» заставляло бы
+/// лезть в диспетчер задач.
+fn draw_home(f: &mut ratatui::Frame, info: &[String], items: &[&str], state: &mut ListState) {
+    let area = f.area();
+    let info_height = info.len() as u16 + 2;
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(info_height), Constraint::Min(3), Constraint::Length(1)])
+        .split(area);
+
+    let width = chunks[0].width.saturating_sub(4) as usize;
+    let text: Vec<String> = info.iter().map(|l| clip_to_width(l, width)).collect();
+    f.render_widget(
+        Paragraph::new(text.join("
+"))
+            .block(Block::default().borders(Borders::ALL).title("NAMI - сервер"))
+            .wrap(Wrap { trim: false }),
+        chunks[0],
+    );
+
+    let list_items: Vec<ListItem> = items
+        .iter()
+        .map(|s| ListItem::new(clip_to_width(s, chunks[1].width.saturating_sub(4) as usize)))
+        .collect();
+    let list = List::new(list_items)
+        .block(Block::default().borders(Borders::ALL).title("Что сделать"))
+        .highlight_style(Style::default().add_modifier(Modifier::REVERSED))
+        .highlight_symbol("> ");
+    f.render_stateful_widget(list, chunks[1], state);
+
+    f.render_widget(
+        Paragraph::new("↑↓ выбор, Enter - открыть, Esc/q - выход")
+            .style(Style::default().fg(Color::DarkGray)),
+        chunks[2],
+    );
+}
 
 fn draw_menu(f: &mut ratatui::Frame, title: &str, items: &[&str], state: &mut ListState, hint: Option<&str>) {
     let owned: Vec<String> = items.iter().map(|s| s.to_string()).collect();

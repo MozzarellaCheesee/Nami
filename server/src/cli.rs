@@ -94,6 +94,27 @@ pub enum Commands {
     },
     /// Полноэкранный TUI управления сервером (стрелки + Enter, как веб-панель владельца)
     Tui,
+    /// Служба Windows: install, uninstall, start, stop, status
+    #[cfg(windows)]
+    Service {
+        #[command(subcommand)]
+        action: ServiceAction,
+    },
+}
+
+#[cfg(windows)]
+#[derive(Subcommand, Clone, Debug)]
+pub enum ServiceAction {
+    /// Зарегистрировать службу и запустить её (нужны права администратора)
+    Install,
+    /// Удалить службу
+    Uninstall,
+    Start,
+    Stop,
+    Status,
+    /// Служебный режим: точка входа для диспетчера служб, вручную не вызывается
+    #[command(hide = true)]
+    Run,
 }
 
 #[derive(Subcommand, Clone, Debug)]
@@ -187,6 +208,8 @@ impl Commands {
             Commands::Library { action } => library_cmd(cfg, action.clone()),
             Commands::Config { action } => config_cmd(cfg, action.clone()),
             Commands::Tui => crate::tui::run(cfg),
+            #[cfg(windows)]
+            Commands::Service { action } => service_command(action),
         }
     }
 }
@@ -1331,4 +1354,40 @@ fn append_music_dir(content: &str, new_dir: &str) -> String {
     }
 
     lines.join("\n") + "\n"
+}
+
+#[cfg(windows)]
+fn service_command(action: &ServiceAction) -> Res<()> {
+    use crate::service;
+    match action {
+        ServiceAction::Install => {
+            let exe = std::env::current_exe()?;
+            service::install(&exe)?;
+            println!("Служба «{}» зарегистрирована и запущена.", service::SERVICE_NAME);
+            Ok(())
+        }
+        ServiceAction::Uninstall => {
+            service::uninstall()?;
+            println!("Служба удалена.");
+            Ok(())
+        }
+        ServiceAction::Start => {
+            service::start()?;
+            println!("Служба запущена.");
+            Ok(())
+        }
+        ServiceAction::Stop => {
+            service::stop()?;
+            println!("Служба остановлена.");
+            Ok(())
+        }
+        ServiceAction::Status => {
+            match service::state() {
+                None => println!("Служба не зарегистрирована."),
+                Some(st) => println!("Состояние службы: {st:?}"),
+            }
+            Ok(())
+        }
+        ServiceAction::Run => service::run_dispatcher(),
+    }
 }

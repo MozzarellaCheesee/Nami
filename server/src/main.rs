@@ -27,6 +27,7 @@ mod sync;
 mod tls;
 mod transcode;
 mod tui;
+mod service;
 mod users;
 mod watcher;
 mod web;
@@ -41,12 +42,7 @@ pub type Res<T> = std::result::Result<T, Err>;
 
 #[tokio::main]
 async fn main() -> Res<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "nami_server=info,tower_http=warn".into()),
-        )
-        .init();
+    init_tracing();
 
     let config_path = config::find_config_path();
     let cfg = config::Config::load(&config_path)?;
@@ -58,6 +54,15 @@ async fn main() -> Res<()> {
     if let Some(command) = cli.command {
         return command.execute(&cfg);
     }
+
+    serve_from_config().await
+}
+
+/// Запуск сервера из конфигурации. Отдельно от [`main`], потому что то же самое нужно службе
+/// Windows: она поднимает собственный рантайм и зовёт эту функцию напрямую.
+pub async fn serve_from_config() -> Res<()> {
+    let config_path = config::find_config_path();
+    let cfg = config::Config::load(&config_path)?;
 
     // Провайдер криптографии выбирается явно: собираем rustls без aws-lc-rs (см. Cargo.toml),
     // а без установленного провайдера rustls отказывается создавать конфигурацию.
@@ -176,6 +181,26 @@ async fn main() -> Res<()> {
     Ok(())
 }
 
+/// У службы Windows нет консоли, и логи в stdout уходят в никуда. Чтобы отказ запуска вообще
+/// можно было разобрать, в этом режиме пишем в файл рядом с данными.
+fn init_tracing() {
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| "nami_server=info,tower_http=warn".into());
+
+    let as_service = cfg!(windows)
+        && std::env::args().any(|a| a == "service")
+        && std::env::args().any(|a| a == "run");
+    if as_service {
+        let cfg = config::Config::load(&config::find_config_path()).unwrap_or_default();
+        let path = cfg.data_dir.join("nami-service.log");
+        if let Ok(file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+            tracing_subscriber::fmt().with_env_filter(filter).with_ansi(false).with_writer(file).init();
+            return;
+        }
+    }
+    tracing_subscriber::fmt().with_env_filter(filter).init();
+}
+
 /// Адрес в локальной сети - нужен только как SAN сертификата, чтобы клиент,
 /// подключающийся по IP, не спотыкался о несовпадение имени.
 ///
@@ -183,7 +208,7 @@ async fn main() -> Res<()> {
 /// выбирает исходящий интерфейс). Полное перечисление интерфейсов - отдельный крейт ради
 /// одной строки; если сервер стоит на машине с несколькими сетями, сертификат
 /// перегенерируется удалением cert.pem.
-fn local_ip() -> String {
+pub fn local_ip() -> String {
     std::net::UdpSocket::bind("0.0.0.0:0")
         .and_then(|s| {
             s.connect("203.0.113.1:80")?;
