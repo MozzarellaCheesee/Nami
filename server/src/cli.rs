@@ -92,6 +92,8 @@ pub enum Commands {
         #[command(subcommand)]
         action: Option<ConfigAction>,
     },
+    /// Полноэкранный TUI управления сервером (стрелки + Enter, как веб-панель владельца)
+    Tui,
 }
 
 #[derive(Subcommand, Clone, Debug)]
@@ -184,6 +186,7 @@ impl Commands {
             Commands::Devices { action } => devices_cmd(cfg, action.clone()),
             Commands::Library { action } => library_cmd(cfg, action.clone()),
             Commands::Config { action } => config_cmd(cfg, action.clone()),
+            Commands::Tui => crate::tui::run(cfg),
         }
     }
 }
@@ -1240,7 +1243,8 @@ fn config_cmd(cfg: &crate::config::Config, action: Option<ConfigAction>) -> Res<
     Ok(())
 }
 
-fn format_ts(ts: i64) -> String {
+/// pub(crate): переиспользуется в tui.rs, чтобы формат дат в TUI совпадал с обычным CLI.
+pub(crate) fn format_ts(ts: i64) -> String {
     let secs = ts;
     let days = secs / 86400;
     let time = secs % 86400;

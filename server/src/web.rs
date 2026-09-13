@@ -76,4 +76,43 @@ mod tests {
             assert!(body.contains(needle), "escapeHtml не экранирует {needle}");
         }
     }
+
+    /// Ловит ровно тот баг, что был: JS читал плоские поля (`tracks_total`,
+    /// `broken_count`, `broken_files`), которых `Health` в `server/src/library.rs`
+    /// не отдаёт - там `tracks` и вложенные `{count, items}` (`Sampled<T>`). Если
+    /// кто-то опять переименует поле на одной стороне и забудет про другую, сборка
+    /// это не поймает - но эта проверка ловит хотя бы уход в сторону старых имён.
+    #[test]
+    fn health_report_uses_actual_server_field_names() {
+        let html = Assets::get("index.html").expect("embedded web client");
+        let html = std::str::from_utf8(&html.data).expect("utf-8 html");
+        let body = html
+            .split_once("async function adminCheckHealth()")
+            .expect("adminCheckHealth defined")
+            .1;
+        let body = body.split_once("\n// --- Модальные окна")
+            .map(|(b, _)| b)
+            .unwrap_or(body);
+        // Реальные имена полей ответа /api/library/health.
+        for needle in ["h.tracks", "h.broken", "h.missing", "h.without_artist",
+            "h.without_album", "h.without_year", "h.duplicate_groups"] {
+            assert!(body.contains(needle), "адрес поля {needle} пропал из отчёта о здоровье");
+        }
+        // Старые несуществующие плоские имена, из-за которых был undefined.
+        for stale in ["tracks_total", "broken_count", "missing_tags_count", "broken_files"] {
+            assert!(!body.contains(stale), "в отчёте вернулось несуществующее поле {stale}");
+        }
+    }
+
+    /// `BrokenFile` (server/src/library.rs) - это `{ path, error, failed_at }`, не
+    /// `TrackRef`: полей artist/title у него нет. Раздел битых файлов обязан читать
+    /// `f.error`, а не гонять их через общий рендерер треков - иначе текст ошибки,
+    /// ради которого раздел вообще существует, пропадает с экрана.
+    #[test]
+    fn broken_files_render_with_error_not_generic_track_template() {
+        let html = Assets::get("index.html").expect("embedded web client");
+        let html = std::str::from_utf8(&html.data).expect("utf-8 html");
+        assert!(html.contains("f.error"), "раздел битых файлов не показывает текст ошибки");
+        assert!(html.contains("renderBrokenFile"), "битые файлы должны рендериться своим шаблоном");
+    }
 }

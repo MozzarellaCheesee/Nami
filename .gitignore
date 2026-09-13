@@ -1,5 +1,7 @@
 # Gradle / Android build output
 .gradle/
+# Отдельный GRADLE_USER_HOME для параллельных сборок - служебный кеш, не часть проекта.
+.gradle-agent-home/
 build/
 *.iml
 .idea/

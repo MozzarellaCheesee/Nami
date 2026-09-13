@@ -149,6 +149,61 @@ pub fn revoke(
     )
 }
 
+/// Сводка по ссылке для списков управления (TUI/будущий API) - без токена в открытом виде,
+/// т.к. в БД хранится только его хеш (`token_hash`), сам токен восстановить нельзя и не нужно:
+/// для отзыва достаточно хеша, см. `revoke_by_hash`.
+#[derive(Debug)]
+pub struct ShareInfo {
+    pub token_hash: String,
+    pub title: String,
+    pub track_ids: Vec<i64>,
+    pub created_by: Option<i64>,
+    pub created_at: i64,
+    pub expires_at: Option<i64>,
+    pub max_plays: Option<i64>,
+    pub play_count: i64,
+}
+
+/// Список всех гостевых ссылок для панели управления. Протухшие не фильтруются -
+/// оператору полезно видеть и мёртвые ссылки, чтобы решить, чистить их или нет.
+pub fn list(conn: &Connection) -> rusqlite::Result<Vec<ShareInfo>> {
+    let mut stmt = conn.prepare(
+        "SELECT token_hash, title, track_ids, created_by, created_at, expires_at, max_plays, play_count
+         FROM shares ORDER BY created_at DESC",
+    )?;
+    let rows = stmt.query_map([], |r| {
+        let ids_json: String = r.get(2)?;
+        Ok(ShareInfo {
+            token_hash: r.get(0)?,
+            title: r.get(1)?,
+            track_ids: serde_json::from_str(&ids_json).unwrap_or_default(),
+            created_by: r.get(3)?,
+            created_at: r.get(4)?,
+            expires_at: r.get(5)?,
+            max_plays: r.get(6)?,
+            play_count: r.get(7)?,
+        })
+    })?;
+    rows.collect()
+}
+
+/// Отзыв ссылки по уже известному хешу токена (для панели управления, где токен
+/// в открытом виде никогда не был доступен). Правила владения те же, что в `revoke`.
+pub fn revoke_by_hash(
+    conn: &Connection,
+    token_hash: &str,
+    requester: Option<i64>,
+    is_owner: bool,
+) -> rusqlite::Result<usize> {
+    if is_owner {
+        return conn.execute("DELETE FROM shares WHERE token_hash=?1", [token_hash]);
+    }
+    conn.execute(
+        "DELETE FROM shares WHERE token_hash=?1 AND created_by IS ?2",
+        rusqlite::params![token_hash, requester],
+    )
+}
+
 /// Экранирование под HTML-текст: заголовок ссылки и теги приходят от пользователя.
 fn esc(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")

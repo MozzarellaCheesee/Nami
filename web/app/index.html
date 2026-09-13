@@ -1309,28 +1309,87 @@ async function adminAnalyze() {
   }
 }
 
+// Сервер отдаёт счётчики не плоскими полями, а как { count, items } (см. Sampled<T>
+// в server/src/library.rs) - отсюда и был undefined: JS читал h.broken_count и
+// h.broken_files, которых в ответе просто нет. safeCount/safeItems защищают от такого
+// расхождения на будущее: даже если сервер честно вернёт null или переименует ветку,
+// в разметке будет осмысленный текст, а не undefined.
+function safeCount(sampled) {
+  const n = sampled && typeof sampled.count === 'number' ? sampled.count : 0;
+  return String(n);
+}
+function safeItems(sampled) {
+  return (sampled && Array.isArray(sampled.items)) ? sampled.items : [];
+}
+
+// Битые файлы (Sampled<BrokenFile>) - это не TrackRef: полей artist/title у них нет
+// вовсе, зато есть текст ошибки, ради которого этот раздел вообще существует. Общий
+// renderTrackSample для них не годится - он подставил бы вместо ошибки затычку
+// "без исполнителя" с висящим " / " в конце.
+function renderBrokenFile(sampled) {
+  const items = safeItems(sampled);
+  const count = safeCount(sampled);
+  let html = `<div><h4 style="margin-top:10px;">Битые файлы: ${escapeHtml(count)}</h4>`;
+  if (items.length === 0) {
+    html += `<div style="font-size:12px;color:var(--text-muted);">нет данных</div>`;
+  } else {
+    items.forEach(f => {
+      const when = f.failed_at ? new Date(f.failed_at * 1000).toLocaleString() : '';
+      html += `<div style="font-size:12px;font-family:monospace;padding:4px 0;">${escapeHtml(f.path)}${when ? ' (' + escapeHtml(when) + ')' : ''}: ${escapeHtml(f.error)}</div>`;
+    });
+  }
+  html += `</div>`;
+  return html;
+}
+
+// Рендерит один список проблемных треков (или "нет данных", если он пуст).
+function renderTrackSample(title, sampled) {
+  const items = safeItems(sampled);
+  const count = safeCount(sampled);
+  let html = `<div><h4 style="margin-top:10px;">${escapeHtml(title)}: ${escapeHtml(count)}</h4>`;
+  if (items.length === 0) {
+    html += `<div style="font-size:12px;color:var(--text-muted);">нет данных</div>`;
+  } else {
+    items.forEach(t => {
+      html += `<div style="font-size:12px;font-family:monospace;padding:4px 0;">${escapeHtml(t.path)} — ${escapeHtml(t.artist || 'без исполнителя')} / ${escapeHtml(t.title)}</div>`;
+    });
+  }
+  html += `</div>`;
+  return html;
+}
+
 async function adminCheckHealth() {
   const repBox = document.getElementById('adminHealthReport');
   show('adminHealthReport');
   repBox.innerHTML = '<div class="alert info">Проверка здоровья библиотеки...</div>';
   try {
     const h = await api('/library/health');
+    const brokenCount = safeCount(h.broken);
+    const groupsCount = (h.duplicate_groups && Array.isArray(h.duplicate_groups)) ? h.duplicate_groups.length : 0;
     let html = `
       <div class="card stack" style="background:var(--surface-raised);">
         <h3>Отчёт о здоровье библиотеки</h3>
         <div class="grid3">
-          <div class="stat-badge"><span class="stat-label">Всего файлов</span><span class="stat-value">${h.tracks_total}</span></div>
-          <div class="stat-badge"><span class="stat-label">Битых файлов</span><span class="stat-value" style="color:${h.broken_count > 0 ? 'var(--red)' : 'var(--green)'};">${h.broken_count}</span></div>
-          <div class="stat-badge"><span class="stat-label">Без тегов</span><span class="stat-value">${h.missing_tags_count}</span></div>
+          <div class="stat-badge"><span class="stat-label">Всего файлов</span><span class="stat-value">${escapeHtml(String(h.tracks ?? 'нет данных'))}</span></div>
+          <div class="stat-badge"><span class="stat-label">Битых файлов</span><span class="stat-value" style="color:${Number(brokenCount) > 0 ? 'var(--red)' : 'var(--green)'};">${escapeHtml(brokenCount)}</span></div>
+          <div class="stat-badge"><span class="stat-label">Дубликатов (групп)</span><span class="stat-value">${escapeHtml(String(groupsCount))}</span></div>
         </div>
     `;
-    if (h.broken_files && h.broken_files.length > 0) {
-      html += `<div><h4 style="color:var(--red);margin-top:10px;">Битые файлы:</h4>`;
-      h.broken_files.forEach(f => {
-        html += `<div style="font-size:12px;font-family:monospace;padding:4px 0;">${escapeHtml(f.path)}: ${escapeHtml(f.error)}</div>`;
+    html += renderBrokenFile(h.broken);
+    html += renderTrackSample('Пропавшие с диска', h.missing);
+    html += renderTrackSample('Без исполнителя', h.without_artist);
+    html += renderTrackSample('Без альбома', h.without_album);
+    html += renderTrackSample('Без года', h.without_year);
+    const groups = (h.duplicate_groups && Array.isArray(h.duplicate_groups)) ? h.duplicate_groups : [];
+    html += `<div><h4 style="margin-top:10px;">Дубликаты: ${escapeHtml(String(groups.length))}</h4>`;
+    if (groups.length === 0) {
+      html += `<div style="font-size:12px;color:var(--text-muted);">нет данных</div>`;
+    } else {
+      groups.forEach(g => {
+        html += `<div style="font-size:12px;padding:4px 0;">${g.map(t => escapeHtml(t.path)).join(' = ')}</div>`;
       });
-      html += `</div>`;
     }
+    html += `</div>`;
     html += `</div>`;
     repBox.innerHTML = html;
   } catch (e) {
@@ -1720,7 +1779,9 @@ async function deleteLibrary(id) {
 
 // Вспомогательное экранирование
 function escapeHtml(s) {
-  if (!s) return '';
+  // Строго null/undefined, а не любое falsy: иначе escapeHtml(0) вернёт '' вместо
+  // "0" и число молча пропадёт из разметки - ровно так и терялись нулевые счётчики.
+  if (s === null || s === undefined) return '';
   // Апостроф и бэктик обязательны: значения подставляются не только в текст, но и в JS-строки
   // внутри onclick-атрибутов (`openEditUserModal(1, 'имя', ...)`) - без них имя с кавычкой
   // выходит из строки и выполняет произвольный код.

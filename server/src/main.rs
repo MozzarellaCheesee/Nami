@@ -26,6 +26,7 @@ mod subsonic;
 mod sync;
 mod tls;
 mod transcode;
+mod tui;
 mod users;
 mod watcher;
 mod web;
