@@ -58,6 +58,9 @@ fun WaveformScrubber(
     // - null while it's still decoding or if the scan failed, in which case the placeholder
     // shape below is what's actually drawn.
     realHeights: List<Float>? = null,
+    /** Идёт ли расчёт прямо сейчас. false при отсутствии данных означает "посчитали и не вышло" -
+     * заглушка тогда рисуется ровно, без пульсации. */
+    stillLoading: Boolean = true,
     // План.md §22.1 "Метки моментов" - drawn as a thin full-height tick (not a dot sitting on
     // the bar it lands on, which reads badly against an uneven waveform - a dot's vertical
     // position has to pick some bar height to sit at, and any choice looks arbitrary/misaligned
@@ -114,7 +117,15 @@ fun WaveformScrubber(
     } else {
         toHeights
     }
-    val barAlpha = if (isReal) 1f else loadingPulse
+    // Пульсация означает "идёт расчёт". Когда расчёт закончился неудачей (файла нет, декодер
+    // не справился), она обязана прекратиться: иначе заглушка мерцает вечно и читается как
+    // бесконечная загрузка. Именно это и происходило с серверными треками - посчитать их было
+    // нечем, и полоса пульсировала всё время прослушивания.
+    val barAlpha = when {
+        isReal -> 1f
+        stillLoading -> loadingPulse
+        else -> 0.45f
+    }
 
     Canvas(
         modifier = modifier

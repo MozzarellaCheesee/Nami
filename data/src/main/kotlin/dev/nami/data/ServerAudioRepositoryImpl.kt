@@ -16,12 +16,33 @@ class ServerAudioRepositoryImpl @Inject constructor(
     private val serverLibraryRepository: dev.nami.domain.ServerLibraryRepository,
 ) : ServerAudioRepository {
 
-    /** key = "artist|title|durSec" -> id сервера (или NOT_FOUND если искали и не нашли). */
-    private val idCache = ConcurrentHashMap<String, Long>()
+    /** key = "artist|title|durSec" -> id сервера (или NOT_FOUND если искали и не нашли).
+     *
+     * Отрицательный ответ кешируется намеренно: трека может не быть на сервере вовсе, и без
+     * этого сопоставление шло бы в сеть при каждом его запуске. Срок жизни у него короче -
+     * трек мог появиться на сервере уже после того, как мы про него спросили. */
+    private val idCache = TtlCache<String, Long>(maxEntries = 2_000, ttlMs = ID_TTL_MS)
 
     /** Тот же ключ -> анализ трека с сервера. Чтобы параллельные проверки (ReplayGain и
-     * BPM/тональность идут разными корутинами) не дёргали `/api/tracks/{id}` дважды. */
-    private val analysisCache = ConcurrentHashMap<String, ServerAnalysis>()
+     * BPM/тональность идут разными корутинами) не дёргали `/api/tracks/{id}` дважды.
+     *
+     * Живёт дольше id: пересчитывать анализ на сервере незачем, он не меняется сам по себе. */
+    private val analysisCache = TtlCache<String, ServerAnalysis>(maxEntries = 500, ttlMs = ANALYSIS_TTL_MS)
+
+    /** Данные разных серверов ключами не различаются, поэтому при смене сервера или токена
+     * старые ответы надо выбрасывать целиком, а не показывать чужую библиотеку. */
+    private var cachedIdentity: String? = null
+
+    private suspend fun dropCachesIfServerChanged() {
+        val identity = listOf(
+            settingsRepository.namiServerToken.value.orEmpty(),
+            settingsRepository.namiServerUrl.value,
+        ).joinToString("|")
+        if (cachedIdentity == identity) return
+        cachedIdentity = identity
+        idCache.clear()
+        analysisCache.clear()
+    }
 
     override fun isServerActive(): Boolean =
         !settingsRepository.namiServerToken.value.isNullOrBlank() &&
@@ -42,26 +63,26 @@ class ServerAudioRepositoryImpl @Inject constructor(
         "${artist?.trim()?.lowercase().orEmpty()}|${title.trim().lowercase()}|${durationMs / 1000}"
 
     override suspend fun serverTrackId(artist: String?, title: String, durationMs: Long): Long? {
-        val key = cacheKey(artist, title, durationMs)
-        val cached = idCache[key]
-        if (cached != null) return if (cached == NOT_FOUND) null else cached
-        return withContext(Dispatchers.IO) {
-            val cfg = activeConfig() ?: return@withContext null
-            val id = NamiServerClient.matchTrackIds(cfg, listOf(Triple(artist, title, durationMs)))
-                ?.firstOrNull()
-            idCache[key] = id ?: NOT_FOUND
-            id
+        dropCachesIfServerChanged()
+        val id = idCache.get(cacheKey(artist, title, durationMs)) {
+            withContext(Dispatchers.IO) {
+                val cfg = activeConfig() ?: return@withContext null
+                NamiServerClient.matchTrackIds(cfg, listOf(Triple(artist, title, durationMs)))
+                    ?.firstOrNull() ?: NOT_FOUND
+            }
         }
+        return id?.takeIf { it != NOT_FOUND }
     }
 
     override suspend fun serverAnalysis(artist: String?, title: String, durationMs: Long): ServerAnalysis? {
-        val key = cacheKey(artist, title, durationMs)
-        analysisCache[key]?.let { return it }
-        return withContext(Dispatchers.IO) {
-            val cfg = activeConfig() ?: return@withContext null
-            val id = serverTrackId(artist, title, durationMs) ?: return@withContext null
-            val obj = NamiServerClient.trackDetail(cfg, id) ?: return@withContext null
-            parseAnalysis(obj)?.also { analysisCache[key] = it }
+        dropCachesIfServerChanged()
+        return analysisCache.get(cacheKey(artist, title, durationMs)) {
+            val id = serverTrackId(artist, title, durationMs) ?: return@get null
+            withContext(Dispatchers.IO) {
+                val cfg = activeConfig() ?: return@withContext null
+                val obj = NamiServerClient.trackDetail(cfg, id) ?: return@withContext null
+                parseAnalysis(obj)
+            }
         }
     }
 
@@ -75,9 +96,9 @@ class ServerAudioRepositoryImpl @Inject constructor(
                 (0 until arr.length()).map { arr.optDouble(it).toFloat() }
             }?.takeIf { it.isNotEmpty() }
             val full = base.copy(waveform = bars)
-            // Кладём в тот же кеш, что и serverAnalysis: повторный вопрос про этот трек в
-            // пределах сессии не должен снова ходить в сеть.
-            analysisCache[cacheKey(artist, title, durationMs)] = full
+            // Кладём в тот же кеш, что и serverAnalysis: повторный вопрос про этот трек не
+            // должен снова ходить в сеть.
+            analysisCache.put(cacheKey(artist, title, durationMs), full)
             full
         }
 
@@ -119,7 +140,9 @@ class ServerAudioRepositoryImpl @Inject constructor(
             ids.forEachIndexed { i, id ->
                 if (i < tracks.size) {
                     val (artist, title, dur) = tracks[i]
-                    idCache[cacheKey(artist, title, dur)] = id ?: NOT_FOUND
+                    // Пакетное сопоставление уже дало ответы - раскладываем их по кешу, чтобы
+                    // следующий поштучный вопрос про эти треки не ходил в сеть.
+                    idCache.put(cacheKey(artist, title, dur), id ?: NOT_FOUND)
                 }
             }
             ids.map { id ->
@@ -150,6 +173,14 @@ class ServerAudioRepositoryImpl @Inject constructor(
 
     companion object {
         private const val NOT_FOUND = -1L
+
+        /** Полчаса: трек мог появиться на сервере уже после того, как мы про него спросили,
+         * и вечно помнить "его там нет" нельзя. */
+        private const val ID_TTL_MS = 30 * 60 * 1000L
+
+        /** Шесть часов: посчитанный анализ сам по себе не меняется, а перезапрос стоит дорого -
+         * при промахе сервер декодирует файл целиком. */
+        private const val ANALYSIS_TTL_MS = 6 * 60 * 60 * 1000L
 
         /** Разбор полей анализа из ответа `GET /api/tracks/{id}` - отдельно, чтобы тестировать. */
         fun parseAnalysis(o: JSONObject): ServerAnalysis? {

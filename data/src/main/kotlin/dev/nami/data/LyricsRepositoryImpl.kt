@@ -85,6 +85,20 @@ class LyricsRepositoryImpl @Inject constructor(
             settingsRepository.setNamiServerUrl((listOf(base) + bases.filter { it != base }).joinToString("\n"))
         }
         val translate = settingsRepository.deeplApiKey.value.isBlank() // свой ключ есть - переводим сами
+
+        // Если сервер знает этот трек - спрашиваем лирику ИМЕННО ДЛЯ НЕГО, а не по метаданным.
+        // Разница принципиальная: ручка трека кладёт найденное в базу сервера (и промах тоже,
+        // чтобы не долбить lrclib на каждом показе), поэтому второй раз лирика придёт из его
+        // кеша и будет одна и та же на всех устройствах. Ручка по метаданным ничего не
+        // сохраняет - ей не к чему привязать результат, id трека она не знает.
+        val cfg = NamiServerClient.Config(base, token, cert, bases)
+        val serverTrackId = NamiServerClient
+            .matchTrackIds(cfg, listOf(Triple(artistName, title, durationMs)))
+            ?.firstOrNull()
+        if (serverTrackId != null) {
+            NamiServerClient.lyrics(cfg, serverTrackId, translate)?.let { return it }
+        }
+
         val q = buildString {
             append(base).append("/api/lyrics?title=").append(java.net.URLEncoder.encode(title, "UTF-8"))
             if (!artistName.isNullOrBlank()) append("&artist=").append(java.net.URLEncoder.encode(artistName, "UTF-8"))

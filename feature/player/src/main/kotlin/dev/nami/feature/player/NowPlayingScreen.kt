@@ -716,6 +716,7 @@ fun NowPlayingScreen(
         val progress = previewProgress ?: actualProgress
         val positionMs = (progress * durationMs).toLong()
         val waveform by viewModel.waveform.collectAsState()
+    val waveformLoading by viewModel.waveformLoading.collectAsState()
         val moments by viewModel.currentTrackMoments.collectAsState()
         var pendingMomentFraction by remember { mutableStateOf<Float?>(null) }
         var selectedMoment by remember { mutableStateOf<dev.nami.domain.Moment?>(null) }
@@ -807,6 +808,7 @@ fun NowPlayingScreen(
                         onPreviewEnd = { previewProgress = null },
                         modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
                         realHeights = waveform,
+                        stillLoading = waveformLoading,
                         moments = if (durationMs > 0) {
                             moments.map { MomentMarker(it.id, it.positionMs.toFloat() / durationMs, it.colorArgb) }
                         } else {

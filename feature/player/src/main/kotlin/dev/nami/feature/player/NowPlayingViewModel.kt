@@ -388,6 +388,11 @@ class NowPlayingViewModel @Inject constructor(
     // loading/on failure - WaveformScrubber falls back to its own placeholder shape.
     private val waveformCache = LinkedHashMap<String, List<Float>>()
     private val _waveform = MutableStateFlow<List<Float>?>(null)
+
+    /** Идёт ли расчёт формы волны прямо сейчас. Нужен полосе прокрутки: её пульсация означает
+     * "считаем", и когда считать нечем, она обязана прекратиться, а не мерцать вечно. */
+    private val _waveformLoading = MutableStateFlow(false)
+    val waveformLoading: StateFlow<Boolean> = _waveformLoading
     val waveform: StateFlow<List<Float>?> = _waveform.asStateFlow()
     private var waveformJob: Job? = null
 
@@ -418,6 +423,7 @@ class NowPlayingViewModel @Inject constructor(
         // заглушку и не запускаем расчёт заново.
         val stored = track?.waveform
         if (stored != null) {
+            _waveformLoading.value = false
             if (stored.isEmpty()) _waveform.value = null else rememberWaveform(path, stored)
             return
         }
@@ -432,6 +438,7 @@ class NowPlayingViewModel @Inject constructor(
             return
         }
         _waveform.value = null
+        _waveformLoading.value = true
         waveformJob = viewModelScope.launch {
             val title = track?.title ?: qTrack?.title
             val artist = track?.artistName ?: qTrack?.artistName
@@ -443,7 +450,13 @@ class NowPlayingViewModel @Inject constructor(
                     serverAudioRepository.serverWaveform(artist, title, dur)
                 } else null
             val localBars = if (track != null) withContext(Dispatchers.Default) { WaveformScanner.scan(track.path) } else null
-            val bars = fromServer ?: localBars ?: return@launch
+            val bars = fromServer ?: localBars
+            _waveformLoading.value = false
+            if (bars == null) {
+                // Считать нечем: у серверного трека нет файла, а сервер его ещё не считал.
+                // Оставляем заглушку без пульсации - она больше не притворяется загрузкой.
+                return@launch
+            }
             rememberWaveform(path, bars)
             withContext(Dispatchers.IO) { waveformDiskCache.write(path, bars) }
             // И на сам трек: иначе результат, посчитанный сервером, терялся при смене пути и
