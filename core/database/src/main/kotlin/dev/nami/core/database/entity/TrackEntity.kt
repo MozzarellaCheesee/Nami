@@ -30,6 +30,7 @@ import androidx.room.PrimaryKey
         // across several rows, one per track carved out of the same physical album image file.
         Index(value = ["path"]),
         Index(value = ["sourceUri"]),
+        Index(value = ["serverTrackId"]),
     ],
 )
 data class TrackEntity(
@@ -102,5 +103,10 @@ data class TrackEntity(
      * результат, посчитанный сервером, иначе терялся и запрашивался заново при каждом
      * проигрывании. */
     val waveform: String? = null,
+    /** id этого же трека в библиотеке сервера, если он там есть. Нужен, чтобы чужая правка
+     * доезжала до ЛОКАЛЬНОГО файла: сопоставление по названию и артисту ломается ровно в тот
+     * момент, когда название и меняют, а связь по id переживает переименование. Заполняется
+     * при зеркалении, когда совпадение ещё видно. */
+    val serverTrackId: Long? = null,
     val noteUpdatedAt: Long = 0,
 )

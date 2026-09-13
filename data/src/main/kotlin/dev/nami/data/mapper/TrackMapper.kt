@@ -36,6 +36,7 @@ fun TrackEntity.toDomain(albumArtworkPath: String? = null, artistName: String? =
     bpm = bpm,
     musicalKey = musicalKey,
     waveform = decodeWaveform(waveform),
+    serverTrackId = serverTrackId,
     rating = rating,
     firstPlayed = firstPlayed,
     fileHash = fileHash,

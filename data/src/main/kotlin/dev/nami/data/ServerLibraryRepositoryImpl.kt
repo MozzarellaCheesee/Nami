@@ -343,17 +343,22 @@ class ServerLibraryRepositoryImpl @Inject constructor(
         // Название альбома берётся разом, а не запросом на каждый трек: список локальных треков -
         // это вся библиотека, и на паре тысяч записей это была бы пара тысяч запросов.
         val albumTitles = albumDao.allForIndexing().associate { it.id to it.title }
-        val unique = serverTracks.filterNot { server ->
-            localTracks.any { local ->
-                DedupKey.matches(
-                    title = local.title,
-                    artistName = metadataResolver.primaryArtistName(local.artistName),
-                    albumName = local.albumId?.value?.let { albumTitles[it] },
-                    otherTitle = server.title,
-                    otherArtistName = metadataResolver.primaryArtistName(server.artist),
-                    otherAlbumName = server.album,
-                )
+        val pairs = pairServerTracksWithLocal(
+            serverTracks = serverTracks,
+            localTracks = localTracks,
+            albumTitleOf = { albumTitles[it] },
+            primaryArtist = { metadataResolver.primaryArtistName(it) },
+        )
+        val unique = mutableListOf<ServerTrackMeta>()
+        for ((server, local) in pairs) {
+            if (local == null) {
+                unique += server
+                continue
             }
+            if (local.serverTrackId != server.id) {
+                trackDao.setServerTrackId(local.id.value, server.id)
+            }
+            applyServerMetadata(local, server, albumTitles)
         }
         val ids = unique.map { "server_${it.id}" }
         if (ids.isEmpty()) trackDao.deleteAllServerTracks() else trackDao.deleteServerTracksExcept(ids)
@@ -399,6 +404,26 @@ class ServerLibraryRepositoryImpl @Inject constructor(
             }
         }
         searchRepository.rebuildIndex()
+    }
+
+    /** Чужая правка, доехавшая до локального файла. Сервер - источник правды по метаданным:
+     * своя правка уходит на него сразу (см. LibraryRepositoryImpl.updateMatchingTrack), поэтому
+     * расхождение означает, что кто-то поменял трек на другом устройстве.
+     *
+     * Путь, формат и размер не трогаем: файл на устройстве свой, сервер про него ничего не знает. */
+    private suspend fun applyServerMetadata(
+        local: Track,
+        server: ServerTrackMeta,
+        albumTitles: Map<String, String>,
+    ) {
+        val sameTitle = local.title == server.title
+        val sameArtist = local.artistName.orEmpty() == server.artist
+        val sameAlbum = local.albumId?.value?.let { albumTitles[it] }.orEmpty() == server.album.orEmpty()
+        if (sameTitle && sameArtist && sameAlbum) return
+
+        val artistId = metadataResolver.resolveArtist(server.artist)
+        val albumId = metadataResolver.resolveAlbum(server.album, artistId, server.year)
+        trackDao.updateMetadataFromServer(local.id.value, server.title, artistId, albumId, server.trackNo)
     }
 
     override suspend fun downloadTrack(serverTrackId: Long): File? =
@@ -659,4 +684,43 @@ internal fun uploadCandidates(
     val missingFiles = withoutMirrors.count { !fileExists(it.path) }
     val tracks = withoutMirrors.filter { fileExists(it.path) }
     return Triple(tracks, withoutMirrors.size, missingFiles)
+}
+
+/**
+ * Сопоставление серверных треков с локальными: сохранённая связь по id вперёд метаданных.
+ *
+ * Порядок здесь и есть весь смысл. Пока связи нет, совпадение ищется по названию, артисту и
+ * альбому - но именно их и меняют. Стоило другому устройству переименовать трек, как локальный
+ * файл переставал совпадать, считался «новым серверным треком», и в библиотеке появлялось
+ * зеркало рядом с собственным файлом. Связь по id переименование переживает.
+ *
+ * internal и без Room намеренно: правило проверяется тестом без поднятия базы и сети.
+ */
+internal fun pairServerTracksWithLocal(
+    serverTracks: List<ServerTrackMeta>,
+    localTracks: List<Track>,
+    albumTitleOf: (String) -> String?,
+    primaryArtist: (String?) -> String?,
+): List<Pair<ServerTrackMeta, Track?>> {
+    val linkedByServerId = localTracks.filter { it.serverTrackId != null }.associateBy { it.serverTrackId }
+    val taken = mutableSetOf<TrackId>()
+    return serverTracks.map { server ->
+        val linked = linkedByServerId[server.id]?.takeIf { it.id !in taken }
+        val local = linked ?: localTracks.firstOrNull { candidate ->
+            // Уже связанный с ДРУГИМ серверным треком локальный файл в кандидаты не годится:
+            // иначе два разных серверных трека уцепились бы за одну и ту же строку.
+            candidate.id !in taken &&
+                (candidate.serverTrackId == null || candidate.serverTrackId == server.id) &&
+                DedupKey.matches(
+                    title = candidate.title,
+                    artistName = primaryArtist(candidate.artistName),
+                    albumName = candidate.albumId?.value?.let(albumTitleOf),
+                    otherTitle = server.title,
+                    otherArtistName = primaryArtist(server.artist),
+                    otherAlbumName = server.album,
+                )
+        }
+        if (local != null) taken += local.id
+        server to local
+    }
 }

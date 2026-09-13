@@ -59,6 +59,11 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var jamRepository: dev.nami.domain.JamRepository
     @Inject lateinit var appUpdateManager: dev.nami.app.update.AppUpdateManager
 
+    // Внедряется ради самого факта создания: репозиторий в своём init подписывается на токен и
+    // держит сокет `/api/ws`, через который прилетают чужие правки. Без этой строки Hilt просто
+    // никогда бы его не создал - больше его никто не запрашивает.
+    @Inject lateinit var serverEventsRepository: dev.nami.data.ServerEventsRepository
+
     private var shakeDetector: ShakeDetector? = null
 
     private val libraryViewModel: LibraryViewModel by viewModels()

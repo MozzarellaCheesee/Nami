@@ -124,6 +124,29 @@ interface TrackDao {
     @Query("SELECT sourceUri FROM tracks WHERE sourceUri IS NOT NULL AND deletedAt IS NULL")
     suspend fun allSourceUris(): List<String>
 
+    /** Правка метаданных, пришедшая с сервера, для ЛОКАЛЬНОГО трека, связанного с серверным.
+     * Отдельно от updateServerTrack: у локального нельзя трогать путь, формат и размер - файл
+     * на устройстве свой, сервер про него ничего не знает. */
+    @Query(
+        """
+        UPDATE tracks SET title=:title, artistId=:artistId, albumId=:albumId, trackNo=:trackNo
+        WHERE id=:id
+        """,
+    )
+    suspend fun updateMetadataFromServer(
+        id: String,
+        title: String,
+        artistId: String?,
+        albumId: String?,
+        trackNo: Int?,
+    )
+
+    @Query("UPDATE tracks SET serverTrackId = :serverTrackId WHERE id = :id")
+    suspend fun setServerTrackId(id: String, serverTrackId: Long?)
+
+    @Query("SELECT * FROM tracks WHERE serverTrackId = :serverTrackId AND deletedAt IS NULL LIMIT 1")
+    suspend fun findByServerTrackId(serverTrackId: Long): TrackEntity?
+
     @Query("UPDATE tracks SET waveform = :waveform WHERE id = :id")
     suspend fun setWaveform(id: String, waveform: String?)
 
@@ -138,7 +161,7 @@ interface TrackDao {
         UPDATE tracks SET title=:title, artistId=:artistId, albumId=:albumId,
             trackNo=:trackNo, durationMs=:durationMs, format=:format,
             sizeBytes=:sizeBytes, artworkPath=:artworkPath, deletedAt=NULL
-        WHERE id=:id AND path LIKE 'nami-server://%'
+        WHERE id=:id AND id LIKE 'server\_%' ESCAPE '\'
         """,
     )
     suspend fun updateServerTrack(

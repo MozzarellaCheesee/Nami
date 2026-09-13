@@ -327,6 +327,13 @@ val MIGRATION_28_29 = object : Migration(28, 29) {
 }
 
 /** Реальные LWW-метки локальных изменений для синхронизации с NAMI Server. */
+val MIGRATION_32_33 = object : Migration(32, 33) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE tracks ADD COLUMN serverTrackId INTEGER")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_tracks_serverTrackId ON tracks(serverTrackId)")
+    }
+}
+
 val MIGRATION_31_32 = object : Migration(31, 32) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE tracks ADD COLUMN waveform TEXT")
