@@ -768,8 +768,48 @@ fn uninstall(cfg: &crate::config::Config, purge: bool) -> Res<()> {
 
     #[cfg(windows)]
     {
-        println!("Остановка процессов nami-server...");
+        println!("1. Удаление службы NamiServer...");
+        if crate::service::state().is_some() {
+            match crate::service::uninstall() {
+                Ok(()) => println!("   [ok] Служба остановлена и удалена"),
+                Err(e) => println!("   [!] Не удалось удалить службу: {e} (нужны права администратора)"),
+            }
+        } else {
+            println!("   • Служба не зарегистрирована");
+        }
         let _ = Command::new("taskkill").args(["/F", "/IM", "nami-server.exe"]).output();
+
+        println!("2. Удаление задачи автозапуска прошлых версий...");
+        let _ = Command::new("schtasks").args(["/Delete", "/TN", "NamiServer", "/F"]).output();
+
+        println!("3. Закрытие портов в брандмауэре...");
+        let _ = Command::new("netsh")
+            .args(["advfirewall", "firewall", "delete", "rule", "name=Nami Music Server (TCP 4533)"])
+            .output();
+        if cfg.port != 4533 {
+            let _ = Command::new("netsh")
+                .args([
+                    "advfirewall", "firewall", "delete", "rule",
+                    &format!("name=Nami Music Server (TCP {})", cfg.port),
+                ])
+                .output();
+        }
+
+        println!("4. Удаление ярлыков...");
+        for var in ["USERPROFILE", "ALLUSERSPROFILE", "APPDATA"] {
+            if let Ok(base) = std::env::var(var) {
+                for rel in [
+                    "Desktop\\Nami - сервер.lnk",
+                    "Microsoft\\Windows\\Start Menu\\Programs\\Nami - сервер.lnk",
+                ] {
+                    let p = PathBuf::from(&base).join(rel);
+                    if p.exists() {
+                        let _ = std::fs::remove_file(&p);
+                    }
+                }
+            }
+        }
+        println!("   ✓ Готово");
     }
 
     // Вопрос пользователю об удалении данных, если не был передан флаг --purge
