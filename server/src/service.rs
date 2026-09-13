@@ -96,6 +96,40 @@ pub fn state() -> Option<ServiceState> {
     service.query_status().ok().map(|s| s.current_state)
 }
 
+/// Выполняет действие над службой от имени администратора, показав запрос UAC.
+///
+/// Управление службами требует прав администратора, а ярлык открывается обычным пользователем.
+/// Без этого любое нажатие «включить» заканчивалось сырым «IO error in winapi call» - это отказ
+/// в доступе, но понять по нему что-либо невозможно.
+///
+/// Через PowerShell, а не своим вызовом ShellExecute: нужен ровно один глагол `runas`, и тащить
+/// ради него крейт с привязками к WinAPI незачем - powershell.exe есть в любой Windows.
+pub fn run_elevated(action: &str) -> Res<()> {
+    let exe = std::env::current_exe()?;
+    let command = elevate_command(&exe.to_string_lossy(), action);
+    let status = std::process::Command::new("powershell.exe")
+        .args(["-NoProfile", "-NonInteractive", "-Command", &command])
+        .status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err("запрос прав администратора отклонён".into())
+    }
+}
+
+/// Команда PowerShell для запуска действия с правами администратора.
+///
+/// Вынесена отдельно и покрыта тестом, потому что ломается молча: путь с пробелом или
+/// апострофом (папка пользователя вида C:\Users\O'Brien) разъедет команду, и вместо
+/// запроса прав пользователь получит невнятную ошибку разбора.
+fn elevate_command(exe: &str, action: &str) -> String {
+    // Одинарные кавычки PowerShell экранируются удвоением.
+    let quoted = exe.replace('\'', "''");
+    format!(
+        "Start-Process -FilePath '{quoted}' -ArgumentList 'service','{action}' -Verb RunAs -Wait -WindowStyle Hidden"
+    )
+}
+
 pub fn is_running() -> bool {
     matches!(state(), Some(ServiceState::Running))
 }
@@ -176,4 +210,17 @@ fn run_service() -> Res<()> {
 pub fn run_dispatcher() -> Res<()> {
     windows_service::service_dispatcher::start(SERVICE_NAME, ffi_service_main)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn путь_с_пробелом_и_апострофом_не_ломает_команду() {
+        let cmd = elevate_command("C:\\Users\\O\'Brien\\Nami Server\\nami-server.exe", "start");
+        assert!(cmd.contains("'C:\\Users\\O''Brien\\Nami Server\\nami-server.exe'"), "{cmd}");
+        assert!(cmd.contains("-ArgumentList 'service','start'"), "{cmd}");
+        assert!(cmd.contains("-Verb RunAs"), "{cmd}");
+    }
 }

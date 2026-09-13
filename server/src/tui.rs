@@ -102,25 +102,56 @@ fn server_control_label() -> String {
     }
 }
 
-/// Возвращает сообщение для показа пользователю. Ошибка здесь не должна валить весь TUI:
-/// чаще всего это «нет прав администратора», и человеку надо просто это увидеть.
+/// Выполняет действие над службой, при отказе в доступе повторяя его с запросом прав.
+///
+/// Прямая попытка идёт первой не из экономии: если TUI и так запущен администратором, лишний
+/// запрос UAC был бы навязчивым. А обычному пользователю управление службами запрещено, и
+/// системная ошибка выглядит как «IO error in winapi call» - по ней понять ничего нельзя,
+/// поэтому вместо показа этого текста просто просим права.
+#[cfg(windows)]
+fn service_action(
+    direct: impl FnOnce() -> Res<()>,
+    verb: &str,
+    done: &str,
+    expect_running: bool,
+) -> String {
+    if direct().is_err() {
+        let _ = crate::service::run_elevated(verb);
+    }
+    // Отчитываемся по фактическому состоянию, а не по коду возврата. Отменённый запрос UAC
+    // виден PowerShell как обычное завершение, и доверие коду возврата означало бы бодрое
+    // «Сервер включён» при выключенном сервере.
+    let running = crate::service::is_running();
+    if running == expect_running {
+        done.to_string()
+    } else if expect_running {
+        "Сервер не включился.
+
+Управление службой требует прав администратора: подтвердите          запрос Windows либо откройте этот экран от имени администратора."
+            .to_string()
+    } else {
+        "Сервер не выключился.
+
+Управление службой требует прав администратора: подтвердите          запрос Windows либо откройте этот экран от имени администратора."
+            .to_string()
+    }
+}
+
+/// Возвращает сообщение для показа пользователю. Ошибка здесь не должна валить весь TUI.
 #[cfg(windows)]
 fn toggle_server() -> String {
     use crate::service;
     match service::state() {
-        None => match std::env::current_exe().map_err(crate::Err::from).and_then(|exe| service::install(&exe)) {
-            Ok(()) => "Служба зарегистрирована и запущена.".to_string(),
-            Err(e) => format!("Не удалось установить службу: {e}
-Запустите TUI от имени администратора."),
-        },
-        Some(st) if format!("{st:?}") == "Running" => match service::stop() {
-            Ok(()) => "Сервер выключен.".to_string(),
-            Err(e) => format!("Не удалось выключить: {e}"),
-        },
-        Some(_) => match service::start() {
-            Ok(()) => "Сервер включён.".to_string(),
-            Err(e) => format!("Не удалось включить: {e}"),
-        },
+        None => service_action(
+            || std::env::current_exe().map_err(crate::Err::from).and_then(|exe| service::install(&exe)),
+            "install",
+            "Служба зарегистрирована и запущена. Дальше сервер будет подниматься вместе с Windows.",
+            true,
+        ),
+        Some(st) if format!("{st:?}") == "Running" => {
+            service_action(service::stop, "stop", "Сервер выключен.", false)
+        }
+        Some(_) => service_action(service::start, "start", "Сервер включён.", true),
     }
 }
 
