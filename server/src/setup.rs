@@ -193,8 +193,19 @@ async fn save_config(Json(req): Json<SaveConfigRequest>) -> Response {
         req.watch,
         ext.replace('\\', "\\\\").replace('"', ""),
     );
-    if let Err(e) = std::fs::write("config.toml", config) {
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(msg(&format!("config.toml: {e}"))))
+    // Пишем ровно туда, откуда сервер конфигурацию и читает. Раньше здесь был относительный
+    // путь, то есть рабочий каталог процесса: у службы Windows это C:\Windows\System32, у
+    // запущенного вручную - каталог установки. Мастер писал в один каталог, сервер читал из
+    // другого, и выбранный порт не применялся - а с ним и всё остальное.
+    let config_path = crate::config::find_config_path();
+    if let Some(parent) = config_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Err(e) = std::fs::write(&config_path, config) {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(msg(&format!("{}: {e}", config_path.display()))),
+        )
             .into_response();
     }
     if let Err(e) =
@@ -204,18 +215,64 @@ async fn save_config(Json(req): Json<SaveConfigRequest>) -> Response {
             .into_response();
     }
 
-    // Автоматический перезапуск сервиса для загрузки config.toml и создания владельца
+    // Порт нужно открыть в брандмауэре ИМЕННО тот, что выбрал человек. Установщик открывал свой,
+    // заданный при установке, и после смены порта в мастере с телефона было не подключиться.
+    let firewall = crate::firewall::open_port(req.port);
+
+    // Куда браузеру идти дальше. Считает сервер, а не страница: страница знает только адрес,
+    // по которому открыта, то есть СТАРЫЙ порт, и возвращала пользователя на него.
+    let scheme = if req.tls { "https" } else { "http" };
+    let next_url = if ext.is_empty() {
+        // {host} подставит страница: имя или адрес, по которому её открыли, остаётся верным -
+        // меняется только порт и схема.
+        format!("{scheme}://{{host}}:{}", req.port)
+    } else {
+        ext.clone()
+    };
+
+    schedule_restart();
+
+    Json(serde_json::json!({
+        "ok": true,
+        "message": "Настройки сохранены. Сервер перезапускается и применяет конфигурацию...",
+        // Шаблон {host} страница подставит сама: адрес, по которому её открыли, остаётся верным,
+        // меняется только порт и схема.
+        "next_url": next_url,
+        "port": req.port,
+        "tls": req.tls,
+        "firewall": firewall,
+    }))
+    .into_response()
+}
+
+/// Перезапуск сервера, чтобы новая конфигурация вступила в силу.
+///
+/// На Linux это systemd. На Windows - служба, и перезапускает её отдельный процесс: убивать
+/// себя изнутри и надеяться, что кто-то поднимет обратно, нельзя - диспетчер служб считает
+/// выход по своей команде штатным и сам ничего не перезапускает.
+pub fn schedule_restart() {
     tokio::spawn(async {
         tokio::time::sleep(std::time::Duration::from_millis(800)).await;
-        let _ = std::process::Command::new("sh")
-            .arg("-c")
-            .arg("systemctl restart nami")
-            .output();
+
+        #[cfg(windows)]
+        {
+            if let Ok(exe) = std::env::current_exe() {
+                // Отдельный процесс переживёт наш выход и поднимет службу обратно.
+                let _ = std::process::Command::new("cmd")
+                    .args(["/C", "timeout /T 2 /NOBREAK >nul && sc stop NamiServer >nul & sc start NamiServer >nul"])
+                    .spawn();
+                let _ = exe;
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = std::process::Command::new("sh")
+                .arg("-c")
+                .arg("systemctl restart nami")
+                .output();
+        }
         std::process::exit(0);
     });
-
-    Json(msg("Настройки успешно сохранены. Сервер перезапускается и применяет конфигурацию..."))
-        .into_response()
 }
 
 fn msg(text: &str) -> serde_json::Value {

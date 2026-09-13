@@ -225,5 +225,24 @@ pub fn find_config_path() -> PathBuf {
             return path;
         }
     }
-    PathBuf::from("config.toml")
+    default_config_path()
+}
+
+/// Куда класть конфигурацию, когда её ещё нет.
+///
+/// Раньше здесь был относительный "config.toml", то есть рабочий каталог процесса. Это молча
+/// ломало всю настройку на Windows: служба стартует с рабочим каталогом `C:\Windows\System32`,
+/// а запущенный вручную процесс - с каталогом установки. Мастер настройки писал файл в один
+/// каталог, сервер читал из другого, и выбранный порт (и вообще все настройки) не применялись.
+///
+/// Рядом с исполняемым файлом - каталог, одинаковый при любом способе запуска. На Linux,
+/// где пакет кладёт данные в /var/lib/nami, этот каталог уже существует и выигрывает.
+pub fn default_config_path() -> PathBuf {
+    if PathBuf::from("/var/lib/nami").is_dir() {
+        return PathBuf::from("/var/lib/nami/config.toml");
+    }
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join("config.toml")))
+        .unwrap_or_else(|| PathBuf::from("config.toml"))
 }

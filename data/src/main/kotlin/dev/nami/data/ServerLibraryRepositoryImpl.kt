@@ -701,8 +701,35 @@ class ServerLibraryRepositoryImpl @Inject constructor(
         val cfg = activeConfig() ?: return@withContext null
         val file = File(path)
         if (!file.exists() || file.length() == 0L) return@withContext null
-        val res = NamiServerClient.uploadTrack(cfg, file) ?: return@withContext null
+
+        // То, что знает приложение, но не обязательно знает файл. При импорте папки название
+        // берётся из имени файла, артист и альбом - из имён папок, обложка - из folder.jpg
+        // рядом; в теги ничего этого не записывается. Сервер читает только теги, поэтому без
+        // подсказки называл трек именем своего временного файла - случайной строкой.
+        val local = trackDao.findByPath(path)
+        val meta = NamiServerClient.UploadMeta(
+            title = local?.title,
+            artist = local?.artistId?.let { artistDao.findById(it)?.name },
+            album = local?.albumId?.let { albumDao.findById(it)?.title },
+            trackNo = local?.trackNo,
+        )
+
+        val res = NamiServerClient.uploadTrack(cfg, file, meta) ?: return@withContext null
         val dup = res.optString("duplicate_of").takeIf { it.isNotBlank() && it != "null" }
+
+        // Обложку сервер тоже не увидит, если её нет в тегах. Ставим свою - но только новому
+        // треку: у дубля обложка уже есть, и перетирать её нашей незачем.
+        if (dup == null) {
+            val serverId = res.optLong("track_id", -1).takeIf { it > 0 }
+            val artwork = local?.artworkPath ?: local?.albumId?.let { albumDao.findById(it)?.artworkPath }
+            if (serverId != null && artwork != null) {
+                val bytes = runCatching { File(artwork).readBytes() }.getOrNull()
+                if (bytes != null && bytes.isNotEmpty()) {
+                    NamiServerClient.uploadArtwork(cfg, serverId, bytes, "image/webp")
+                }
+            }
+        }
+
         if (dup != null) "Уже есть на сервере" else "Загружен на сервер"
     }
 

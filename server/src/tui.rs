@@ -79,6 +79,7 @@ const MAIN_ITEMS: &[&str] = &[
     "Режим библиотеки",
     "Устройства",
     "Общие ссылки",
+    "Обновление сервера",
     "Выход",
 ];
 
@@ -218,12 +219,65 @@ fn main_menu(term: &mut Term, conn: &Connection, cfg: &Config) -> Res<()> {
                     2 => library_mode_screen(term, conn)?,
                     3 => devices_screen(term, conn)?,
                     4 => shares_screen(term, conn)?,
+                    5 => update_screen(term)?,
                     _ => return Ok(()),
                 }
             }
             Key::Quit => return Ok(()),
             Key::Other => {}
         }
+    }
+}
+
+/// Проверка и установка обновления сервера.
+fn update_screen(term: &mut Term) -> Res<()> {
+    message(term, "Обновление", "Проверяю наличие новой версии...")?;
+    let info = match crate::update::check() {
+        Ok(i) => i,
+        Err(e) => return message(term, "Обновление", &format!("Не удалось проверить: {e}")),
+    };
+
+    let latest = info.latest.clone().unwrap_or_else(|| "неизвестно".into());
+    if !info.available {
+        return message(
+            term,
+            "Обновление",
+            &format!("Установлена версия {}. Это последняя.", info.current),
+        );
+    }
+    if info.asset_url.is_none() {
+        return message(
+            term,
+            "Обновление",
+            &format!("Доступна версия {latest}, но готовой сборки для этой платформы в релизе нет."),
+        );
+    }
+
+    let question = format!(
+        "Установлена {}, доступна {latest}. Обновить сейчас? Сервер будет перезапущен.",
+        info.current
+    );
+    if !confirm(term, &question)? {
+        return Ok(());
+    }
+
+    message(term, "Обновление", "Скачиваю и устанавливаю...")?;
+    match crate::update::install(&info) {
+        Ok(v) => {
+            message(term, "Обновление", &format!("Обновлено до {v}. Перезапускаю сервер."))?;
+            // Перезапуск через ту же службу, что и везде: TUI сам сервером не управляет.
+            #[cfg(windows)]
+            {
+                let _ = crate::service::stop();
+                let _ = crate::service::start();
+            }
+            #[cfg(not(windows))]
+            {
+                let _ = std::process::Command::new("systemctl").args(["restart", "nami"]).output();
+            }
+            Ok(())
+        }
+        Err(e) => message(term, "Обновление", &format!("Не удалось обновить: {e}")),
     }
 }
 

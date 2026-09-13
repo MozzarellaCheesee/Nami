@@ -83,6 +83,26 @@ mod tests {
     /// кто-то опять переименует поле на одной стороне и забудет про другую, сборка
     /// это не поймает - но эта проверка ловит хотя бы уход в сторону старых имён.
     #[test]
+    fn в_панели_есть_проверка_и_установка_обновления() {
+        let html = Assets::get("index.html").expect("embedded web client");
+        let html = std::str::from_utf8(&html.data).expect("utf-8 html");
+        assert!(html.contains("/update/check"), "нет запроса проверки обновления");
+        assert!(html.contains("/update/install"), "нет запроса установки обновления");
+        assert!(html.contains("adminCheckUpdate"), "нет кнопки проверки");
+    }
+
+    #[test]
+    fn активная_вкладка_переживает_перезагрузку() {
+        let html = Assets::get("index.html").expect("embedded web client");
+        let html = std::str::from_utf8(&html.data).expect("utf-8 html");
+        // Вкладка запоминается и восстанавливается, иначе перезагрузка страницы всегда
+        // выкидывала бы обратно на список треков.
+        assert!(html.contains("nami_active_tab"), "нет ключа хранения вкладки");
+        assert!(html.contains("localStorage.setItem(TAB_STORAGE_KEY"), "вкладка не сохраняется");
+        assert!(html.contains("restoreTab()"), "вкладка не восстанавливается");
+    }
+
+    #[test]
     fn health_report_uses_actual_server_field_names() {
         let html = Assets::get("index.html").expect("embedded web client");
         let html = std::str::from_utf8(&html.data).expect("utf-8 html");

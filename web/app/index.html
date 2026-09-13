@@ -667,6 +667,19 @@
         <div id="adminActionMsg" class="alert hidden"></div>
         <div id="adminHealthReport" class="stack hidden" style="margin-top:14px;"></div>
       </div>
+
+      <div class="card">
+        <div class="card-title">Версия сервера</div>
+        <div class="card-desc">Проверка обновлений и установка новой версии.</div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+          <button onclick="adminCheckUpdate()">⬆️ Проверить обновления</button>
+          <button id="adminUpdateInstall" class="primary hidden" onclick="adminInstallUpdate()">Установить обновление</button>
+        </div>
+
+        <div id="adminUpdateMsg" class="alert hidden" style="margin-top:12px;"></div>
+        <div id="adminUpdateNotes" class="stack hidden" style="margin-top:12px;"></div>
+      </div>
     </section>
   </main>
 
@@ -775,17 +788,33 @@ function logout() {
 }
 
 // --- Переключение вкладок ---
+const TABS = ['tracks', 'myLib', 'profile', 'admin'];
+const TAB_STORAGE_KEY = 'nami_active_tab';
+
 function switchTab(tab) {
-  const tabs = ['tracks', 'myLib', 'profile', 'admin'];
-  tabs.forEach(t => {
+  TABS.forEach(t => {
     const btn = document.getElementById('btnTab' + t.charAt(0).toUpperCase() + t.slice(1));
     const sec = document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1));
     if (btn) btn.classList.toggle('active', t === tab);
     if (sec) sec.classList.toggle('hidden', t !== tab);
   });
+  // Запоминаем выбор, чтобы перезагрузка страницы не выкидывала обратно на список треков.
+  // В try: в приватном окне и при запрещённых данных сайта доступ к localStorage бросает
+  // исключение, и падать из-за мелкого удобства нельзя.
+  try { localStorage.setItem(TAB_STORAGE_KEY, tab); } catch (e) {}
   if (tab === 'myLib') loadMyLibrary();
   if (tab === 'profile') loadProfile();
   if (tab === 'admin') loadAdminData();
+}
+
+/** Вкладка с прошлого раза. Незнакомое значение и вкладка владельца у обычного пользователя
+ * отбрасываются: иначе правка хранилища руками или смена роли открыла бы пустой раздел. */
+function restoreTab() {
+  let saved = null;
+  try { saved = localStorage.getItem(TAB_STORAGE_KEY); } catch (e) {}
+  const allowed = saved && TABS.includes(saved) &&
+    (saved !== 'admin' || (CURRENT_USER && CURRENT_USER.role === 'owner'));
+  switchTab(allowed ? saved : 'tracks');
 }
 
 // --- Инициализация приложения ---
@@ -813,6 +842,9 @@ async function initApp() {
     // Загрузка треков
     ALL_TRACKS = await api('/tracks?limit=1000');
     renderTracks(ALL_TRACKS);
+
+    // После того, как роль известна: вкладка владельца восстанавливается только владельцу.
+    restoreTab();
   } catch (e) {
     console.error(e);
   }
@@ -1356,6 +1388,69 @@ function renderTrackSample(title, sampled) {
   }
   html += `</div>`;
   return html;
+}
+
+/** Последняя проверка обновлений: кнопку установки показываем только когда есть что ставить. */
+let PENDING_UPDATE = null;
+
+async function adminCheckUpdate() {
+  const box = document.getElementById('adminUpdateMsg');
+  const notes = document.getElementById('adminUpdateNotes');
+  show('adminUpdateMsg');
+  hide('adminUpdateNotes');
+  hide('adminUpdateInstall');
+  box.className = 'alert info';
+  box.textContent = 'Проверяю наличие новой версии...';
+  try {
+    const info = await api('/update/check');
+    PENDING_UPDATE = info;
+    if (!info.available) {
+      box.className = 'alert success';
+      box.textContent = 'Установлена версия ' + escapeHtml(info.current) + '. Это последняя.';
+      return;
+    }
+    if (!info.asset_url) {
+      box.className = 'alert info';
+      box.textContent = 'Доступна версия ' + escapeHtml(info.latest) +
+        ', но готовой сборки для платформы этого сервера в релизе нет.';
+      return;
+    }
+    box.className = 'alert info';
+    box.innerHTML = 'Установлена ' + escapeHtml(info.current) + ', доступна <b>' +
+      escapeHtml(info.latest) + '</b>.' +
+      (info.url ? ' <a href="' + escapeHtml(info.url) + '" target="_blank" rel="noopener">Что нового</a>' : '');
+    show('adminUpdateInstall');
+    if (info.notes) {
+      show('adminUpdateNotes');
+      notes.innerHTML = '<div style="font-size:12px;white-space:pre-wrap;">' +
+        escapeHtml(info.notes.slice(0, 2000)) + '</div>';
+    }
+  } catch (e) {
+    box.className = 'alert error';
+    box.textContent = 'Не удалось проверить: ' + escapeHtml(e.message || e);
+  }
+}
+
+async function adminInstallUpdate() {
+  if (!PENDING_UPDATE || !PENDING_UPDATE.available) return;
+  if (!confirm('Обновить сервер до ' + PENDING_UPDATE.latest + '? Он будет перезапущен.')) return;
+  const box = document.getElementById('adminUpdateMsg');
+  show('adminUpdateMsg');
+  box.className = 'alert info';
+  box.textContent = 'Скачиваю и устанавливаю. Это займёт до минуты, не закрывайте страницу...';
+  hide('adminUpdateInstall');
+  try {
+    const res = await api('/update/install', { method: 'POST' });
+    box.className = 'alert success';
+    // Сервер перезапускается, поэтому дальше страница временно недоступна - так и пишем,
+    // иначе обрыв соединения читается как поломка.
+    box.textContent = (res.message || 'Обновлено.') +
+      ' Страница снова заработает через несколько секунд, обновите её.';
+  } catch (e) {
+    box.className = 'alert error';
+    box.textContent = 'Не удалось обновить: ' + escapeHtml(e.message || e);
+    show('adminUpdateInstall');
+  }
 }
 
 async function adminCheckHealth() {

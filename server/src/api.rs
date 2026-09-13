@@ -101,6 +101,8 @@ pub fn router(state: Shared) -> Router {
         .route("/api/tracks/{id}/waveform", get(waveform_handler))
         .route("/api/tracks/{id}/analyze", post(analyze_track))
         .route("/api/tracks/delta", get(tracks_delta))
+        .route("/api/update/check", get(update_check))
+        .route("/api/update/install", post(update_install))
         .route("/api/tracks/{id}/radio", get(radio_handler))
         .route("/api/tracks/{id}/hls/master.m3u8", get(hls_master))
         .route("/api/tracks/{id}/hls/{profile}/index.m3u8", get(hls_index))
@@ -1138,6 +1140,45 @@ struct TrackAnalysis {
     replaygain_track_peak: Option<f64>,
     waveform: Option<Vec<f32>>,
     analyzed_at: Option<i64>,
+}
+
+/// Есть ли новая версия сервера. Только владельцу: обновление меняет сам сервер.
+async fn update_check(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+) -> ApiResult<Json<crate::update::UpdateInfo>> {
+    need_owner(&st.db.lock().unwrap(), &ident)?;
+    // Сеть синхронная - в блокирующий исполнитель, иначе она встанет колом на время запроса.
+    tokio::task::spawn_blocking(crate::update::check)
+        .await
+        .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .map(Json)
+        .map_err(|e| ApiError(StatusCode::BAD_GATEWAY, e.to_string()))
+}
+
+/// Скачивает и ставит обновление, затем перезапускает сервер.
+async fn update_install(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+) -> ApiResult<Json<serde_json::Value>> {
+    need_owner(&st.db.lock().unwrap(), &ident)?;
+    let version = tokio::task::spawn_blocking(|| {
+        let info = crate::update::check()?;
+        if !info.available {
+            return Err::<String, crate::Err>("обновление не требуется".into());
+        }
+        crate::update::install(&info)
+    })
+    .await
+    .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .map_err(|e| ApiError(StatusCode::BAD_GATEWAY, e.to_string()))?;
+
+    crate::setup::schedule_restart();
+    Ok(Json(serde_json::json!({
+        "ok": true,
+        "version": version,
+        "message": format!("Обновлено до {version}. Сервер перезапускается."),
+    })))
 }
 
 // ---------------------------------------------------------------- HLS
@@ -2916,6 +2957,17 @@ async fn jam_history(
 struct UploadQuery {
     /// Имя файла клиента - от него берётся только расширение и безопасная основа.
     filename: Option<String>,
+    /// Метаданные, известные клиенту. Нужны, когда в самом файле тегов нет: при импорте папки
+    /// приложение берёт название из имени файла, артиста и альбом - из имён папок, а обложку
+    /// из folder.jpg рядом. Сервер всего этого не видит и без подсказки называл трек именем
+    /// своего временного файла - случайной строкой, похожей на UUID.
+    ///
+    /// Теги файла всё равно главнее: они точнее догадок по именам папок.
+    title: Option<String>,
+    artist: Option<String>,
+    album: Option<String>,
+    track_no: Option<i64>,
+    year: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -2977,6 +3029,18 @@ async fn upload(
     // Пишем во временный файл: под настоящим именем он появится только когда
     // окажется, что это не дубль, - иначе папка загрузок копила бы мусор.
     let tmp = dir.join(format!("{}{ext}", users::random_token()));
+    // Основа имени временного файла: по ней узнаём, что read_meta не нашёл тега названия и
+    // подставил имя файла. Сравнивать проще, чем гадать по пустоте - пустым title не бывает.
+    let tmp_stem = tmp
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let hint_title = q.title.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
+    let hint_artist = q.artist.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
+    let hint_album = q.album.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
+    let hint_track_no = q.track_no.and_then(|v| u32::try_from(v).ok());
+    let hint_year = q.year.and_then(|v| u32::try_from(v).ok());
+
     let written = write_body(&tmp, body).await;
     if let Err(e) = written {
         let _ = std::fs::remove_file(&tmp);
@@ -2990,10 +3054,29 @@ async fn upload(
             let _ = std::fs::remove_file(&tmp);
             r
         };
-        let meta = match scanner::read_meta(&tmp) {
+        let mut meta = match scanner::read_meta(&tmp) {
             Ok(m) => m,
             Err(e) => return cleanup(Err(e)),
         };
+        // Без тегов read_meta берёт название из имени файла, а имя тут - случайная строка
+        // временного файла. Подсказка клиента для такого случая и нужна.
+        if let Some(title) = hint_title {
+            if meta.title == tmp_stem {
+                meta.title = title;
+            }
+        }
+        if meta.artist.is_none() {
+            meta.artist = hint_artist;
+        }
+        if meta.album.is_none() {
+            meta.album = hint_album;
+        }
+        if meta.track_no.is_none() {
+            meta.track_no = hint_track_no;
+        }
+        if meta.year.is_none() {
+            meta.year = hint_year;
+        }
         let hash = match scanner::file_hash(&tmp) {
             Ok(h) => h,
             Err(e) => return cleanup(Err(e.into())),

@@ -459,13 +459,22 @@ async function saveConfig() {
   showStep(6)
 
   if (res.ok) {
-    showStatus('status6', 'success', data.message || 'Настройки сохранены!')
-    const targetUrl = payload.external_url || window.location.origin
+    // Адрес считает сервер и присылает в next_url. Страница знает только тот адрес, по
+    // которому открыта, то есть СТАРЫЙ порт, и раньше возвращала пользователя на него -
+    // после смены порта это был заведомо мёртвый адрес.
+    // {host} подставляем здесь: имя или IP, по которому открыт мастер, остаётся верным,
+    // меняется только порт и схема.
+    const targetUrl = (data.next_url || window.location.origin)
+      .replace('{host}', window.location.hostname)
+    const extra = data.firewall ? ' ' + data.firewall : ''
+    showStatus('status6', 'success', (data.message || 'Настройки сохранены!') + extra)
     document.getElementById('step6Link').href = targetUrl
     document.getElementById('step6Actions').style.display = 'block'
+    // Дольше прежних 3.5 секунд: сервер должен успеть перезапуститься и занять новый порт,
+    // иначе браузер приходит раньше и показывает ошибку соединения.
     setTimeout(() => {
       window.location.href = targetUrl
-    }, 3500)
+    }, 8000)
   } else {
     showStatus('status6', 'error', data.message || 'Ошибка сохранения')
   }

@@ -27,7 +27,9 @@ mod sync;
 mod tls;
 mod transcode;
 mod tui;
+mod firewall;
 mod service;
+mod update;
 mod users;
 mod watcher;
 mod web;
@@ -61,6 +63,8 @@ async fn main() -> Res<()> {
 /// Запуск сервера из конфигурации. Отдельно от [`main`], потому что то же самое нужно службе
 /// Windows: она поднимает собственный рантайм и зовёт эту функцию напрямую.
 pub async fn serve_from_config() -> Res<()> {
+    // Остаток прошлого обновления: пока старый процесс был жив, файл держался им.
+    update::cleanup_old();
     let config_path = config::find_config_path();
     let cfg = config::Config::load(&config_path)?;
 

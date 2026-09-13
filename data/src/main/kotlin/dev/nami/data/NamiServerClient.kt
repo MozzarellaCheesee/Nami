@@ -576,10 +576,28 @@ object NamiServerClient {
      * POST /api/tracks/upload?filename=<имя> - тело запроса = сам файл. Дедупликация на
      * сервере. Возвращает `{track_id, duplicate_of}` либо null.
      */
-    fun uploadTrack(cfg: Config, file: java.io.File): JSONObject? {
+    /** Метаданные, известные приложению, но не обязательно записанные в сам файл. При импорте
+     * папки название берётся из имени файла, артист и альбом - из имён папок: в теги это не
+     * попадает, и сервер без подсказки назвал бы трек именем своего временного файла. */
+    data class UploadMeta(
+        val title: String? = null,
+        val artist: String? = null,
+        val album: String? = null,
+        val trackNo: Int? = null,
+        val year: Int? = null,
+    )
+
+    fun uploadTrack(cfg: Config, file: java.io.File, meta: UploadMeta = UploadMeta()): JSONObject? {
         val base = reachableBase(cfg) ?: return null
         val name = java.net.URLEncoder.encode(file.name, "UTF-8")
-        val url = "$base/api/tracks/upload?filename=$name"
+        fun param(key: String, value: String?): String =
+            value?.trim()?.takeIf { it.isNotEmpty() }
+                ?.let { "&$key=" + java.net.URLEncoder.encode(it, "UTF-8") }.orEmpty()
+        val hints = param("title", meta.title) + param("artist", meta.artist) +
+            param("album", meta.album) +
+            meta.trackNo?.let { "&track_no=$it" }.orEmpty() +
+            meta.year?.let { "&year=$it" }.orEmpty()
+        val url = "$base/api/tracks/upload?filename=$name$hints"
         return runCatching {
             val conn = (URL(url).openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
