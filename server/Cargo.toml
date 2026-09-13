@@ -1,6 +1,6 @@
 [package]
 name = "nami-server"
-version = "1.0.13"
+version = "1.0.14"
 edition = "2021"
 description = "Self-hosted сервер NAMI - библиотека и passthrough-отдача аудио"
 
