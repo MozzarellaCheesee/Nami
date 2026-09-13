@@ -202,6 +202,16 @@ object NamiServerClient {
         return (0 until arr.length()).map { arr.optDouble(it).toFloat() }
     }
 
+    /** GET /api/tracks/delta - что изменилось с момента `since`. Заменяет перекачивание всего
+     * списка на каждое событие: правка одного трека - это одна строка в ответе. */
+    fun tracksDelta(cfg: Config, since: Long): JSONObject? {
+        val base = reachableBase(cfg) ?: return null
+        val (code, text) = request("GET", "$base/api/tracks/delta?since=$since", null, cfg.token, cfg.certSha256)
+            ?: return null
+        if (code != 200) return null
+        return runCatching { JSONObject(text) }.getOrNull()
+    }
+
     /** POST /api/tracks/{id}/analyze - посчитать трек на сервере и получить результат.
      * Идемпотентна: уже посчитанный трек сервер отдаёт из базы, не декодируя файл заново.
      * Нужна для серверных треков: локального файла за ними нет, и посчитать самим нечем. */

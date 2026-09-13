@@ -287,6 +287,7 @@ class ServerLibraryRepositoryImpl @Inject constructor(
     override suspend fun listTracks(limit: Int, offset: Int): List<ServerTrackMeta>? =
         withContext(Dispatchers.IO) {
             val cfg = activeConfig() ?: return@withContext null
+            val startedAt = System.currentTimeMillis()
             val pageSize = limit.coerceIn(1, 1000)
             val tracks = mutableListOf<ServerTrackMeta>()
             var nextOffset = offset.coerceAtLeast(0)
@@ -296,23 +297,15 @@ class ServerLibraryRepositoryImpl @Inject constructor(
                 pageCount = arr.length()
                 for (i in 0 until arr.length()) {
                     val o = arr.optJSONObject(i) ?: continue
-                    val id = o.optLong("id", -1)
-                    if (id < 0) continue
-                    tracks += ServerTrackMeta(
-                        id = id,
-                        title = o.optString("title", ""),
-                        artist = o.optString("artist", ""),
-                        album = o.optString("album").takeIf { it.isNotBlank() },
-                        durationMs = o.optLong("duration_ms", 0L),
-                        trackNo = o.optInt("track_no").takeIf { o.has("track_no") && !o.isNull("track_no") },
-                        year = o.optInt("year").takeIf { o.has("year") && !o.isNull("year") },
-                        sizeBytes = o.optLong("size_bytes", 0L),
-                        format = o.optString("format").takeIf { it.isNotBlank() && it != "null" },
-                    )
+                    tracks += parseTrackMeta(o) ?: continue
                 }
                 nextOffset += pageCount
             } while (pageCount == pageSize)
             mirrorIntoLibrary(tracks)
+            // Полный список только что привёл устройство в соответствие с сервером - дальше
+            // хватит дельты. Отметку берём ДО запроса: изменение, случившееся во время
+            // выкачивания, иначе потерялось бы навсегда.
+            deltaCursor = startedAt
             tracks
         }
 
@@ -404,6 +397,78 @@ class ServerLibraryRepositoryImpl @Inject constructor(
             }
         }
         searchRepository.rebuildIndex()
+    }
+
+    /** Разбор одной строки трека из ответа сервера. Общий для списка и для дельты: два разбора
+     * одного и того же JSON разошлись бы при первом же новом поле. */
+    private fun parseTrackMeta(o: org.json.JSONObject): ServerTrackMeta? {
+        val id = o.optLong("id", -1)
+        if (id < 0) return null
+        return ServerTrackMeta(
+            id = id,
+            title = o.optString("title", ""),
+            artist = o.optString("artist", ""),
+            album = o.optString("album").takeIf { it.isNotBlank() },
+            durationMs = o.optLong("duration_ms", 0L),
+            trackNo = o.optInt("track_no").takeIf { o.has("track_no") && !o.isNull("track_no") },
+            year = o.optInt("year").takeIf { o.has("year") && !o.isNull("year") },
+            sizeBytes = o.optLong("size_bytes", 0L),
+            format = o.optString("format").takeIf { it.isNotBlank() && it != "null" },
+        )
+    }
+
+    /** Курсор дельты: момент сервера, до которого изменения уже применены. Ноль - ещё ничего
+     * не забирали, значит первый раз нужен полный список. Хранится в настройках, а не в памяти:
+     * иначе каждый запуск приложения начинался бы с полной перекачки. */
+    private var deltaCursor: Long
+        get() = settingsRepository.serverDeltaCursor.value
+        set(value) = settingsRepository.setServerDeltaCursor(value)
+
+    override suspend fun applyServerChanges(): Boolean = withContext(Dispatchers.IO) {
+        val cfg = activeConfig() ?: return@withContext false
+        val since = deltaCursor
+        if (since <= 0L) return@withContext false
+
+        val obj = NamiServerClient.tracksDelta(cfg, since) ?: return@withContext false
+        val changed = obj.optJSONArray("changed")?.let { arr ->
+            (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i)?.let(::parseTrackMeta) }
+        }.orEmpty()
+        val deleted = obj.optJSONArray("deleted")?.let { arr ->
+            (0 until arr.length()).map { arr.optLong(it) }
+        }.orEmpty()
+        // Если влезло не всё - курсор не двигаем и уходим на полный список: догонять дельту
+        // порциями сложнее, чем один раз забрать список, а случай этот редкий.
+        if (obj.optBoolean("truncated", false)) return@withContext false
+
+        for (id in deleted) {
+            trackDao.hardDelete("server_$id")
+            trackDao.findByServerTrackId(id)?.let { trackDao.setServerTrackId(it.id, null) }
+            invalidateArtwork(id)
+        }
+
+        val albumTitles = albumDao.allForIndexing().associate { it.id to it.title }
+        for (server in changed) {
+            val mirror = trackDao.findById("server_${server.id}")
+            val linked = trackDao.findByServerTrackId(server.id)
+            // Трека нет ни зеркалом, ни связанным локальным файлом: он новый для этого
+            // устройства, и провести его надо обычным зеркалированием - там дедуп, обложки и
+            // разрешение артиста с альбомом.
+            if (mirror == null && linked == null) return@withContext false
+
+            if (mirror != null) {
+                val artistId = metadataResolver.resolveArtist(server.artist)
+                val albumId = metadataResolver.resolveAlbum(server.album, artistId, server.year)
+                trackDao.updateServerTrack(
+                    mirror.id, server.title, artistId, albumId, server.trackNo, server.durationMs,
+                    server.format ?: "server", server.sizeBytes, mirror.artworkPath,
+                )
+            }
+            linked?.let { applyServerMetadata(it.toDomain(), server, albumTitles) }
+        }
+
+        if (changed.isNotEmpty() || deleted.isNotEmpty()) searchRepository.rebuildIndex()
+        deltaCursor = obj.optLong("now", since)
+        true
     }
 
     /** Чужая правка, доехавшая до локального файла. Сервер - источник правды по метаданным:

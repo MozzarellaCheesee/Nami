@@ -269,6 +269,11 @@ interface SettingsRepository {
     /** Токен устройства, выданный сервером при сопряжении. Секрет - лежит в шифрованном файле.
      * Null - не сопряжено. */
     val namiServerToken: StateFlow<String?>
+
+    /** Курсор дельты серверной библиотеки: момент сервера, до которого изменения уже применены.
+     * Ноль - ещё ничего не забирали, нужен полный список. */
+    val serverDeltaCursor: StateFlow<Long>
+    fun setServerDeltaCursor(value: Long)
     fun setNamiServerToken(token: String?)
 
     /** Брать лирику (позже - анализ и стрим) с сервера, когда он подключён и сопряжён.

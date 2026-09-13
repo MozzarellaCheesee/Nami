@@ -271,6 +271,55 @@ pub fn migrate(conn: &Connection) -> crate::Res<()> {
     add("tracks", "waveform", "TEXT")?;
     add("tracks", "analyzed_at", "INTEGER")?;
     add("tracks", "metadata_edited_at", "INTEGER")?;
+    add("tracks", "changed_at", "INTEGER NOT NULL DEFAULT 0")?;
+
+    // Метка изменения проставляется триггерами, а не руками в каждом месте записи. Мест этих
+    // с десяток (сканер, правка тегов, пакетная правка альбома, переименование артиста,
+    // анализатор, загрузка), и при добавлении одиннадцатого про метку забыли бы - а забытая
+    // метка означает правку, которая молча не доедет до других устройств.
+    //
+    // Список колонок в UPDATE OF задан явно, и это важно: сканер на каждом проходе обновляет
+    // seen_at у ВСЕХ треков, и без ограничения вся библиотека считалась бы изменившейся после
+    // каждого сканирования, ради чего дельта и затевалась.
+    conn.execute_batch(
+        "CREATE TRIGGER IF NOT EXISTS tracks_changed_at_insert AFTER INSERT ON tracks
+         BEGIN
+             UPDATE tracks SET changed_at = CAST(strftime('%s','now') AS INTEGER) * 1000
+             WHERE id = NEW.id;
+         END;
+         CREATE TRIGGER IF NOT EXISTS tracks_changed_at_update AFTER UPDATE OF
+             title, artist, album, album_artist, track_no, year, duration_ms, format,
+             bpm, musical_key, waveform, rg_track_gain, rg_track_peak, r128_loudness
+         ON tracks
+         BEGIN
+             UPDATE tracks SET changed_at = CAST(strftime('%s','now') AS INTEGER) * 1000
+             WHERE id = NEW.id;
+         END;",
+    )?;
+
+    // Надгробия удалённых треков. Без них клиент узнаёт об удалении только по полному списку,
+    // то есть дельта не могла бы заменить его совсем.
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS deleted_tracks (
+            id         INTEGER PRIMARY KEY,
+            deleted_at INTEGER NOT NULL,
+            library_id INTEGER NOT NULL DEFAULT 0,
+            -- Путь нужен не для красоты: в общем режиме видимость считается по префиксу пути
+            -- (users::visibility), и без этой колонки запрос дельты падал бы ровно у тех
+            -- пользователей, у кого доступ ограничен папками.
+            path       TEXT NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_deleted_tracks_at ON deleted_tracks(deleted_at);",
+    )?;
+    // Таблица могла остаться с прошлой версии без колонки пути - дописываем. Порядок важен:
+    // ALTER по ещё не созданной таблице - ошибка, поэтому только после CREATE выше.
+    add("deleted_tracks", "path", "TEXT NOT NULL DEFAULT ''")?;
+    // Чистим старые: клиент, не заходивший месяц, всё равно получит полный список, а таблица
+    // иначе росла бы вечно.
+    conn.execute(
+        "DELETE FROM deleted_tracks WHERE deleted_at < ?1",
+        [now() - 30 * 24 * 60 * 60 * 1000],
+    )?;
     add("users", "subsonic_password", "TEXT")?;
     add("users", "listenbrainz_token", "TEXT")?;
     add("devices", "user_id", "INTEGER")?;

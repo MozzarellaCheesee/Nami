@@ -27,6 +27,12 @@ interface ServerLibraryRepository {
     /** Список треков сервера, постранично. Null - сервера нет или запрос не удался. */
     suspend fun listTracks(limit: Int = 1000, offset: Int = 0): List<ServerTrackMeta>?
 
+    /** Забирает с сервера только изменения и применяет их. Возвращает true, если справилась
+     * сама; false означает «нужен полный список» - например, на сервере появились треки,
+     * которых на устройстве нет вовсе, и их надо провести через обычное зеркалирование с
+     * дедупом. Вызывающий в этом случае зовёт [listTracks]. */
+    suspend fun applyServerChanges(): Boolean = false
+
     /** Скачать трек сервера в офлайн-кеш. Возвращает файл или null при ошибке. */
     suspend fun downloadTrack(serverTrackId: Long): File?
 

@@ -913,6 +913,8 @@ private object NoOpSettingsRepository : dev.nami.domain.SettingsRepository {
     override val namiServerCertSha256 = MutableStateFlow<String?>(null)
     override fun setNamiServerCertSha256(value: String?) {}
     override val namiServerToken = MutableStateFlow<String?>(null)
+    override val serverDeltaCursor = MutableStateFlow(0L)
+    override fun setServerDeltaCursor(value: Long) {}
     override fun setNamiServerToken(token: String?) {}
     override val namiServerPreferred = MutableStateFlow(false)
     override fun setNamiServerPreferred(value: Boolean) {}

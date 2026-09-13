@@ -100,6 +100,7 @@ pub fn router(state: Shared) -> Router {
         .route("/api/tracks/{id}/artwork", get(artwork_handler).put(put_artwork))
         .route("/api/tracks/{id}/waveform", get(waveform_handler))
         .route("/api/tracks/{id}/analyze", post(analyze_track))
+        .route("/api/tracks/delta", get(tracks_delta))
         .route("/api/tracks/{id}/radio", get(radio_handler))
         .route("/api/tracks/{id}/hls/master.m3u8", get(hls_master))
         .route("/api/tracks/{id}/hls/{profile}/index.m3u8", get(hls_index))
@@ -358,6 +359,72 @@ async fn tracks(
     Ok(Json(rows))
 }
 
+#[derive(Deserialize)]
+struct DeltaQuery {
+    /// Момент прошлой синхронизации, мс эпохи. 0 или отсутствует - клиент просит всё.
+    since: Option<i64>,
+    limit: Option<i64>,
+}
+
+/// Что изменилось с момента `since`. Заменяет собой перекачивание всего списка на каждое
+/// событие: правка одного трека на другом устройстве - это одна строка в ответе, а не вся
+/// библиотека.
+///
+/// `now` в ответе - не время клиента и не время получения ответа, а отметка сервера: клиент
+/// кладёт её в свой курсор. Иначе расхождение часов между устройствами либо теряло бы правки
+/// (часы клиента спешат), либо заставляло бы перевыкачивать одно и то же (отстают).
+///
+/// `truncated` означает, что изменений больше, чем поместилось: клиент обязан сходить ещё раз
+/// с новым курсором, а не считать, что получил всё.
+#[derive(Serialize)]
+struct TracksDelta {
+    changed: Vec<Track>,
+    deleted: Vec<i64>,
+    now: i64,
+    truncated: bool,
+}
+
+async fn tracks_delta(
+    State(st): State<Shared>,
+    Extension(ident): Extension<Ident>,
+    Query(q): Query<DeltaQuery>,
+) -> ApiResult<Json<TracksDelta>> {
+    let since = q.since.unwrap_or(0).max(0);
+    let limit = q.limit.unwrap_or(500).clamp(1, 1000);
+    let now = crate::db::now();
+    let db = st.db.lock().unwrap();
+    let (clause, base_params) = users::visibility(&db, &ident);
+
+    let mut params = base_params.clone();
+    params.push(rusqlite::types::Value::Integer(since));
+    params.push(rusqlite::types::Value::Integer(limit + 1));
+    let mut stmt = db.prepare(&format!(
+        "SELECT {TRACK_COLS} FROM tracks WHERE 1=1{clause} AND changed_at > ?
+         ORDER BY changed_at LIMIT ?"
+    ))?;
+    let mut changed = stmt
+        .query_map(rusqlite::params_from_iter(params), row_to_track)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    // Запрашивали на одну строку больше предела - лишняя и есть признак "влезло не всё".
+    let truncated = changed.len() as i64 > limit;
+    if truncated {
+        changed.truncate(limit as usize);
+    }
+
+    // Надгробия фильтруем по той же видимости, что и сами треки: чужую библиотеку
+    // не должно быть видно даже списком удалённых идентификаторов.
+    let mut del_params = base_params;
+    del_params.push(rusqlite::types::Value::Integer(since));
+    let mut del_stmt = db.prepare(&format!(
+        "SELECT id FROM deleted_tracks WHERE 1=1{clause} AND deleted_at > ? ORDER BY deleted_at"
+    ))?;
+    let deleted = del_stmt
+        .query_map(rusqlite::params_from_iter(del_params), |r| r.get(0))?
+        .collect::<rusqlite::Result<Vec<i64>>>()?;
+
+    Ok(Json(TracksDelta { changed, deleted, now, truncated }))
+}
+
 /// Один трек со всеми деталями. Отдельно от списочного `Track`: сюда добавлен
 /// chromaprint-fingerprint - в списке на тысячу треков он был бы лишними килобайтами
 /// на строку, а на экране информации о треке нужен.
@@ -509,6 +576,13 @@ fn delete_tracks_internal(
 
         // Удаляем из базы
         let _ = db.execute("DELETE FROM playback_position WHERE track_id=?1", [id]);
+        // Надгробие ставим ДО удаления: library_id читается из самой строки, после DELETE
+        // его взять уже негде, а без него удаление не отфильтровать по видимости.
+        let _ = db.execute(
+            "INSERT OR REPLACE INTO deleted_tracks (id, deleted_at, library_id, path)
+             SELECT id, ?2, library_id, path FROM tracks WHERE id=?1",
+            rusqlite::params![id, crate::db::now()],
+        );
         if db.execute("DELETE FROM tracks WHERE id=?1", [id]).is_ok() {
             deleted.push(id);
         } else {
@@ -3402,5 +3476,78 @@ mod analysis_tests {
         assert_eq!(got.bpm, Some(128.0));
         assert_eq!(got.musical_key.as_deref(), Some("A Minor"));
         assert_eq!(got.waveform, Some(vec![0.1, 0.9]));
+    }
+}
+
+#[cfg(test)]
+mod delta_tests {
+    use super::*;
+    use rusqlite::Connection;
+
+    fn db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(crate::db::SCHEMA).unwrap();
+        crate::db::migrate(&conn).unwrap();
+        conn
+    }
+
+    fn insert(conn: &Connection, path: &str, title: &str) -> i64 {
+        conn.execute(
+            "INSERT INTO tracks (path, title, duration_ms, size_bytes, mtime, library_id)
+             VALUES (?1, ?2, 1000, 1, 0, 0)",
+            rusqlite::params![path, title],
+        )
+        .unwrap();
+        conn.last_insert_rowid()
+    }
+
+    fn changed_at(conn: &Connection, id: i64) -> i64 {
+        conn.query_row("SELECT changed_at FROM tracks WHERE id=?1", [id], |r| r.get(0)).unwrap()
+    }
+
+    #[test]
+    fn новый_трек_получает_метку_изменения() {
+        let conn = db();
+        let id = insert(&conn, "/музыка/а.flac", "Песня");
+        assert!(changed_at(&conn, id) > 0, "триггер вставки должен проставить changed_at");
+    }
+
+    #[test]
+    fn правка_тегов_двигает_метку_а_повторное_сканирование_нет() {
+        let conn = db();
+        let id = insert(&conn, "/музыка/а.flac", "Песня");
+        conn.execute("UPDATE tracks SET changed_at=1000 WHERE id=?1", [id]).unwrap();
+
+        // Сканер на каждом проходе обновляет seen_at у ВСЕХ треков. Если бы метку двигало и
+        // это, вся библиотека считалась бы изменившейся после каждого сканирования, и дельта
+        // не отличалась бы от полного списка - то есть была бы бесполезна.
+        conn.execute("UPDATE tracks SET seen_at=12345 WHERE id=?1", [id]).unwrap();
+        assert_eq!(changed_at(&conn, id), 1000, "seen_at не должен считаться изменением");
+
+        conn.execute("UPDATE tracks SET title='Другое' WHERE id=?1", [id]).unwrap();
+        assert!(changed_at(&conn, id) > 1000, "правка названия обязана двигать метку");
+    }
+
+    #[test]
+    fn надгробие_хранит_путь_и_библиотеку() {
+        let conn = db();
+        let id = insert(&conn, "/музыка/а.flac", "Песня");
+        conn.execute(
+            "INSERT OR REPLACE INTO deleted_tracks (id, deleted_at, library_id, path)
+             SELECT id, 500, library_id, path FROM tracks WHERE id=?1",
+            [id],
+        )
+        .unwrap();
+        conn.execute("DELETE FROM tracks WHERE id=?1", [id]).unwrap();
+
+        // Путь нужен для проверки видимости по папкам: без него запрос дельты падал бы у
+        // пользователей с доступом, ограниченным папками.
+        let (path, lib): (String, i64) = conn
+            .query_row("SELECT path, library_id FROM deleted_tracks WHERE id=?1", [id], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .unwrap();
+        assert_eq!(path, "/музыка/а.flac");
+        assert_eq!(lib, 0);
     }
 }

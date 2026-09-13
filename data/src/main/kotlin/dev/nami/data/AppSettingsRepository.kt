@@ -109,6 +109,7 @@ private const val KEY_LASTFM_SESSION_KEY = "lastfm_session_key"
 private const val KEY_NAMI_SERVER_URL = "nami_server_url"
 private const val KEY_NAMI_SERVER_CERT = "nami_server_cert_sha256"
 private const val KEY_NAMI_SERVER_TOKEN = "nami_server_token"
+private const val KEY_SERVER_DELTA_CURSOR = "server_delta_cursor"
 private const val KEY_NAMI_SERVER_PREFERRED = "nami_server_preferred"
 private const val KEY_PLAYBACK_SOURCE_PREFERENCE = "playback_source_preference"
 private const val KEY_NAMI_LYRICS_FROM_SERVER = "nami_lyrics_from_server"
@@ -498,6 +499,16 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
     override fun setNamiServerToken(token: String?) {
         securePrefs.edit { putString(KEY_NAMI_SERVER_TOKEN, token) }
         _namiServerToken.value = token
+        // Другой аккаунт - другая библиотека. Курсор от прошлого сервера означал бы "всё
+        // остальное уже применено", и чужие треки просто не появились бы.
+        setServerDeltaCursor(0L)
+    }
+
+    private val _serverDeltaCursor = MutableStateFlow(prefs.getLong(KEY_SERVER_DELTA_CURSOR, 0L))
+    override val serverDeltaCursor: StateFlow<Long> = _serverDeltaCursor
+    override fun setServerDeltaCursor(value: Long) {
+        prefs.edit { putLong(KEY_SERVER_DELTA_CURSOR, value) }
+        _serverDeltaCursor.value = value
     }
 
     private val _namiServerPreferred =
