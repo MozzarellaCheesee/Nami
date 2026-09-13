@@ -401,9 +401,7 @@ class NowPlayingViewModel @Inject constructor(
             track to q.nowPlaying
         }
             .distinctUntilChanged { a, b ->
-                val pathA = a.first?.path ?: a.second?.id?.value
-                val pathB = b.first?.path ?: b.second?.id?.value
-                pathA == pathB
+                waveformReloadKey(a.first, a.second) == waveformReloadKey(b.first, b.second)
             }
             .onEach { (track, nowPlaying) -> loadWaveform(track, nowPlaying) }
             .launchIn(viewModelScope)
@@ -697,3 +695,15 @@ internal fun isServerTrack(id: String, detailsPath: String?): Boolean {
     if (id.startsWith("jam_")) return true
     return (detailsPath ?: return id.startsWith("server_")).startsWith("nami-server://")
 }
+
+/** Ключ, по которому решается, перезапускать ли загрузку формы волны.
+ *
+ * В нём не только путь, но и появилась ли уже сохранённая волна. Только по пути было мало:
+ * анализ дописывает волну в базу УЖЕ ПОСЛЕ открытия экрана (расчёт идёт в фоне и занимает
+ * секунды), путь при этом не меняется, перезагрузка не срабатывала - и волна появлялась только
+ * если переключиться на другой трек и вернуться обратно.
+ *
+ * internal и отдельной функцией, чтобы проверяться тестом без поднятия всей ViewModel.
+ */
+internal fun waveformReloadKey(track: Track?, nowPlaying: dev.nami.domain.QueueTrack?): Pair<String?, Boolean> =
+    (track?.path ?: nowPlaying?.id?.value) to (track?.waveform != null)
