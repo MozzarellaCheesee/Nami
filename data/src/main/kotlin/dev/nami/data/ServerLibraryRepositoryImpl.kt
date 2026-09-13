@@ -491,8 +491,15 @@ class ServerLibraryRepositoryImpl @Inject constructor(
         val sameAlbum = local.albumId?.value?.let { albumTitles[it] }.orEmpty() == server.album.orEmpty()
         if (sameTitle && sameArtist && sameAlbum) return
 
-        val artistId = metadataResolver.resolveArtist(server.artist)
-        val albumId = metadataResolver.resolveAlbum(server.album, artistId, server.year)
+        // Сервер не источник истины, если он просто не знает тег: пустой artist/album с сервера
+        // (файл без тегов, или сервер ещё не подхватил подсказку из загрузки) не должен стирать
+        // уже верные локальные данные - раньше именно так трек с артистом превращался в
+        // "Неизвестного исполнителя" сразу после того, как переставал дублироваться.
+        val artistName = server.artist.takeIf(String::isNotBlank) ?: local.artistName.orEmpty()
+        val albumName = server.album ?: local.albumId?.value?.let { albumTitles[it] }
+
+        val artistId = metadataResolver.resolveArtist(artistName)
+        val albumId = metadataResolver.resolveAlbum(albumName, artistId, server.year)
         trackDao.updateMetadataFromServer(local.id.value, server.title, artistId, albumId, server.trackNo)
     }
 

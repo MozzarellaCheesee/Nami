@@ -144,9 +144,10 @@ try {
     $earlyRelease = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" -Headers @{ "User-Agent" = "Nami-Windows-Installer"; "Accept" = "application/vnd.github+json" }
     $earlyTargetVersion = $earlyRelease.tag_name.TrimStart('v')
 } catch {}
+$upToDate = $false
 if ($currentVersion -and $earlyTargetVersion -and $currentVersion.TrimStart('v') -eq $earlyTargetVersion) {
     Write-Host "      ✓ Обновления нет: у вас уже установлена последняя версия $currentVersion." -ForegroundColor Green
-    return
+    $upToDate = $true
 }
 if ($currentVersion -and $earlyTargetVersion) {
     Write-Host "      Доступно обновление: $currentVersion → $earlyTargetVersion" -ForegroundColor Cyan
@@ -189,6 +190,15 @@ if ($ffmpegCmd) {
 Write-Host "[3/6] Получение бинарника Nami Server..." -ForegroundColor Cyan
 $downloadSucceeded = $false
 
+if ($upToDate) {
+    # Версия уже последняя - шаг скачивания не нужен, но установка не обязана
+    # на этом останавливаться: брандмауэр, служба, ярлыки и т.п. ниже по скрипту
+    # должны выполниться в любом случае (например при переустановке или ремонте).
+    Write-Host "      ✓ Бинарник уже актуальной версии, скачивание не требуется" -ForegroundColor Green
+    $downloadSucceeded = $true
+    $targetVersion = $currentVersion
+} else {
+
 $assetZip = "nami-server-windows-x86_64.zip"
 $assetExe = "nami-server-windows-x86_64.exe"
 
@@ -229,10 +239,6 @@ try {
         $isZip = $true
     }
 
-    if ($currentVersion -and $currentVersion.TrimStart('v') -eq $targetVersion) {
-        Write-Host "      ✓ Обновления нет: у вас уже установлена последняя версия $currentVersion." -ForegroundColor Green
-        return
-    }
     if ($currentVersion) {
         Write-Host "      Обновление: $currentVersion → $targetVersion" -ForegroundColor Cyan
     }
@@ -302,6 +308,8 @@ if (-not $downloadSucceeded -or -not (Test-Path $binPath)) {
             }
         }
     }
+}
+
 }
 
 if (-not (Test-Path $binPath)) {
