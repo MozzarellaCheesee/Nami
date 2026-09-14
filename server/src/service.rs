@@ -37,7 +37,10 @@ const SERVICE_TYPE: ServiceType = ServiceType::OWN_PROCESS;
 /// может зависеть от его профиля. Обратная сторона - музыка на сетевом диске, подключённом в
 /// профиле пользователя, службе не видна; для таких папок в конфигурации указывают путь UNC.
 pub fn install(exe: &std::path::Path) -> Res<()> {
-    let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CREATE_SERVICE)?;
+    let manager = ServiceManager::local_computer(
+        None::<&str>,
+        ServiceManagerAccess::CREATE_SERVICE | ServiceManagerAccess::CONNECT,
+    )?;
     let info = ServiceInfo {
         name: OsString::from(SERVICE_NAME),
         display_name: OsString::from(DISPLAY_NAME),
@@ -52,7 +55,24 @@ pub fn install(exe: &std::path::Path) -> Res<()> {
         account_name: None, // LocalSystem
         account_password: None,
     };
-    let service = manager.create_service(&info, ServiceAccess::CHANGE_CONFIG | ServiceAccess::START)?;
+    // Служба с таким именем могла остаться от старой установки (переустановка в другую
+    // папку, локальная сборка разработчика) и указывать на СОВСЕМ ДРУГОЙ exe. create_service
+    // в этом случае просто отказывает (ERROR_SERVICE_EXISTS), и install.ps1 переходил в ветку
+    // "служба уже есть - stop/start" - запуская старый, по-прежнему зарегистрированный путь,
+    // без свежего config.toml. Раз уже существует - перенастраиваем путь на актуальный, а не
+    // считаем чужую регистрацию правильной.
+    let service = match manager.create_service(&info, ServiceAccess::CHANGE_CONFIG | ServiceAccess::START) {
+        Ok(s) => s,
+        Err(_) => {
+            let existing = manager.open_service(
+                SERVICE_NAME,
+                ServiceAccess::CHANGE_CONFIG | ServiceAccess::START | ServiceAccess::STOP,
+            )?;
+            let _ = existing.stop();
+            existing.change_config(&info)?;
+            existing
+        }
+    };
     service.set_description("Self-hosted музыкальный сервер Nami: библиотека, отдача аудио, синхронизация между устройствами")?;
     service.start(&[] as &[&std::ffi::OsStr])?;
     Ok(())

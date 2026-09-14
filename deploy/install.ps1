@@ -413,13 +413,13 @@ try {
 $serviceReady = $false
 if ($isAdmin) {
     try {
-        $existing = Get-Service -Name "NamiServer" -ErrorAction SilentlyContinue
-        if ($existing) {
-            & $binPath service stop 2>$null | Out-Null
-            & $binPath service start 2>$null | Out-Null
-        } else {
-            & $binPath service install 2>$null | Out-Null
-        }
+        # Всегда install, а не stop/start по факту существования: install переподключает
+        # путь службы на актуальный exe, если служба существует, но зарегистрирована на
+        # другую копию (переустановка в другую папку, сборка разработчика и т.п.) - раньше
+        # stop/start запускал СТАРЫЙ путь как есть, без свежего config.toml, и пользователь
+        # видел рабочий сайт через запасной процесс ниже, а после ручного запуска "той же"
+        # службы попадал на пустой конфиг и мастер настройки заново.
+        & $binPath service install 2>$null | Out-Null
         Start-Sleep -Seconds 2
         $svc = Get-Service -Name "NamiServer" -ErrorAction SilentlyContinue
         if ($svc -and $svc.Status -eq 'Running') {
