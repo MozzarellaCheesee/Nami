@@ -86,9 +86,18 @@ class ServerLibraryViewModel @Inject constructor(
     var error by mutableStateOf<String?>(null)
         private set
 
-    /** id треков, скачивание которых сейчас идёт. */
-    var downloading by mutableStateOf<Set<Long>>(emptySet())
+    /** id треков, которые скачивает точечный тап по одному треку (не "Скачать всё" -
+     * та часть живёт в репозитории, см. [batchProgress]). */
+    var singleDownloading by mutableStateOf<Set<Long>>(emptySet())
         private set
+
+    /** id треков, которые качает фоновая массовая загрузка прямо сейчас - зеркало
+     * [ServerLibraryRepository.downloadAllProgress], пережившее переход между экранами. */
+    var batchProgress by mutableStateOf<Set<Long>>(emptySet())
+        private set
+
+    /** Объединение точечной и массовой загрузки - то, что видит UI одним значком. */
+    val downloading: Set<Long> get() = singleDownloading + batchProgress
 
     /** id треков, лежащих в офлайн-кеше. */
     var cached by mutableStateOf<Set<Long>>(emptySet())
@@ -100,13 +109,24 @@ class ServerLibraryViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
+            // Отдельная подписка, не привязанная к телу downloadAll(): сама загрузка идёт
+            // в scope репозитория и переживает уход с этого экрана, а вот подписка на её
+            // прогресс - обычный viewModelScope, и это ок, отвалившийся при выходе UI-биндинг
+            // просто перестаёт обновлять значки, саму загрузку это не останавливает.
+            serverLibraryRepository.downloadAllProgress.collect { progress ->
+                batchProgress = progress
+                cached = serverLibraryRepository.cachedTrackIds()
+            }
+        }
+        viewModelScope.launch {
             jamRepository.serverChanges.collect { entities ->
                 if ("server_disconnected" in entities) {
                     refreshJob?.cancel()
                     tracks = emptyList()
                     artworkFiles = emptyMap()
                     cached = emptySet()
-                    downloading = emptySet()
+                    singleDownloading = emptySet()
+                    serverLibraryRepository.cancelDownloadAll()
                     loading = false
                     error = "Устройство отвязано от сервера"
                     return@collect
@@ -173,41 +193,25 @@ class ServerLibraryViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            downloading = downloading + track.id
+            singleDownloading = singleDownloading + track.id
             try {
                 val file = serverLibraryRepository.downloadTrack(track.id)
                 if (file != null) cached = cached + track.id
             } finally {
-                downloading = downloading - track.id
+                singleDownloading = singleDownloading - track.id
             }
         }
     }
 
+    /** Фоновая массовая загрузка живёт в репозитории (см. [ServerLibraryRepository.
+     * downloadAllInBackground]) - переход на другой экран её больше не обрывает, и значок
+     * "скачано" у уже докачанного трека переключается сразу, а не после возврата на экран. */
     fun downloadAll() {
-        val pending = tracks.filterNot { it.id in cached || it.id in downloading }
-        if (pending.isEmpty()) return
-        viewModelScope.launch {
-            downloading = downloading + pending.map { it.id }
-            val completed = mutableSetOf<Long>()
-            val limit = Semaphore(3)
-            try {
-                kotlinx.coroutines.coroutineScope {
-                    pending.forEach { track ->
-                        launch {
-                            limit.withPermit {
-                                if (serverLibraryRepository.downloadTrack(track.id) != null) {
-                                    synchronized(completed) { completed += track.id }
-                                }
-                            }
-                        }
-                    }
-                }
-                cached = cached + completed
-            } finally {
-                downloading = downloading - pending.map { it.id }.toSet()
-            }
-        }
+        val pending = tracks.map { it.id }.filterNot { it in cached }
+        serverLibraryRepository.downloadAllInBackground(pending)
     }
+
+    fun cancelDownloadAll() = serverLibraryRepository.cancelDownloadAll()
 
     fun artworkUrl(trackId: Long): String? = artworkFiles[trackId]
 
@@ -297,7 +301,7 @@ class ServerLibraryViewModel @Inject constructor(
             if (serverLibraryRepository.deleteTrack(trackId)) {
                 tracks = tracks.filterNot { it.id == trackId }
                 cached = cached - trackId
-                downloading = downloading - trackId
+                singleDownloading = singleDownloading - trackId
                 selectedTrackIds = selectedTrackIds - trackId
                 actionMsg = "Трек удалён с сервера"
             } else {
@@ -314,7 +318,7 @@ class ServerLibraryViewModel @Inject constructor(
             if (serverLibraryRepository.deleteFromServerOnly(trackId)) {
                 tracks = tracks.filterNot { it.id == trackId }
                 cached = cached - trackId
-                downloading = downloading - trackId
+                singleDownloading = singleDownloading - trackId
                 selectedTrackIds = selectedTrackIds - trackId
                 actionMsg = "Трек удалён с сервера, копия осталась на устройстве"
             } else {
@@ -331,7 +335,7 @@ class ServerLibraryViewModel @Inject constructor(
             if (deleted.isNotEmpty()) {
                 tracks = tracks.filterNot { it.id in deleted }
                 cached = cached - deleted
-                downloading = downloading - deleted
+                singleDownloading = singleDownloading - deleted
                 actionMsg = if (deleted.size == ids.size) {
                     "Удалено треков с сервера: ${deleted.size}"
                 } else {
@@ -440,8 +444,16 @@ fun ServerLibraryScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         NamiPill(
-                            text = if (viewModel.downloading.isEmpty()) "Скачать всё" else "Скачивание…",
-                            onClick = viewModel::downloadAll,
+                            text = if (viewModel.batchProgress.isEmpty()) {
+                                "Скачать всё"
+                            } else {
+                                "Остановить (${viewModel.batchProgress.size})"
+                            },
+                            onClick = if (viewModel.batchProgress.isEmpty()) {
+                                viewModel::downloadAll
+                            } else {
+                                viewModel::cancelDownloadAll
+                            },
                         )
                     }
                 }

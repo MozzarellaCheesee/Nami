@@ -1,6 +1,8 @@
 package dev.nami.domain
 
 import java.io.File
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 /** Один трек из библиотеки сервера (`GET /api/tracks`). */
 data class ServerTrackMeta(
@@ -47,6 +49,19 @@ interface ServerLibraryRepository {
 
     /** Все id треков, лежащих в офлайн-кеше. */
     fun cachedTrackIds(): Set<Long>
+
+    /** id треков, которые сейчас качает фоновая массовая загрузка ("Скачать всё"). Живёт в
+     * репозитории (singleton), а не во ViewModel экрана - переход на другой экран раньше
+     * обрывал viewModelScope и вместе с ним саму загрузку. */
+    val downloadAllProgress: StateFlow<Set<Long>>
+        get() = MutableStateFlow(emptySet())
+
+    /** Запускает фоновую массовую загрузку перечисленных треков в офлайн-кеш; уже идущая
+     * загрузка отменяется и заменяется этой. */
+    fun downloadAllInBackground(serverTrackIds: List<Long>) = Unit
+
+    /** Останавливает текущую фоновую массовую загрузку, если она идёт. */
+    fun cancelDownloadAll() = Unit
 
     /** Удалить трек и его сохранённую обложку из офлайн-кеша. */
     fun removeFromCache(serverTrackId: Long)

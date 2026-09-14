@@ -24,8 +24,11 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.security.MessageDigest
@@ -577,6 +580,45 @@ class ServerLibraryRepositoryImpl @Inject constructor(
     }
 
     override fun cachedTrackIds(): Set<Long> = cachedAudioIds.toSet()
+
+    private val _downloadAllProgress = MutableStateFlow<Set<Long>>(emptySet())
+    override val downloadAllProgress: StateFlow<Set<Long>> = _downloadAllProgress
+    private var downloadAllJob: Job? = null
+
+    // Живёт на scope репозитория (singleton), а не во viewModelScope экрана - раньше уход с
+    // экрана "Скачать всё" отменял viewModelScope вместе с самой загрузкой, и трек, докачка
+    // которого прервалась на середине, потом отображался нескачанным без всякого объяснения.
+    override fun downloadAllInBackground(serverTrackIds: List<Long>) {
+        val pending = serverTrackIds.filterNot { it in cachedAudioIds || it in _downloadAllProgress.value }
+        if (pending.isEmpty()) return
+        downloadAllJob?.cancel()
+        downloadAllJob = scope.launch {
+            _downloadAllProgress.value = _downloadAllProgress.value + pending
+            try {
+                val limit = Semaphore(3)
+                coroutineScope {
+                    pending.forEach { id ->
+                        launch {
+                            limit.withPermit {
+                                // downloadTrack сам кладёт id в cachedAudioIds при успехе -
+                                // cachedTrackIds() отражает это сразу, отдельный флаг не нужен.
+                                downloadTrack(id)
+                                _downloadAllProgress.value = _downloadAllProgress.value - id
+                            }
+                        }
+                    }
+                }
+            } finally {
+                _downloadAllProgress.value = _downloadAllProgress.value - pending.toSet()
+            }
+        }
+    }
+
+    override fun cancelDownloadAll() {
+        downloadAllJob?.cancel()
+        downloadAllJob = null
+        _downloadAllProgress.value = emptySet()
+    }
 
     override fun removeFromCache(serverTrackId: Long) {
         fileFor(serverTrackId).delete()
