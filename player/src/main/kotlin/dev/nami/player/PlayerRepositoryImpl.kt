@@ -108,8 +108,14 @@ class PlayerRepositoryImpl @Inject constructor(
         if (replace) serverUrlByMediaId.clear()
         if (tracks.isEmpty()) return
         val unresolved = tracks.filter { track ->
+            // Явный id (серверная запись, jam или уже связанный локальный трек) сначала -
+            // нечёткое сопоставление по имени/артисту/длительности ниже нужно только тем,
+            // у кого связи ещё нет. Раньше локальный трек шёл в нечёткий матч всегда, даже
+            // сразу после успешной загрузки с уже известным serverTrackId - совпадение
+            // срывалось на любом расхождении метаданных, и бейдж врал «нет на сервере».
             val serverId = track.id.value.removePrefix("server_").removePrefix("jam_").toLongOrNull()
                 ?.takeIf { track.id.value.startsWith("server_") || track.id.value.startsWith("jam_") }
+                ?: track.serverTrackId
             if (serverId != null) {
                 serverAudioRepository.serverStreamUrl(serverId)?.let { serverUrlByMediaId[track.id.value] = it }
                 false
@@ -200,19 +206,8 @@ class PlayerRepositoryImpl @Inject constructor(
 
                         override fun onIsPlayingChanged(isPlaying: Boolean) {
                             if (!isPlaying) {
-                                val now = System.currentTimeMillis()
-                                pausedAtMs = now
-                                // Persisted, not just in-memory - see SettingsRepository.
-                                // lastPlaybackQueueTrackIds's doc for why (a paused, backgrounded
-                                // service is killable, wiping pausedAtMs along with everything
-                                // else in-memory). The WHOLE queue, not just the current track --
-                                // restoring only the one playing track silently dropped the rest
-                                // of the queue on a cold-start restore.
-                                controller?.let { player ->
-                                    if (player.mediaItemCount == 0) return@let
-                                    val ids = (0 until player.mediaItemCount).map { player.getMediaItemAt(it).mediaId }
-                                    settingsRepository.setLastPlayback(ids, player.currentMediaItemIndex, player.currentPosition, now)
-                                }
+                                pausedAtMs = System.currentTimeMillis()
+                                controller?.let(::persistPlaybackSnapshot)
                             }
                         }
 
@@ -239,8 +234,32 @@ class PlayerRepositoryImpl @Inject constructor(
                         controller?.takeIf { it.isPlaying }?.let(::publishState)
                     }
                 }
+                scope.launch {
+                    // lastPlaybackPositionMs/PausedAt раньше обновлялись только на паузе - трек,
+                    // который просто долго играет без единой паузы, никогда не освежал метку
+                    // времени. SyncRepository шлёт её на сервер как "updated_at" в /api/position,
+                    // а серверный "что слушают друзья" фильтрует по последним 120с - без этого
+                    // тика позиция слушающего без пауз человека всегда оказывалась за окном, и
+                    // друзья видели пустой список, даже когда он реально что-то слушал.
+                    while (true) {
+                        delay(20_000)
+                        controller?.takeIf { it.isPlaying }?.let(::persistPlaybackSnapshot)
+                    }
+                }
             },
             MoreExecutors.directExecutor(),
+        )
+    }
+
+    // Persisted, not just in-memory - see SettingsRepository.lastPlaybackQueueTrackIds's
+    // doc for why (a paused, backgrounded service is killable, wiping in-memory state along
+    // with everything else). The WHOLE queue, not just the current track - restoring only
+    // the one playing track silently dropped the rest of the queue on a cold-start restore.
+    private fun persistPlaybackSnapshot(player: Player) {
+        if (player.mediaItemCount == 0) return
+        val ids = (0 until player.mediaItemCount).map { player.getMediaItemAt(it).mediaId }
+        settingsRepository.setLastPlayback(
+            ids, player.currentMediaItemIndex, player.currentPosition, System.currentTimeMillis(),
         )
     }
 
@@ -508,6 +527,7 @@ class PlayerRepositoryImpl @Inject constructor(
                 durationMs = track.durationMs,
                 cueStartMs = track.cueStartMs,
                 cueEndMs = track.cueEndMs,
+                serverTrackId = track.serverTrackId,
             )
         }
         if (playables.isEmpty()) return

@@ -118,6 +118,7 @@ class ShortcutsViewModel @Inject constructor(
                             durationMs = track.durationMs,
                             cueStartMs = track.cueStartMs,
                             cueEndMs = track.cueEndMs,
+                            serverTrackId = track.serverTrackId,
                         ),
                     ),
                     startIndex = 0,

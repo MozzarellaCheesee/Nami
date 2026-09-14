@@ -256,12 +256,32 @@ pub fn schedule_restart() {
 
         #[cfg(windows)]
         {
-            if let Ok(exe) = std::env::current_exe() {
-                // Отдельный процесс переживёт наш выход и поднимет службу обратно.
+            // Через службу процесс запущен, только если он сам стартовал командой
+            // "service run" (диспетчер служб зовёт именно так) - тогда его и поднимает
+            // диспетчер после `sc start`. Раньше решение "как перезапускаться" не делали
+            // вовсе: если сервер запущен вручную (двойной клик, из консоли, tui), `sc
+            // start` не поднимал НИКОГО - служба под этим именем либо не установлена,
+            // либо это вообще другой процесс - и после смены порта в мастере настройки
+            // сервер просто умирал насовсем.
+            let as_service = std::env::args().any(|a| a == "service") && std::env::args().any(|a| a == "run");
+            if as_service {
+                // Ping, а не timeout: timeout есть и в MSYS/Git-Bash coreutils с несовместимым
+                // синтаксисом (/T режется как неизвестный аргумент), и если он попадает в PATH
+                // раньше системного C:\Windows\System32\timeout.exe, вся цепочка обрывается
+                // молча. ping есть только один, системный, и всегда понимает /n.
                 let _ = std::process::Command::new("cmd")
-                    .args(["/C", "timeout /T 2 /NOBREAK >nul && sc stop NamiServer >nul & sc start NamiServer >nul"])
+                    .args(["/C", "ping -n 3 127.0.0.1 >nul & sc stop NamiServer >nul & sc start NamiServer >nul"])
                     .spawn();
-                let _ = exe;
+            } else if let Ok(exe) = std::env::current_exe() {
+                let args: Vec<String> = std::env::args().skip(1).collect();
+                let _ = std::process::Command::new("cmd")
+                    .arg("/C")
+                    .arg(format!(
+                        "ping -n 3 127.0.0.1 >nul & \"{}\" {}",
+                        exe.display(),
+                        args.join(" "),
+                    ))
+                    .spawn();
             }
         }
         #[cfg(not(windows))]

@@ -3082,10 +3082,14 @@ async fn upload(
                 meta.title = title;
             }
         }
-        if meta.artist.is_none() {
+        // is_none() пропускал файлы с пустым (но присутствующим) тегом артиста/альбома -
+        // такие пишут некоторые энкодеры вместо того, чтобы не писать тег вовсе. Подсказка
+        // клиента в этом случае молча терялась, и трек уходил на сервер без исполнителя,
+        // хотя в приложении он был известен.
+        if meta.artist.as_deref().unwrap_or("").trim().is_empty() {
             meta.artist = hint_artist;
         }
-        if meta.album.is_none() {
+        if meta.album.as_deref().unwrap_or("").trim().is_empty() {
             meta.album = hint_album;
         }
         if meta.track_no.is_none() {
@@ -3123,7 +3127,7 @@ async fn upload(
         if let Err(e) = std::fs::rename(&tmp, &final_path) {
             return cleanup(Err(e.into()));
         }
-        let (id, dup) = scanner::add_file(&db, &final_path, library_id)?;
+        let (id, dup) = scanner::add_file_with_meta(&db, &final_path, library_id, meta)?;
         Ok(Uploaded { track_id: id, duplicate_of: dup })
     })
     .await

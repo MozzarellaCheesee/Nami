@@ -64,6 +64,7 @@ class CardSortViewModel @Inject constructor(
                             durationMs = track.durationMs,
                             cueStartMs = track.cueStartMs,
                             cueEndMs = track.cueEndMs,
+                            serverTrackId = track.serverTrackId,
                         ),
                     ),
                     startIndex = 0,
@@ -96,5 +97,6 @@ class CardSortViewModel @Inject constructor(
         durationMs = durationMs,
         cueStartMs = cueStartMs,
         cueEndMs = cueEndMs,
+        serverTrackId = serverTrackId,
     )
 }

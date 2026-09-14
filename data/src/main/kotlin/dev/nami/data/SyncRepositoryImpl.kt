@@ -635,24 +635,26 @@ class SyncRepositoryImpl @Inject constructor(
 
         if (changes.length() == 0) {
             Log.d(TAG, "pushToServer: no local changes")
-            prefs.edit().putLong(pushKey, pushStartedMs).apply()
-            return true
-        }
-
-        Log.d(TAG, "pushToServer: pushing ${changes.length()} changes")
-        val chunkSize = 5000
-        for (i in 0 until changes.length() step chunkSize) {
-            val batch = JSONArray()
-            val end = minOf(i + chunkSize, changes.length())
-            for (j in i until end) {
-                batch.put(changes.getJSONObject(j))
-            }
-            val ok = NamiServerClient.syncPush(cfg, batch)
-            if (!ok) {
-                Log.w(TAG, "pushToServer: push batch failed at offset $i")
-                return false
+        } else {
+            Log.d(TAG, "pushToServer: pushing ${changes.length()} changes")
+            val chunkSize = 5000
+            for (i in 0 until changes.length() step chunkSize) {
+                val batch = JSONArray()
+                val end = minOf(i + chunkSize, changes.length())
+                for (j in i until end) {
+                    batch.put(changes.getJSONObject(j))
+                }
+                val ok = NamiServerClient.syncPush(cfg, batch)
+                if (!ok) {
+                    Log.w(TAG, "pushToServer: push batch failed at offset $i")
+                    return false
+                }
             }
         }
+        // Позиция раньше отправлялась только внутри блока выше - если у пользователя не было
+        // ни одной другой правки (лайк, плейлист, тег), changes был пуст, функция выходила
+        // раньше этого места, и позиция ни разу не уходила на сервер. "Что слушают друзья"
+        // у человека, который просто слушает музыку без правок библиотеки, был вечно пуст.
         val queue = settingsRepository.lastPlaybackQueueTrackIds.value
         val index = settingsRepository.lastPlaybackQueueIndex.value
         queue.getOrNull(index)?.let { localId ->

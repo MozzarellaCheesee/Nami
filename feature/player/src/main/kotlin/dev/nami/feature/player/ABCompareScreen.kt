@@ -139,4 +139,5 @@ private fun Track.toPlayableTrack() = PlayableTrack(
     durationMs = durationMs,
     cueStartMs = cueStartMs,
     cueEndMs = cueEndMs,
+    serverTrackId = serverTrackId,
 )

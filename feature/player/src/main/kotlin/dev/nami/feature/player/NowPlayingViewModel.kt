@@ -685,6 +685,7 @@ class NowPlayingViewModel @Inject constructor(
             durationMs = durationMs,
             cueStartMs = cueStartMs,
             cueEndMs = cueEndMs,
+            serverTrackId = serverTrackId,
         )
 }
 

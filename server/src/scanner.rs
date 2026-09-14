@@ -310,8 +310,23 @@ pub fn find_duplicate(
     found
 }
 
-/// Заносит уже лежащий на диске файл в библиотеку - через тот же разбор тегов,
-/// что и сканер. Возвращает id и признак дубля.
+/// Заносит уже лежащий на диске файл в библиотеку с уже готовыми метаданными - для
+/// загрузки с подсказками клиента (`/api/tracks/upload?artist=...`). Раньше подсказку
+/// сливали с прочитанными тегами только чтобы разложить файл по папке (`sort_path`), а
+/// в БД всё равно уходил повторный `read_meta()` с диска - трек без тега артиста в файле
+/// так и попадал в библиотеку без артиста, даже если клиент прислал его прямым текстом.
+pub fn add_file_with_meta(
+    conn: &Connection,
+    path: &Path,
+    library_id: i64,
+    meta: TrackMeta,
+) -> crate::Res<(i64, Option<DuplicateOf>)> {
+    let hash = file_hash(path)?;
+    add_file_impl(conn, path, library_id, meta, hash)
+}
+
+/// То же самое, но сама читает теги файла - для тестов, где готового `TrackMeta` нет.
+#[cfg(test)]
 pub fn add_file(
     conn: &Connection,
     path: &Path,
@@ -319,6 +334,16 @@ pub fn add_file(
 ) -> crate::Res<(i64, Option<DuplicateOf>)> {
     let meta = read_meta(path)?;
     let hash = file_hash(path)?;
+    add_file_impl(conn, path, library_id, meta, hash)
+}
+
+fn add_file_impl(
+    conn: &Connection,
+    path: &Path,
+    library_id: i64,
+    meta: TrackMeta,
+    hash: String,
+) -> crate::Res<(i64, Option<DuplicateOf>)> {
     if let Some((id, why)) = find_duplicate(conn, &hash, &meta, library_id) {
         return Ok((id, Some(why)));
     }

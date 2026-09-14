@@ -273,6 +273,7 @@ class LibraryViewModel @Inject constructor(
                     format = track.format,
                     cueStartMs = track.cueStartMs,
                     cueEndMs = track.cueEndMs,
+                    serverTrackId = track.serverTrackId,
                 ),
             )
         }

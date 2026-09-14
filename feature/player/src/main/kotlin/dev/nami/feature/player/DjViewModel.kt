@@ -41,6 +41,7 @@ class DjViewModel @Inject constructor(
                 format = track.format,
                 durationMs = track.durationMs,
                 bpm = track.bpm,
+                serverTrackId = track.serverTrackId,
             ),
         )
     }

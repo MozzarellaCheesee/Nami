@@ -28,13 +28,19 @@ pub fn hash_token(token: &str) -> String {
     hex::encode(Sha256::digest(token.as_bytes()))
 }
 
-/// Возвращает список локальных IPv4-адресов (кроме loopback).
-/// Используется для поля hosts в QR-коде.
+/// Возвращает список локальных IPv4-адресов (кроме loopback), для поля hosts в QR-коде.
+///
+/// Раньше был только один адрес - тот, что система выбирает для исходящего соединения к
+/// 8.8.8.8. На машине с Docker/WSL или другим виртуальным адаптером система может выбрать
+/// ЕГО (например 172.19.0.1), а не настоящий LAN-интерфейс - телефон получал единственный
+/// и недостижимый адрес, и сопряжение по QR отваливалось таймаутом без всякого объяснения.
+/// Теперь отдаём ВСЕ адреса всех интерфейсов - клиент и так перебирает hosts по очереди
+/// (см. Android NamiServerClient.pairFromAuthUri), нужно просто дать ему настоящий LAN в
+/// списке, а не один угаданный.
 pub fn local_ips() -> Vec<Ipv4Addr> {
     use std::net::UdpSocket;
     let mut ips = Vec::new();
 
-    // Попытка получить основной IP через connect к внешнему адресу (не отправляет пакет)
     if let Ok(socket) = UdpSocket::bind("0.0.0.0:0") {
         if socket.connect("8.8.8.8:80").is_ok() {
             if let Ok(addr) = socket.local_addr() {
@@ -47,7 +53,54 @@ pub fn local_ips() -> Vec<Ipv4Addr> {
         }
     }
 
+    for ip in enumerate_interface_ips() {
+        if !ips.contains(&ip) {
+            ips.push(ip);
+        }
+    }
+
+    // Настоящая домашняя сеть почти всегда 192.168.x или 10.x; 172.16.0.0/12 - подсеть по
+    // умолчанию у Docker/Hyper-V/WSL, телефон её не достанет никогда. Клиент и так перебирает
+    // весь список по очереди при неудаче (см. Android NamiServerClient.pairFromAuthUri), но
+    // без сортировки виртуальные адаптеры могли встать первыми - каждый лишний адрес перед
+    // рабочим стоил пользователю ещё 5 секунд таймаута на сопряжении.
+    ips.sort_by_key(rank_ip);
     ips
+}
+
+fn rank_ip(ip: &Ipv4Addr) -> u8 {
+    let o = ip.octets();
+    match o {
+        [192, 168, ..] => 0,
+        [10, ..] => 1,
+        [172, 16..=31, ..] => 3,
+        _ => 2,
+    }
+}
+
+/// Перечисляет IPv4-адреса всех сетевых интерфейсов через системные утилиты - в std
+/// кросс-платформенного перечисления интерфейсов нет, а тянуть отдельный крейт ради
+/// одного списка адресов ни к чему.
+fn enumerate_interface_ips() -> Vec<Ipv4Addr> {
+    let output = if cfg!(windows) {
+        // Имена командлетов PowerShell не зависят от локали системы, в отличие от вывода
+        // ipconfig ("IPv4-адрес" на русской Windows, "IPv4 Address" на английской).
+        std::process::Command::new("powershell")
+            .args([
+                "-NoProfile", "-NonInteractive", "-Command",
+                "Get-NetIPAddress -AddressFamily IPv4 | Select-Object -ExpandProperty IPAddress",
+            ])
+            .output()
+    } else {
+        std::process::Command::new("hostname").arg("-I").output()
+    };
+
+    let Ok(output) = output else { return Vec::new() };
+    let text = String::from_utf8_lossy(&output.stdout);
+    text.split_whitespace()
+        .filter_map(|s| s.parse::<Ipv4Addr>().ok())
+        .filter(|ip| !ip.is_loopback() && !ip.is_link_local())
+        .collect()
 }
 
 /// Создаёт одноразовый код сопряжения на 10 минут.

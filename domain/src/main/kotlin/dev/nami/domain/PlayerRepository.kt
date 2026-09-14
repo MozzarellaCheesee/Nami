@@ -20,6 +20,10 @@ data class PlayableTrack(
     val cueStartMs: Long? = null,
     val cueEndMs: Long? = null,
     val bpm: Float? = null,
+    /** Id того же трека на сервере, если он уже связан (см. `TrackEntity.serverTrackId`).
+     * Известен - используем его напрямую вместо нечёткого сопоставления по имени/артисту/
+     * длительности, которое и давало ложное «нет на сервере» сразу после успешной загрузки. */
+    val serverTrackId: Long? = null,
 )
 
 enum class QueueOrigin { MANUAL, CONTEXT }
