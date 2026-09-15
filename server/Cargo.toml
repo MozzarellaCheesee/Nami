@@ -10,7 +10,7 @@ axum = { version = "0.8", features = ["ws", "http1", "http2", "json", "tokio"] }
 # aws-lc-rs тянет cmake+bindgen и делает кросс-компиляцию arm64 отдельным приключением,
 # ring для этого собирается обычным кросс-gcc.
 axum-server = { version = "0.8", default-features = false, features = ["tls-rustls-no-provider"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "sync"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "sync", "process", "io-util", "time"] }
 tower = "0.5"
 # Уже приезжает транзитивно с axum; объявляем явно ради BodyExt в потоковой загрузке.
 http-body-util = "0.1"
@@ -38,6 +38,9 @@ getrandom = "0.4"
 argon2 = "0.5"
 sha2 = "0.11"
 hex = "0.4"
+base64 = "0.22"
+ring = "0.17"
+url = "2"
 rcgen = "0.14"
 # без default-features: нужен только SVG-рендер, растровый бэкенд тянет весь крейт image.
 qrcode = { version = "0.14", default-features = false, features = ["svg"] }

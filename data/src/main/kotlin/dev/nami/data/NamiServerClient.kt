@@ -27,6 +27,29 @@ object NamiServerClient {
     private const val TAG = "NamiServerClient"
     private const val TIMEOUT_MS = 5_000
 
+    /** Discord tokens stay on the server; only account metadata/authorization URL are returned. */
+    fun discordAccount(cfg: Config, action: String = "status"): Pair<Int, JSONObject>? {
+        val (method, path) = when (action) {
+            "status" -> "GET" to "/api/me/discord"
+            "authorize" -> "POST" to "/api/me/discord/authorize"
+            "refresh" -> "POST" to "/api/me/discord/refresh"
+            "disconnect" -> "DELETE" to "/api/me/discord"
+            else -> return null
+        }
+        val base = reachableBase(cfg) ?: return null
+        val (code, text) = request(method, "$base$path", if (method == "POST") "{}" else null,
+            cfg.token, cfg.certSha256, readTimeoutMs = if (action == "status") TIMEOUT_MS else 35_000, followRedirects = false) ?: return null
+        val body = runCatching { JSONObject(text) }.getOrDefault(JSONObject())
+        return code to body
+    }
+
+    fun discordPlayback(cfg: Config, payload: JSONObject): Pair<Int, JSONObject>? {
+        val base = reachableBase(cfg) ?: return null
+        val (code, text) = request("POST", "$base/api/me/discord/playback", payload.toString(),
+            cfg.token, cfg.certSha256, followRedirects = false) ?: return null
+        return code to runCatching { JSONObject(text) }.getOrDefault(JSONObject())
+    }
+
     /** Размер куска при выгрузке файла. Совпадает с chunked-режимом соединения, чтобы копирование
      * не резало каждый кусок на восемь записей по умолчанию. */
     private const val UPLOAD_BUFFER_BYTES = 64 * 1024
@@ -748,9 +771,11 @@ object NamiServerClient {
         bearer: String?,
         certSha256: String?,
         readTimeoutMs: Int = TIMEOUT_MS,
+        followRedirects: Boolean = true,
     ): Pair<Int, String>? = runCatching {
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = method
+            instanceFollowRedirects = followRedirects
             connectTimeout = TIMEOUT_MS
             readTimeout = readTimeoutMs
             // Пиннинг отпечатка - только для адреса-IP в локальной сети (самоподписанный

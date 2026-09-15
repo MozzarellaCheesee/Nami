@@ -27,3 +27,8 @@ core/native/build/
 .superpowers/
 AGENTS.md
 secrets/
+
+# Official Discord SDK is installed by the builder; never commit downloaded binaries.
+app/libs/discord_partner_sdk.aar
+server/discord-bridge/build/
+server/discord-bridge/sdk/

@@ -168,6 +168,29 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
 
     // Default OFF: tapping a track starts playback without jumping to Now Playing, per the
     // explicit request this setting exists for - opening the full player is opt-in.
+    private val _discordApplicationId = MutableStateFlow(prefs.getString("discord_application_id", "").orEmpty())
+    val discordApplicationId: StateFlow<String> = _discordApplicationId
+    fun setDiscordApplicationId(value: String) {
+        val id = value.trim()
+        require(id.isEmpty() || dev.nami.domain.validDiscordApplicationId(id))
+        prefs.edit { putString("discord_application_id", id) }
+        _discordApplicationId.value = id
+    }
+
+    private val _discordPresenceEnabled = MutableStateFlow(prefs.getBoolean("discord_presence_enabled", false))
+    val discordPresenceEnabled: StateFlow<Boolean> = _discordPresenceEnabled
+    fun setDiscordPresenceEnabled(value: Boolean) {
+        prefs.edit { putBoolean("discord_presence_enabled", value) }
+        _discordPresenceEnabled.value = value
+    }
+
+    private val _discordShowMode = MutableStateFlow(prefs.getBoolean("discord_show_mode", true))
+    val discordShowMode: StateFlow<Boolean> = _discordShowMode
+    fun setDiscordShowMode(value: Boolean) {
+        prefs.edit { putBoolean("discord_show_mode", value) }
+        _discordShowMode.value = value
+    }
+
     private val _autoOpenPlayer = MutableStateFlow(prefs.getBoolean(KEY_AUTO_OPEN_PLAYER, false))
     override val autoOpenPlayer: StateFlow<Boolean> = _autoOpenPlayer
 

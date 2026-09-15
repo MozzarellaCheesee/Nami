@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.22)
+project(nami_discord LANGUAGES CXX)
+find_package(discord_partner_sdk REQUIRED CONFIG)
+add_library(nami_discord SHARED discord_presence.cpp)
+target_compile_features(nami_discord PRIVATE cxx_std_20)
+target_link_libraries(nami_discord PRIVATE discord_partner_sdk::discord_partner_sdk)

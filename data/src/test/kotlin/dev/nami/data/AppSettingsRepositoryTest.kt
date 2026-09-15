@@ -19,6 +19,25 @@ import org.robolectric.RobolectricTestRunner
 class AppSettingsRepositoryTest {
 
     @Test
+    fun `Discord is opt in and user application ID persists`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val repo = AppSettingsRepository(context)
+        assertFalse(repo.discordPresenceEnabled.value)
+        assertEquals("", repo.discordApplicationId.value)
+        repo.setDiscordApplicationId(" 123456789012345678 ")
+        repo.setDiscordPresenceEnabled(true)
+        repo.setDiscordShowMode(false)
+        val reopened = AppSettingsRepository(context)
+        assertEquals("123456789012345678", reopened.discordApplicationId.value)
+        assertEquals(true, reopened.discordPresenceEnabled.value)
+        assertFalse(reopened.discordShowMode.value)
+        kotlin.test.assertFailsWith<IllegalArgumentException> { repo.setDiscordApplicationId("user-token") }
+        assertEquals("123456789012345678", repo.discordApplicationId.value)
+        repo.setDiscordApplicationId("")
+        assertEquals("", AppSettingsRepository(context).discordApplicationId.value)
+    }
+
+    @Test
     fun `defaults to false and persists a change`() = runTest {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val repo = AppSettingsRepository(context)

@@ -453,6 +453,16 @@
 
     <!-- Вкладка: Профиль пользователя -->
     <section id="tabProfile" class="hidden">
+      <div class="card stack">
+        <h2>Discord</h2>
+        <div class="card-desc">Подключите свой Discord, чтобы показывать музыку с телефона в своём профиле. В приложении Nami на телефоне войдите в этот же аккаунт сервера. Публикуются название трека, исполнитель, время и режим прослушивания.</div>
+        <div id="discordStatus" role="status" aria-live="polite">Загрузка…</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button id="discordConnect" class="primary" onclick="discordAction('authorize')" disabled>Подключить Discord</button>
+          <button id="discordDisconnect" class="danger" onclick="discordAction('disconnect')" disabled>Отключить Discord</button>
+          <button id="discordRefresh" onclick="loadDiscord()">Обновить статус</button>
+        </div>
+      </div>
       <!-- Смена пароля -->
       <div class="card stack">
         <h2>Безопасность аккаунта</h2>
@@ -704,15 +714,16 @@ const inviteToken = () => new URLSearchParams(location.hash.slice(1)).get('invit
 let ALL_TRACKS = [], CURRENT_USER = null, ACTIVE_TRACK_ID = null;
 
 async function api(path, opts = {}) {
+  const credential = T();
   const r = await fetch('/api' + path, {
     ...opts,
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + T(),
+      'Authorization': 'Bearer ' + credential,
       ...(opts.headers || {})
     },
   });
-  if (r.status === 401) { logout(); throw new Error('Сессия истекла, войдите заново'); }
+  if (r.status === 401) { if (credential === T()) logout(); throw new Error('Сессия истекла, войдите заново'); }
   if (!r.ok) {
     const txt = await r.text();
     let msg = txt;
@@ -784,6 +795,10 @@ async function acceptInvite() {
 
 function logout() {
   localStorage.removeItem('nami_token');
+  CURRENT_USER = null;
+  ++discordRequest;
+  discordBusyToken = null;
+  document.getElementById('discordStatus').textContent = '';
   showAuthView();
 }
 
@@ -1104,6 +1119,7 @@ async function uploadFiles(files) {
 
 // --- Профиль пользователя ---
 async function loadProfile() {
+  loadDiscord();
   try {
     const me = await api('/me');
     document.getElementById('nowPlayingVisibleCb').checked = !!me.user.now_playing_visible;
@@ -1117,6 +1133,61 @@ async function loadProfile() {
     document.getElementById('subsonicUrl').textContent = window.location.protocol + '//' + host + '/rest';
   } catch (e) { console.error(e); }
 }
+
+let discordRequest = 0;
+let discordBusyToken = null;
+function renderDiscord(account) {
+  const names = { waiting: 'Ожидает воспроизведения на телефоне', connecting: 'Подключение к Discord…',
+    published: 'Активность опубликована', error: 'Не удалось опубликовать активность. Сервер повторит попытку.' };
+  document.getElementById('discordStatus').textContent = !account.configured
+    ? 'Администратор ещё не настроил подключение Discord.'
+    : !account.linked ? 'Discord не подключён.'
+    : account.needs_reconnect ? 'Подключите Discord заново: настройки или разрешения изменились.'
+    : 'Подключён: ' + account.username + '. ' + (!account.presence_supported
+      ? 'Публикация недоступна: администратору нужно установить и настроить Discord Social SDK на сервере.'
+      : names[account.presence_status] || names.waiting);
+  document.getElementById('discordConnect').disabled = !account.configured;
+  document.getElementById('discordDisconnect').disabled = !account.linked;
+}
+async function discordAction(action = 'status') {
+  const credential = T();
+  if (!credential || discordBusyToken === credential) return;
+  const request = ++discordRequest;
+  discordBusyToken = credential;
+  for (const id of ['discordConnect', 'discordDisconnect', 'discordRefresh']) document.getElementById(id).disabled = true;
+  try {
+    const account = await api('/me/discord' + (action === 'authorize' ? '/authorize' : ''), {
+      method: action === 'authorize' ? 'POST' : action === 'disconnect' ? 'DELETE' : 'GET',
+      ...(action === 'authorize' ? { body: '{}' } : {})
+    });
+    if (credential !== T() || request !== discordRequest) return;
+    if (action === 'authorize') {
+      const url = new URL(account.authorize_url);
+      if (url.origin !== 'https://discord.com' || url.pathname !== '/oauth2/authorize' || url.username || url.password)
+        throw new Error('Сервер вернул неверный адрес авторизации Discord');
+      // Same-tab navigation works on phones without popup permissions.
+      location.assign(url.href);
+    } else if (action === 'disconnect') {
+      const updated = await api('/me/discord');
+      if (credential !== T() || request !== discordRequest) return;
+      renderDiscord(updated);
+      if (account.revoked_remotely === false)
+        document.getElementById('discordStatus').textContent += ' Отзовите разрешение Nami также в настройках Discord: сервер не смог связаться с Discord.';
+    } else renderDiscord(account);
+  } catch (e) {
+    if (credential === T() && request === discordRequest)
+      document.getElementById('discordStatus').textContent = e.message;
+  } finally {
+    if (request === discordRequest) {
+      discordBusyToken = null;
+      if (credential === T()) document.getElementById('discordRefresh').disabled = false;
+    }
+  }
+}
+function loadDiscord() { return discordAction(); }
+setInterval(() => {
+  if (T() && !document.hidden && !document.getElementById('tabProfile').classList.contains('hidden')) loadDiscord();
+}, 15000);
 
 async function changeMyPassword() {
   const msg = document.getElementById('profPwMsg');

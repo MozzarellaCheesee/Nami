@@ -25,6 +25,17 @@ run {
     if (f.exists()) f.inputStream().use { localProps.load(it) }
 }
 
+// Obtain the official Android AAR (Social SDK 1.10+) from Discord Developer Portal.
+// The application ID is supplied by each user in settings, never compiled into the APK.
+val discordSdkAar = rootProject.file(
+    providers.gradleProperty("nami.discordSdkAar").orNull
+        ?: localProps.getProperty("nami.discordSdkAar", "app/libs/discord_partner_sdk.aar")
+)
+val withDiscordSdk = discordSdkAar.isFile
+if (providers.gradleProperty("nami.requireDiscordSdk").orNull == "true") {
+    require(withDiscordSdk) { "Discord SDK missing: set nami.discordSdkAar to the official Android AAR (1.10+)." }
+}
+
 android {
     namespace = "dev.nami.app"
     compileSdk = 35
@@ -33,7 +44,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = gitCommitCount
-        versionName = "0.1.2-beta.34"
+        versionName = "0.1.2-beta.35"
     }
     val keystoreFile = rootProject.file("secrets/nami.jks")
     val storePass = System.getenv("NAMI_KEYSTORE_PASSWORD")
@@ -68,7 +79,18 @@ android {
             isMinifyEnabled = false
         }
     }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        prefab = withDiscordSdk
+    }
+    sourceSets.getByName("main").java.srcDir(
+        if (withDiscordSdk) "src/discord/kotlin" else "src/noDiscord/kotlin"
+    )
+    if (withDiscordSdk) {
+        externalNativeBuild {
+            cmake { path = file("src/main/cpp/CMakeLists.txt") }
+        }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
@@ -91,6 +113,7 @@ android {
 kotlin { jvmToolchain(21) }
 
 dependencies {
+    if (withDiscordSdk) implementation(files(discordSdkAar))
     implementation(project(":core:model"))
     implementation(project(":core:database"))
     implementation(project(":core:designsystem"))

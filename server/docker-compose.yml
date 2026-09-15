@@ -18,6 +18,13 @@ services:
       NAMI_MUSIC_DIRS: /music
       NAMI_DB_PATH: /data/nami.db
       NAMI_DATA_DIR: /data
+      # One server application; each Nami user authorizes their own Discord account.
+      NAMI_DISCORD_CLIENT_ID: ${NAMI_DISCORD_CLIENT_ID:-}
+      NAMI_DISCORD_CLIENT_SECRET: ${NAMI_DISCORD_CLIENT_SECRET:-}
+      NAMI_DISCORD_REDIRECT_URI: ${NAMI_DISCORD_REDIRECT_URI:-}
+      NAMI_DISCORD_TOKEN_KEY: ${NAMI_DISCORD_TOKEN_KEY:-}
+      # Absolute path inside the container. Mount the bridge and matching official SDK library.
+      NAMI_DISCORD_BRIDGE: ${NAMI_DISCORD_BRIDGE:-}
     volumes:
       - ${NAMI_MUSIC:-./music}:/music:ro
       - nami-data:/data

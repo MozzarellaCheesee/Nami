@@ -1169,6 +1169,7 @@ fun SettingsPlayerScreen(
     val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
 
     SettingsSubScreenScaffold(title = "Плеер", onBack = onBack) {
+        dev.nami.app.discord.DiscordSettingsCard(viewModel)
         NowPlayingPresetRow(
             selected = layoutPreset,
             onSelect = viewModel::applyNowPlayingPreset,

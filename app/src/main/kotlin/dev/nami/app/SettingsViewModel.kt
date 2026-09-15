@@ -27,7 +27,90 @@ class SettingsViewModel @Inject constructor(
     private val appUpdateManager: dev.nami.app.update.AppUpdateManager,
     private val libraryRepository: dev.nami.domain.LibraryRepository,
     private val serverLibraryRepository: dev.nami.domain.ServerLibraryRepository,
+    discordPresenceManager: dev.nami.app.discord.DiscordPresenceManager,
 ) : ViewModel() {
+
+    val discordApplicationId = appSettingsRepository.discordApplicationId
+    val discordPresenceEnabled = appSettingsRepository.discordPresenceEnabled
+    val discordShowMode = appSettingsRepository.discordShowMode
+    val discordStatus = discordPresenceManager.status
+    fun setDiscordApplicationId(value: String) = appSettingsRepository.setDiscordApplicationId(value)
+    fun setDiscordPresenceEnabled(value: Boolean) = appSettingsRepository.setDiscordPresenceEnabled(value)
+    fun setDiscordShowMode(value: Boolean) = appSettingsRepository.setDiscordShowMode(value)
+
+    private val _discordServerAccount = MutableStateFlow<org.json.JSONObject?>(null)
+    val discordServerAccount: StateFlow<org.json.JSONObject?> = _discordServerAccount
+    private val _discordServerMessage = MutableStateFlow<String?>(null)
+    val discordServerMessage: StateFlow<String?> = _discordServerMessage
+    private val _discordServerBusy = MutableStateFlow(false)
+    val discordServerBusy: StateFlow<Boolean> = _discordServerBusy
+    private var discordServerGeneration = 0L
+
+    init {
+        viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(appSettingsRepository.namiServerToken,
+                appSettingsRepository.namiServerUrl, appSettingsRepository.namiServerCertSha256) { token, url, cert ->
+                Triple(token, url, cert)
+            }.collect {
+                discordServerGeneration++
+                _discordServerAccount.value = null
+                _discordServerMessage.value = null
+                _discordServerBusy.value = false
+            }
+        }
+    }
+
+    fun discordServerAction(action: String = "status", openBrowser: ((String) -> Unit)? = null) {
+        if (_discordServerBusy.value) return
+        val cfg = serverConfig()
+        if (cfg == null) {
+            _discordServerAccount.value = null
+            _discordServerMessage.value = "Сначала войдите в свою учётную запись сервера Nami"
+            return
+        }
+        val generation = ++discordServerGeneration
+        _discordServerBusy.value = true
+        _discordServerMessage.value = null
+        viewModelScope.launch {
+            try {
+                var result = withContext(Dispatchers.IO) { NamiServerClient.discordAccount(cfg, action) }
+                if (action == "status" && result?.first == 200 && result.second.optBoolean("needs_refresh") &&
+                    !result.second.optBoolean("needs_reconnect")) {
+                    result = withContext(Dispatchers.IO) { NamiServerClient.discordAccount(cfg, "refresh") }
+                }
+                if (generation != discordServerGeneration || serverConfig() != cfg) return@launch
+                val code = result?.first
+                val body = result?.second
+                if (code != 200 || body == null) {
+                    _discordServerMessage.value = when (code) {
+                        401, 403 -> "Войдите в свою учётную запись Nami; гостевое устройство не подходит"
+                        409 -> "Привязку Discord нужно выполнить заново"
+                        503 -> "Администратор ещё не настроил Discord OAuth на сервере"
+                        null -> "Не удалось связаться с сервером"
+                        else -> "Сервер не смог выполнить действие Discord (код $code)"
+                    }
+                    if (code == 409) _discordServerAccount.value = null
+                    return@launch
+                }
+                if (action == "authorize") {
+                    val url = body.optString("authorize_url")
+                    val uri = android.net.Uri.parse(url)
+                    if (uri.scheme == "https" && uri.host == "discord.com" && uri.path == "/oauth2/authorize" &&
+                        uri.userInfo == null && uri.port == -1) {
+                        runCatching { openBrowser?.invoke(url) }.onFailure {
+                            _discordServerMessage.value = "Не удалось открыть браузер для входа в Discord"
+                        }
+                    } else _discordServerMessage.value = "Сервер вернул неверный адрес авторизации"
+                } else if (action == "disconnect") {
+                    _discordServerAccount.value = null
+                    _discordServerMessage.value = if (body.optBoolean("revoked_remotely")) "Discord отключён для вашей учётной записи"
+                        else "Привязка удалена с Nami. Отзовите доступ также в Discord → Авторизованные приложения."
+                } else _discordServerAccount.value = body
+            } finally {
+                if (generation == discordServerGeneration) _discordServerBusy.value = false
+            }
+        }
+    }
 
     val uploadAllMsg: StateFlow<String?> = serverLibraryRepository.uploadProgress
     fun clearUploadAllMsg() { serverLibraryRepository.clearUploadProgress() }

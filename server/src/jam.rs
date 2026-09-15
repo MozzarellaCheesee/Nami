@@ -517,6 +517,7 @@ mod tests {
             positions: tokio::sync::broadcast::channel(BUFFER).0,
             jams: Registry::default(),
             metrics: crate::metrics::Metrics::new(),
+            discord_presence: Default::default(),
         })
     }
 
@@ -672,6 +673,7 @@ mod tests {
             positions,
             jams: Registry::default(),
             metrics: crate::metrics::Metrics::new(),
+            discord_presence: Default::default(),
         });
         let host = Ident { user_id: Some(1), device_id: Some(999) };
         let mut host_membership = Membership::default();

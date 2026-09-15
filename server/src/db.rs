@@ -120,6 +120,25 @@ CREATE TABLE IF NOT EXISTS users (
     listenbrainz_token TEXT
 );
 
+CREATE TABLE IF NOT EXISTS discord_connections (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    discord_user_id TEXT NOT NULL UNIQUE,
+    username TEXT NOT NULL,
+    client_id TEXT NOT NULL,
+    token_cipher TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    scopes TEXT NOT NULL,
+    refreshing_until INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS discord_oauth_pending (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    state_hash TEXT NOT NULL UNIQUE,
+    credential_hash TEXT NOT NULL,
+    verifier TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    consumed INTEGER NOT NULL DEFAULT 0
+);
+
 -- Режим "общая библиотека с ограничением доступа к папкам". Ни одной строки на
 -- пользователя = видит всё; появилась хоть одна - видит только перечисленные поддеревья.
 CREATE TABLE IF NOT EXISTS user_folder_access (

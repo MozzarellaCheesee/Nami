@@ -45,6 +45,7 @@ pub struct AppState {
     pub jams: crate::jam::Registry,
     /// Метрики Prometheus
     pub metrics: crate::metrics::Metrics,
+    pub discord_presence: crate::discord_presence::Runtime,
 }
 
 impl AppState {
@@ -127,6 +128,10 @@ pub fn router(state: Shared) -> Router {
         .route("/api/auth/logout", post(logout))
         .route("/api/auth/pair-code", post(generate_pair_code))
         .route("/api/me", get(me).patch(patch_me))
+        .route("/api/me/discord", get(crate::discord::status).delete(crate::discord::disconnect))
+        .route("/api/me/discord/authorize", post(crate::discord::authorize))
+        .route("/api/me/discord/refresh", post(crate::discord::refresh))
+        .route("/api/me/discord/playback", post(crate::discord_presence::playback))
         .route("/api/me/subsonic-password", axum::routing::put(put_subsonic_password))
         .route("/api/me/password", axum::routing::put(put_my_password))
         .route("/api/me/listenbrainz-token", axum::routing::put(put_listenbrainz_token))
@@ -151,6 +156,7 @@ pub fn router(state: Shared) -> Router {
 
     Router::new()
         .route("/api/health", get(health))
+        .route("/api/discord/callback", get(crate::discord::callback))
         .route("/metrics", get(metrics_handler))
         .route("/api/auth/pair", post(pair))
         .route("/api/auth/qr/start", post(qr_start))
@@ -3534,6 +3540,7 @@ mod analysis_tests {
             positions: tokio::sync::broadcast::channel(8).0,
             jams: Default::default(),
             metrics: crate::metrics::Metrics::new(),
+            discord_presence: Default::default(),
         })
     }
 

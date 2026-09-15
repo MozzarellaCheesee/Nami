@@ -1,5 +1,10 @@
 # Пример конфигурации сервера NAMI. Скопировать в config.toml (в git не попадает).
 # Любое поле переопределяется переменной окружения - удобно для Docker.
+# Discord OAuth настраивается только через NAMI_DISCORD_CLIENT_ID,
+# NAMI_DISCORD_CLIENT_SECRET, NAMI_DISCORD_REDIRECT_URI, NAMI_DISCORD_TOKEN_KEY.
+# Для публикации: NAMI_DISCORD_BRIDGE — абсолютный путь к мосту с официальным Social SDK.
+# Привязки и OAuth-токены индивидуальны для каждого пользователя Nami.
+# Подробности: ../docs/discord-server-oauth.md
 
 # NAMI_PORT
 port = 4533

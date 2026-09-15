@@ -174,6 +174,12 @@ class PlayerRepositoryImpl @Inject constructor(
             // MEDIA_ITEM_TRANSITION_REASON_AUTO - so the cover-slide animation below would never
             // fire for a crossfaded transition. The service bumps this extra on each handover.
             .setListener(object : MediaController.Listener {
+                override fun onDisconnected(controller: MediaController) {
+                    this@PlayerRepositoryImpl.controller = null
+                    _state.value = PlaybackState.Idle
+                    _queue.value = PlayerQueue.EMPTY
+                }
+
                 override fun onExtrasChanged(controller: MediaController, extras: android.os.Bundle) {
                     if (extras.containsKey(EXTRA_CROSSFADE_HANDOVER)) _autoAdvanceSignal.value++
                 }

@@ -27,6 +27,7 @@ class NamiApplication : Application(), SingletonImageLoader.Factory {
     @Inject lateinit var playerRepository: PlayerRepository
     @Inject lateinit var serverLibraryRepository: ServerLibraryRepository
     @Inject lateinit var settingsRepository: SettingsRepository
+    @Inject lateinit var discordPresenceManager: dev.nami.app.discord.DiscordPresenceManager
 
     override fun newImageLoader(context: PlatformContext): ImageLoader {
         val okHttpClient = dev.nami.player.net.createPinnedOkHttpClient {
@@ -41,6 +42,7 @@ class NamiApplication : Application(), SingletonImageLoader.Factory {
 
     override fun onCreate() {
         super.onCreate()
+        discordPresenceManager.start()
         dev.nami.data.NamiServerClient.setUnauthorizedHandler { rejectedToken ->
             if (settingsRepository.namiServerToken.value == rejectedToken) {
                 settingsRepository.setNamiServerToken(null)

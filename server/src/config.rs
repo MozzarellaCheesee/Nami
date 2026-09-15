@@ -5,6 +5,9 @@ use serde::Deserialize;
 /// Конфигурация сервера: config.toml + переопределения из окружения.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
+    /// OAuth secrets come from the server environment, never from client requests.
+    #[serde(skip)]
+    pub discord: Option<crate::discord::DiscordConfig>,
     #[serde(default = "default_port")]
     pub port: u16,
     #[serde(default)]
@@ -87,6 +90,7 @@ fn default_import_pattern() -> String {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            discord: None,
             port: default_port(),
             music_dirs: Vec::new(),
             db_path: default_db(),
@@ -206,6 +210,7 @@ impl Config {
             cfg.transcode_cache_mb =
                 v.parse().map_err(|_| format!("NAMI_TRANSCODE_CACHE_MB: не число: {v}"))?;
         }
+        cfg.discord = crate::discord::DiscordConfig::from_env()?;
         Ok(cfg)
     }
 }

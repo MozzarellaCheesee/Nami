@@ -11,6 +11,8 @@ mod auth;
 mod cli;
 mod config;
 mod db;
+mod discord;
+mod discord_presence;
 mod domain;
 mod hls;
 mod host;
@@ -161,12 +163,14 @@ pub async fn serve_from_config() -> Res<()> {
         jams: Default::default(),
         cfg: cfg.clone(),
         metrics: metrics::Metrics::new(),
+        discord_presence: Default::default(),
     });
 
     if cfg.watch {
         watcher::spawn(state.clone());
     }
     scrobble::spawn(state.clone());
+    discord_presence::spawn(state.clone()).await;
 
     let addr = SocketAddr::from(([0, 0, 0, 0], cfg.port));
     // PWA первым: если запрос не совпадёт с его роутами, пойдёт в API.

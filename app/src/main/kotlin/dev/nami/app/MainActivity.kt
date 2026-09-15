@@ -221,6 +221,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        dev.nami.app.discord.DiscordSdk.initialize(this)
         jamRepository.connectServerEvents()
         // Transparent system nav bar: content draws edge-to-edge under it (NamiBottomBar already
         // adds its own navigationBarsPadding inset, so nothing shifts), and the gesture bar/
