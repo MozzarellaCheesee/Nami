@@ -77,6 +77,7 @@ private class DspChain {
 }
 
 private const val ACTION_TOGGLE_LIKE = "dev.nami.ACTION_TOGGLE_LIKE"
+private const val ACTION_TOGGLE_SHUFFLE = "dev.nami.ACTION_TOGGLE_SHUFFLE"
 const val ACTION_CROSSFADE_NEXT = "dev.nami.ACTION_CROSSFADE_NEXT"
 const val EXTRA_CROSSFADE_DURATION_MS = "dev.nami.EXTRA_CROSSFADE_DURATION_MS"
 
@@ -133,7 +134,7 @@ class PlaybackService : MediaLibraryService() {
     // same listener object both times, not a fresh one that'd be easy to double-add by accident.
     private val replayGainListener = object : Player.Listener {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-            scope.launch { refreshLikeButton() }
+            scope.launch { refreshCustomLayout() }
             val trackId = mediaItem?.mediaId?.let(::TrackId) ?: return
             scope.launch { updateReplayGainForCurrentTrack(trackId) }
             scope.launch { updateEndingFadeForCurrentTrack(trackId) }
@@ -168,21 +169,33 @@ class PlaybackService : MediaLibraryService() {
      * только в своём собственном MiniPlayer. Media3's MediaSession.Callback is the extension
      * point for a custom action beyond the standard play/pause/skip set. */
     private val likeCommand = SessionCommand(ACTION_TOGGLE_LIKE, Bundle.EMPTY)
+    private val shuffleCommand = SessionCommand(ACTION_TOGGLE_SHUFFLE, Bundle.EMPTY)
     private val crossfadeNextCommand = SessionCommand(ACTION_CROSSFADE_NEXT, Bundle.EMPTY)
 
     // ICON_HEART_FILLED/UNFILLED (не ICON_UNDEFINED + свой setIconResId) - системный медиа-плеер
     // (шторка/блокировка на Android 13+) распознаёт и перерисовывает при тапе только эти
     // именованные константы иконок, кастомный resId он показывает один раз статично и не обновляет
     // после нажатия - от этого лайк в системном плеере "не менялся".
+    // SLOT_FORWARD_SECONDARY - крайний правый слот, за стандартным "следующий трек"
+    // (SLOT_FORWARD): лайк должен идти именно там, а не просто последним в списке.
     private fun likeButton(liked: Boolean) = CommandButton.Builder(if (liked) CommandButton.ICON_HEART_FILLED else CommandButton.ICON_HEART_UNFILLED)
         .setDisplayName(if (liked) "Убрать из любимых" else "В любимые")
         .setSessionCommand(likeCommand)
+        .setSlots(CommandButton.SLOT_FORWARD_SECONDARY)
         .build()
 
-    private suspend fun refreshLikeButton() {
-        val trackId = (player.currentMediaItem?.mediaId)?.takeIf { it.isNotEmpty() }?.let(::TrackId) ?: return
-        val liked = playlistRepository.isTrackLiked(trackId).first()
-        mediaSession.setCustomLayout(ImmutableList.of(likeButton(liked)))
+    // SLOT_BACK_SECONDARY - крайний левый слот, перед стандартным "предыдущий трек"
+    // (SLOT_BACK): требуемый порядок - перемешать, предыдущий, пауза, следующий, лайк.
+    private fun shuffleButton(enabled: Boolean) = CommandButton.Builder(if (enabled) CommandButton.ICON_SHUFFLE_ON else CommandButton.ICON_SHUFFLE_OFF)
+        .setDisplayName(if (enabled) "Перемешивание включено" else "Перемешать")
+        .setSessionCommand(shuffleCommand)
+        .setSlots(CommandButton.SLOT_BACK_SECONDARY)
+        .build()
+
+    private suspend fun refreshCustomLayout() {
+        val trackId = (player.currentMediaItem?.mediaId)?.takeIf { it.isNotEmpty() }?.let(::TrackId)
+        val liked = trackId?.let { playlistRepository.isTrackLiked(it).first() } ?: false
+        mediaSession.setCustomLayout(ImmutableList.of(shuffleButton(player.shuffleModeEnabled), likeButton(liked)))
     }
 
     private val sessionCallback = object : MediaLibrarySession.Callback {
@@ -191,11 +204,12 @@ class PlaybackService : MediaLibraryService() {
                 .setAvailableSessionCommands(
                     MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS.buildUpon()
                         .add(likeCommand)
+                        .add(shuffleCommand)
                         .add(crossfadeNextCommand)
                         .build(),
                 )
                 .build()
-            scope.launch { refreshLikeButton() }
+            scope.launch { refreshCustomLayout() }
             return connectionResult
         }
 
@@ -210,9 +224,14 @@ class PlaybackService : MediaLibraryService() {
                 if (trackId != null) {
                     scope.launch {
                         playlistRepository.toggleLike(trackId)
-                        refreshLikeButton()
+                        refreshCustomLayout()
                     }
                 }
+                return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+            }
+            if (customCommand.customAction == ACTION_TOGGLE_SHUFFLE) {
+                player.shuffleModeEnabled = !player.shuffleModeEnabled
+                scope.launch { refreshCustomLayout() }
                 return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
             }
             if (customCommand.customAction == ACTION_CROSSFADE_NEXT) {
@@ -427,7 +446,7 @@ class PlaybackService : MediaLibraryService() {
             .build()
 
         player.playlistMetadata = updatedMetadata
-        scope.launch { refreshLikeButton() }
+        scope.launch { refreshCustomLayout() }
     }
 
 

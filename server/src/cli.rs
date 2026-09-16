@@ -94,6 +94,11 @@ pub enum Commands {
     },
     /// Полноэкранный TUI управления сервером (стрелки + Enter, как веб-панель владельца)
     Tui,
+    /// Discord Rich Presence: подключение OAuth-приложения и native-моста (setup, status, disable)
+    Discord {
+        #[command(subcommand)]
+        action: Option<DiscordAction>,
+    },
     /// Служба Windows: install, uninstall, start, stop, status
     #[cfg(windows)]
     Service {
@@ -176,6 +181,16 @@ pub enum LibraryAction {
 }
 
 #[derive(Subcommand, Clone, Debug)]
+pub enum DiscordAction {
+    /// Интерактивный мастер: спрашивает Client ID/Secret/Redirect URI и путь к native-мосту
+    Setup,
+    /// Показать текущее состояние (настроено ли, найден ли мост) без секретов
+    Status,
+    /// Убрать интеграцию (удаляет discord.env, не трогает уже привязанные Discord-аккаунты пользователей)
+    Disable,
+}
+
+#[derive(Subcommand, Clone, Debug)]
 pub enum ConfigAction {
     /// Показать текущую конфигурацию
     Show,
@@ -208,6 +223,7 @@ impl Commands {
             Commands::Library { action } => library_cmd(cfg, action.clone()),
             Commands::Config { action } => config_cmd(cfg, action.clone()),
             Commands::Tui => crate::tui::run(cfg),
+            Commands::Discord { action } => discord_cmd(cfg, action.clone()),
             #[cfg(windows)]
             Commands::Service { action } => service_command(action),
         }
@@ -1377,6 +1393,191 @@ fn library_cmd(cfg: &crate::config::Config, action: Option<LibraryAction>) -> Re
         }
     }
     Ok(())
+}
+
+fn discord_env_path(cfg: &crate::config::Config) -> PathBuf {
+    cfg.data_dir.join("discord.env")
+}
+
+/// Мастер настройки Discord Rich Presence. Секреты пишутся ТОЛЬКО в локальный файл на диске
+/// сервера (см. config::load_discord_env_file) - никогда через веб/API, ровно та же граница,
+/// что и раньше требовала руками прописывать NAMI_DISCORD_* в окружение (см. discord.rs:
+/// "OAuth secrets come from the server environment, never from client requests").
+fn discord_cmd(cfg: &crate::config::Config, action: Option<DiscordAction>) -> Res<()> {
+    match action.unwrap_or(DiscordAction::Status) {
+        DiscordAction::Status => discord_status(cfg),
+        DiscordAction::Setup => discord_setup(cfg),
+        DiscordAction::Disable => discord_disable(cfg),
+    }
+}
+
+fn discord_status(cfg: &crate::config::Config) -> Res<()> {
+    println!("=== 🎮 Discord Rich Presence ===\n");
+    match &cfg.discord {
+        Some(d) => println!("  OAuth:  ✓ настроен (Client ID: {})", d.client_id),
+        None => println!("  OAuth:  ✗ не настроен"),
+    }
+    let bridge = std::env::var("NAMI_DISCORD_BRIDGE").ok().filter(|s| !s.is_empty());
+    match bridge {
+        Some(path) => {
+            let ok = Command::new(&path).arg("--check").output()
+                .map(|o| o.status.success() && String::from_utf8_lossy(&o.stdout).trim() == "nami-discord-bridge-v1")
+                .unwrap_or(false);
+            println!("  Мост:   {} {}", if ok { "✓" } else { "✗" }, path);
+        }
+        None => println!("  Мост:   ✗ не задан (публикация в Discord недоступна, presence_supported=false)"),
+    }
+    let env_file = discord_env_path(cfg);
+    println!("\n  Файл настроек: {}", env_file.display());
+    if cfg.discord.is_none() {
+        println!("\n  Настроить: nami discord setup");
+    }
+    Ok(())
+}
+
+fn discord_disable(cfg: &crate::config::Config) -> Res<()> {
+    let path = discord_env_path(cfg);
+    if path.exists() {
+        std::fs::remove_file(&path)?;
+        println!("✓ {} удалён. Перезапустите сервер, чтобы интеграция отключилась.", path.display());
+    } else {
+        println!("Интеграция и так не настроена ({} не существует).", path.display());
+    }
+    println!("Уже привязанные аккаунты пользователей (/api/me/discord) не тронуты - это отключает только серверную OAuth-часть.");
+    restart_hint();
+    Ok(())
+}
+
+fn discord_setup(cfg: &crate::config::Config) -> Res<()> {
+    use std::io::{self, Write};
+    println!("=== 🎮 Мастер настройки Discord Rich Presence ===\n");
+    println!("Перед тем как продолжить, сделай на https://discord.com/developers/applications:");
+    println!("  1. New Application → включи Social SDK для него.");
+    println!("  2. OAuth2 → General: скопируй Client ID и Client Secret (Reset Secret при первом разе).");
+    println!("  3. OAuth2 → Redirects: добавь точный адрес вида");
+    println!("       https://<твой-домен>:<порт>/api/discord/callback");
+    println!("     (localhost по http допустим только для локальной разработки).");
+    println!("  4. Social SDK → Downloads: скачай C++ SDK под ОС/архитектуру ЭТОГО сервера,");
+    println!("     собери мост по инструкции в docs/discord-server-oauth.md → «Сборка SDK-моста»,");
+    println!("     и держи под рукой путь к готовому nami-discord-bridge(.exe).");
+    println!("     Без этого шага OAuth подключится, но реальная публикация в Discord работать не будет.\n");
+    println!("Полная документация: docs/discord-server-oauth.md\n");
+
+    let read_line = |prompt: &str| -> Res<String> {
+        print!("{prompt}");
+        io::stdout().flush()?;
+        let mut s = String::new();
+        io::stdin().read_line(&mut s)?;
+        Ok(s.trim().to_string())
+    };
+
+    let client_id = loop {
+        let v = read_line("Client ID: ")?;
+        if v.is_empty() {
+            println!("Отменено.");
+            return Ok(());
+        }
+        if v.bytes().all(|c| c.is_ascii_digit()) && v.parse::<u64>().unwrap_or(0) != 0 {
+            break v;
+        }
+        println!("  Client ID - это число из Developer Portal, попробуй ещё раз.");
+    };
+
+    let client_secret = loop {
+        let v = read_line("Client Secret: ")?;
+        if !v.is_empty() {
+            break v;
+        }
+        println!("  Не может быть пустым.");
+    };
+
+    let default_redirect = if !cfg.external_url.trim().is_empty() {
+        format!("{}/api/discord/callback", cfg.external_url.trim().trim_end_matches('/'))
+    } else {
+        format!("https://localhost:{}/api/discord/callback", cfg.port)
+    };
+    let redirect_input = read_line(&format!("Redirect URI [{default_redirect}]: "))?;
+    let redirect_uri = if redirect_input.is_empty() { default_redirect } else { redirect_input };
+
+    // Token Key - случайные 32 байта, автоматически: пользователю не нужно возиться с openssl.
+    let mut key_bytes = [0u8; 32];
+    ring::rand::SecureRandom::fill(&ring::rand::SystemRandom::new(), &mut key_bytes)
+        .map_err(|_| "не удалось сгенерировать ключ шифрования токенов")?;
+    let token_key = hex::encode(key_bytes);
+
+    let bridge_input = read_line("Путь к собранному nami-discord-bridge (Enter - настроить позже): ")?;
+    let bridge_path = if bridge_input.is_empty() {
+        None
+    } else {
+        let check = Command::new(&bridge_input).arg("--check").output();
+        match check {
+            Ok(o) if o.status.success() && String::from_utf8_lossy(&o.stdout).trim() == "nami-discord-bridge-v1" => {
+                println!("  ✓ Мост отвечает корректно");
+            }
+            Ok(o) => {
+                println!(
+                    "  ⚠ Мост запустился, но ответил не тем, что ожидалось ({}). Проверь версию SDK.",
+                    String::from_utf8_lossy(&o.stdout).trim()
+                );
+            }
+            Err(e) => println!("  ⚠ Не удалось запустить '{bridge_input}': {e}. Проверь путь и права."),
+        }
+        Some(bridge_input)
+    };
+
+    // Валидация теми же правилами, что и боевой DiscordConfig::from_env - временно выставляем
+    // переменные в этом короткоживущем процессе, чтобы не дублировать проверки редиректа/ID.
+    std::env::set_var("NAMI_DISCORD_CLIENT_ID", &client_id);
+    std::env::set_var("NAMI_DISCORD_CLIENT_SECRET", &client_secret);
+    std::env::set_var("NAMI_DISCORD_REDIRECT_URI", &redirect_uri);
+    std::env::set_var("NAMI_DISCORD_TOKEN_KEY", &token_key);
+    if let Err(e) = crate::discord::DiscordConfig::from_env() {
+        println!("\n✗ Настройки не прошли проверку: {e}");
+        println!("Ничего не сохранено, запусти мастер заново: nami discord setup");
+        return Ok(());
+    }
+
+    let data_dir = &cfg.data_dir;
+    std::fs::create_dir_all(data_dir)?;
+    let mut content = format!(
+        "NAMI_DISCORD_CLIENT_ID={client_id}\nNAMI_DISCORD_CLIENT_SECRET={client_secret}\nNAMI_DISCORD_REDIRECT_URI={redirect_uri}\nNAMI_DISCORD_TOKEN_KEY={token_key}\n"
+    );
+    if let Some(bridge) = &bridge_path {
+        content.push_str(&format!("NAMI_DISCORD_BRIDGE={bridge}\n"));
+    }
+    let path = discord_env_path(cfg);
+    std::fs::write(&path, content)?;
+
+    println!("\n✓ Сохранено в {}", path.display());
+    if bridge_path.is_none() {
+        println!("  Мост не указан - OAuth-подключение аккаунтов заработает, реальная публикация в Discord появится после");
+        println!("  запуска nami discord setup ещё раз (Client ID/Secret можно оставить теми же).");
+    }
+    restart_hint();
+    Ok(())
+}
+
+/// Общая подсказка/попытка перезапуска после смены discord.env - тот же паттерн, что и
+/// `config set`, только пробует перезапустить сам, а не только печатает команду, когда сервер
+/// зарегистрирован как служба Windows (единственная платформа, где у CLI есть на это права).
+fn restart_hint() {
+    #[cfg(windows)]
+    {
+        if crate::service::state().is_some() {
+            println!("\nПерезапуск службы NamiServer...");
+            match crate::service::stop().and_then(|_| crate::service::start()) {
+                Ok(()) => {
+                    println!("✓ Служба перезапущена, изменения применены.");
+                    return;
+                }
+                Err(e) => println!("⚠ Не удалось перезапустить автоматически: {e}"),
+            }
+        }
+    }
+    println!("\nПерезапустите сервер, чтобы изменения применились:");
+    println!("  Windows (служба): nami service stop && nami service start");
+    println!("  systemd:          sudo systemctl restart nami");
+    println!("  Docker:           docker-compose up -d --force-recreate");
 }
 
 /// Просмотр и редактирование конфигурации

@@ -181,7 +181,18 @@ class PlayerRepositoryImpl @Inject constructor(
                 }
 
                 override fun onExtrasChanged(controller: MediaController, extras: android.os.Bundle) {
-                    if (extras.containsKey(EXTRA_CROSSFADE_HANDOVER)) _autoAdvanceSignal.value++
+                    if (extras.containsKey(EXTRA_CROSSFADE_HANDOVER)) {
+                        _autoAdvanceSignal.value++
+                        // Handover swaps the session's underlying player (PlaybackService.
+                        // promoteIncomingPlayer) without necessarily firing onEvents on this
+                        // controller - _state can then keep showing the outgoing player's last
+                        // known playWhenReady (often "paused" mid-fade) while the incoming one is
+                        // actually already playing. toggle() reads controller.isPlaying live and
+                        // acts on the real value, so the first tap after a crossfade paused what
+                        // was really still playing - forcing a resync here is what makes the icon
+                        // agree with reality again.
+                        publishState(controller)
+                    }
                 }
             })
             .buildAsync()

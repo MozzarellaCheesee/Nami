@@ -210,8 +210,29 @@ impl Config {
             cfg.transcode_cache_mb =
                 v.parse().map_err(|_| format!("NAMI_TRANSCODE_CACHE_MB: не число: {v}"))?;
         }
+        load_discord_env_file(&cfg.data_dir);
         cfg.discord = crate::discord::DiscordConfig::from_env()?;
         Ok(cfg)
+    }
+}
+
+/// `nami discord setup` (см. cli.rs) пишет сюда `NAMI_DISCORD_*` парами `KEY=VALUE`, по одной
+/// на строку - тот же секрет, что раньше приходилось руками прописывать в окружение службы.
+/// Загружается ДО `DiscordConfig::from_env()`, только если переменная ещё не задана снаружи -
+/// настоящие env (Docker/systemd EnvironmentFile) всегда выигрывают у этого файла.
+fn load_discord_env_file(data_dir: &std::path::Path) {
+    let path = data_dir.join("discord.env");
+    let Ok(text) = std::fs::read_to_string(&path) else { return };
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Some((key, value)) = line.split_once('=') {
+            if std::env::var_os(key).is_none() {
+                std::env::set_var(key, value);
+            }
+        }
     }
 }
 
