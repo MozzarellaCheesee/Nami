@@ -790,9 +790,7 @@ class PlaybackService : MediaLibraryService() {
      * be released anyway, so old.pause() being reactively called on it here is inaudible and
      * harmless. Same end state, no window where the surviving player has no focus at all. */
     private fun retireOutgoingPlayer(old: ExoPlayer) {
-        android.util.Log.d("NamiCrossfade", "retire: before setAudioAttributes, playWhenReady=${player.playWhenReady} isPlaying=${player.isPlaying} playbackState=${player.playbackState}")
         player.setAudioAttributes(audioAttributes, /* handleAudioFocus = */ true)
-        android.util.Log.d("NamiCrossfade", "retire: after setAudioAttributes, playWhenReady=${player.playWhenReady} isPlaying=${player.isPlaying} playbackState=${player.playbackState}")
         old.release()
     }
 
