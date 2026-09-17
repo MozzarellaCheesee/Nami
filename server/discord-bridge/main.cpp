@@ -101,8 +101,15 @@ int main(int argc, char** argv) {
                     sent = 0;
                 } else if (op == "SET") {
                     std::string title_hex, description_hex, artwork_hex;
-                    if (!(stream >> version >> title_hex >> description_hex >> start >> end >> artwork_hex) || !version)
+                    // artwork_hex is last on the line and legitimately empty when there's no
+                    // artwork (hex::encode("") on the server side is "") - operator>> refuses to
+                    // extract an empty whitespace-delimited token at all, which made every SET
+                    // with no artwork throw here. getline for the tail of the line instead - it
+                    // returns "" for a bare trailing space/newline instead of failing the stream.
+                    if (!(stream >> version >> title_hex >> description_hex >> start >> end) || !version)
                         throw std::runtime_error("invalid activity");
+                    stream >> std::ws;
+                    std::getline(stream, artwork_hex);
                     title = unhex(title_hex); description = unhex(description_hex); artwork_url = unhex(artwork_hex);
                     if (title.empty() || title.size() > 512 || description.size() > 512 || start <= 0 || (end && end < start)
                         || artwork_url.size() > 512)
