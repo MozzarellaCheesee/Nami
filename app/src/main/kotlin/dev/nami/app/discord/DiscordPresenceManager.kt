@@ -7,7 +7,6 @@ import dev.nami.domain.DiscordPresence
 import dev.nami.domain.JamRepository
 import dev.nami.domain.LocalShareRepository
 import dev.nami.domain.PlayerRepository
-import dev.nami.domain.ServerAudioRepository
 import dev.nami.domain.discordListeningMode
 import dev.nami.domain.discordPresence
 import dev.nami.domain.validDiscordApplicationId
@@ -35,7 +34,6 @@ class DiscordPresenceManager @Inject constructor(
     private val player: PlayerRepository,
     private val jam: JamRepository,
     private val share: LocalShareRepository,
-    private val serverAudio: ServerAudioRepository,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val _status = MutableStateFlow("Выключено")
@@ -85,12 +83,15 @@ class DiscordPresenceManager @Inject constructor(
      * (runPresence()) deliberately never attaches one - see the note in discord_presence.cpp
      * ("Local artwork and private server URLs must never be published as public assets"), it
      * has no server in front of it to vet or proxy the URL. */
-    private fun withArtwork(presence: DiscordPresence): DiscordPresence {
+    private fun withArtwork(presence: DiscordPresence, config: NamiServerClient.Config): DiscordPresence {
         val serverId = presence.trackId.removePrefix("server_").removePrefix("jam_").toLongOrNull()
             ?.takeIf { presence.trackId.startsWith("server_") || presence.trackId.startsWith("jam_") }
             ?: return presence
-        val url = serverAudio.serverArtworkUrl(serverId)?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
-        android.util.Log.d("NamiDiscordArtwork", "serverId=$serverId rawUrl=${serverAudio.serverArtworkUrl(serverId)} usedUrl=$url")
+        // Not serverAudio.serverArtworkUrl() - it prefers the local offline-cache file:// path
+        // when the artwork happens to already be cached on this phone (the common case), which
+        // is useless to a publisher running on the SERVER. Build the network URL directly.
+        val url = "${config.baseUrl}/api/tracks/$serverId/artwork?token=${config.token}"
+            .takeIf { it.startsWith("https://") }
         return if (url != null) presence.copy(artworkUrl = url) else presence
     }
 
@@ -121,7 +122,7 @@ class DiscordPresenceManager @Inject constructor(
         var sticky: DiscordPresence? = null
         try {
             while (true) {
-                val raw = currentPresence()?.let(::withArtwork)
+                val raw = currentPresence()?.let { withArtwork(it, config) }
                 if (raw != null) sticky = raw
                 val desired = sticky
                 // Discord has no native "paused" state for a plain Activity's timestamps - they're

@@ -80,24 +80,23 @@ impl Activity {
             && (self.duration_ms - other.duration_ms).abs() <= 2_000
             && self.artwork_url == other.artwork_url
     }
-    /// (start, end) as of right now, ready to hand to the bridge - see the position_ms doc above.
-    fn timestamps(&self) -> (i64, i64) {
+    /// Position as of right now, in ms - see the position_ms doc above. Deliberately NOT
+    /// resolved to an absolute start/end epoch here: the bridge has its own additional queuing
+    /// delay (its UpdateRichPresence calls are throttled to once per 5s, see main.cpp's
+    /// last_publish) between receiving a SET line and actually dispatching to Discord, so epoch
+    /// math needs to happen at THAT moment, using the bridge's own clock, not here.
+    fn position_now(&self) -> i64 {
         let elapsed_ms = if self.paused {
             0
         } else {
             self.received_at.elapsed().as_millis() as i64
         };
-        let mut position_ms = self.position_ms + elapsed_ms;
+        let position_ms = self.position_ms + elapsed_ms;
         if self.duration_ms > 0 {
-            position_ms = position_ms.min(self.duration_ms);
-        }
-        let start = now() - position_ms / 1000;
-        let end = if self.duration_ms > 0 {
-            start + self.duration_ms / 1000
+            position_ms.min(self.duration_ms)
         } else {
-            0
-        };
-        (start, end)
+            position_ms
+        }
     }
 }
 impl Runtime {
@@ -460,14 +459,12 @@ async fn run(st: &Shared, uid: i64, path: &PathBuf) -> Result<(), ()> {
                     }
                     if sent != d.entry.version && last_set.elapsed() >= Duration::from_secs(5) {
                         let a = &d.entry.activity;
-                        // Computed here, right before the line actually goes to the bridge - not
-                        // back when the phone's HTTP request was accepted - so the timestamps
-                        // Discord ends up showing reflect real elapsed time, not "elapsed as of
-                        // whenever the poll/cooldown got around to dispatching this". See
-                        // Activity::timestamps' doc comment.
-                        let (start, end) = a.timestamps();
+                        // position_ms/duration_ms, not a resolved start/end epoch - the bridge
+                        // itself throttles actual UpdateRichPresence calls to once per 5s (see
+                        // main.cpp's last_publish), so epoch math has to happen there, at the
+                        // moment it's actually dispatched, using ITS clock - not here.
                         let paused_flag = if a.paused { 1 } else { 0 };
-                        send(&mut stdin, format!("SET {} {} {} {} {} {} {}\n", d.entry.version, hex::encode(&a.title), hex::encode(&a.description), start, end, paused_flag, hex::encode(&a.artwork_url))).await?;
+                        send(&mut stdin, format!("SET {} {} {} {} {} {} {}\n", d.entry.version, hex::encode(&a.title), hex::encode(&a.description), a.position_now(), a.duration_ms, paused_flag, hex::encode(&a.artwork_url))).await?;
                         sent = d.entry.version;
                         last_set = Instant::now();
                         connected_at = Instant::now();
@@ -667,8 +664,7 @@ mod tests {
         )
         .unwrap();
         let a = p.activity().unwrap().unwrap();
-        let (start, end) = a.timestamps();
-        assert_eq!(end - start, 5);
+        assert_eq!(a.duration_ms - a.position_now(), 3500);
         p.position_ms = 6000;
         assert!(p.activity().is_err());
         p.playing = false;

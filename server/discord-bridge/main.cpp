@@ -1,6 +1,7 @@
 // One authenticated Discord user per process. No local RPC or unauthenticated fallback.
 #define DISCORDPP_IMPLEMENTATION
 #include "discordpp.h"
+#include <algorithm>
 #include <chrono>
 #include <deque>
 #include <iostream>
@@ -57,11 +58,16 @@ int main(int argc, char** argv) {
     auto client = std::make_shared<discordpp::Client>();
     uint64_t expected_user = 0, version = 0, sent = 0, generation = 0;
     std::string title, description, artwork_url;
-    int64_t start = 0, end = 0;
+    int64_t position_ms = 0, duration_ms = 0;
     bool token_ready = false, fatal = false, was_ready = false, quit = false, paused = false;
     auto last_input = Clock::now();
     auto last_publish = Clock::now() - 5s;
     auto last_ready = Clock::now();
+    // Real-time anchor for position_ms/duration_ms (see the doc on the Rust side's
+    // Activity::position_now) - UpdateRichPresence only actually fires once per 5s
+    // (last_publish below), so epoch start/end are computed fresh at THAT moment using elapsed
+    // time since this SET was received, not once when it arrived.
+    auto set_received_at = Clock::now();
     auto owned = [&] {
         if (!token_ready || client->GetStatus() != discordpp::Client::Status::Ready) return false;
         auto user = client->GetCurrentUserV2();
@@ -107,14 +113,15 @@ int main(int argc, char** argv) {
                     // extract an empty whitespace-delimited token at all, which made every SET
                     // with no artwork throw here. getline for the tail of the line instead - it
                     // returns "" for a bare trailing space/newline instead of failing the stream.
-                    if (!(stream >> version >> title_hex >> description_hex >> start >> end >> paused_int) || !version)
+                    if (!(stream >> version >> title_hex >> description_hex >> position_ms >> duration_ms >> paused_int) || !version)
                         throw std::runtime_error("invalid activity");
                     stream >> std::ws;
                     std::getline(stream, artwork_hex);
                     title = unhex(title_hex); description = unhex(description_hex); artwork_url = unhex(artwork_hex);
                     paused = paused_int != 0;
-                    if (title.empty() || title.size() > 512 || description.size() > 512 || start <= 0 || (end && end < start)
-                        || artwork_url.size() > 512)
+                    set_received_at = Clock::now();
+                    if (title.empty() || title.size() > 512 || description.size() > 512 || position_ms < 0 || duration_ms < 0
+                        || (duration_ms > 0 && position_ms > duration_ms) || artwork_url.size() > 512)
                         throw std::runtime_error("invalid activity");
                 } else throw std::runtime_error("invalid command");
             }
@@ -141,9 +148,15 @@ int main(int argc, char** argv) {
                 // SetTimestamps entirely while paused is what makes the progress bar disappear
                 // instead of drifting on while nothing is actually playing.
                 if (!paused) {
+                    const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - set_received_at).count();
+                    int64_t effective_position_ms = position_ms + elapsed_ms;
+                    if (duration_ms > 0) effective_position_ms = std::min(effective_position_ms, duration_ms);
+                    const int64_t epoch_now = std::chrono::duration_cast<std::chrono::seconds>(
+                        std::chrono::system_clock::now().time_since_epoch()).count();
+                    const int64_t start = epoch_now - effective_position_ms / 1000;
                     discordpp::ActivityTimestamps timestamps;
                     timestamps.SetStart(start);
-                    if (end) timestamps.SetEnd(end);
+                    if (duration_ms > 0) timestamps.SetEnd(start + duration_ms / 1000);
                     activity.SetTimestamps(timestamps);
                 }
                 if (!artwork_url.empty()) {
