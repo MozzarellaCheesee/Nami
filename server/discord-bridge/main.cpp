@@ -90,7 +90,11 @@ int main(int argc, char** argv) {
                     client->UpdateToken(discordpp::AuthorizationTokenType::Bearer, unhex(token),
                         [&, request](discordpp::ClientResult result) {
                             if (generation != request || quit) return;
-                            if (!result.Successful()) { fatal = true; return; }
+                            if (!result.Successful()) {
+                                std::cerr << "UpdateToken failed: " << result.Error() << std::endl;
+                                fatal = true;
+                                return;
+                            }
                             token_ready = true;
                             if (client->GetStatus() == discordpp::Client::Status::Disconnected) client->Connect();
                         });
@@ -143,14 +147,18 @@ int main(int argc, char** argv) {
                 client->UpdateRichPresence(activity, [&, request](discordpp::ClientResult result) {
                     if (quit || request != version) return;
                     std::cout << (result.Successful() ? "published " : "error ") << request << std::endl;
-                    if (!result.Successful()) fatal = true;
+                    if (!result.Successful()) {
+                        std::cerr << "UpdateRichPresence failed: " << result.Error() << std::endl;
+                        fatal = true;
+                    }
                 });
                 sent = version;
                 last_publish = Clock::now();
             }
             std::this_thread::sleep_for(20ms);
         }
-    } catch (...) { fatal = true; }
+    } catch (const std::exception& e) { std::cerr << "exception: " << e.what() << std::endl; fatal = true; }
+    catch (...) { std::cerr << "unknown exception" << std::endl; fatal = true; }
     quit = true;
     ++generation;
     // Only touch presence of the authenticated expected user, even during shutdown.

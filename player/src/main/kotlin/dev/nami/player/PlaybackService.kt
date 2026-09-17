@@ -776,12 +776,22 @@ class PlaybackService : MediaLibraryService() {
         mediaSession.setSessionExtras(Bundle().apply { putInt(EXTRA_CROSSFADE_HANDOVER, crossfadeHandovers) })
     }
 
-    /** Audio focus is only re-armed here, once the faded-out player is gone: a second focus request
-     * while it still held focus is what the framework answers by telling IT it lost focus, and
-     * ExoPlayer's AudioFocusManager would then pause the track mid-fade. */
+    /** Audio focus is re-armed on the SURVIVING player (`player`, already promoted to `fresh` back
+     * when the fade started - see promoteIncomingPlayer) before `old` is released, not after.
+     *
+     * The reverse order (old.release() first, request second) leaves a real gap where nobody
+     * holds focus - and logcat on a real device showed the crossfade's actual completion lagging
+     * ~5s behind its own 5-second timer while the user tapped play/pause repeatedly right at that
+     * gap, exactly what a brief real audio interruption there would provoke.
+     *
+     * Requesting on `player` first WHILE `old` still holds focus asks the framework to tell `old`
+     * it lost focus, which would normally pause it mid-fade (the reason this used to release
+     * first) - but by the time retire() runs, `old` has already faded to volume 0 and is about to
+     * be released anyway, so old.pause() being reactively called on it here is inaudible and
+     * harmless. Same end state, no window where the surviving player has no focus at all. */
     private fun retireOutgoingPlayer(old: ExoPlayer) {
-        old.release()
         player.setAudioAttributes(audioAttributes, /* handleAudioFocus = */ true)
+        old.release()
     }
 
     /** Swaps the live ExoPlayer for one built with (or without) the custom float-output sink,

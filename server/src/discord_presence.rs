@@ -369,11 +369,23 @@ async fn run(st: &Shared, uid: i64, path: &PathBuf) -> Result<(), ()> {
     let mut child = command(path)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .spawn()
         .map_err(|_| ())?;
     let mut stdin = child.stdin.take().ok_or(())?;
     let mut lines = BufReader::new(child.stdout.take().ok_or(())?).lines();
+    // The bridge previously ran with stderr discarded entirely - a failed UpdateRichPresence
+    // (bad asset key, SDK-side validation, ...) showed up to the user only as a bare "error",
+    // with nothing in the server's own logs to say why. uid is not logged (would tie a Discord
+    // failure to a specific Nami account in a shared log file for no operational benefit).
+    let mut stderr_lines = BufReader::new(child.stderr.take().ok_or(())?).lines();
+    tokio::spawn(async move {
+        while let Ok(Some(line)) = stderr_lines.next_line().await {
+            if !line.trim().is_empty() {
+                tracing::warn!("discord-bridge: {line}");
+            }
+        }
+    });
     let mut cipher = String::new();
     let mut account = String::new();
     let mut sent = 0;
