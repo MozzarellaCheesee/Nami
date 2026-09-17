@@ -50,8 +50,21 @@ struct Entry {
 struct Activity {
     title: String,
     description: String,
-    start: i64,
-    end: i64,
+    /// Position/duration/received_at (not an absolute start timestamp computed once on receipt)
+    /// so the actual Discord-facing start/end can be derived fresh at the moment the bridge is
+    /// about to dispatch a SET - not at the moment the phone's HTTP request was accepted. The
+    /// bridge only actually publishes on its own 1s poll plus a 5s per-publish cooldown, so a
+    /// start baked in at accept time silently drifts stale by however long that dispatch was
+    /// delayed - a real, reproducible few-second-ahead skew on a live server, not just a
+    /// theoretical worry.
+    position_ms: i64,
+    duration_ms: i64,
+    received_at: Instant,
+    /// True while the track is paused (or between tracks/mid-crossfade) - Discord's Activity
+    /// timestamps have no native "paused" concept, they're just an epoch it counts up from
+    /// client-side forever, so the bridge omits them entirely rather than showing a bar that
+    /// keeps crawling forward while nothing is actually playing.
+    paused: bool,
     /// Public HTTPS URL of the track's own artwork. Empty when there's none. The server passes
     /// this straight through - it's already been resolved to a plain https:// URL by the phone
     /// (see NamiServerClient/DiscordPresenceManager.withArtwork), the SDK bridge just forwards
@@ -62,9 +75,29 @@ impl Activity {
     fn same(&self, other: &Self) -> bool {
         self.title == other.title
             && self.description == other.description
-            && (self.start - other.start).abs() <= 2
-            && (self.end - other.end).abs() <= 2
+            && self.paused == other.paused
+            && (self.position_ms - other.position_ms).abs() <= 2_000
+            && (self.duration_ms - other.duration_ms).abs() <= 2_000
             && self.artwork_url == other.artwork_url
+    }
+    /// (start, end) as of right now, ready to hand to the bridge - see the position_ms doc above.
+    fn timestamps(&self) -> (i64, i64) {
+        let elapsed_ms = if self.paused {
+            0
+        } else {
+            self.received_at.elapsed().as_millis() as i64
+        };
+        let mut position_ms = self.position_ms + elapsed_ms;
+        if self.duration_ms > 0 {
+            position_ms = position_ms.min(self.duration_ms);
+        }
+        let start = now() - position_ms / 1000;
+        let end = if self.duration_ms > 0 {
+            start + self.duration_ms / 1000
+        } else {
+            0
+        };
+        (start, end)
     }
 }
 impl Runtime {
@@ -150,6 +183,8 @@ pub struct Playback {
     takeover: bool,
     #[serde(default)]
     artwork_url: String,
+    #[serde(default)]
+    paused: bool,
 }
 impl Playback {
     fn activity(&self) -> Result<Option<Activity>, Error> {
@@ -177,7 +212,6 @@ impl Playback {
         {
             return Err(Error(StatusCode::BAD_REQUEST, "Invalid playback metadata"));
         }
-        let start = now() - self.position_ms / 1000;
         Ok(Some(Activity {
             title: self.title.clone(),
             description: if self.description.trim().is_empty() {
@@ -185,12 +219,10 @@ impl Playback {
             } else {
                 self.description.clone()
             },
-            start,
-            end: if self.duration_ms > 0 {
-                start + self.duration_ms / 1000
-            } else {
-                0
-            },
+            position_ms: self.position_ms,
+            duration_ms: self.duration_ms,
+            received_at: Instant::now(),
+            paused: self.paused,
             artwork_url: self.artwork_url.clone(),
         }))
     }
@@ -428,7 +460,14 @@ async fn run(st: &Shared, uid: i64, path: &PathBuf) -> Result<(), ()> {
                     }
                     if sent != d.entry.version && last_set.elapsed() >= Duration::from_secs(5) {
                         let a = &d.entry.activity;
-                        send(&mut stdin, format!("SET {} {} {} {} {} {}\n", d.entry.version, hex::encode(&a.title), hex::encode(&a.description), a.start, a.end, hex::encode(&a.artwork_url))).await?;
+                        // Computed here, right before the line actually goes to the bridge - not
+                        // back when the phone's HTTP request was accepted - so the timestamps
+                        // Discord ends up showing reflect real elapsed time, not "elapsed as of
+                        // whenever the poll/cooldown got around to dispatching this". See
+                        // Activity::timestamps' doc comment.
+                        let (start, end) = a.timestamps();
+                        let paused_flag = if a.paused { 1 } else { 0 };
+                        send(&mut stdin, format!("SET {} {} {} {} {} {} {}\n", d.entry.version, hex::encode(&a.title), hex::encode(&a.description), start, end, paused_flag, hex::encode(&a.artwork_url))).await?;
                         sent = d.entry.version;
                         last_set = Instant::now();
                         connected_at = Instant::now();
@@ -586,8 +625,10 @@ mod tests {
         Activity {
             title: title.into(),
             description: "Artist · Джем".into(),
-            start: 1,
-            end: 30,
+            position_ms: 1000,
+            duration_ms: 29_000,
+            received_at: Instant::now(),
+            paused: false,
             artwork_url: String::new(),
         }
     }
@@ -626,7 +667,8 @@ mod tests {
         )
         .unwrap();
         let a = p.activity().unwrap().unwrap();
-        assert_eq!(a.end - a.start, 5);
+        let (start, end) = a.timestamps();
+        assert_eq!(end - start, 5);
         p.position_ms = 6000;
         assert!(p.activity().is_err());
         p.playing = false;

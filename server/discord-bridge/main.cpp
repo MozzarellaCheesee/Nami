@@ -58,7 +58,7 @@ int main(int argc, char** argv) {
     uint64_t expected_user = 0, version = 0, sent = 0, generation = 0;
     std::string title, description, artwork_url;
     int64_t start = 0, end = 0;
-    bool token_ready = false, fatal = false, was_ready = false, quit = false;
+    bool token_ready = false, fatal = false, was_ready = false, quit = false, paused = false;
     auto last_input = Clock::now();
     auto last_publish = Clock::now() - 5s;
     auto last_ready = Clock::now();
@@ -101,16 +101,18 @@ int main(int argc, char** argv) {
                     sent = 0;
                 } else if (op == "SET") {
                     std::string title_hex, description_hex, artwork_hex;
+                    int paused_int = 0;
                     // artwork_hex is last on the line and legitimately empty when there's no
                     // artwork (hex::encode("") on the server side is "") - operator>> refuses to
                     // extract an empty whitespace-delimited token at all, which made every SET
                     // with no artwork throw here. getline for the tail of the line instead - it
                     // returns "" for a bare trailing space/newline instead of failing the stream.
-                    if (!(stream >> version >> title_hex >> description_hex >> start >> end) || !version)
+                    if (!(stream >> version >> title_hex >> description_hex >> start >> end >> paused_int) || !version)
                         throw std::runtime_error("invalid activity");
                     stream >> std::ws;
                     std::getline(stream, artwork_hex);
                     title = unhex(title_hex); description = unhex(description_hex); artwork_url = unhex(artwork_hex);
+                    paused = paused_int != 0;
                     if (title.empty() || title.size() > 512 || description.size() > 512 || start <= 0 || (end && end < start)
                         || artwork_url.size() > 512)
                         throw std::runtime_error("invalid activity");
@@ -134,10 +136,16 @@ int main(int argc, char** argv) {
                 activity.SetType(discordpp::ActivityTypes::Listening);
                 activity.SetDetails(title);
                 activity.SetState(description);
-                discordpp::ActivityTimestamps timestamps;
-                timestamps.SetStart(start);
-                if (end) timestamps.SetEnd(end);
-                activity.SetTimestamps(timestamps);
+                // No native "paused" concept for a plain Activity's timestamps - Discord just
+                // counts up from whatever start it was given, forever, client-side. Omitting
+                // SetTimestamps entirely while paused is what makes the progress bar disappear
+                // instead of drifting on while nothing is actually playing.
+                if (!paused) {
+                    discordpp::ActivityTimestamps timestamps;
+                    timestamps.SetStart(start);
+                    if (end) timestamps.SetEnd(end);
+                    activity.SetTimestamps(timestamps);
+                }
                 if (!artwork_url.empty()) {
                     discordpp::ActivityAssets assets;
                     assets.SetLargeImage(artwork_url);

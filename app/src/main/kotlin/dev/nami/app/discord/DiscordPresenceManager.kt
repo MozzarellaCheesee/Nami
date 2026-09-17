@@ -90,6 +90,7 @@ class DiscordPresenceManager @Inject constructor(
             ?.takeIf { presence.trackId.startsWith("server_") || presence.trackId.startsWith("jam_") }
             ?: return presence
         val url = serverAudio.serverArtworkUrl(serverId)?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
+        android.util.Log.d("NamiDiscordArtwork", "serverId=$serverId rawUrl=${serverAudio.serverArtworkUrl(serverId)} usedUrl=$url")
         return if (url != null) presence.copy(artworkUrl = url) else presence
     }
 
@@ -123,6 +124,12 @@ class DiscordPresenceManager @Inject constructor(
                 val raw = currentPresence()?.let(::withArtwork)
                 if (raw != null) sticky = raw
                 val desired = sticky
+                // Discord has no native "paused" state for a plain Activity's timestamps - they're
+                // just a fixed epoch it counts up from client-side forever, so while raw is null
+                // (paused, or a track-change/crossfade gap) the server is told to omit them
+                // entirely instead of freezing/faking a value: no bar shown at all beats one that
+                // has to be kept artificially in sync.
+                val paused = raw == null && desired != null
                 val now = SystemClock.elapsedRealtime()
                 if (raw != null && (observed == null || observed.trackId != raw.trackId)) takeover = true
                 observed = raw
@@ -139,7 +146,7 @@ class DiscordPresenceManager @Inject constructor(
                 }
                 if ((available && desired != null && (changed(last, desired) || now - sentAt >= 15_000)) ||
                     (desired == null && mayHavePublished)) {
-                    val payload = JSONObject().put("playing", desired != null).put("takeover", takeover)
+                    val payload = JSONObject().put("playing", desired != null).put("takeover", takeover).put("paused", paused)
                     desired?.let {
                         val duration = it.endSeconds?.let { end -> (end - it.startSeconds) * 1000 } ?: 0
                         val position = (System.currentTimeMillis() - it.startSeconds * 1000).coerceAtLeast(0)
