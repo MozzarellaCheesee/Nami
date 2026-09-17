@@ -7,6 +7,7 @@ import dev.nami.domain.DiscordPresence
 import dev.nami.domain.JamRepository
 import dev.nami.domain.LocalShareRepository
 import dev.nami.domain.PlayerRepository
+import dev.nami.domain.ServerAudioRepository
 import dev.nami.domain.discordListeningMode
 import dev.nami.domain.discordPresence
 import dev.nami.domain.validDiscordApplicationId
@@ -34,6 +35,7 @@ class DiscordPresenceManager @Inject constructor(
     private val player: PlayerRepository,
     private val jam: JamRepository,
     private val share: LocalShareRepository,
+    private val serverAudio: ServerAudioRepository,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val _status = MutableStateFlow("Выключено")
@@ -78,6 +80,19 @@ class DiscordPresenceManager @Inject constructor(
         settings.discordShowMode.value, System.currentTimeMillis(),
     )
 
+    /** Artwork only makes sense for the server-relay path: the publisher there runs on the
+     * server, which can host a real public HTTPS URL. The direct phone-to-Discord RPC path
+     * (runPresence()) deliberately never attaches one - see the note in discord_presence.cpp
+     * ("Local artwork and private server URLs must never be published as public assets"), it
+     * has no server in front of it to vet or proxy the URL. */
+    private fun withArtwork(presence: DiscordPresence): DiscordPresence {
+        val serverId = presence.trackId.removePrefix("server_").removePrefix("jam_").toLongOrNull()
+            ?.takeIf { presence.trackId.startsWith("server_") || presence.trackId.startsWith("jam_") }
+            ?: return presence
+        val url = serverAudio.serverArtworkUrl(serverId)?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
+        return if (url != null) presence.copy(artworkUrl = url) else presence
+    }
+
     private fun changed(previous: DiscordPresence?, desired: DiscordPresence?): Boolean = when {
         previous == null || desired == null -> previous != desired
         else -> previous.trackId != desired.trackId || previous.title != desired.title ||
@@ -95,12 +110,22 @@ class DiscordPresenceManager @Inject constructor(
         var observed: DiscordPresence? = null
         var takeover = false
         var mayHavePublished = false
+        // Nami player only reports "listening" while actually playing - a pause, or the gap
+        // during a track change/crossfade handover, would otherwise read as null here and this
+        // loop would immediately publish "stopped". The user wants activity to persist through
+        // that (as most desktop clients do) and disappear only when the app itself goes away -
+        // sticking to the last real presence and never letting it go back to null (short of the
+        // whole coroutine ending, which happens on app exit/server disconnect/feature toggle)
+        // is what makes that true without inventing a separate "paused" wire state.
+        var sticky: DiscordPresence? = null
         try {
             while (true) {
-                val desired = currentPresence()
+                val raw = currentPresence()?.let(::withArtwork)
+                if (raw != null) sticky = raw
+                val desired = sticky
                 val now = SystemClock.elapsedRealtime()
-                if (desired != null && (observed == null || observed.trackId != desired.trackId)) takeover = true
-                observed = desired
+                if (raw != null && (observed == null || observed.trackId != raw.trackId)) takeover = true
+                observed = raw
                 if (desired != null && now - checkedAt >= 30_000) {
                     val response = withContext(Dispatchers.IO) { NamiServerClient.discordAccount(config) }
                     checkedAt = SystemClock.elapsedRealtime()
@@ -122,6 +147,7 @@ class DiscordPresenceManager @Inject constructor(
                             .put("description", it.description.filterNot(Char::isISOControl))
                             .put("position_ms", if (duration > 0) position.coerceAtMost(duration) else position)
                             .put("duration_ms", duration)
+                        it.artworkUrl?.let { url -> payload.put("artwork_url", url) }
                     }
                     // A failed request may already have reached the server, so always send a later stop.
                     mayHavePublished = mayHavePublished || desired != null
@@ -158,13 +184,17 @@ class DiscordPresenceManager @Inject constructor(
             opened = true
             var last: DiscordPresence? = null
             var sentAt = 0L
+            // Same "stick to the last real track" reasoning as reportToServer() below - a pause
+            // or a track-change gap must not clear the activity, only closing/disabling this does
+            // (which tears down this whole coroutine and runs the DiscordSdk.clear() in finally).
+            var sticky: DiscordPresence? = null
             while (true) {
-                val desired = currentPresence()
+                val raw = currentPresence()
+                if (raw != null) sticky = raw
+                val desired = sticky
                 val now = SystemClock.elapsedRealtime()
                 val result = DiscordSdk.poll()
                 if (desired == null) {
-                    if (last != null) DiscordSdk.clear()
-                    last = null
                     _status.value = "Готово · ожидает воспроизведения"
                 } else {
                     val changed = changed(last, desired)

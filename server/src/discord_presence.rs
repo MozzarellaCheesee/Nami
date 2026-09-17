@@ -52,6 +52,11 @@ struct Activity {
     description: String,
     start: i64,
     end: i64,
+    /// Public HTTPS URL of the track's own artwork. Empty when there's none. The server passes
+    /// this straight through - it's already been resolved to a plain https:// URL by the phone
+    /// (see NamiServerClient/DiscordPresenceManager.withArtwork), the SDK bridge just forwards
+    /// it to Discord's own image fetcher (SetLargeImage), which does the actual fetch/caching.
+    artwork_url: String,
 }
 impl Activity {
     fn same(&self, other: &Self) -> bool {
@@ -59,6 +64,7 @@ impl Activity {
             && self.description == other.description
             && (self.start - other.start).abs() <= 2
             && (self.end - other.end).abs() <= 2
+            && self.artwork_url == other.artwork_url
     }
 }
 impl Runtime {
@@ -142,6 +148,8 @@ pub struct Playback {
     duration_ms: i64,
     #[serde(default)]
     takeover: bool,
+    #[serde(default)]
+    artwork_url: String,
 }
 impl Playback {
     fn activity(&self) -> Result<Option<Activity>, Error> {
@@ -159,6 +167,13 @@ impl Playback {
             || !(0..=604_800_000).contains(&self.duration_ms)
             || !(0..=604_800_000).contains(&self.position_ms)
             || (self.duration_ms > 0 && self.position_ms > self.duration_ms)
+            // Only a plain https URL is forwarded to Discord's fetcher - never file://, never
+            // http:// (Discord's own crawler doesn't trust plaintext), never a control character
+            // smuggled into a field the bridge later hex-decodes and passes straight to the SDK.
+            || (!self.artwork_url.is_empty()
+                && (self.artwork_url.chars().count() > 512
+                    || !self.artwork_url.starts_with("https://")
+                    || self.artwork_url.chars().any(char::is_control)))
         {
             return Err(Error(StatusCode::BAD_REQUEST, "Invalid playback metadata"));
         }
@@ -176,6 +191,7 @@ impl Playback {
             } else {
                 0
             },
+            artwork_url: self.artwork_url.clone(),
         }))
     }
 }
@@ -400,7 +416,7 @@ async fn run(st: &Shared, uid: i64, path: &PathBuf) -> Result<(), ()> {
                     }
                     if sent != d.entry.version && last_set.elapsed() >= Duration::from_secs(5) {
                         let a = &d.entry.activity;
-                        send(&mut stdin, format!("SET {} {} {} {} {}\n", d.entry.version, hex::encode(&a.title), hex::encode(&a.description), a.start, a.end)).await?;
+                        send(&mut stdin, format!("SET {} {} {} {} {} {}\n", d.entry.version, hex::encode(&a.title), hex::encode(&a.description), a.start, a.end, hex::encode(&a.artwork_url))).await?;
                         sent = d.entry.version;
                         last_set = Instant::now();
                         connected_at = Instant::now();
@@ -560,6 +576,7 @@ mod tests {
             description: "Artist · Джем".into(),
             start: 1,
             end: 30,
+            artwork_url: String::new(),
         }
     }
     #[test]

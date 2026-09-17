@@ -56,7 +56,7 @@ int main(int argc, char** argv) {
 
     auto client = std::make_shared<discordpp::Client>();
     uint64_t expected_user = 0, version = 0, sent = 0, generation = 0;
-    std::string title, description;
+    std::string title, description, artwork_url;
     int64_t start = 0, end = 0;
     bool token_ready = false, fatal = false, was_ready = false, quit = false;
     auto last_input = Clock::now();
@@ -96,11 +96,12 @@ int main(int argc, char** argv) {
                         });
                     sent = 0;
                 } else if (op == "SET") {
-                    std::string title_hex, description_hex;
-                    if (!(stream >> version >> title_hex >> description_hex >> start >> end) || !version)
+                    std::string title_hex, description_hex, artwork_hex;
+                    if (!(stream >> version >> title_hex >> description_hex >> start >> end >> artwork_hex) || !version)
                         throw std::runtime_error("invalid activity");
-                    title = unhex(title_hex); description = unhex(description_hex);
-                    if (title.empty() || title.size() > 512 || description.size() > 512 || start <= 0 || (end && end < start))
+                    title = unhex(title_hex); description = unhex(description_hex); artwork_url = unhex(artwork_hex);
+                    if (title.empty() || title.size() > 512 || description.size() > 512 || start <= 0 || (end && end < start)
+                        || artwork_url.size() > 512)
                         throw std::runtime_error("invalid activity");
                 } else throw std::runtime_error("invalid command");
             }
@@ -126,6 +127,18 @@ int main(int argc, char** argv) {
                 timestamps.SetStart(start);
                 if (end) timestamps.SetEnd(end);
                 activity.SetTimestamps(timestamps);
+                if (!artwork_url.empty()) {
+                    discordpp::ActivityAssets assets;
+                    assets.SetLargeImage(artwork_url);
+                    assets.SetLargeText(title);
+                    // "nami_logo" - an Art Asset the server admin uploads once in the Discord
+                    // Developer Portal (Rich Presence -> Art Assets) under this exact key. See
+                    // docs/discord-server-oauth.md. Only shown alongside a real large image -
+                    // a small badge with no large image to sit on top of looks like a mistake.
+                    assets.SetSmallImage(std::string("nami_logo"));
+                    assets.SetSmallText(std::string("Nami"));
+                    activity.SetAssets(assets);
+                }
                 const auto request = version;
                 client->UpdateRichPresence(activity, [&, request](discordpp::ClientResult result) {
                     if (quit || request != version) return;

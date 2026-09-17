@@ -189,9 +189,30 @@ class PlayerRepositoryImpl @Inject constructor(
                         // known playWhenReady (often "paused" mid-fade) while the incoming one is
                         // actually already playing. toggle() reads controller.isPlaying live and
                         // acts on the real value, so the first tap after a crossfade paused what
-                        // was really still playing - forcing a resync here is what makes the icon
-                        // agree with reality again.
-                        publishState(controller)
+                        // was really still playing.
+                        //
+                        // The incoming player is ALWAYS still STATE_BUFFERING at the exact instant
+                        // this fires (promoteIncomingPlayer runs the moment the fade starts, right
+                        // after buildIncomingPlayer() calls prepare() with zero time to buffer) -
+                        // publishing immediately here previously latched a guaranteed-false
+                        // isPlaying into _state (toPlaybackState requires STATE_READY), and a tap
+                        // landing in that window issued a REAL pause() on the fresh player instead
+                        // of just fixing a stale icon - worse than the bug it was meant to fix.
+                        // Wait for the real STATE_READY transition instead of guessing at one.
+                        if (controller.playbackState == Player.STATE_READY) {
+                            publishState(controller)
+                        } else {
+                            controller.addListener(
+                                object : Player.Listener {
+                                    override fun onPlaybackStateChanged(playbackState: Int) {
+                                        if (playbackState == Player.STATE_READY) {
+                                            controller.removeListener(this)
+                                            publishState(controller)
+                                        }
+                                    }
+                                },
+                            )
+                        }
                     }
                 }
             })

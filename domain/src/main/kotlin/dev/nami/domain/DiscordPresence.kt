@@ -34,15 +34,22 @@ data class DiscordPresence(
     val description: String,
     val startSeconds: Long,
     val endSeconds: Long?,
+    /** Public HTTPS URL of the track's own artwork, server-hosted - never a `file://` path
+     * (the publisher is a process on the SERVER, it cannot reach anything local to the phone).
+     * Null when the server doesn't know this track or has no artwork for it. */
+    val artworkUrl: String? = null,
 )
 
-/** Only publish metadata of the track that is actually playing, never a stale queue entry. */
+/** Only publish metadata of the track that is actually playing, never a stale queue entry.
+ * `artworkUrl` is looked up by the caller (needs a repository, this function stays pure) - pass
+ * null when there's nothing to show, never a local file path (see [DiscordPresence.artworkUrl]). */
 fun discordPresence(
     playback: PlaybackState,
     track: QueueTrack?,
     mode: DiscordListeningMode,
     showMode: Boolean,
     nowMs: Long,
+    artworkUrl: String? = null,
 ): DiscordPresence? {
     val playing = playback as? PlaybackState.Playing ?: return null
     if (!playing.isPlaying || track == null || track.id != playing.trackId) return null
@@ -58,5 +65,6 @@ fun discordPresence(
         ).joinToString(" · ").ifBlank { "Nami" }.take(128),
         startSeconds = start,
         endSeconds = playing.durationMs.takeIf { it > 0 }?.let { start + it / 1000 },
+        artworkUrl = artworkUrl,
     )
 }
