@@ -167,7 +167,11 @@ int main(int argc, char** argv) {
                 if (!artwork_url.empty()) {
                     discordpp::ActivityAssets assets;
                     assets.SetLargeImage(artwork_url);
-                    assets.SetLargeText(title);
+                    // No SetLargeText: Discord renders it as a THIRD visible line under
+                    // Details/State, not just an image hover tooltip. It was set to `title`,
+                    // duplicating the track name (already shown via SetDetails above) as a
+                    // second, redundant line. Nothing else here (album name, etc.) exists to put
+                    // there instead, so it's simply omitted.
                     // "nami_logo" - an Art Asset the server admin uploads once in the Discord
                     // Developer Portal (Rich Presence -> Art Assets) under this exact key. See
                     // docs/discord-server-oauth.md. Only shown alongside a real large image -
