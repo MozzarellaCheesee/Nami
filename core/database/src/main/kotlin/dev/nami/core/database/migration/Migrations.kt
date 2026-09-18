@@ -326,6 +326,13 @@ val MIGRATION_28_29 = object : Migration(28, 29) {
     }
 }
 
+/** Хранит полную строку исполнителя из тега ("A feat. B") отдельно от группирующего artistId. */
+val MIGRATION_33_34 = object : Migration(33, 34) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE tracks ADD COLUMN rawArtistName TEXT")
+    }
+}
+
 /** Реальные LWW-метки локальных изменений для синхронизации с NAMI Server. */
 val MIGRATION_32_33 = object : Migration(32, 33) {
     override fun migrate(db: SupportSQLiteDatabase) {

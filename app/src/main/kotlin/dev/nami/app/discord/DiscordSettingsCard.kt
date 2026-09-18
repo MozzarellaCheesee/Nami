@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -31,6 +32,7 @@ internal fun DiscordSettingsCard(viewModel: SettingsViewModel) {
     val id by viewModel.discordApplicationId.collectAsState()
     val enabled by viewModel.discordPresenceEnabled.collectAsState()
     val showMode by viewModel.discordShowMode.collectAsState()
+    val showAppIcon by viewModel.discordShowAppIcon.collectAsState()
     val status by viewModel.discordStatus.collectAsState()
     var draft by remember(id) { mutableStateOf(id) }
     val valid = draft.isBlank() || validDiscordApplicationId(draft.trim())
@@ -78,6 +80,13 @@ internal fun DiscordSettingsCard(viewModel: SettingsViewModel) {
                 else -> "Ожидает воспроизведения"
             })
         }
+        SettingsRow(
+            icon = Icons.Outlined.Image,
+            title = "Значок приложения в активности",
+            subtitle = "Маленькая иконка Nami поверх обложки трека",
+            trailing = { NamiSwitch(showAppIcon, viewModel::setDiscordShowAppIcon) },
+            onClick = { viewModel.setDiscordShowAppIcon(!showAppIcon) },
+        )
     }
     SettingsCard(Modifier.padding(horizontal = 20.dp)) {
         SettingsRow(

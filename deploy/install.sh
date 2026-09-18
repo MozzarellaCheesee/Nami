@@ -13,6 +13,13 @@ set -euo pipefail
 
 GITHUB_REPO="${GITHUB_REPO:-MozzarellaCheesee/Nami}"
 INSTALL_DIR="/usr/local/bin"
+# Реальный бинарник живёт здесь, а не в INSTALL_DIR - self-update (server/src/update.rs) переименовывает
+# себя в .old и кладёт новый файл рядом, а это требует ПРАВА НА ЗАПИСЬ В КАТАЛОГ, не только на сам
+# файл. Служба работает от непривилегированного nami (см. systemd unit ниже), и делать /usr/local/bin
+# (общий системный каталог для всех программ) доступным ему на запись небезопасно - вместо этого у
+# бинарника свой каталог, которым владеет только nami, а в /usr/local/bin остаётся только симлинк
+# для удобства запуска команды `nami`/`nami-server` из PATH.
+BIN_DIR="/opt/nami/bin"
 DATA_DIR="/var/lib/nami"
 SERVICE_NAME="nami"
 SYSTEMD_UNIT="/etc/systemd/system/${SERVICE_NAME}.service"
@@ -547,11 +554,14 @@ if [ "$BINARY_FOUND" = false ]; then
     fi
 fi
 
-# 7. Установка исполняемого файла
-log_info "Установка nami-server в ${INSTALL_DIR}..."
-$SUDO install -m 755 "${TMP_DIR}/nami-server" "${INSTALL_DIR}/nami-server"
-$SUDO ln -sf "${INSTALL_DIR}/nami-server" "${INSTALL_DIR}/nami"
-log_ok "Установлен: ${INSTALL_DIR}/nami-server (симлинк ${INSTALL_DIR}/nami)"
+# 7. Установка исполняемого файла (в BIN_DIR - см. комментарий у его объявления; owner
+# выставляется чуть ниже, сразу после создания пользователя nami)
+log_info "Установка nami-server в ${BIN_DIR}..."
+$SUDO mkdir -p "$BIN_DIR"
+$SUDO install -m 755 "${TMP_DIR}/nami-server" "${BIN_DIR}/nami-server"
+$SUDO ln -sf "${BIN_DIR}/nami-server" "${INSTALL_DIR}/nami-server"
+$SUDO ln -sf "${BIN_DIR}/nami-server" "${INSTALL_DIR}/nami"
+log_ok "Установлен: ${BIN_DIR}/nami-server (симлинки в ${INSTALL_DIR} для PATH)"
 if [ -n "$CURRENT_VERSION" ]; then
     log_ok "Сервер обновлён: ${CURRENT_VERSION#v} → ${TARGET_VERSION#v}."
 else
@@ -568,6 +578,12 @@ if ! id -u nami >/dev/null 2>&1; then
 else
     log_info "Системный пользователь 'nami' уже существует."
 fi
+
+# Owner каталога с бинарником - только теперь, когда пользователь nami точно существует.
+# Даёт self-update ("Установить обновление" в веб-UI) право переименовать/заменить сам файл, не
+# трогая права на общий /usr/local/bin.
+$SUDO chown -R nami:nami "$BIN_DIR"
+$SUDO chmod 750 "$BIN_DIR"
 
 # Права sudo для пользователя nami: мастер /setup настраивает Nginx, Caddy, Certbot и
 # брандмауэр от его имени.
@@ -772,7 +788,7 @@ Type=simple
 User=nami
 Group=nami
 WorkingDirectory=${DATA_DIR}
-ExecStart=${INSTALL_DIR}/nami-server
+ExecStart=${BIN_DIR}/nami-server
 Restart=always
 RestartSec=3s
 LimitNOFILE=65536

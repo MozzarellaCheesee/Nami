@@ -11,6 +11,7 @@ import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.ShuffleOrder
 import dev.nami.player.net.pinnedOkHttpDataSourceFactory
 import androidx.media3.common.MediaMetadata
 import androidx.media3.session.CommandButton
@@ -152,6 +153,24 @@ class PlaybackService : MediaLibraryService() {
                 crossfade?.cancel()
             }
         }
+
+        // The app's own shuffle (PlayerRepositoryImpl.setShuffleEnabled) physically reorders the
+        // queue and leaves ExoPlayer's shuffleModeEnabled flag alone - that flag is only turned on
+        // here so the system notification/lockscreen/Android Auto shuffle icon reflects it too.
+        // Without pinning the shuffle order to identity, ExoPlayer would compute its own random
+        // shuffle order the moment that flag flips true, and the notification's next/previous
+        // buttons (which route through the session's standard skip commands) would jump through
+        // THAT order instead of the physically-shuffled list - desyncing skip from what's shown.
+        override fun onEvents(player: Player, events: Player.Events) {
+            if (events.contains(Player.EVENT_TIMELINE_CHANGED) && player is ExoPlayer) {
+                val count = player.mediaItemCount
+                if (count > 0) player.setShuffleOrder(ShuffleOrder.DefaultShuffleOrder(IntArray(count) { it }, 0))
+            }
+        }
+
+        override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
+            scope.launch { refreshCustomLayout() }
+        }
     }
 
     @Inject lateinit var settingsRepository: SettingsRepository
@@ -160,6 +179,11 @@ class PlaybackService : MediaLibraryService() {
     @Inject lateinit var serverAudioRepository: dev.nami.domain.ServerAudioRepository
     @Inject lateinit var lyricsRepository: LyricsRepository
     @Inject lateinit var trackAnalysisScanner: dev.nami.player.analysis.TrackAnalysisScanner
+    // Same singleton instance ViewModels use (no android:process split for this service) - reused
+    // here so the notification's shuffle button drives the exact same physical-reorder algorithm
+    // as the in-app shuffle toggle, instead of a separate flag-only mechanism that never actually
+    // reordered the queue.
+    @Inject lateinit var playerRepository: dev.nami.domain.PlayerRepository
 
     private var currentLyricLine: String? = null
     private var cachedLyrics: Lyrics? = null
@@ -230,8 +254,11 @@ class PlaybackService : MediaLibraryService() {
                 return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
             }
             if (customCommand.customAction == ACTION_TOGGLE_SHUFFLE) {
-                player.shuffleModeEnabled = !player.shuffleModeEnabled
-                scope.launch { refreshCustomLayout() }
+                // Routes through the real repository (physically reorders the queue) instead of
+                // flipping player.shuffleModeEnabled directly - that flag now only follows along
+                // as a side effect (see setShuffleEnabled), so notification/lockscreen taps and
+                // in-app taps end up doing the exact same thing.
+                scope.launch { playerRepository.setShuffleEnabled(!playerRepository.shuffleEnabled.value) }
                 return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
             }
             if (customCommand.customAction == ACTION_CROSSFADE_NEXT) {

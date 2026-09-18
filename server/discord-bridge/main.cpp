@@ -60,6 +60,7 @@ int main(int argc, char** argv) {
     std::string title, description, artwork_url;
     int64_t position_ms = 0, duration_ms = 0;
     bool token_ready = false, fatal = false, was_ready = false, quit = false, paused = false;
+    bool show_app_icon = true;
     auto last_input = Clock::now();
     auto last_publish = Clock::now() - 5s;
     auto last_ready = Clock::now();
@@ -107,18 +108,19 @@ int main(int argc, char** argv) {
                     sent = 0;
                 } else if (op == "SET") {
                     std::string title_hex, description_hex, artwork_hex;
-                    int paused_int = 0;
+                    int paused_int = 0, icon_int = 1;
                     // artwork_hex is last on the line and legitimately empty when there's no
                     // artwork (hex::encode("") on the server side is "") - operator>> refuses to
                     // extract an empty whitespace-delimited token at all, which made every SET
                     // with no artwork throw here. getline for the tail of the line instead - it
                     // returns "" for a bare trailing space/newline instead of failing the stream.
-                    if (!(stream >> version >> title_hex >> description_hex >> position_ms >> duration_ms >> paused_int) || !version)
+                    if (!(stream >> version >> title_hex >> description_hex >> position_ms >> duration_ms >> paused_int >> icon_int) || !version)
                         throw std::runtime_error("invalid activity");
                     stream >> std::ws;
                     std::getline(stream, artwork_hex);
                     title = unhex(title_hex); description = unhex(description_hex); artwork_url = unhex(artwork_hex);
                     paused = paused_int != 0;
+                    show_app_icon = icon_int != 0;
                     set_received_at = Clock::now();
                     if (title.empty() || title.size() > 512 || description.size() > 512 || position_ms < 0 || duration_ms < 0
                         || (duration_ms > 0 && position_ms > duration_ms) || artwork_url.size() > 512)
@@ -142,7 +144,10 @@ int main(int argc, char** argv) {
                 discordpp::Activity activity;
                 activity.SetType(discordpp::ActivityTypes::Listening);
                 activity.SetDetails(title);
-                activity.SetState(description);
+                // "· На паузе" appended to the state line - the only user-visible cue that this is
+                // a paused track and not a still-playing one, now that SetTimestamps below is
+                // skipped entirely on pause (no bar, so nothing else marks it as paused).
+                activity.SetState(paused ? description + " · На паузе" : description);
                 // No native "paused" concept for a plain Activity's timestamps - Discord just
                 // counts up from whatever start it was given, forever, client-side. Omitting
                 // SetTimestamps entirely while paused is what makes the progress bar disappear
@@ -167,8 +172,11 @@ int main(int argc, char** argv) {
                     // Developer Portal (Rich Presence -> Art Assets) under this exact key. See
                     // docs/discord-server-oauth.md. Only shown alongside a real large image -
                     // a small badge with no large image to sit on top of looks like a mistake.
-                    assets.SetSmallImage(std::string("nami_logo"));
-                    assets.SetSmallText(std::string("Nami"));
+                    // show_app_icon is the user's own toggle for this badge (default on).
+                    if (show_app_icon) {
+                        assets.SetSmallImage(std::string("nami_logo"));
+                        assets.SetSmallText(std::string("Nami"));
+                    }
                     activity.SetAssets(assets);
                 }
                 const auto request = version;

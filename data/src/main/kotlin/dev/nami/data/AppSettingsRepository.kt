@@ -191,6 +191,13 @@ class AppSettingsRepository @Inject constructor(@ApplicationContext context: Con
         _discordShowMode.value = value
     }
 
+    private val _discordShowAppIcon = MutableStateFlow(prefs.getBoolean("discord_show_app_icon", true))
+    val discordShowAppIcon: StateFlow<Boolean> = _discordShowAppIcon
+    fun setDiscordShowAppIcon(value: Boolean) {
+        prefs.edit { putBoolean("discord_show_app_icon", value) }
+        _discordShowAppIcon.value = value
+    }
+
     private val _autoOpenPlayer = MutableStateFlow(prefs.getBoolean(KEY_AUTO_OPEN_PLAYER, false))
     override val autoOpenPlayer: StateFlow<Boolean> = _autoOpenPlayer
 

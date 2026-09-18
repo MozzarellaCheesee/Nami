@@ -14,6 +14,7 @@ import dev.nami.domain.PlayableTrack
 import dev.nami.domain.PlayerQueue
 import dev.nami.domain.PlayerRepository
 import dev.nami.domain.PlaylistRepository
+import dev.nami.domain.TrackSort
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -49,7 +50,8 @@ class AlbumDetailViewModelTest {
             override suspend fun batchEditTracks(ids: List<dev.nami.core.model.TrackId>, artistName: String?, albumName: String?, year: Int?, genre: String?) = error("unused")
             override suspend fun searchMusicBrainz(title: String, artistName: String?) = error("unused")
             override fun tracks() = throw NotImplementedError()
-            override suspend fun allTracksOrdered(): List<Track> = emptyList()
+            override suspend fun allTracksOrdered(sort: TrackSort): List<Track> = emptyList()
+            override suspend fun createArtist(name: String): dev.nami.core.model.ArtistId? = error("unused")
             override fun track(id: TrackId) = throw NotImplementedError()
             override fun albums() = throw NotImplementedError()
             override fun recentAlbums(limit: Int) = flowOf(emptyList<AlbumSummary>())

@@ -30,16 +30,24 @@ Java_dev_nami_app_discord_DiscordSdk_nativeOpen(JNIEnv*, jobject, jlong id) {
 
 extern "C" JNIEXPORT void JNICALL
 Java_dev_nami_app_discord_DiscordSdk_nativePublish(
-    JNIEnv* env, jobject, jbyteArray title, jbyteArray description, jlong start, jlong end) {
+    JNIEnv* env, jobject, jbyteArray title, jbyteArray description, jlong start, jlong end, jboolean paused) {
     if (!client) return;
     discordpp::Activity activity;
     activity.SetType(discordpp::ActivityTypes::Listening);
     activity.SetDetails(utf8(env, title));
-    activity.SetState(utf8(env, description));
-    discordpp::ActivityTimestamps timestamps;
-    timestamps.SetStart(start);
-    if (end > 0) timestamps.SetEnd(end);
-    activity.SetTimestamps(timestamps);
+    // Same reasoning as the server-relay bridge (main.cpp): Discord's Activity timestamps have no
+    // native "paused" state, they just count up forever from whatever start they're given, so a
+    // paused track is marked instead by skipping SetTimestamps (no bar) and labeling the state
+    // line, rather than freezing/faking a still-advancing value.
+    if (paused) {
+        activity.SetState(utf8(env, description) + " · На паузе");
+    } else {
+        activity.SetState(utf8(env, description));
+        discordpp::ActivityTimestamps timestamps;
+        timestamps.SetStart(start);
+        if (end > 0) timestamps.SetEnd(end);
+        activity.SetTimestamps(timestamps);
+    }
     // Local artwork and private server URLs must never be published as public assets.
     const auto request = ++generation;
     result = 0;

@@ -205,38 +205,43 @@ class LibraryRepositoryImpl @Inject constructor(
             .flow
             .map { pagingData -> pagingData.pagingMap { it.toDomain() } }
 
-    override fun tracks(sort: dev.nami.domain.TrackSort): Flow<PagingData<Track>> {
-        val orderBy = when (sort) {
-            dev.nami.domain.TrackSort.DATE_ADDED -> "tracks.dateAdded DESC"
-            dev.nami.domain.TrackSort.TITLE -> "tracks.title COLLATE NOCASE ASC"
-            dev.nami.domain.TrackSort.ARTIST -> "artistName COLLATE NOCASE ASC, tracks.title COLLATE NOCASE ASC"
-            dev.nami.domain.TrackSort.YEAR -> "albums.year DESC"
-            dev.nami.domain.TrackSort.DURATION -> "tracks.durationMs DESC"
-            dev.nami.domain.TrackSort.PLAY_COUNT -> "tracks.playCount DESC"
-            dev.nami.domain.TrackSort.BPM -> "tracks.bpm DESC"
-            // Оценка битрейта: колонки нет, но размер/длительность дают порядок не хуже.
-            dev.nami.domain.TrackSort.BITRATE -> "(tracks.sizeBytes * 8000.0 / MAX(tracks.durationMs, 1)) DESC"
-            dev.nami.domain.TrackSort.RATING -> "tracks.rating DESC"
-        }
-        val sql = """
-            SELECT tracks.*, COALESCE(albums.artworkPath, tracks.artworkPath) AS albumArtworkPath,
-                   artists.name AS artistName
-            FROM tracks
-            LEFT JOIN albums ON tracks.albumId = albums.id
-            LEFT JOIN artists ON tracks.artistId = artists.id
-            WHERE tracks.deletedAt IS NULL
-            ORDER BY $orderBy
-        """.trimIndent()
-        return Pager(PagingConfig(pageSize = 50)) {
-            trackDao.pagingSourceSorted(androidx.sqlite.db.SimpleSQLiteQuery(sql))
-        }.flow.map { pagingData -> pagingData.pagingMap { it.toDomain() } }
+    private fun trackSortOrderBy(sort: dev.nami.domain.TrackSort): String = when (sort) {
+        dev.nami.domain.TrackSort.DATE_ADDED -> "tracks.dateAdded DESC"
+        dev.nami.domain.TrackSort.TITLE -> "tracks.title COLLATE NOCASE ASC"
+        dev.nami.domain.TrackSort.ARTIST -> "artistName COLLATE NOCASE ASC, tracks.title COLLATE NOCASE ASC"
+        dev.nami.domain.TrackSort.YEAR -> "albums.year DESC"
+        dev.nami.domain.TrackSort.DURATION -> "tracks.durationMs DESC"
+        dev.nami.domain.TrackSort.PLAY_COUNT -> "tracks.playCount DESC"
+        dev.nami.domain.TrackSort.BPM -> "tracks.bpm DESC"
+        // Оценка битрейта: колонки нет, но размер/длительность дают порядок не хуже.
+        dev.nami.domain.TrackSort.BITRATE -> "(tracks.sizeBytes * 8000.0 / MAX(tracks.durationMs, 1)) DESC"
+        dev.nami.domain.TrackSort.RATING -> "tracks.rating DESC"
     }
+
+    private fun sortedTracksSql(sort: dev.nami.domain.TrackSort): String = """
+        SELECT tracks.*, COALESCE(albums.artworkPath, tracks.artworkPath) AS albumArtworkPath,
+               COALESCE(tracks.rawArtistName, artists.name) AS artistName
+        FROM tracks
+        LEFT JOIN albums ON tracks.albumId = albums.id
+        LEFT JOIN artists ON tracks.artistId = artists.id
+        WHERE tracks.deletedAt IS NULL
+        ORDER BY ${trackSortOrderBy(sort)}
+    """.trimIndent()
+
+    override fun tracks(sort: dev.nami.domain.TrackSort): Flow<PagingData<Track>> =
+        Pager(PagingConfig(pageSize = 50)) {
+            trackDao.pagingSourceSorted(androidx.sqlite.db.SimpleSQLiteQuery(sortedTracksSql(sort)))
+        }.flow.map { pagingData -> pagingData.pagingMap { it.toDomain() } }
 
     override suspend fun trackYears(): Map<TrackId, Int> =
         trackDao.allTrackYears().associate { TrackId(it.id) to it.year }
 
-    override suspend fun allTracksOrdered(): List<Track> =
-        trackDao.allOrderedWithArtwork().map { it.toDomain() }
+    override suspend fun allTracksOrdered(sort: dev.nami.domain.TrackSort): List<Track> =
+        if (sort == dev.nami.domain.TrackSort.DATE_ADDED) {
+            trackDao.allOrderedWithArtwork().map { it.toDomain() }
+        } else {
+            trackDao.allOrderedWithArtworkSorted(androidx.sqlite.db.SimpleSQLiteQuery(sortedTracksSql(sort))).map { it.toDomain() }
+        }
 
     override fun allTracksOrderedFlow(): Flow<List<Track>> =
         trackDao.observeAllOrderedWithArtwork().map { rows -> rows.map { it.toDomain() } }
@@ -347,6 +352,9 @@ class LibraryRepositoryImpl @Inject constructor(
             )
         }
     }
+
+    override suspend fun createArtist(name: String): ArtistId? =
+        metadataResolver.resolveArtist(name)?.let { ArtistId(it) }
 
     override fun albumArtists(id: AlbumId): Flow<List<Artist>> =
         albumDao.observeArtistsForAlbum(id.value).map { rows -> rows.map { it.toDomain() } }
@@ -520,7 +528,12 @@ class LibraryRepositoryImpl @Inject constructor(
         val resolvedAlbumId = albumName?.takeIf { it.isNotBlank() }?.let { metadataResolver.resolveAlbum(it, resolvedArtistId, year) }
 
         for (id in ids) {
-            if (resolvedArtistId != null) trackDao.setArtistId(id.value, resolvedArtistId)
+            if (resolvedArtistId != null) {
+                trackDao.setArtistId(id.value, resolvedArtistId)
+                // Manual edit replaces whatever the tag said, incl. any "feat." credits - a stale
+                // rawArtistName would otherwise keep shadowing the artist the user just set.
+                trackDao.setRawArtistName(id.value, artistName)
+            }
             if (resolvedAlbumId != null) {
                 trackDao.setAlbumId(id.value, resolvedAlbumId)
             } else if (year != null) {
@@ -1175,6 +1188,7 @@ class LibraryRepositoryImpl @Inject constructor(
                     id = trackId,
                     title = title,
                     artistId = artistId,
+                    rawArtistName = tags?.artist,
                     albumId = albumId,
                     trackNo = tags?.trackNo,
                     discNo = tags?.discNo,

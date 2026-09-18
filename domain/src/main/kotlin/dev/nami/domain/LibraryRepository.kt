@@ -40,8 +40,10 @@ interface LibraryRepository {
     suspend fun setTrackChain(trackId: TrackId, nextTrackId: TrackId?) = Unit
 
     fun tracks(): Flow<PagingData<Track>>
-    /** Snapshot of every non-deleted track, same order as [tracks], for building a full playback queue. */
-    suspend fun allTracksOrdered(): List<Track>
+    /** Snapshot of every non-deleted track, for building a full playback queue - in [sort] order,
+     * so tapping a track after sorting the library queues up skipNext/skipPrevious in that same
+     * order instead of always falling back to date-added. */
+    suspend fun allTracksOrdered(sort: TrackSort = TrackSort.DATE_ADDED): List<Track>
 
     /** Живой вариант [allTracksOrdered]: переотдаёт список при каждом изменении библиотеки.
      * Для главного экрана, который держат открытым во время импорта. Дефолт-реализация - разовый
@@ -55,6 +57,9 @@ interface LibraryRepository {
     /** Same shape as [recentAlbums] but for the Tracks tab's "Артисты" preview row. */
     fun featuredArtists(limit: Int): Flow<List<Artist>>
     fun artists(): Flow<PagingData<Artist>>
+    /** Finds an existing artist by exact name or creates one - lets an "existing artists only"
+     * picker also cover an artist that isn't in the library yet. */
+    suspend fun createArtist(name: String): ArtistId?
     fun album(id: AlbumId): Flow<Album?>
     fun artist(id: ArtistId): Flow<Artist?>
     fun tracksInAlbum(id: AlbumId): Flow<List<Track>>

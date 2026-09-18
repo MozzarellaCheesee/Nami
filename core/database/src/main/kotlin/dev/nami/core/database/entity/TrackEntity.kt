@@ -109,4 +109,9 @@ data class TrackEntity(
      * при зеркалении, когда совпадение ещё видно. */
     val serverTrackId: Long? = null,
     val noteUpdatedAt: Long = 0,
+    /** Полная строка исполнителя из тега ("A feat. B"), для отображения. [artistId] всё ещё
+     * ссылается только на основного исполнителя (см. MetadataResolver.primaryArtistName) - иначе
+     * "A feat. B" и "A" считались бы разными исполнителями и дробили бы библиотеку. Null для
+     * треков без исполнителя или добавленных до этой колонки - тогда отображается artists.name. */
+    val rawArtistName: String? = null,
 )

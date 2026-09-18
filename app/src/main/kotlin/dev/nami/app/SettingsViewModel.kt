@@ -33,10 +33,12 @@ class SettingsViewModel @Inject constructor(
     val discordApplicationId = appSettingsRepository.discordApplicationId
     val discordPresenceEnabled = appSettingsRepository.discordPresenceEnabled
     val discordShowMode = appSettingsRepository.discordShowMode
+    val discordShowAppIcon = appSettingsRepository.discordShowAppIcon
     val discordStatus = discordPresenceManager.status
     fun setDiscordApplicationId(value: String) = appSettingsRepository.setDiscordApplicationId(value)
     fun setDiscordPresenceEnabled(value: Boolean) = appSettingsRepository.setDiscordPresenceEnabled(value)
     fun setDiscordShowMode(value: Boolean) = appSettingsRepository.setDiscordShowMode(value)
+    fun setDiscordShowAppIcon(value: Boolean) = appSettingsRepository.setDiscordShowAppIcon(value)
 
     private val _discordServerAccount = MutableStateFlow<org.json.JSONObject?>(null)
     val discordServerAccount: StateFlow<org.json.JSONObject?> = _discordServerAccount

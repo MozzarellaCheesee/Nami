@@ -12,6 +12,7 @@ import dev.nami.domain.ImportSource
 import dev.nami.domain.LibraryRepository
 import dev.nami.domain.SearchRepository
 import dev.nami.domain.SearchResult
+import dev.nami.domain.TrackSort
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -37,7 +38,8 @@ class SearchViewModelTest {
             override suspend fun batchEditTracks(ids: List<dev.nami.core.model.TrackId>, artistName: String?, albumName: String?, year: Int?, genre: String?) = error("unused")
             override suspend fun searchMusicBrainz(title: String, artistName: String?) = error("unused")
         override fun tracks() = error("unused")
-        override suspend fun allTracksOrdered(): List<Track> = error("unused")
+        override suspend fun allTracksOrdered(sort: TrackSort): List<Track> = error("unused")
+            override suspend fun createArtist(name: String): dev.nami.core.model.ArtistId? = error("unused")
         override fun track(id: TrackId) = error("unused")
         override fun albums() = error("unused")
         override fun recentAlbums(limit: Int): Flow<List<AlbumSummary>> = flowOf(emptyList())

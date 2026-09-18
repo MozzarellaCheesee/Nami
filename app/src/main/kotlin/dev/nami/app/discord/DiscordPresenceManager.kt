@@ -27,6 +27,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.abs
 
+/** Perceived-idle cutoff: how long nothing may play before a lingering "paused" activity gets
+ * cleared for real, in both DiscordPresenceManager report paths. */
+private const val IDLE_TIMEOUT_MS = 120_000L
+
 /** Runs with the application process, including background playback; it is not owned by a screen. */
 @Singleton
 class DiscordPresenceManager @Inject constructor(
@@ -120,10 +124,20 @@ class DiscordPresenceManager @Inject constructor(
         // whole coroutine ending, which happens on app exit/server disconnect/feature toggle)
         // is what makes that true without inventing a separate "paused" wire state.
         var sticky: DiscordPresence? = null
+        // Sticky above keeps activity alive through a short pause/track-change gap, but a pause
+        // left sitting for real (user walked away, phone locked) shouldn't show Discord activity
+        // forever - clear it once nothing has actually played for IDLE_TIMEOUT_MS straight.
+        var idleSince = SystemClock.elapsedRealtime()
         try {
             while (true) {
                 val raw = currentPresence()?.let { withArtwork(it, config) }
-                if (raw != null) sticky = raw
+                val now = SystemClock.elapsedRealtime()
+                if (raw != null) {
+                    sticky = raw
+                    idleSince = now
+                } else if (sticky != null && now - idleSince >= IDLE_TIMEOUT_MS) {
+                    sticky = null
+                }
                 val desired = sticky
                 // Discord has no native "paused" state for a plain Activity's timestamps - they're
                 // just a fixed epoch it counts up from client-side forever, so while raw is null
@@ -131,7 +145,6 @@ class DiscordPresenceManager @Inject constructor(
                 // entirely instead of freezing/faking a value: no bar shown at all beats one that
                 // has to be kept artificially in sync.
                 val paused = raw == null && desired != null
-                val now = SystemClock.elapsedRealtime()
                 if (raw != null && (observed == null || observed.trackId != raw.trackId)) takeover = true
                 observed = raw
                 if (desired != null && now - checkedAt >= 30_000) {
@@ -152,10 +165,15 @@ class DiscordPresenceManager @Inject constructor(
                         val duration = it.endSeconds?.let { end -> (end - it.startSeconds) * 1000 } ?: 0
                         val position = (System.currentTimeMillis() - it.startSeconds * 1000).coerceAtLeast(0)
                         payload.put("title", it.title.filterNot(Char::isISOControl))
-                            .put("description", it.description.filterNot(Char::isISOControl))
+                            // 116, not the server's old 128: leaves room for the bridge's own
+                            // " · На паузе" suffix (see discord_presence.rs) without the whole
+                            // update getting rejected once truncation pushed the pause label past
+                            // Discord's 128-char state limit.
+                            .put("description", it.description.filterNot(Char::isISOControl).take(116))
                             .put("position_ms", if (duration > 0) position.coerceAtMost(duration) else position)
                             .put("duration_ms", duration)
                         it.artworkUrl?.let { url -> payload.put("artwork_url", url) }
+                        payload.put("show_app_icon", settings.discordShowAppIcon.value)
                     }
                     // A failed request may already have reached the server, so always send a later stop.
                     mayHavePublished = mayHavePublished || desired != null
@@ -196,22 +214,39 @@ class DiscordPresenceManager @Inject constructor(
             // or a track-change gap must not clear the activity, only closing/disabling this does
             // (which tears down this whole coroutine and runs the DiscordSdk.clear() in finally).
             var sticky: DiscordPresence? = null
+            // Same idle cutoff as reportToServer() - a pause left sitting for real, not just a
+            // brief gap, must eventually clear the activity instead of showing it forever.
+            var idleSince = SystemClock.elapsedRealtime()
+            var lastPaused = false
             while (true) {
                 val raw = currentPresence()
-                if (raw != null) sticky = raw
-                val desired = sticky
                 val now = SystemClock.elapsedRealtime()
+                if (raw != null) {
+                    sticky = raw
+                    idleSince = now
+                } else if (sticky != null && now - idleSince >= IDLE_TIMEOUT_MS) {
+                    sticky = null
+                }
+                val desired = sticky
+                val paused = raw == null && desired != null
                 val result = DiscordSdk.poll()
                 if (desired == null) {
+                    if (last != null) {
+                        DiscordSdk.clear()
+                        last = null
+                    }
                     _status.value = "Готово · ожидает воспроизведения"
                 } else {
-                    val changed = changed(last, desired)
+                    // paused != lastPaused forces an immediate republish on pause/resume - changed()
+                    // alone wouldn't notice, it doesn't compare pause state at all.
+                    val changed = changed(last, desired) || paused != lastPaused
                     // Coalesce seek bursts; refresh after reconnect even when the track is unchanged.
                     val elapsed = now - sentAt
                     if (last == null || (elapsed >= 5000 && changed && result != 0) ||
                         (result == -1 && elapsed >= 15000) || elapsed >= 30000) {
-                        DiscordSdk.publish(desired)
+                        DiscordSdk.publish(desired, paused)
                         last = desired
+                        lastPaused = paused
                         sentAt = now
                         _status.value = "Отправка активности…"
                     } else {

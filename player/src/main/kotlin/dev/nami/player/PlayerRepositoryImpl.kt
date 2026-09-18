@@ -617,6 +617,10 @@ class PlayerRepositoryImpl @Inject constructor(
         val items = ordered.map { it.toMediaItem() }
         awaitController()?.apply {
             setMediaItems(items, newStartIndex, startMs)
+            // Matches the _shuffleEnabled reset above - a stale true from the previous queue would
+            // otherwise keep the system notification/lockscreen shuffle icon lit for a new,
+            // unshuffled queue.
+            shuffleModeEnabled = false
             prepare()
             play()
             updatePlaybackSource(this)
@@ -819,6 +823,10 @@ class PlayerRepositoryImpl @Inject constructor(
             preShuffleOrder = null
         }
         _shuffleEnabled.value = enabled
+        // Queue is already physically reordered above - this flag has no effect on playback order
+        // (PlaybackService pins ExoPlayer's shuffle order to identity), it only tells the system
+        // notification/lockscreen/Android Auto shuffle icon to match what the app just did.
+        player.shuffleModeEnabled = enabled
     }
 
     /** Weighted-random permutation (Efraimidis-Spirakis: key = U^(1/weight), sort descending)

@@ -139,7 +139,18 @@ pub fn install(info: &UpdateInfo) -> Res<String> {
         exe.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default()
     ));
     let _ = std::fs::remove_file(&old);
-    std::fs::rename(&exe, &old)?;
+    if let Err(e) = std::fs::rename(&exe, &old) {
+        if e.kind() == std::io::ErrorKind::PermissionDenied {
+            return Err(format!(
+                "нет прав на запись в {}: сервис работает от пользователя без доступа к этому \
+                 каталогу. Переустановите сервер (curl -fsSL .../deploy/install.sh | bash) - \
+                 актуальный установщик кладёт бинарник в каталог, которым владеет сам сервис.",
+                dir.display(),
+            )
+            .into());
+        }
+        return Err(e.into());
+    }
     if let Err(e) = std::fs::copy(&fresh, &exe) {
         // Возвращаем себя на место, иначе сервер останется без исполняемого файла.
         let _ = std::fs::rename(&old, &exe);

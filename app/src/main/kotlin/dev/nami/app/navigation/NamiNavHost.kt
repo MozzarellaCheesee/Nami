@@ -415,7 +415,7 @@ fun NamiNavHost(
                         if (queue.nowPlaying?.id == trackId) {
                             showNowPlaying = true
                         } else {
-                            nowPlayingViewModel.playFromLibrary(trackId)
+                            nowPlayingViewModel.playFromLibrary(trackId, libraryViewModel.uiState.value.sort)
                             if (autoOpenPlayer) showNowPlaying = true
                         }
                     },

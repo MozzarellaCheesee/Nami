@@ -17,16 +17,16 @@ internal object DiscordSdk {
     }
 
     fun open(applicationId: String) = nativeOpen(applicationId.toULong().toLong())
-    fun publish(presence: DiscordPresence) = nativePublish(
+    fun publish(presence: DiscordPresence, paused: Boolean = false) = nativePublish(
         presence.title.toByteArray(Charsets.UTF_8), presence.description.toByteArray(Charsets.UTF_8),
-        presence.startSeconds, presence.endSeconds ?: 0,
+        presence.startSeconds, presence.endSeconds ?: 0, paused,
     )
     fun poll(): Int = nativePoll()
     fun clear() = nativeClear()
     fun close() = nativeClose()
 
     private external fun nativeOpen(applicationId: Long)
-    private external fun nativePublish(title: ByteArray, description: ByteArray, start: Long, end: Long)
+    private external fun nativePublish(title: ByteArray, description: ByteArray, start: Long, end: Long, paused: Boolean)
     private external fun nativePoll(): Int
     private external fun nativeClear()
     private external fun nativeClose()

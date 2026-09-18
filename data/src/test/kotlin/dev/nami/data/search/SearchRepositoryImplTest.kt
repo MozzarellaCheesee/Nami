@@ -58,6 +58,8 @@ class SearchRepositoryImplTest {
         override suspend fun setChainNext(id: String, nextTrackId: String?) = error("unused")
         override fun pagingSource(): PagingSource<Int, TrackDao.TrackWithArtwork> = error("unused")
         override fun pagingSourceSorted(query: androidx.sqlite.db.SupportSQLiteQuery): PagingSource<Int, TrackDao.TrackWithArtwork> = error("unused")
+        override suspend fun allOrderedWithArtworkSorted(query: androidx.sqlite.db.SupportSQLiteQuery): List<TrackDao.TrackWithArtwork> = error("unused")
+        override suspend fun setRawArtistName(id: String, name: String?) = error("unused")
         override suspend fun allTrackYears(): List<TrackDao.TrackYearRow> = emptyList()
         override suspend fun allOrderedWithArtwork(): List<TrackDao.TrackWithArtwork> = error("unused")
         override fun observeAllOrderedWithArtwork(): kotlinx.coroutines.flow.Flow<List<TrackDao.TrackWithArtwork>> = error("unused")

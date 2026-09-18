@@ -9,7 +9,7 @@ internal object DiscordSdk {
     const val ready = false
     fun initialize(activity: Activity) = Unit
     fun open(applicationId: String) = Unit
-    fun publish(presence: DiscordPresence) = Unit
+    fun publish(presence: DiscordPresence, paused: Boolean = false) = Unit
     fun poll(): Int = -1
     fun clear() = Unit
     fun close() = Unit

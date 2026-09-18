@@ -16,7 +16,7 @@ interface TrackDao {
     @Query(
         """
         SELECT tracks.*, COALESCE(albums.artworkPath, tracks.artworkPath) AS albumArtworkPath,
-               artists.name AS artistName
+               COALESCE(tracks.rawArtistName, artists.name) AS artistName
         FROM tracks
         LEFT JOIN albums ON tracks.albumId = albums.id
         LEFT JOIN artists ON tracks.artistId = artists.id
@@ -33,10 +33,15 @@ interface TrackDao {
     @RawQuery(observedEntities = [TrackEntity::class])
     fun pagingSourceSorted(query: SupportSQLiteQuery): PagingSource<Int, TrackWithArtwork>
 
+    /** Same query [pagingSourceSorted] builds, as a one-shot full list - for building a playback
+     * queue in the same order the library is currently sorted in (see LibraryRepository.allTracksOrdered). */
+    @RawQuery
+    suspend fun allOrderedWithArtworkSorted(query: SupportSQLiteQuery): List<TrackWithArtwork>
+
     @Query(
         """
         SELECT tracks.*, COALESCE(albums.artworkPath, tracks.artworkPath) AS albumArtworkPath,
-               artists.name AS artistName
+               COALESCE(tracks.rawArtistName, artists.name) AS artistName
         FROM tracks
         LEFT JOIN albums ON tracks.albumId = albums.id
         LEFT JOIN artists ON tracks.artistId = artists.id
@@ -52,7 +57,7 @@ interface TrackDao {
     @Query(
         """
         SELECT tracks.*, COALESCE(albums.artworkPath, tracks.artworkPath) AS albumArtworkPath,
-               artists.name AS artistName
+               COALESCE(tracks.rawArtistName, artists.name) AS artistName
         FROM tracks
         LEFT JOIN albums ON tracks.albumId = albums.id
         LEFT JOIN artists ON tracks.artistId = artists.id
@@ -68,7 +73,7 @@ interface TrackDao {
     @Query(
         """
         SELECT tracks.*, COALESCE(albums.artworkPath, tracks.artworkPath) AS albumArtworkPath,
-               artists.name AS artistName
+               COALESCE(tracks.rawArtistName, artists.name) AS artistName
         FROM tracks
         LEFT JOIN albums ON tracks.albumId = albums.id
         LEFT JOIN artists ON tracks.artistId = artists.id
@@ -84,7 +89,7 @@ interface TrackDao {
     @Query(
         """
         SELECT tracks.*, COALESCE(albums.artworkPath, tracks.artworkPath) AS albumArtworkPath,
-               artists.name AS artistName
+               COALESCE(tracks.rawArtistName, artists.name) AS artistName
         FROM tracks
         LEFT JOIN albums ON tracks.albumId = albums.id
         LEFT JOIN artists ON tracks.artistId = artists.id
@@ -192,7 +197,7 @@ interface TrackDao {
     @Query(
         """
         SELECT tracks.*, COALESCE(albums.artworkPath, tracks.artworkPath) AS albumArtworkPath,
-               artists.name AS artistName
+               COALESCE(tracks.rawArtistName, artists.name) AS artistName
         FROM tracks
         LEFT JOIN albums ON tracks.albumId = albums.id
         LEFT JOIN artists ON tracks.artistId = artists.id
@@ -207,7 +212,7 @@ interface TrackDao {
     @Query(
         """
         SELECT tracks.*, COALESCE(albums.artworkPath, tracks.artworkPath) AS albumArtworkPath,
-               artists.name AS artistName
+               COALESCE(tracks.rawArtistName, artists.name) AS artistName
         FROM tracks
         LEFT JOIN albums ON tracks.albumId = albums.id
         LEFT JOIN artists ON tracks.artistId = artists.id
@@ -220,7 +225,7 @@ interface TrackDao {
     @Query(
         """
         SELECT tracks.*, COALESCE(albums.artworkPath, tracks.artworkPath) AS albumArtworkPath,
-               artists.name AS artistName
+               COALESCE(tracks.rawArtistName, artists.name) AS artistName
         FROM tracks
         LEFT JOIN albums ON tracks.albumId = albums.id
         LEFT JOIN artists ON tracks.artistId = artists.id
@@ -234,7 +239,7 @@ interface TrackDao {
 
     @Query(
         """
-        SELECT tracks.id AS id, tracks.title AS title, artists.name AS artistName,
+        SELECT tracks.id AS id, tracks.title AS title, COALESCE(tracks.rawArtistName, artists.name) AS artistName,
                albums.title AS albumName, tracks.format AS format, albums.year AS year
         FROM tracks
         LEFT JOIN artists ON tracks.artistId = artists.id
@@ -346,6 +351,9 @@ interface TrackDao {
     // null detaches the track from any artist (used by "remove from artist").
     @Query("UPDATE tracks SET artistId = :artistId WHERE id = :id")
     suspend fun setArtistId(id: String, artistId: String?)
+
+    @Query("UPDATE tracks SET rawArtistName = :name WHERE id = :id")
+    suspend fun setRawArtistName(id: String, name: String?)
 
     @Query("SELECT * FROM tracks WHERE deletedAt IS NOT NULL ORDER BY deletedAt DESC")
     fun trashedTracksFlow(): Flow<List<TrackEntity>>

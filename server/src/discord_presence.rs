@@ -70,6 +70,10 @@ struct Activity {
     /// (see NamiServerClient/DiscordPresenceManager.withArtwork), the SDK bridge just forwards
     /// it to Discord's own image fetcher (SetLargeImage), which does the actual fetch/caching.
     artwork_url: String,
+    /// Whether the small "Nami" app-icon badge should sit on top of [artwork_url]. User-toggle
+    /// (default on) - some people find a second logo next to their own track art noisy. Only
+    /// meaningful alongside a real large image, same as the bridge's own rule for showing it.
+    show_app_icon: bool,
 }
 impl Activity {
     fn same(&self, other: &Self) -> bool {
@@ -79,6 +83,7 @@ impl Activity {
             && (self.position_ms - other.position_ms).abs() <= 2_000
             && (self.duration_ms - other.duration_ms).abs() <= 2_000
             && self.artwork_url == other.artwork_url
+            && self.show_app_icon == other.show_app_icon
     }
     /// Position as of right now, in ms - see the position_ms doc above. Deliberately NOT
     /// resolved to an absolute start/end epoch here: the bridge has its own additional queuing
@@ -184,6 +189,11 @@ pub struct Playback {
     artwork_url: String,
     #[serde(default)]
     paused: bool,
+    #[serde(default = "default_true")]
+    show_app_icon: bool,
+}
+fn default_true() -> bool {
+    true
 }
 impl Playback {
     fn activity(&self) -> Result<Option<Activity>, Error> {
@@ -192,7 +202,10 @@ impl Playback {
         }
         if self.title.trim().is_empty()
             || self.title.chars().count() > 128
-            || self.description.chars().count() > 128
+            // 116, not 128: the bridge appends " · На паузе" (11 chars) to this field while
+            // paused (main.cpp) - leaving headroom keeps the result under Discord's 128-char
+            // state limit instead of risking the whole activity update being rejected.
+            || self.description.chars().count() > 116
             || self
                 .title
                 .chars()
@@ -223,6 +236,7 @@ impl Playback {
             received_at: Instant::now(),
             paused: self.paused,
             artwork_url: self.artwork_url.clone(),
+            show_app_icon: self.show_app_icon,
         }))
     }
 }
@@ -464,7 +478,8 @@ async fn run(st: &Shared, uid: i64, path: &PathBuf) -> Result<(), ()> {
                         // main.cpp's last_publish), so epoch math has to happen there, at the
                         // moment it's actually dispatched, using ITS clock - not here.
                         let paused_flag = if a.paused { 1 } else { 0 };
-                        send(&mut stdin, format!("SET {} {} {} {} {} {} {}\n", d.entry.version, hex::encode(&a.title), hex::encode(&a.description), a.position_now(), a.duration_ms, paused_flag, hex::encode(&a.artwork_url))).await?;
+                        let icon_flag = if a.show_app_icon { 1 } else { 0 };
+                        send(&mut stdin, format!("SET {} {} {} {} {} {} {} {}\n", d.entry.version, hex::encode(&a.title), hex::encode(&a.description), a.position_now(), a.duration_ms, paused_flag, icon_flag, hex::encode(&a.artwork_url))).await?;
                         sent = d.entry.version;
                         last_set = Instant::now();
                         connected_at = Instant::now();
@@ -627,6 +642,7 @@ mod tests {
             received_at: Instant::now(),
             paused: false,
             artwork_url: String::new(),
+            show_app_icon: true,
         }
     }
     #[test]

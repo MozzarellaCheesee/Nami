@@ -514,10 +514,10 @@ class NowPlayingViewModel @Inject constructor(
      * every track in that list, positioned at [trackId], so skipPrevious/skipNext traverse the
      * whole library exactly like tapping a track inside an album/artist/playlist already does.
      */
-    fun playFromLibrary(trackId: TrackId) {
+    fun playFromLibrary(trackId: TrackId, sort: dev.nami.domain.TrackSort = dev.nami.domain.TrackSort.DATE_ADDED) {
         _shuffleAllActive.value = false
         viewModelScope.launch {
-            val tracks = libraryRepository.allTracksOrdered()
+            val tracks = libraryRepository.allTracksOrdered(sort)
             val startIndex = tracks.indexOfFirst { it.id == trackId }
             if (startIndex < 0) return@launch
             playerRepository.play(tracks.map { it.toPlayableTrack(artistName = null) }, startIndex = startIndex)
