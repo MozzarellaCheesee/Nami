@@ -1,0 +1,174 @@
+{
+  "id": "2026-09",
+  "title": "Итоги сентября",
+  "subtitle": "Твой месяц в музыке",
+  "from": "2026-09-01",
+  "to": "2026-09-30",
+  "min_plays": 10,
+  "theme": {
+    "background": "#0E1A2B",
+    "background2": "#3A1C71",
+    "text": "#FFFFFF",
+    "accent": "#FFB86B",
+    "font": "sans"
+  },
+  "screens": [
+    {
+      "duration_ms": 5000,
+      "blocks": [
+        {
+          "type": "text",
+          "text": "{{title}}",
+          "size": "40",
+          "weight": "black"
+        },
+        {
+          "type": "spacer",
+          "height": "12"
+        },
+        {
+          "type": "text",
+          "text": "Посмотрим, как звучал твой {{month}}",
+          "size": "18"
+        }
+      ]
+    },
+    {
+      "duration_ms": 6000,
+      "style": {
+        "background": "#1B0F2E",
+        "background2": "#C24A34"
+      },
+      "blocks": [
+        {
+          "type": "text",
+          "text": "Ты слушал музыку",
+          "size": "22"
+        },
+        {
+          "type": "number",
+          "value": "{{minutes}}",
+          "label": "{{plural:minutes|минуту|минуты|минут}}"
+        },
+        {
+          "type": "text",
+          "text": "Это {{active_days}} {{plural:active_days|день|дня|дней}} из {{period_days}}, а самая длинная серия — {{streak_days}} подряд",
+          "size": "16"
+        }
+      ]
+    },
+    {
+      "duration_ms": 7000,
+      "show_if": "top_artists.1.title",
+      "style": {
+        "image": "{{top_artists.1.artwork}}",
+        "dim": "0.55"
+      },
+      "blocks": [
+        {
+          "type": "text",
+          "text": "Артист месяца",
+          "size": "18"
+        },
+        {
+          "type": "text",
+          "text": "{{top_artists.1.title}}",
+          "size": "44",
+          "weight": "black"
+        },
+        {
+          "type": "text",
+          "text": "{{top_artists.1.minutes}} {{plural:top_artists.1.minutes|минута|минуты|минут}} вместе",
+          "size": "18"
+        }
+      ]
+    },
+    {
+      "duration_ms": 8000,
+      "show_if": "top_tracks.1.title",
+      "blocks": [
+        {
+          "type": "text",
+          "text": "Самые заслушанные треки",
+          "size": "24",
+          "weight": "bold"
+        },
+        {
+          "type": "spacer",
+          "height": "16"
+        },
+        {
+          "type": "list",
+          "source": "top_tracks",
+          "limit": "5",
+          "show": "plays",
+          "artwork": "true"
+        }
+      ]
+    },
+    {
+      "duration_ms": 6000,
+      "show_if": "new_artists",
+      "style": {
+        "background": "#0F2E24",
+        "background2": "#0E1A2B"
+      },
+      "blocks": [
+        {
+          "type": "text",
+          "text": "Открытия месяца",
+          "size": "24",
+          "weight": "bold"
+        },
+        {
+          "type": "text",
+          "text": "{{new_artists}} {{plural:new_artists|новый артист|новых артиста|новых артистов}}",
+          "size": "16"
+        },
+        {
+          "type": "spacer",
+          "height": "16"
+        },
+        {
+          "type": "list",
+          "source": "new_artists",
+          "limit": "3",
+          "show": "minutes",
+          "artwork": "true"
+        }
+      ]
+    },
+    {
+      "duration_ms": 6000,
+      "blocks": [
+        {
+          "type": "text",
+          "text": "Чаще всего ты слушал в {{top_hour}}",
+          "size": "22",
+          "weight": "bold"
+        },
+        {
+          "type": "spacer",
+          "height": "16"
+        },
+        {
+          "type": "bars",
+          "source": "hours",
+          "metric": "minutes"
+        },
+        {
+          "type": "spacer",
+          "height": "16"
+        },
+        {
+          "type": "text",
+          "text": "Любимый день недели — {{top_weekday}}",
+          "size": "16"
+        }
+      ]
+    }
+  ],
+  "available_from": "2026-09-24",
+  "available_until": "2026-10-03",
+  "auto_open": true
+}
