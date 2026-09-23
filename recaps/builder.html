@@ -157,7 +157,7 @@ code,.mono{font-family:var(--mono);font-size:12px}
         <button id="copyJson" class="primary">Скопировать</button>
       </div>
       <textarea id="json" rows="10" spellcheck="false" aria-label="JSON итогов"></textarea>
-      <div class="row">
+      <div class="row" style="flex-wrap:wrap">
         <button id="applyJson">Загрузить из поля</button>
         <label class="row" style="display:flex;cursor:pointer;color:var(--text)"><input type="file" id="file" accept=".json,application/json" hidden><span style="border:1px solid var(--line);border-radius:8px;padding:6px 10px;background:var(--panel2)">Открыть файл…</span></label>
         <button id="resetBtn" class="ghost">Пример</button>
@@ -356,6 +356,27 @@ $("#file").onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>
 $("#resetBtn").onclick=()=>{load(JSON.parse(JSON.stringify(EXAMPLE)));toast("Загружен пример")};
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>setTab(b.dataset.t));
 addEventListener("keydown",e=>{if(e.target.closest("input,textarea,select"))return;if(e.key==="ArrowRight")go(1);if(e.key==="ArrowLeft")go(-1)});
+
+// ---------- desktop (Tauri): native open/save, Ctrl+S ----------
+const T=window.__TAURI__;
+if(T){
+  let lastPath=null;
+  const saveTo=async(ask)=>{
+    let path=ask||!lastPath?await T.dialog.save({defaultPath:lastPath||`${recap.id||"recap"}.json`,filters:[{name:"JSON",extensions:["json"]}]}):lastPath;
+    if(!path)return;
+    try{await T.core.invoke("save_file",{path,content:JSON.stringify(clean(),null,2)+"\n"});lastPath=path;toast("Сохранено: "+path.split(/[\/]/).pop())}catch(e){$("#warn").innerHTML=`<div>⚠ ${esc(e)}</div>`}
+  };
+  const openFrom=async()=>{
+    const path=await T.dialog.open({multiple:false,filters:[{name:"JSON",extensions:["json"]}]});
+    if(!path)return;
+    try{load(JSON.parse(await T.core.invoke("read_file",{path})));lastPath=path;toast("Открыт "+path.split(/[\/]/).pop())}catch(e){$("#warn").innerHTML=`<div>⚠ ${esc(e.message||e)}</div>`}
+  };
+  const bar=$("#applyJson").parentElement;
+  const mk=(t,f,cls)=>{const b=document.createElement("button");b.textContent=t;if(cls)b.className=cls;b.onclick=f;return b};
+  bar.prepend(mk("Сохранить…",()=>saveTo(true),"primary"),mk("Открыть…",openFrom));
+  bar.querySelector('label').hidden=true;
+  addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();saveTo(e.shiftKey)}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="o"){e.preventDefault();openFrom()}});
+}
 
 keysDatalist();
 let draft=null;try{draft=JSON.parse(localStorage.getItem("nami-recap-draft"))}catch{}
