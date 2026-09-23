@@ -561,6 +561,14 @@ $SUDO mkdir -p "$BIN_DIR"
 $SUDO install -m 755 "${TMP_DIR}/nami-server" "${BIN_DIR}/nami-server"
 $SUDO ln -sf "${BIN_DIR}/nami-server" "${INSTALL_DIR}/nami-server"
 $SUDO ln -sf "${BIN_DIR}/nami-server" "${INSTALL_DIR}/nami"
+# Мост Discord (Rich Presence) едет в том же архиве; сервер находит его рядом с собой.
+if [ -d "${TMP_DIR}/discord-bridge" ]; then
+    $SUDO rm -rf "${BIN_DIR}/discord-bridge.old"
+    [ -d "${BIN_DIR}/discord-bridge" ] && $SUDO mv "${BIN_DIR}/discord-bridge" "${BIN_DIR}/discord-bridge.old"
+    $SUDO cp -r "${TMP_DIR}/discord-bridge" "${BIN_DIR}/discord-bridge"
+    $SUDO chmod 755 "${BIN_DIR}/discord-bridge/"*
+    log_ok "Мост Discord установлен: ${BIN_DIR}/discord-bridge"
+fi
 log_ok "Установлен: ${BIN_DIR}/nami-server (симлинки в ${INSTALL_DIR} для PATH)"
 if [ -n "$CURRENT_VERSION" ]; then
     log_ok "Сервер обновлён: ${CURRENT_VERSION#v} → ${TARGET_VERSION#v}."

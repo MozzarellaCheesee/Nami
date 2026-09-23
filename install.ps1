@@ -279,6 +279,14 @@ try {
         if ($foundExe) {
             $downloadSucceeded = Copy-BinaryWithRetry -From $foundExe.FullName -To $binPath
         }
+        # Мост Discord (Rich Presence) едет в том же архиве; сервер находит его рядом с собой.
+        $bridgeSrc = Get-ChildItem -Path $tempExtract -Filter "discord-bridge" -Directory -Recurse | Select-Object -First 1
+        if ($bridgeSrc) {
+            $bridgeDst = Join-Path $InstallDir "discord-bridge"
+            New-Item -ItemType Directory -Force -Path $bridgeDst | Out-Null
+            Copy-Item -Path (Join-Path $bridgeSrc.FullName "*") -Destination $bridgeDst -Force -ErrorAction SilentlyContinue
+            Write-Host "      Мост Discord установлен: $bridgeDst" -ForegroundColor Green
+        }
         Remove-Item -Path $tempExtract -Recurse -Force -ErrorAction SilentlyContinue
     } else {
         $downloadSucceeded = Copy-BinaryWithRetry -From $tempFile -To $binPath
