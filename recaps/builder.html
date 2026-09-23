@@ -110,10 +110,12 @@ code,.mono{font-family:var(--mono);font-size:12px}
   <section class="col side">
     <div class="card">
       <h2>Итоги</h2>
+      <div class="row"><button id="preMonth">Итоги месяца</button><button id="preYear">Итоги года</button></div>
       <div class="grid2">
         <label>id файла<input id="f_id" class="mono"></label>
         <label>мин. прослушиваний<input id="f_min" type="number" min="1"></label>
       </div>
+      <label class="row" style="display:flex;color:var(--text);cursor:pointer"><input type="checkbox" id="f_auto" style="width:auto;accent-color:var(--accent)"> Открыть у всех автоматически (один раз при запуске)</label>
       <label>Заголовок (на карточке)<input id="f_title"></label>
       <label>Подзаголовок<input id="f_sub"></label>
       <div class="grid2">
@@ -177,7 +179,7 @@ code,.mono{font-family:var(--mono);font-size:12px}
 
 <script>
 (() => {
-const EXAMPLE = {"id":"2026-09","title":"Итоги сентября","subtitle":"Твой месяц в музыке","from":"2026-09-01","to":"2026-09-30","available_from":"2026-10-01","available_until":"2026-10-31","min_plays":10,
+const EXAMPLE = {"id":"2026-09","title":"Итоги сентября","subtitle":"Твой месяц в музыке","from":"2026-09-01","to":"2026-09-30","min_plays":10,
 "theme":{"background":"#0E1A2B","background2":"#3A1C71","text":"#FFFFFF","accent":"#FFB86B","font":"sans"},
 "screens":[
 {"duration_ms":5000,"blocks":[{"type":"text","text":"{{title}}","size":"40","weight":"black"},{"type":"spacer","height":"12"},{"type":"text","text":"Посмотрим, как звучал твой {{month}}","size":"18"}]},
@@ -288,10 +290,14 @@ function bind(root,obj,onChange){
 function renderMeta(){
   const m={f_id:"id",f_title:"title",f_sub:"subtitle",f_from:"from",f_to:"to",f_af:"available_from",f_au:"available_until",f_min:"min_plays"};
   for(const [id,k] of Object.entries(m)){const el=$("#"+id);if(document.activeElement!==el)el.value=recap[k]??"";el.oninput=()=>{recap[k]=k==="min_plays"?(parseInt(el.value)||1):el.value;if(recap[k]==="")delete recap[k];renderAll(false)}}
+  const au=$("#f_auto");au.checked=!!recap.auto_open;au.onchange=()=>{au.checked?recap.auto_open=true:delete recap.auto_open;renderAll(false)};
   $("#idTag").textContent=(recap.id||"без id")+".json";
   $("#fileName").textContent=`recaps/${recap.id||"id"}.json`;
   const f=d=>d?new Date(d+"T00:00").toLocaleDateString("ru",{day:"numeric",month:"long",year:"numeric"}):null;
-  $("#whenText").textContent=`Карточка появится на экране «Статистика» ${recap.available_from?"с "+f(recap.available_from):"сразу после публикации"}${recap.available_until?" и пропадёт после "+f(recap.available_until):" и не пропадёт сама"} — у тех, у кого за период ${recap.min_plays||1}+ прослушиваний.`;
+  const [dfFrom,dfUntil]=defaultWindow(recap.from,recap.to);
+  $("#f_af").placeholder=dfFrom||"";$("#f_au").placeholder=dfUntil||"";
+  const af=recap.available_from||dfFrom, au=recap.available_until||dfUntil;
+  $("#whenText").textContent=`${!recap.available_from&&!recap.available_until&&dfFrom?"Окно по умолчанию. ":""}Карточка на главной и в «Статистике» видна ${af?"с "+f(af):"сразу после публикации"}${au?" по "+f(au)+" включительно":" и не пропадёт сама"} — у тех, у кого за период ${recap.min_plays||1}+ прослушиваний.${recap.auto_open?" Кроме карточки, итоги откроются сами у каждого такого человека один раз при запуске приложения.":""}`;
   const tf=$("#themeFields");recap.theme=recap.theme||{};
   if(!tf.contains(document.activeElement)){tf.innerHTML=THEME_KEYS.map(f=>fieldHtml("theme",f,recap.theme[f[0]])).join("");bind(tf,recap.theme,()=>renderAll(false))}
 }
@@ -330,7 +336,7 @@ function validate(){
   if(!/^[A-Za-z0-9_-]+$/.test(recap.id||""))w.push("id: только латиница, цифры, - и _ (это имя файла).");
   if(!recap.from||!recap.to)w.push("Укажи период: с и по.");
   if(recap.from&&recap.to&&recap.from>recap.to)w.push("Период: «с» позже, чем «по».");
-  if(recap.available_from&&recap.to&&recap.available_from<recap.to)w.push("Итоги откроются раньше конца периода — данные будут неполными.");
+  if(recap.available_from&&recap.to&&recap.available_from<recap.to)w.push("Итоги откроются до конца периода: цифры досчитываются при каждом открытии.");
   const txt=JSON.stringify(recap);for(const m of txt.matchAll(/\{\{([^}]+)\}\}/g)){const e=m[1].trim();const k=e.startsWith("plural:")?e.slice(7).split("|")[0].trim():e;if(!known.has(k))w.push(`Неизвестные данные: {{${esc(e)}}}`)}
   recap.screens.forEach((s,i)=>{if(s.show_if&&!known.has(s.show_if.trim()))w.push(`Экран ${i+1}: условие «${esc(s.show_if)}» не из списка данных.`)});
   $("#warn").innerHTML=[...new Set(w)].map(x=>`<div>⚠ ${x}</div>`).join("");
@@ -356,6 +362,21 @@ $("#file").onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>
 $("#resetBtn").onclick=()=>{load(JSON.parse(JSON.stringify(EXAMPLE)));toast("Загружен пример")};
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>setTab(b.dataset.t));
 addEventListener("keydown",e=>{if(e.target.closest("input,textarea,select"))return;if(e.key==="ArrowRight")go(1);if(e.key==="ArrowLeft")go(-1)});
+
+// Same defaults as the app (RecapRepositoryImpl.defaultWindow): a whole month opens for its last
+// 3 days, a whole year from Dec 25 to Jan 7.
+function iso(d){return d.toISOString().slice(0,10)}
+function addDays(s,n){const d=new Date(s+"T00:00:00Z");d.setUTCDate(d.getUTCDate()+n);return iso(d)}
+function defaultWindow(from,to){
+  if(!from||!to)return [null,null];
+  const F=new Date(from+"T00:00:00Z"),T=new Date(to+"T00:00:00Z");
+  if(F.getUTCMonth()===0&&F.getUTCDate()===1&&to===`${F.getUTCFullYear()}-12-31`)return [addDays(to,-6),addDays(to,7)];
+  const last=new Date(Date.UTC(F.getUTCFullYear(),F.getUTCMonth()+1,0));
+  if(F.getUTCDate()===1&&to===iso(last))return [addDays(to,-2),to];
+  return [null,null];
+}
+$("#preMonth").onclick=()=>{const n=new Date(),y=n.getFullYear(),m=n.getMonth();recap.from=iso(new Date(Date.UTC(y,m,1)));recap.to=iso(new Date(Date.UTC(y,m+1,0)));recap.id=`${y}-${String(m+1).padStart(2,"0")}`;recap.title=["Итоги января","Итоги февраля","Итоги марта","Итоги апреля","Итоги мая","Итоги июня","Итоги июля","Итоги августа","Итоги сентября","Итоги октября","Итоги ноября","Итоги декабря"][m];delete recap.available_from;delete recap.available_until;renderAll(false);toast("Период: текущий месяц, окно — последние 3 дня")};
+$("#preYear").onclick=()=>{const y=new Date().getFullYear();recap.from=`${y}-01-01`;recap.to=`${y}-12-31`;recap.id=String(y);recap.title=`Итоги ${y} года`;delete recap.available_from;delete recap.available_until;renderAll(false);toast("Период: год, окно — 25 декабря – 7 января")};
 
 // ---------- desktop (Tauri): native open/save, Ctrl+S ----------
 const T=window.__TAURI__;
