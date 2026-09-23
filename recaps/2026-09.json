@@ -4,7 +4,7 @@
   "subtitle": "Твой месяц в музыке",
   "from": "2026-09-01",
   "to": "2026-09-30",
-  "min_plays": 10,
+  "min_plays": 1,
   "theme": {
     "background": "#0E1A2B",
     "background2": "#3A1C71",
