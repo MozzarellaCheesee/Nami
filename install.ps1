@@ -80,7 +80,7 @@ if (-not $isAdmin) {
         # при запуске через -File превращается в кракозябры. Самому себе BOM ставить при этом
         # нельзя — тогда ломается `irm | iex`, ради которого всё и затевалось.
         $scriptPath = Join-Path $env:TEMP "nami-install-$(Get-Random).ps1"
-        $selfUrl = "https://raw.githubusercontent.com/$Repo/main/deploy/install.ps1"
+        $selfUrl = "https://raw.githubusercontent.com/$Repo/main/install.ps1"
         try {
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
             $selfText = Invoke-RestMethod -Uri $selfUrl -UseBasicParsing
