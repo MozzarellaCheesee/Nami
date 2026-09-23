@@ -396,6 +396,21 @@ case "$PKG_MANAGER" in
         ;;
 esac
 
+# Библиотеки для моста Discord (Rich Presence): Discord SDK подгружает ALSA, PulseAudio и X11
+# даже на сервере без экрана и звука. Без них мост не стартует, остальной сервер работает.
+if [ "$(uname -m)" = "x86_64" ]; then
+    log_info "Установка библиотек для моста Discord..."
+    case "$PKG_MANAGER" in
+        apt)
+            $SUDO apt-get install -y libpulse0 libx11-6 libatomic1 >/dev/null 2>&1 || true
+            $SUDO apt-get install -y libasound2t64 >/dev/null 2>&1 || $SUDO apt-get install -y libasound2 >/dev/null 2>&1 || true
+            ;;
+        dnf|yum) $SUDO $PKG_MANAGER install -y alsa-lib pulseaudio-libs libX11 libatomic >/dev/null 2>&1 || true ;;
+        pacman) $SUDO pacman -S --noconfirm --needed alsa-lib libpulse libx11 >/dev/null 2>&1 || true ;;
+        zypper) $SUDO zypper --non-interactive install libasound2 libpulse0 libX11-6 libatomic1 >/dev/null 2>&1 || true ;;
+    esac
+fi
+
 # Универсальный fallback для Caddy (скачивание официального бинарника, только если нет Nginx)
 if [ "$HAS_NGINX" != true ] && ! command -v caddy >/dev/null 2>&1; then
     log_info "Загрузка официального исполняемого файла Caddy..."
