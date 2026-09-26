@@ -54,6 +54,13 @@
           "type": "text",
           "text": "Это {{active_days}} {{plural:active_days|день|дня|дней}} из {{period_days}}, а самая длинная серия — {{streak_days}} подряд",
           "size": "16"
+        },
+        {
+          "type": "text",
+          "text": "Мало, да?",
+          "size": "10",
+          "weight": "black",
+          "align": "center"
         }
       ]
     },
@@ -168,7 +175,7 @@
       ]
     }
   ],
-  "available_from": "2026-09-24",
+  "available_from": "2026-09-26",
   "available_until": "2026-10-03",
   "auto_open": true
 }
